@@ -51,9 +51,12 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
-- **sml-cli**: executable contract and SML-0.1 smoke probes.
+- **sml-core::trace**: immutable recurrent-cycle evidence tied directly to execution.
+- **sml-core::tasks**: deterministic SML-1 development tasks with complete symbolic oracles.
+- **sml-cli**: executable contract plus SML-0.1/SML-0.2 smoke probes.
 - **docs/SML-0-SPEC.md**: executable SML-0 architecture boundary.
 - **docs/SML-0.1-ALGEBRA-MEMORY-ATLAS.md**: reference algebra/memory/page semantics.
+- **docs/SML-0.2-TRACE-TASKS.md**: recurrent trace and deterministic SML-1 task contract.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
@@ -65,6 +68,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo test --workspace
     cargo run -p sml-cli -- contract
     cargo run -p sml-cli -- sml01-smoke
+    cargo run -p sml-cli -- sml02-smoke
 
 ## Scientific discipline
 

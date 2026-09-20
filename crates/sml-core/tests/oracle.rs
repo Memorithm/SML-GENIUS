@@ -72,6 +72,9 @@ impl ReasoningKernel for ConvergingKernel {
             contradiction: false,
             active_parameters: 100,
             active_storage_bits: 100,
+            selected_pages: Vec::new(),
+            pairwise_comparisons: 0,
+            attention_score_ops: 0,
         })
     }
 }

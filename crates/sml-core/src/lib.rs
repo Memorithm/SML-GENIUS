@@ -13,6 +13,8 @@ pub mod atlas;
 pub mod audit;
 pub mod gf2;
 pub mod memory;
+pub mod tasks;
+pub mod trace;
 
 /// Inference RAM ceiling for the target SML-25B profile.
 pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
@@ -400,6 +402,12 @@ pub struct ReasoningStep {
     pub active_parameters: u64,
     /// Caller-measured semantic active-storage bits touched in this cycle.
     pub active_storage_bits: u128,
+    /// Circuit-atlas pages selected during this cycle, in execution order.
+    pub selected_pages: Vec<PageId>,
+    /// Token-pair comparisons performed by this cycle.
+    pub pairwise_comparisons: u64,
+    /// Attention-score operations performed by this cycle.
+    pub attention_score_ops: u64,
 }
 
 /// Deterministic recurrent reasoning kernel contract.
@@ -472,39 +480,7 @@ pub fn run_recurrent<K: ReasoningKernel>(
     kernel: &mut K,
     policy: HaltingPolicy,
 ) -> Result<RecurrentOutcome, RunError<K::Error>> {
-    let policy = policy.validate().map_err(RunError::Runner)?;
-    let mut previous = initial;
-    let mut counters = ExecutionCounters::default();
-
-    for depth in 1..=policy.max_depth {
-        let step = kernel.step(&previous, depth).map_err(RunError::Kernel)?;
-        let distance = previous
-            .hamming_distance(&step.workspace)
-            .map_err(|error| RunError::Runner(error.into()))?;
-
-        counters.recurrent_cycles = depth;
-        counters.active_parameters = counters
-            .active_parameters
-            .saturating_add(step.active_parameters);
-        counters.active_storage_bits = counters
-            .active_storage_bits
-            .saturating_add(step.active_storage_bits);
-
-        let stable = distance <= policy.stable_hamming_threshold;
-        let can_halt = depth >= policy.min_depth && stable && !step.contradiction;
-        let must_halt = depth == policy.max_depth;
-
-        previous = step.workspace;
-        if can_halt || must_halt {
-            return Ok(RecurrentOutcome {
-                workspace: previous,
-                depth,
-                counters,
-            });
-        }
-    }
-
-    unreachable!("validated max_depth is non-zero")
+    trace::run_recurrent_traced(initial, kernel, policy, 0).map(|traced| traced.outcome)
 }
 
 /// Composite error from the recurrent runner.

@@ -6,8 +6,11 @@ use sml_core::{
     audit::validate_non_attention_candidate,
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
-    BooleanWorkspace, ExecutionCounters, PageId, ParameterBudget, SML_25B_INITIAL_BUDGET,
-    TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND, TARGET_VRAM_BYTES,
+    tasks::development_suite,
+    trace::run_recurrent_traced,
+    BooleanWorkspace, ExecutionCounters, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
+    ReasoningStep, SML_25B_INITIAL_BUDGET, TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND,
+    TARGET_VRAM_BYTES,
 };
 
 fn main() {
@@ -22,9 +25,15 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml02-smoke" => {
+            if let Err(error) = sml02_smoke() {
+                eprintln!("SML-0.2 smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: sml-cli [contract|sml01-smoke]");
+            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke]");
             std::process::exit(2);
         }
     }
@@ -92,5 +101,69 @@ fn sml01_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("page_physical_bytes={}", activation.physical_bytes);
     println!("pairwise_comparisons={}", counters.pairwise_comparisons);
     println!("attention_score_ops={}", counters.attention_score_ops);
+    Ok(())
+}
+
+struct TraceSmokeKernel;
+
+impl ReasoningKernel for TraceSmokeKernel {
+    type Error = std::convert::Infallible;
+
+    fn step(
+        &mut self,
+        workspace: &BooleanWorkspace,
+        depth: u32,
+    ) -> Result<ReasoningStep, Self::Error> {
+        let next = if depth == 1 {
+            BooleanWorkspace::from_bits(&[true, workspace.get(1).unwrap_or(false)])
+        } else {
+            BooleanWorkspace::from_bits(&[true, true])
+        };
+        Ok(ReasoningStep {
+            workspace: next,
+            contradiction: false,
+            active_parameters: 32,
+            active_storage_bits: 32,
+            selected_pages: vec![PageId(depth - 1)],
+            pairwise_comparisons: 0,
+            attention_score_ops: 0,
+        })
+    }
+}
+
+fn sml02_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let suite = development_suite(8)?;
+    for instance in &suite {
+        if !instance.oracle_matches()? {
+            return Err("SML-1 development oracle mismatch".into());
+        }
+    }
+
+    let mut kernel = TraceSmokeKernel;
+    let traced = run_recurrent_traced(
+        BooleanWorkspace::from_bits(&[false, false]),
+        &mut kernel,
+        HaltingPolicy {
+            min_depth: 2,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        },
+        0,
+    )
+    .map_err(|error| format!("recurrent smoke failed: {error:?}"))?;
+    traced.trace.validate_non_attention()?;
+
+    println!("SML-0.2 smoke");
+    println!("development_tasks={}", suite.len());
+    println!("recurrent_depth={}", traced.outcome.depth);
+    println!("trace_records={}", traced.trace.len());
+    println!(
+        "active_parameter_touches={}",
+        traced.outcome.counters.active_parameters
+    );
+    println!(
+        "pairwise_comparisons={}",
+        traced.outcome.counters.pairwise_comparisons
+    );
     Ok(())
 }

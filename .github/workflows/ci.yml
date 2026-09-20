@@ -40,3 +40,5 @@ jobs:
         run: cargo run -p sml-cli -- contract
       - name: SML-0.1 smoke
         run: cargo run -p sml-cli -- sml01-smoke
+      - name: SML-0.2 smoke
+        run: cargo run -p sml-cli -- sml02-smoke
