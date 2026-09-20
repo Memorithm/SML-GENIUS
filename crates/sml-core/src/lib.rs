@@ -11,6 +11,7 @@ use core::fmt;
 pub mod anf;
 pub mod atlas;
 pub mod audit;
+pub mod circuit;
 pub mod gf2;
 pub mod memory;
 pub mod tasks;

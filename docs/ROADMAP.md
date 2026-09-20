@@ -30,14 +30,15 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] recurrent-cycle trace records binding pages, active bits and state transitions;
 - [x] SML-1 deterministic task generators and complete-answer oracles;
 - [x] first continuous-latent / hard-forward trainability primitive for two-input Boolean gates;
-- [ ] multi-gate circuit and routing trainability experiments;
+- [x] fixed-wiring multi-gate Boolean circuit trainability with exact hard inference;
+- [ ] learned wiring / routing trainability experiments;
 - [ ] discrete topology search through a leak-safe Forge domain;
 - [ ] frozen SML-0 exit report.
 
 ## Immediate implementation sequence
 
-1. Compose trainable Boolean gates into a small acyclic circuit with explicit parameter accounting.
-2. Define a leak-safe Forge domain for discrete topology / ANF search.
+1. Define a leak-safe Forge domain for discrete circuit topology / ANF search.
+2. Add learned wiring or routing under explicit structural budgets.
 3. Train the first SML candidate on the deterministic task panel and retain full traces.
 4. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
 5. Define the first page-residency planner contract for ElasticXxx.

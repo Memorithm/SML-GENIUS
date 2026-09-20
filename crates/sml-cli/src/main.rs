@@ -4,6 +4,7 @@ use sml_core::{
     anf::{AnfMonomial, AnfPolynomial},
     atlas::{AtlasPageManifest, CircuitAtlas},
     audit::validate_non_attention_candidate,
+    circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     tasks::development_suite,
@@ -38,9 +39,15 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml04-smoke" => {
+            if let Err(error) = sml04_smoke() {
+                eprintln!("SML-0.4 smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke]");
+            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke]");
             std::process::exit(2);
         }
     }
@@ -199,5 +206,62 @@ fn sml03_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("and_final_code={}", and_report.final_table.code());
     println!("and_final_loss={:.8}", and_report.final_loss);
     println!("training_epochs={}", config.epochs);
+    Ok(())
+}
+
+fn sml04_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let mut samples = Vec::with_capacity(8);
+    for mask in 0_u8..8 {
+        let x0 = mask & 1 != 0;
+        let x1 = mask & 2 != 0;
+        let x2 = mask & 4 != 0;
+        samples.push(CircuitSample {
+            inputs: vec![x0, x1, x2],
+            target: (x0 ^ x1) & x2,
+        });
+    }
+
+    let mut circuit = LatentBooleanCircuit::new(
+        3,
+        vec![
+            CircuitNodeSpec {
+                left: SignalRef::Input(0),
+                right: SignalRef::Input(1),
+            },
+            CircuitNodeSpec {
+                left: SignalRef::Gate(0),
+                right: SignalRef::Input(2),
+            },
+        ],
+        SignalRef::Gate(1),
+    )?;
+
+    let report = circuit.train(
+        &samples,
+        GateTrainingConfig {
+            epochs: 800,
+            learning_rate: 0.2,
+            epsilon: 1.0e-6,
+        },
+    )?;
+
+    if report.final_tables != vec![TruthTable2::XOR, TruthTable2::AND] {
+        return Err("two-gate circuit did not learn XOR -> AND identities".into());
+    }
+    if report.hard_correct != samples.len() as u64 {
+        return Err("two-gate circuit hard forward is not exact".into());
+    }
+
+    let accounting = circuit.accounting();
+    println!("SML-0.4 smoke");
+    println!("hard_correct={}", report.hard_correct);
+    println!("initial_loss={:.8}", report.initial_loss);
+    println!("final_loss={:.8}", report.final_loss);
+    println!("learned_boolean_bits={}", accounting.learned_boolean_bits);
+    println!("wiring_metadata_bits={}", accounting.wiring_metadata_bits);
+    println!(
+        "latent_training_scalars={}",
+        accounting.latent_training_scalars
+    );
     Ok(())
 }
