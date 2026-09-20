@@ -12,6 +12,7 @@ pub mod anf;
 pub mod atlas;
 pub mod audit;
 pub mod circuit;
+pub mod forge_topology;
 pub mod gf2;
 pub mod memory;
 pub mod tasks;
