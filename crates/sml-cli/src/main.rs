@@ -328,8 +328,7 @@ fn sml06_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let frozen = router.freeze()?;
     let mut counters = ExecutionCounters::default();
     for (address, expected) in targets.iter().copied().enumerate() {
-        let workspace =
-            BooleanWorkspace::from_bits(&[address & 1 != 0, address & 2 != 0]);
+        let workspace = BooleanWorkspace::from_bits(&[address & 1 != 0, address & 2 != 0]);
         let page = frozen.route(&workspace, &mut counters)?;
         if page != expected {
             return Err(format!("frozen route mismatch at address {address}").into());
