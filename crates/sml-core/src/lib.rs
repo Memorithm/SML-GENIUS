@@ -15,6 +15,7 @@ pub mod gf2;
 pub mod memory;
 pub mod tasks;
 pub mod trace;
+pub mod train;
 
 /// Inference RAM ceiling for the target SML-25B profile.
 pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
