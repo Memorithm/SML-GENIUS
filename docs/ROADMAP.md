@@ -29,17 +29,20 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] dense O(1) circuit-atlas page manifest with metadata/alignment accounting;
 - [x] recurrent-cycle trace records binding pages, active bits and state transitions;
 - [x] SML-1 deterministic task generators and complete-answer oracles;
-- [ ] trainability experiments;
+- [x] first continuous-latent / hard-forward trainability primitive for two-input Boolean gates;
+- [ ] multi-gate circuit and routing trainability experiments;
+- [ ] discrete topology search through a leak-safe Forge domain;
 - [ ] frozen SML-0 exit report.
 
 ## Immediate implementation sequence
 
-1. Implement the first trainability path with continuous latent parameters and hard Boolean forward semantics.
+1. Compose trainable Boolean gates into a small acyclic circuit with explicit parameter accounting.
 2. Define a leak-safe Forge domain for discrete topology / ANF search.
-3. Benchmark fixed recurrent depths against adaptive recurrent depth on the deterministic task panel.
-4. Define the first page-residency planner contract for ElasticXxx.
-5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
-6. Promote reusable primitives to SciRust only after semantics stabilize.
+3. Train the first SML candidate on the deterministic task panel and retain full traces.
+4. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
+5. Define the first page-residency planner contract for ElasticXxx.
+6. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+7. Promote reusable primitives to SciRust only after semantics stabilize.
 
 ## Stop conditions
 
