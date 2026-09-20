@@ -2,9 +2,9 @@
 
 use sml_core::{
     anf::{AnfMonomial, AnfPolynomial},
-    circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
     atlas::{AtlasPageManifest, CircuitAtlas},
     audit::validate_non_attention_candidate,
+    circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     tasks::development_suite,
@@ -209,7 +209,6 @@ fn sml03_smoke() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 fn sml04_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let mut samples = Vec::with_capacity(8);
     for mask in 0_u8..8 {
@@ -260,6 +259,9 @@ fn sml04_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("final_loss={:.8}", report.final_loss);
     println!("learned_boolean_bits={}", accounting.learned_boolean_bits);
     println!("wiring_metadata_bits={}", accounting.wiring_metadata_bits);
-    println!("latent_training_scalars={}", accounting.latent_training_scalars);
+    println!(
+        "latent_training_scalars={}",
+        accounting.latent_training_scalars
+    );
     Ok(())
 }
