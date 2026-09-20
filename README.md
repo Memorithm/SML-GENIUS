@@ -46,8 +46,14 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 ## Workspace
 
 - **sml-core**: dependency-free deterministic reference semantics, exact counters, Boolean circuit oracle, direct routing and adaptive recurrent-depth runner.
-- **sml-cli**: small executable contract probe.
+- **sml-core::gf2**: bit-packed GF(2) vectors and deterministic linear transforms.
+- **sml-core::anf**: canonical algebraic-normal-form / Zhegalkin relation evaluation.
+- **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
+- **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
+- **sml-core::audit**: fail-closed non-attention execution-counter gate.
+- **sml-cli**: executable contract and SML-0.1 smoke probes.
 - **docs/SML-0-SPEC.md**: executable SML-0 architecture boundary.
+- **docs/SML-0.1-ALGEBRA-MEMORY-ATLAS.md**: reference algebra/memory/page semantics.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
@@ -58,6 +64,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
     cargo run -p sml-cli -- contract
+    cargo run -p sml-cli -- sml01-smoke
 
 ## Scientific discipline
 
