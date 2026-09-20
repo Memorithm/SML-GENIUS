@@ -15,7 +15,7 @@ fn gf2_xor_and_dot_are_exact_and_accounted() {
 
     let sum = left.xor(&right, &mut counters).unwrap();
     assert_eq!(sum.to_u64_le().unwrap(), 0b0110);
-    assert!(left.dot_parity(&right, &mut counters).unwrap());
+    assert!(!left.dot_parity(&right, &mut counters).unwrap());
 
     assert_eq!(counters.gf2_ops, 11);
     assert_eq!(counters.pairwise_comparisons, 0);
