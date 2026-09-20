@@ -33,20 +33,10 @@ pub enum ReadOutcome {
 /// Result of a memory write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteOutcome {
-    Inserted {
-        slot: usize,
-    },
-    Updated {
-        slot: usize,
-    },
-    CollisionRejected {
-        slot: usize,
-        resident_key: u64,
-    },
-    Replaced {
-        slot: usize,
-        evicted_key: u64,
-    },
+    Inserted { slot: usize },
+    Updated { slot: usize },
+    CollisionRejected { slot: usize, resident_key: u64 },
+    Replaced { slot: usize, evicted_key: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,8 +128,7 @@ impl BoundedAssociativeMemory {
                 ReadOutcome::EmptyMiss { slot }
             }
             Some(resident) => {
-                counters.memory_key_comparisons =
-                    counters.memory_key_comparisons.saturating_add(1);
+                counters.memory_key_comparisons = counters.memory_key_comparisons.saturating_add(1);
                 if resident.key == key {
                     counters.memory_hits = counters.memory_hits.saturating_add(1);
                     ReadOutcome::Hit {
@@ -187,8 +176,7 @@ impl BoundedAssociativeMemory {
                 Ok(WriteOutcome::Inserted { slot })
             }
             Some(existing) if existing == key => {
-                counters.memory_key_comparisons =
-                    counters.memory_key_comparisons.saturating_add(1);
+                counters.memory_key_comparisons = counters.memory_key_comparisons.saturating_add(1);
                 let write_epoch = self.take_epoch()?;
                 self.slots[slot] = Some(MemorySlot {
                     key,
@@ -198,8 +186,7 @@ impl BoundedAssociativeMemory {
                 Ok(WriteOutcome::Updated { slot })
             }
             Some(existing) => {
-                counters.memory_key_comparisons =
-                    counters.memory_key_comparisons.saturating_add(1);
+                counters.memory_key_comparisons = counters.memory_key_comparisons.saturating_add(1);
                 counters.memory_collisions = counters.memory_collisions.saturating_add(1);
                 match self.replacement {
                     ReplacementPolicy::RejectCollision => Ok(WriteOutcome::CollisionRejected {
