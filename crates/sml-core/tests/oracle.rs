@@ -71,6 +71,7 @@ impl ReasoningKernel for ConvergingKernel {
             workspace: BooleanWorkspace::from_bits(&bits),
             contradiction: false,
             active_parameters: 100,
+            active_storage_bits: 100,
         })
     }
 }
@@ -92,6 +93,7 @@ fn recurrent_depth_halts_only_after_stability() {
     assert_eq!(outcome.depth, 3);
     assert_eq!(outcome.counters.recurrent_cycles, 3);
     assert_eq!(outcome.counters.active_parameters, 300);
+    assert_eq!(outcome.counters.active_storage_bits, 300);
 }
 
 #[test]
