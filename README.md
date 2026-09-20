@@ -52,15 +52,17 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
 - **sml-core::circuit**: fixed-wiring acyclic circuits with jointly trainable hard Boolean gate identities.
+- **sml-core::forge_topology**: strict `sml-topology/v1` parser and independent full-oracle destination requalification.
 - **sml-core::trace**: immutable recurrent-cycle evidence tied directly to execution.
 - **sml-core::tasks**: deterministic SML-1 development tasks with complete symbolic oracles.
 - **sml-core::train**: continuous-latent training of hard two-input Boolean truth tables.
-- **sml-cli**: executable contract plus SML-0.1/SML-0.2/SML-0.3 smoke probes.
+- **sml-cli**: executable contract plus SML-0.1 through SML-0.5 smoke probes.
 - **docs/SML-0-SPEC.md**: executable SML-0 architecture boundary.
 - **docs/SML-0.1-ALGEBRA-MEMORY-ATLAS.md**: reference algebra/memory/page semantics.
 - **docs/SML-0.2-TRACE-TASKS.md**: recurrent trace and deterministic SML-1 task contract.
 - **docs/SML-0.3-TRAINABLE-GATES.md**: first executable Boolean trainability contract.
 - **docs/SML-0.4-TRAINABLE-CIRCUITS.md**: multi-gate acyclic trainability and representation accounting.
+- **docs/SML-0.5-FORGE-REQUALIFICATION.md**: Forge search boundary and independent destination promotion gate.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
@@ -75,6 +77,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo run -p sml-cli -- sml02-smoke
     cargo run -p sml-cli -- sml03-smoke
     cargo run -p sml-cli -- sml04-smoke
+    cargo run -p sml-cli -- sml05-smoke
 
 ## Scientific discipline
 
