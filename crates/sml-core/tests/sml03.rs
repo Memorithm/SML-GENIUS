@@ -26,7 +26,11 @@ fn latent_gate_learns_every_two_input_boolean_function() {
 
         assert_eq!(report.final_table, target, "failed truth table {code}");
         assert_eq!(gate.hard_accuracy(target).unwrap(), 4);
-        assert!(report.final_loss < 0.05, "loss={} code={code}", report.final_loss);
+        assert!(
+            report.final_loss < 0.05,
+            "loss={} code={code}",
+            report.final_loss
+        );
         assert_eq!(report.counters.epochs, config.epochs);
         assert_eq!(report.counters.samples, config.epochs as u64 * 4);
         assert_eq!(
@@ -71,8 +75,5 @@ fn invalid_training_configuration_fails_closed() {
         LatentGate2::from_logits([f64::NAN; TRUTH_TABLE_COUNT]),
         Err(TrainError::NonFiniteLatent)
     );
-    assert_eq!(
-        TruthTable2::new(16),
-        Err(TrainError::InvalidTruthTable(16))
-    );
+    assert_eq!(TruthTable2::new(16), Err(TrainError::InvalidTruthTable(16)));
 }
