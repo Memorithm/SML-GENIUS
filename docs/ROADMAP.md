@@ -27,18 +27,18 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] canonical ANF / Zhegalkin polynomial evaluation;
 - [x] bounded associative memory with explicit miss/collision/replacement outcomes;
 - [x] dense O(1) circuit-atlas page manifest with metadata/alignment accounting;
-- [ ] recurrent-cycle trace records binding pages, active bits and state transitions;
-- [ ] SML-1 deterministic task generators and complete-answer oracles;
+- [x] recurrent-cycle trace records binding pages, active bits and state transitions;
+- [x] SML-1 deterministic task generators and complete-answer oracles;
 - [ ] trainability experiments;
 - [ ] frozen SML-0 exit report.
 
 ## Immediate implementation sequence
 
-1. Add recurrent-cycle trace records for depth, pages, active parameters/bits and audit counters.
-2. Build SML-1 deterministic task generators and complete-answer oracles.
-3. Implement at least two trainability paths: continuous relaxation/STE and discrete search via Forge.
-4. Benchmark fixed recurrent depths against adaptive recurrent depth.
-5. Define the first page-residency planner contract for ElasticXxx.
+1. Implement the first trainability path with continuous latent parameters and hard Boolean forward semantics.
+2. Define a leak-safe Forge domain for discrete topology / ANF search.
+3. Benchmark fixed recurrent depths against adaptive recurrent depth on the deterministic task panel.
+4. Define the first page-residency planner contract for ElasticXxx.
+5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
 6. Promote reusable primitives to SciRust only after semantics stabilize.
 
 ## Stop conditions
