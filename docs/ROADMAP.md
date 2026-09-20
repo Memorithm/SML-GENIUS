@@ -14,18 +14,32 @@ Progression is evidence-gated. Model size does not advance because a calendar mi
 | SML-7 | 25B | Can instruction tuning preserve SML properties? | post-training quality without collapse of sparsity/depth/memory behavior |
 | SML-8 | 25B | Is the system reproducibly qualified? | independent reruns, ablations, robustness, complete artefact provenance |
 
+## SML-0 implementation status
+
+The following are reference-semantics milestones, not model-quality results:
+
+- [x] exact learned-parameter and packed-bit accounting;
+- [x] bit-packed Boolean circuit oracle;
+- [x] direct page routing without history scans;
+- [x] bounded recurrent-depth execution and deterministic stability halting;
+- [x] explicit non-attention audit counters;
+- [x] GF(2) vector and linear-map reference operators;
+- [x] canonical ANF / Zhegalkin polynomial evaluation;
+- [x] bounded associative memory with explicit miss/collision/replacement outcomes;
+- [x] dense O(1) circuit-atlas page manifest with metadata/alignment accounting;
+- [ ] recurrent-cycle trace records binding pages, active bits and state transitions;
+- [ ] SML-1 deterministic task generators and complete-answer oracles;
+- [ ] trainability experiments;
+- [ ] frozen SML-0 exit report.
+
 ## Immediate implementation sequence
 
-1. Finish SML-0 reference semantics and structural audit surface.
-2. Add GF(2) and ANF reference operators with oracle tests.
-3. Add bounded associative memory with explicit collision/replacement policy.
-4. Add a page-manifest format with exact physical-bit and active-parameter accounting.
-5. Add trace records for recurrent depth, active pages and state transitions.
-6. Build SML-1 deterministic task generators and complete-answer oracles.
-7. Implement at least two trainability paths: continuous relaxation/STE and discrete search via Forge.
-8. Benchmark fixed recurrent depths against adaptive recurrent depth.
-9. Promote reusable primitives to SciRust only after semantics stabilize.
-10. Integrate residency planning with ElasticXxx only after the page contract is frozen.
+1. Add recurrent-cycle trace records for depth, pages, active parameters/bits and audit counters.
+2. Build SML-1 deterministic task generators and complete-answer oracles.
+3. Implement at least two trainability paths: continuous relaxation/STE and discrete search via Forge.
+4. Benchmark fixed recurrent depths against adaptive recurrent depth.
+5. Define the first page-residency planner contract for ElasticXxx.
+6. Promote reusable primitives to SciRust only after semantics stabilize.
 
 ## Stop conditions
 
