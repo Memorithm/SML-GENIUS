@@ -8,6 +8,7 @@ use sml_core::{
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     tasks::development_suite,
     trace::run_recurrent_traced,
+    train::{GateTrainingConfig, LatentGate2, TruthTable2},
     BooleanWorkspace, ExecutionCounters, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
     ReasoningStep, SML_25B_INITIAL_BUDGET, TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND,
     TARGET_VRAM_BYTES,
@@ -31,9 +32,15 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml03-smoke" => {
+            if let Err(error) = sml03_smoke() {
+                eprintln!("SML-0.3 smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke]");
+            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke]");
             std::process::exit(2);
         }
     }
@@ -165,5 +172,31 @@ fn sml02_smoke() -> Result<(), Box<dyn std::error::Error>> {
         "pairwise_comparisons={}",
         traced.outcome.counters.pairwise_comparisons
     );
+    Ok(())
+}
+
+
+fn sml03_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let config = GateTrainingConfig::default();
+
+    let mut xor_gate = LatentGate2::default();
+    let xor_report = xor_gate.train_truth_table(TruthTable2::XOR, config)?;
+
+    let mut and_gate = LatentGate2::default();
+    let and_report = and_gate.train_truth_table(TruthTable2::AND, config)?;
+
+    if xor_report.final_table != TruthTable2::XOR || xor_gate.hard_accuracy(TruthTable2::XOR)? != 4 {
+        return Err("XOR gate did not converge to the exact hard truth table".into());
+    }
+    if and_report.final_table != TruthTable2::AND || and_gate.hard_accuracy(TruthTable2::AND)? != 4 {
+        return Err("AND gate did not converge to the exact hard truth table".into());
+    }
+
+    println!("SML-0.3 smoke");
+    println!("xor_final_code={}", xor_report.final_table.code());
+    println!("xor_final_loss={:.8}", xor_report.final_loss);
+    println!("and_final_code={}", and_report.final_table.code());
+    println!("and_final_loss={:.8}", and_report.final_loss);
+    println!("training_epochs={}", config.epochs);
     Ok(())
 }
