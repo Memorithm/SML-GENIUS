@@ -175,7 +175,6 @@ fn sml02_smoke() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 fn sml03_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let config = GateTrainingConfig::default();
 
@@ -185,10 +184,12 @@ fn sml03_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let mut and_gate = LatentGate2::default();
     let and_report = and_gate.train_truth_table(TruthTable2::AND, config)?;
 
-    if xor_report.final_table != TruthTable2::XOR || xor_gate.hard_accuracy(TruthTable2::XOR)? != 4 {
+    if xor_report.final_table != TruthTable2::XOR || xor_gate.hard_accuracy(TruthTable2::XOR)? != 4
+    {
         return Err("XOR gate did not converge to the exact hard truth table".into());
     }
-    if and_report.final_table != TruthTable2::AND || and_gate.hard_accuracy(TruthTable2::AND)? != 4 {
+    if and_report.final_table != TruthTable2::AND || and_gate.hard_accuracy(TruthTable2::AND)? != 4
+    {
         return Err("AND gate did not converge to the exact hard truth table".into());
     }
 
