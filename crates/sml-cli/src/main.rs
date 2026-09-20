@@ -58,15 +58,11 @@ fn sml01_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let relation = AnfPolynomial::new(
         2,
         false,
-        vec![
-            AnfMonomial::new(vec![0])?,
-            AnfMonomial::new(vec![0, 1])?,
-        ],
+        vec![AnfMonomial::new(vec![0])?, AnfMonomial::new(vec![0, 1])?],
     )?
     .evaluate(&[true, false], &mut counters)?;
 
-    let mut memory =
-        BoundedAssociativeMemory::new(4, 2, ReplacementPolicy::ReplaceExisting)?;
+    let mut memory = BoundedAssociativeMemory::new(4, 2, ReplacementPolicy::ReplaceExisting)?;
     memory.write(
         address,
         BooleanWorkspace::from_bits(&[relation, true]),
