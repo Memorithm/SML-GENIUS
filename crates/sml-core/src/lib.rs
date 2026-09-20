@@ -1,0 +1,483 @@
+#![forbid(unsafe_code)]
+
+//! Deterministic reference primitives for the SML-GENIUS research programme.
+//!
+//! This crate is intentionally small and dependency-free. It is an executable
+//! specification surface, not a performance implementation and not evidence of
+//! model quality or architectural novelty.
+
+use core::fmt;
+
+/// Inference RAM ceiling for the target SML-25B profile.
+pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+/// Inference VRAM ceiling for the target SML-25B profile.
+pub const TARGET_VRAM_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// Nominal single-stream decode target.
+pub const TARGET_TOKENS_PER_SECOND: u32 = 40;
+/// Initial maximum active-parameter fraction per recurrent cycle, in parts per million.
+pub const INITIAL_ACTIVE_PPM: u32 = 10_000;
+/// Long-term active-parameter fraction target per recurrent cycle, in parts per million.
+pub const STRETCH_ACTIVE_PPM: u32 = 2_500;
+
+/// Exact physical accounting for the initial mixed-precision SML parameter atlas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ParameterBudget {
+    /// One physical bit per learned parameter.
+    pub boolean: u64,
+    /// Two physical bits per learned ternary parameter.
+    pub ternary: u64,
+    /// Four physical bits per learned residual parameter.
+    pub residual4: u64,
+}
+
+impl ParameterBudget {
+    /// Returns the exact number of learned scalar parameters represented by this budget.
+    #[must_use]
+    pub const fn total_parameters(self) -> u64 {
+        self.boolean + self.ternary + self.residual4
+    }
+
+    /// Returns exact packed storage in bits, excluding metadata and alignment.
+    #[must_use]
+    pub const fn storage_bits(self) -> u128 {
+        self.boolean as u128 + 2 * self.ternary as u128 + 4 * self.residual4 as u128
+    }
+
+    /// Returns packed bytes rounded upward to the next byte.
+    #[must_use]
+    pub const fn storage_bytes_ceil(self) -> u128 {
+        self.storage_bits().div_ceil(8)
+    }
+
+    /// Returns the Boolean share in parts per million, avoiding floating-point ambiguity.
+    #[must_use]
+    pub const fn boolean_fraction_ppm(self) -> u32 {
+        let total = self.total_parameters();
+        if total == 0 {
+            return 0;
+        }
+        ((self.boolean as u128 * 1_000_000) / total as u128) as u32
+    }
+}
+
+/// Canonical initial SML-25B research budget: 85% Boolean, 10% ternary, 5% 4-bit residual.
+pub const SML_25B_INITIAL_BUDGET: ParameterBudget = ParameterBudget {
+    boolean: 21_250_000_000,
+    ternary: 2_500_000_000,
+    residual4: 1_250_000_000,
+};
+
+/// Exact counters attached to a reference execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ExecutionCounters {
+    /// Primitive Boolean gate evaluations.
+    pub boolean_ops: u64,
+    /// Direct route-table lookups.
+    pub route_lookups: u64,
+    /// Recurrent reasoning cycles completed.
+    pub recurrent_cycles: u32,
+    /// Learned parameters touched by the caller-declared active pages.
+    pub active_parameters: u64,
+}
+
+/// A densely packed Boolean workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BooleanWorkspace {
+    words: Vec<u64>,
+    len_bits: usize,
+}
+
+impl BooleanWorkspace {
+    /// Builds a packed workspace from explicit bits.
+    #[must_use]
+    pub fn from_bits(bits: &[bool]) -> Self {
+        let mut words = vec![0_u64; bits.len().div_ceil(64)];
+        for (index, bit) in bits.iter().copied().enumerate() {
+            if bit {
+                words[index / 64] |= 1_u64 << (index % 64);
+            }
+        }
+        Self {
+            words,
+            len_bits: bits.len(),
+        }
+    }
+
+    /// Number of meaningful bits in the workspace.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len_bits
+    }
+
+    /// Returns true when the workspace contains no bits.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len_bits == 0
+    }
+
+    /// Reads one bit.
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<bool> {
+        if index >= self.len_bits {
+            return None;
+        }
+        Some((self.words[index / 64] & (1_u64 << (index % 64))) != 0)
+    }
+
+    /// Returns the Hamming distance between equally-sized workspaces.
+    pub fn hamming_distance(&self, other: &Self) -> Result<u64, WorkspaceError> {
+        if self.len_bits != other.len_bits {
+            return Err(WorkspaceError::LengthMismatch {
+                left: self.len_bits,
+                right: other.len_bits,
+            });
+        }
+        Ok(self
+            .words
+            .iter()
+            .zip(&other.words)
+            .map(|(left, right)| (left ^ right).count_ones() as u64)
+            .sum())
+    }
+
+    fn low_address(&self, width: u8) -> Result<usize, RouteError> {
+        if width as usize > usize::BITS as usize {
+            return Err(RouteError::AddressWidthTooLarge(width));
+        }
+        if width as usize > self.len_bits {
+            return Err(RouteError::WorkspaceTooSmall {
+                required: width as usize,
+                actual: self.len_bits,
+            });
+        }
+
+        let mut address = 0_usize;
+        for bit in 0..width as usize {
+            if self.get(bit).unwrap_or(false) {
+                address |= 1_usize << bit;
+            }
+        }
+        Ok(address)
+    }
+}
+
+/// Errors produced by workspace operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceError {
+    /// Hamming distance requires equal logical widths.
+    LengthMismatch { left: usize, right: usize },
+}
+
+impl fmt::Display for WorkspaceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LengthMismatch { left, right } => {
+                write!(f, "workspace length mismatch: {left} != {right}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for WorkspaceError {}
+
+/// A reference to a Boolean circuit signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wire {
+    /// External circuit input.
+    Input(u32),
+    /// Output of a previously evaluated gate.
+    Gate(u32),
+}
+
+/// Boolean primitives permitted by the SML-0 reference circuit oracle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gate {
+    Not(Wire),
+    And(Wire, Wire),
+    Or(Wire, Wire),
+    Xor(Wire, Wire),
+}
+
+/// A topologically ordered deterministic Boolean circuit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BooleanCircuit {
+    input_count: usize,
+    gates: Vec<Gate>,
+    outputs: Vec<Wire>,
+}
+
+impl BooleanCircuit {
+    /// Creates a circuit. Structural validity is checked during evaluation.
+    #[must_use]
+    pub fn new(input_count: usize, gates: Vec<Gate>, outputs: Vec<Wire>) -> Self {
+        Self {
+            input_count,
+            gates,
+            outputs,
+        }
+    }
+
+    /// Evaluates the circuit and increments exact primitive-operation counters.
+    pub fn evaluate(
+        &self,
+        inputs: &[bool],
+        counters: &mut ExecutionCounters,
+    ) -> Result<Vec<bool>, CircuitError> {
+        if inputs.len() != self.input_count {
+            return Err(CircuitError::InputCount {
+                expected: self.input_count,
+                actual: inputs.len(),
+            });
+        }
+
+        let mut gate_values = Vec::with_capacity(self.gates.len());
+        for (gate_index, gate) in self.gates.iter().copied().enumerate() {
+            let resolve = |wire: Wire| self.resolve(wire, inputs, &gate_values, gate_index);
+            let value = match gate {
+                Gate::Not(a) => !resolve(a)?,
+                Gate::And(a, b) => resolve(a)? & resolve(b)?,
+                Gate::Or(a, b) => resolve(a)? | resolve(b)?,
+                Gate::Xor(a, b) => resolve(a)? ^ resolve(b)?,
+            };
+            counters.boolean_ops = counters.boolean_ops.saturating_add(1);
+            gate_values.push(value);
+        }
+
+        self.outputs
+            .iter()
+            .copied()
+            .map(|wire| self.resolve(wire, inputs, &gate_values, self.gates.len()))
+            .collect()
+    }
+
+    fn resolve(
+        &self,
+        wire: Wire,
+        inputs: &[bool],
+        gate_values: &[bool],
+        current_gate: usize,
+    ) -> Result<bool, CircuitError> {
+        match wire {
+            Wire::Input(index) => inputs
+                .get(index as usize)
+                .copied()
+                .ok_or(CircuitError::InvalidInputWire(index)),
+            Wire::Gate(index) => {
+                let index = index as usize;
+                if index >= current_gate {
+                    return Err(CircuitError::ForwardOrCyclicGateReference {
+                        referenced: index,
+                        current: current_gate,
+                    });
+                }
+                gate_values
+                    .get(index)
+                    .copied()
+                    .ok_or(CircuitError::InvalidGateWire(index))
+            }
+        }
+    }
+}
+
+/// Structural or input errors from the Boolean circuit oracle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitError {
+    InputCount { expected: usize, actual: usize },
+    InvalidInputWire(u32),
+    InvalidGateWire(usize),
+    ForwardOrCyclicGateReference { referenced: usize, current: usize },
+}
+
+impl fmt::Display for CircuitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for CircuitError {}
+
+/// Stable page identifier in the future hierarchical circuit atlas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PageId(pub u32);
+
+/// Direct-address reference router. Routing does not scan history or rank token pairs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectRouteTable {
+    address_width: u8,
+    entries: Vec<PageId>,
+}
+
+impl DirectRouteTable {
+    /// Builds a complete direct-address table with exactly two-to-the-width entries.
+    pub fn new(address_width: u8, entries: Vec<PageId>) -> Result<Self, RouteError> {
+        if address_width as u32 >= usize::BITS {
+            return Err(RouteError::AddressWidthTooLarge(address_width));
+        }
+        let expected = 1_usize << address_width;
+        if entries.len() != expected {
+            return Err(RouteError::EntryCount {
+                expected,
+                actual: entries.len(),
+            });
+        }
+        Ok(Self {
+            address_width,
+            entries,
+        })
+    }
+
+    /// Resolves a page with one direct table lookup after extracting address bits.
+    pub fn route(
+        &self,
+        workspace: &BooleanWorkspace,
+        counters: &mut ExecutionCounters,
+    ) -> Result<PageId, RouteError> {
+        let address = workspace.low_address(self.address_width)?;
+        counters.route_lookups = counters.route_lookups.saturating_add(1);
+        Ok(self.entries[address])
+    }
+}
+
+/// Errors from deterministic direct routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteError {
+    AddressWidthTooLarge(u8),
+    EntryCount { expected: usize, actual: usize },
+    WorkspaceTooSmall { required: usize, actual: usize },
+}
+
+impl fmt::Display for RouteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for RouteError {}
+
+/// Result of one internal reasoning cycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningStep {
+    pub workspace: BooleanWorkspace,
+    /// A true value prevents stability-based early halting for this step.
+    pub contradiction: bool,
+    /// Caller-measured active learned parameters touched in this cycle.
+    pub active_parameters: u64,
+}
+
+/// Deterministic recurrent reasoning kernel contract.
+pub trait ReasoningKernel {
+    type Error;
+
+    fn step(
+        &mut self,
+        workspace: &BooleanWorkspace,
+        depth: u32,
+    ) -> Result<ReasoningStep, Self::Error>;
+}
+
+/// Adaptive recurrent-depth policy used by the SML-0 reference runner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HaltingPolicy {
+    pub min_depth: u32,
+    pub max_depth: u32,
+    pub stable_hamming_threshold: u64,
+}
+
+impl HaltingPolicy {
+    /// Rejects impossible or empty depth ranges.
+    pub fn validate(self) -> Result<Self, RecurrentError> {
+        if self.min_depth == 0 || self.max_depth == 0 || self.min_depth > self.max_depth {
+            return Err(RecurrentError::InvalidDepthRange {
+                min: self.min_depth,
+                max: self.max_depth,
+            });
+        }
+        Ok(self)
+    }
+}
+
+/// Summary emitted by a completed recurrent reasoning run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecurrentOutcome {
+    pub workspace: BooleanWorkspace,
+    pub depth: u32,
+    pub counters: ExecutionCounters,
+}
+
+/// Errors from the recurrent reference runner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecurrentError {
+    InvalidDepthRange { min: u32, max: u32 },
+    Workspace(WorkspaceError),
+}
+
+impl fmt::Display for RecurrentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for RecurrentError {}
+
+impl From<WorkspaceError> for RecurrentError {
+    fn from(value: WorkspaceError) -> Self {
+        Self::Workspace(value)
+    }
+}
+
+/// Executes repeated internal reasoning cycles until stability or the hard depth cap.
+///
+/// Kernel errors are returned separately from runner errors so callers do not need
+/// to erase their domain-specific failure type.
+pub fn run_recurrent<K: ReasoningKernel>(
+    initial: BooleanWorkspace,
+    kernel: &mut K,
+    policy: HaltingPolicy,
+) -> Result<RecurrentOutcome, RunError<K::Error>> {
+    let policy = policy.validate().map_err(RunError::Runner)?;
+    let mut previous = initial;
+    let mut counters = ExecutionCounters::default();
+
+    for depth in 1..=policy.max_depth {
+        let step = kernel.step(&previous, depth).map_err(RunError::Kernel)?;
+        let distance = previous
+            .hamming_distance(&step.workspace)
+            .map_err(|error| RunError::Runner(error.into()))?;
+
+        counters.recurrent_cycles = depth;
+        counters.active_parameters = counters
+            .active_parameters
+            .saturating_add(step.active_parameters);
+
+        let stable = distance <= policy.stable_hamming_threshold;
+        let can_halt = depth >= policy.min_depth && stable && !step.contradiction;
+        let must_halt = depth == policy.max_depth;
+
+        previous = step.workspace;
+        if can_halt || must_halt {
+            return Ok(RecurrentOutcome {
+                workspace: previous,
+                depth,
+                counters,
+            });
+        }
+    }
+
+    unreachable!("validated max_depth is non-zero")
+}
+
+/// Composite error from the recurrent runner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunError<E> {
+    Runner(RecurrentError),
+    Kernel(E),
+}
+
+/// Returns whether an active parameter count stays inside a declared ppm budget.
+#[must_use]
+pub fn active_fraction_within_ppm(active: u64, total: u64, limit_ppm: u32) -> bool {
+    if total == 0 {
+        return active == 0;
+    }
+    active as u128 * 1_000_000 <= total as u128 * limit_ppm as u128
+}

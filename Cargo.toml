@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "crates/sml-core",
+    "crates/sml-cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.89"
+license = "PolyForm-Noncommercial-1.0.0"
+authors = ["Tarek Zekriti"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
