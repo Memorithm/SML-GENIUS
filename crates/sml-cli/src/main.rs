@@ -5,6 +5,7 @@ use sml_core::{
     atlas::{AtlasPageManifest, CircuitAtlas},
     audit::validate_non_attention_candidate,
     circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
+    forge_topology::ForgeTopologyCandidateV1,
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     tasks::development_suite,
@@ -45,9 +46,17 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml05-smoke" => {
+            if let Err(error) = sml05_smoke() {
+                eprintln!("SML-0.5 smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke]");
+            eprintln!(
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke]"
+            );
             std::process::exit(2);
         }
     }
@@ -263,5 +272,33 @@ fn sml04_smoke() -> Result<(), Box<dyn std::error::Error>> {
         "latent_training_scalars={}",
         accounting.latent_training_scalars
     );
+    Ok(())
+}
+
+
+fn sml05_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    const CANDIDATE: &str =
+        "sml-topology/v1|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4";
+    let target: Vec<bool> = (0_usize..8)
+        .map(|row| {
+            let x0 = row & 1 != 0;
+            let x1 = row & 2 != 0;
+            let x2 = row & 4 != 0;
+            (x0 ^ x1) & x2
+        })
+        .collect();
+
+    let candidate = ForgeTopologyCandidateV1::parse(CANDIDATE)?;
+    let report = candidate.requalify(3, 3, &target)?;
+    if !report.exact() {
+        return Err("Forge candidate failed destination-side full-oracle requalification".into());
+    }
+
+    println!("SML-0.5 smoke");
+    println!("rows={}", report.rows);
+    println!("incorrect_rows={}", report.incorrect_rows);
+    println!("reachable_gates={}", report.reachable_gates);
+    println!("learned_boolean_bits={}", report.learned_boolean_bits);
+    println!("wiring_metadata_bits={}", report.wiring_metadata_bits);
     Ok(())
 }
