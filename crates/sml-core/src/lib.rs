@@ -8,6 +8,12 @@
 
 use core::fmt;
 
+pub mod anf;
+pub mod atlas;
+pub mod audit;
+pub mod gf2;
+pub mod memory;
+
 /// Inference RAM ceiling for the target SML-25B profile.
 pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 /// Inference VRAM ceiling for the target SML-25B profile.
@@ -72,12 +78,42 @@ pub const SML_25B_INITIAL_BUDGET: ParameterBudget = ParameterBudget {
 pub struct ExecutionCounters {
     /// Primitive Boolean gate evaluations.
     pub boolean_ops: u64,
+    /// Semantic GF(2) primitive evaluations.
+    pub gf2_ops: u64,
+    /// Algebraic-normal-form monomials evaluated.
+    pub anf_monomials: u64,
     /// Direct route-table lookups.
     pub route_lookups: u64,
+    /// Bounded associative-memory reads.
+    pub memory_reads: u64,
+    /// Bounded associative-memory writes.
+    pub memory_writes: u64,
+    /// Successful associative-memory reads.
+    pub memory_hits: u64,
+    /// Associative-memory misses.
+    pub memory_misses: u64,
+    /// Write-time address collisions.
+    pub memory_collisions: u64,
+    /// Deterministic collision replacements.
+    pub memory_replacements: u64,
+    /// Exact-key comparisons inside directly addressed memory slots.
+    pub memory_key_comparisons: u64,
+    /// Circuit-atlas page activations.
+    pub atlas_page_activations: u64,
+    /// Learned parameter touches induced by atlas-page activations.
+    pub atlas_parameter_touches: u64,
+    /// Semantic storage bits touched by atlas-page activations.
+    pub atlas_storage_bits_touched: u128,
+    /// Token-pair comparisons. This must remain zero for SML candidate paths.
+    pub pairwise_comparisons: u64,
+    /// Attention-score operations. This must remain zero for SML candidate paths.
+    pub attention_score_ops: u64,
     /// Recurrent reasoning cycles completed.
     pub recurrent_cycles: u32,
-    /// Learned parameters touched by the caller-declared active pages.
+    /// Learned parameters touched across recurrent cycles.
     pub active_parameters: u64,
+    /// Semantic active-storage bits touched across recurrent cycles.
+    pub active_storage_bits: u128,
 }
 
 /// A densely packed Boolean workspace.
@@ -362,6 +398,8 @@ pub struct ReasoningStep {
     pub contradiction: bool,
     /// Caller-measured active learned parameters touched in this cycle.
     pub active_parameters: u64,
+    /// Caller-measured semantic active-storage bits touched in this cycle.
+    pub active_storage_bits: u128,
 }
 
 /// Deterministic recurrent reasoning kernel contract.
@@ -448,6 +486,9 @@ pub fn run_recurrent<K: ReasoningKernel>(
         counters.active_parameters = counters
             .active_parameters
             .saturating_add(step.active_parameters);
+        counters.active_storage_bits = counters
+            .active_storage_bits
+            .saturating_add(step.active_storage_bits);
 
         let stable = distance <= policy.stable_hamming_threshold;
         let can_halt = depth >= policy.min_depth && stable && !step.contradiction;
