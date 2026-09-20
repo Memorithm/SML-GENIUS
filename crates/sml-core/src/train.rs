@@ -173,7 +173,11 @@ impl LatentGate2 {
             for input_index in 0..4_u8 {
                 let left = input_index & 1 != 0;
                 let right = input_index & 2 != 0;
-                let target_value = if target.evaluate(left, right) { 1.0 } else { 0.0 };
+                let target_value = if target.evaluate(left, right) {
+                    1.0
+                } else {
+                    0.0
+                };
                 let probability = weighted_output(&weights, left, right)
                     .clamp(config.epsilon, 1.0 - config.epsilon);
                 let loss_gradient =
@@ -181,11 +185,13 @@ impl LatentGate2 {
 
                 for candidate_code in 0..TRUTH_TABLE_COUNT {
                     let candidate = TruthTable2::new(candidate_code as u8)?;
-                    let candidate_value =
-                        if candidate.evaluate(left, right) { 1.0 } else { 0.0 };
-                    gradient[candidate_code] += loss_gradient
-                        * weights[candidate_code]
-                        * (candidate_value - probability);
+                    let candidate_value = if candidate.evaluate(left, right) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    gradient[candidate_code] +=
+                        loss_gradient * weights[candidate_code] * (candidate_value - probability);
                 }
             }
 
@@ -252,33 +258,28 @@ impl LatentGate2 {
         Ok(weights)
     }
 
-    fn loss_for_truth_table(
-        &self,
-        target: TruthTable2,
-        epsilon: f64,
-    ) -> Result<f64, TrainError> {
+    fn loss_for_truth_table(&self, target: TruthTable2, epsilon: f64) -> Result<f64, TrainError> {
         let weights = self.softmax_weights()?;
         let mut loss = 0.0_f64;
 
         for input_index in 0..4_u8 {
             let left = input_index & 1 != 0;
             let right = input_index & 2 != 0;
-            let target_value = if target.evaluate(left, right) { 1.0 } else { 0.0 };
-            let probability =
-                weighted_output(&weights, left, right).clamp(epsilon, 1.0 - epsilon);
-            loss -= target_value * probability.ln()
-                + (1.0 - target_value) * (1.0 - probability).ln();
+            let target_value = if target.evaluate(left, right) {
+                1.0
+            } else {
+                0.0
+            };
+            let probability = weighted_output(&weights, left, right).clamp(epsilon, 1.0 - epsilon);
+            loss -=
+                target_value * probability.ln() + (1.0 - target_value) * (1.0 - probability).ln();
         }
 
         Ok(loss / 4.0)
     }
 }
 
-fn weighted_output(
-    weights: &[f64; TRUTH_TABLE_COUNT],
-    left: bool,
-    right: bool,
-) -> f64 {
+fn weighted_output(weights: &[f64; TRUTH_TABLE_COUNT], left: bool, right: bool) -> f64 {
     weights
         .iter()
         .enumerate()
