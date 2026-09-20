@@ -217,11 +217,10 @@ impl LatentBooleanCircuit {
 
             for sample in samples {
                 let forward = self.forward_soft(&sample.inputs)?;
-                let probability = forward.gate_outputs[output_gate]
-                    .clamp(config.epsilon, 1.0 - config.epsilon);
+                let probability =
+                    forward.gate_outputs[output_gate].clamp(config.epsilon, 1.0 - config.epsilon);
                 let target = bool_as_f64(sample.target);
-                let output_gradient =
-                    (probability - target) / (probability * (1.0 - probability));
+                let output_gradient = (probability - target) / (probability * (1.0 - probability));
 
                 let mut upstream = vec![0.0_f64; self.nodes.len()];
                 upstream[output_gate] = output_gradient;
@@ -267,12 +266,12 @@ impl LatentBooleanCircuit {
 
             counters.epochs = counters.epochs.saturating_add(1);
             counters.samples_seen = counters.samples_seen.saturating_add(samples.len() as u64);
-            counters.soft_gate_evaluations = counters.soft_gate_evaluations.saturating_add(
-                samples.len() as u64 * self.nodes.len() as u64,
-            );
-            counters.latent_parameter_updates = counters.latent_parameter_updates.saturating_add(
-                self.nodes.len() as u64 * TRUTH_TABLE_COUNT as u64,
-            );
+            counters.soft_gate_evaluations = counters
+                .soft_gate_evaluations
+                .saturating_add(samples.len() as u64 * self.nodes.len() as u64);
+            counters.latent_parameter_updates = counters
+                .latent_parameter_updates
+                .saturating_add(self.nodes.len() as u64 * TRUTH_TABLE_COUNT as u64);
         }
 
         Ok(CircuitTrainingReport {
@@ -347,8 +346,7 @@ impl LatentBooleanCircuit {
 
         for sample in samples {
             let forward = self.forward_soft(&sample.inputs)?;
-            let probability =
-                forward.gate_outputs[output_gate].clamp(epsilon, 1.0 - epsilon);
+            let probability = forward.gate_outputs[output_gate].clamp(epsilon, 1.0 - epsilon);
             let target = bool_as_f64(sample.target);
             loss -= target * probability.ln() + (1.0 - target) * (1.0 - probability).ln();
         }
@@ -422,11 +420,7 @@ fn validate_samples(samples: &[CircuitSample], input_count: usize) -> Result<(),
     Ok(())
 }
 
-fn resolve_hard(
-    signal: SignalRef,
-    inputs: &[bool],
-    gates: &[bool],
-) -> Result<bool, CircuitError> {
+fn resolve_hard(signal: SignalRef, inputs: &[bool], gates: &[bool]) -> Result<bool, CircuitError> {
     match signal {
         SignalRef::Input(index) => inputs
             .get(index as usize)
@@ -439,11 +433,7 @@ fn resolve_hard(
     }
 }
 
-fn resolve_soft(
-    signal: SignalRef,
-    inputs: &[bool],
-    gates: &[f64],
-) -> Result<f64, CircuitError> {
+fn resolve_soft(signal: SignalRef, inputs: &[bool], gates: &[f64]) -> Result<f64, CircuitError> {
     match signal {
         SignalRef::Input(index) => inputs
             .get(index as usize)
@@ -496,18 +486,15 @@ fn multilinear_extension(table: TruthTable2, left: f64, right: f64) -> (f64, f64
         + y10 * left * (1.0 - right)
         + y01 * (1.0 - left) * right
         + y11 * left * right;
-    let left_derivative =
-        (y10 - y00) * (1.0 - right) + (y11 - y01) * right;
-    let right_derivative =
-        (y01 - y00) * (1.0 - left) + (y11 - y10) * left;
+    let left_derivative = (y10 - y00) * (1.0 - right) + (y11 - y01) * right;
+    let right_derivative = (y01 - y00) * (1.0 - left) + (y11 - y10) * left;
     (output, left_derivative, right_derivative)
 }
 
 fn deterministic_logits(node_index: usize) -> [f64; TRUTH_TABLE_COUNT] {
     let mut logits = [0.0_f64; TRUTH_TABLE_COUNT];
     for (code, logit) in logits.iter_mut().enumerate() {
-        let seed = (node_index as u64 + 1)
-            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        let seed = (node_index as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)
             ^ (code as u64 + 1).wrapping_mul(0xd1b5_4a32_d192_ed03);
         let mixed = mix64(seed);
         let unit = (mixed >> 11) as f64 / (1_u64 << 53) as f64;
