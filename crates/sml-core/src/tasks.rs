@@ -77,10 +77,7 @@ pub fn delayed_bit_recall(case_id: u64, delay: usize) -> TaskInstance {
 }
 
 /// Direct keyed Boolean fact recall with unrelated keyed facts.
-pub fn keyed_fact_recall(
-    case_id: u64,
-    distractors: usize,
-) -> Result<TaskInstance, TaskError> {
+pub fn keyed_fact_recall(case_id: u64, distractors: usize) -> Result<TaskInstance, TaskError> {
     validate_distractor_count(distractors)?;
     let target_key = (case_id % 16_384) as u16;
     let target_value = deterministic_bit(case_id, 1);
@@ -107,10 +104,7 @@ pub fn keyed_fact_recall(
 }
 
 /// Copies the exact payload observed after a marker.
-pub fn copy_after_marker(
-    case_id: u64,
-    payload_len: usize,
-) -> Result<TaskInstance, TaskError> {
+pub fn copy_after_marker(case_id: u64, payload_len: usize) -> Result<TaskInstance, TaskError> {
     if payload_len == 0 || payload_len > 4_096 {
         return Err(TaskError::InvalidPayloadLength(payload_len));
     }
@@ -136,10 +130,7 @@ pub fn copy_after_marker(
 }
 
 /// Retrieves two facts and returns their Boolean conjunction.
-pub fn two_fact_conjunction(
-    case_id: u64,
-    distractors: usize,
-) -> Result<TaskInstance, TaskError> {
+pub fn two_fact_conjunction(case_id: u64, distractors: usize) -> Result<TaskInstance, TaskError> {
     validate_distractor_count(distractors)?;
     let left_key = (case_id % 8_192) as u16;
     let right_key = 8_192 + (case_id % 8_192) as u16;
@@ -175,10 +166,7 @@ pub fn two_fact_conjunction(
 }
 
 /// Recalls a target fact while irrelevant facts and non-keyed distractors intervene.
-pub fn distractor_rejection(
-    case_id: u64,
-    distractors: usize,
-) -> Result<TaskInstance, TaskError> {
+pub fn distractor_rejection(case_id: u64, distractors: usize) -> Result<TaskInstance, TaskError> {
     validate_distractor_count(distractors)?;
     let target_key = (case_id % 8_192) as u16;
     let target_value = deterministic_bit(case_id, 97);
@@ -223,8 +211,10 @@ pub fn development_suite(cases_per_kind: u32) -> Result<Vec<TaskInstance>, TaskE
 pub fn solve_task(instance: &TaskInstance) -> Result<TaskAnswer, TaskError> {
     match instance.kind {
         TaskKind::DelayedBitRecall => {
-            let query = find_event(&instance.events, |event| matches!(event, TaskEvent::QueryRecall))
-                .ok_or(TaskError::MissingQuery)?;
+            let query = find_event(&instance.events, |event| {
+                matches!(event, TaskEvent::QueryRecall)
+            })
+            .ok_or(TaskError::MissingQuery)?;
             let value = instance.events[..query]
                 .iter()
                 .rev()
@@ -241,8 +231,10 @@ pub fn solve_task(instance: &TaskInstance) -> Result<TaskAnswer, TaskError> {
             Ok(TaskAnswer::Bit(value))
         }
         TaskKind::CopyAfterMarker => {
-            let query = find_event(&instance.events, |event| matches!(event, TaskEvent::QueryCopy))
-                .ok_or(TaskError::MissingQuery)?;
+            let query = find_event(&instance.events, |event| {
+                matches!(event, TaskEvent::QueryCopy)
+            })
+            .ok_or(TaskError::MissingQuery)?;
             let marker = instance.events[..query]
                 .iter()
                 .rposition(|event| matches!(event, TaskEvent::Marker))
@@ -268,10 +260,7 @@ pub fn solve_task(instance: &TaskInstance) -> Result<TaskAnswer, TaskError> {
     }
 }
 
-fn find_event(
-    events: &[TaskEvent],
-    predicate: impl Fn(&TaskEvent) -> bool,
-) -> Option<usize> {
+fn find_event(events: &[TaskEvent], predicate: impl Fn(&TaskEvent) -> bool) -> Option<usize> {
     events.iter().position(predicate)
 }
 
