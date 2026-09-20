@@ -1,7 +1,7 @@
 use sml_core::{
     active_fraction_within_ppm, run_recurrent, BooleanCircuit, BooleanWorkspace, DirectRouteTable,
-    ExecutionCounters, Gate, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel, ReasoningStep,
-    RunError, Wire, INITIAL_ACTIVE_PPM, SML_25B_INITIAL_BUDGET,
+    ExecutionCounters, Gate, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
+    ReasoningStep, RunError, Wire, INITIAL_ACTIVE_PPM, SML_25B_INITIAL_BUDGET,
 };
 
 #[test]
@@ -43,11 +43,8 @@ fn boolean_oracle_composes_without_pairwise_scoring() {
 
 #[test]
 fn direct_router_uses_workspace_address() {
-    let router = DirectRouteTable::new(
-        2,
-        vec![PageId(10), PageId(11), PageId(12), PageId(13)],
-    )
-    .unwrap();
+    let router =
+        DirectRouteTable::new(2, vec![PageId(10), PageId(11), PageId(12), PageId(13)]).unwrap();
     let workspace = BooleanWorkspace::from_bits(&[true, true, false, true]);
     let mut counters = ExecutionCounters::default();
 
