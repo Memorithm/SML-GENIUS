@@ -275,10 +275,8 @@ fn sml04_smoke() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 fn sml05_smoke() -> Result<(), Box<dyn std::error::Error>> {
-    const CANDIDATE: &str =
-        "sml-topology/v1|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4";
+    const CANDIDATE: &str = "sml-topology/v1|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4";
     let target: Vec<bool> = (0_usize..8)
         .map(|row| {
             let x0 = row & 1 != 0;

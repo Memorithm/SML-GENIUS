@@ -55,9 +55,8 @@ impl ForgeTopologyCandidateV1 {
                 if output.is_some() {
                     return Err(ForgeTopologyError::GateAfterOutput);
                 }
-                let (index_text, payload) = rest
-                    .split_once('=')
-                    .ok_or(ForgeTopologyError::GateSyntax)?;
+                let (index_text, payload) =
+                    rest.split_once('=').ok_or(ForgeTopologyError::GateSyntax)?;
                 let index = parse_usize(index_text)?;
                 if index != gates.len() {
                     return Err(ForgeTopologyError::GateIndex {
@@ -119,8 +118,8 @@ impl ForgeTopologyCandidateV1 {
         }
 
         let mut incorrect_rows = 0_u64;
-        for row in 0..expected_rows {
-            if self.evaluate_row(input_count, row)? != target_truth_table[row] {
+        for (row, expected) in target_truth_table.iter().copied().enumerate() {
+            if self.evaluate_row(input_count, row)? != expected {
                 incorrect_rows = incorrect_rows.saturating_add(1);
             }
         }
@@ -284,7 +283,10 @@ pub enum ForgeTopologyError {
     UnknownField,
     GateAfterOutput,
     GateSyntax,
-    GateIndex { expected: usize, actual: usize },
+    GateIndex {
+        expected: usize,
+        actual: usize,
+    },
     DuplicateOutput,
     MissingOutput,
     ZeroGates,
@@ -292,11 +294,24 @@ pub enum ForgeTopologyError {
     TruthTableCode(u8),
     InputCount(u8),
     MaxGates(u8),
-    GateCount { expected: usize, actual: usize },
-    ForwardOrInvalidSource { gate: usize, source: u16, limit: usize },
-    OutputSource { source: u16, limit: usize },
+    GateCount {
+        expected: usize,
+        actual: usize,
+    },
+    ForwardOrInvalidSource {
+        gate: usize,
+        source: u16,
+        limit: usize,
+    },
+    OutputSource {
+        source: u16,
+        limit: usize,
+    },
     GateValue(usize),
-    TruthTableLength { expected: usize, actual: usize },
+    TruthTableLength {
+        expected: usize,
+        actual: usize,
+    },
 }
 
 impl fmt::Display for ForgeTopologyError {

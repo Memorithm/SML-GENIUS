@@ -13,8 +13,7 @@ fn target_table() -> Vec<bool> {
         .collect()
 }
 
-const EXACT_FORGE_REPR: &str =
-    "sml-topology/v1|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4";
+const EXACT_FORGE_REPR: &str = "sml-topology/v1|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4";
 
 #[test]
 fn parser_accepts_canonical_forge_v1_representation() {
@@ -41,10 +40,9 @@ fn destination_requalification_reexecutes_complete_oracle() {
 
 #[test]
 fn destination_requalification_rejects_wrong_but_structural_candidate() {
-    let candidate = ForgeTopologyCandidateV1::parse(
-        "sml-topology/v1|g0=0,1,0|g1=3,2,8|g2=0,0,0|out=4",
-    )
-    .unwrap();
+    let candidate =
+        ForgeTopologyCandidateV1::parse("sml-topology/v1|g0=0,1,0|g1=3,2,8|g2=0,0,0|out=4")
+            .unwrap();
     let report = candidate.requalify(3, 3, &target_table()).unwrap();
 
     assert!(!report.exact());
@@ -54,34 +52,27 @@ fn destination_requalification_rejects_wrong_but_structural_candidate() {
 #[test]
 fn parser_is_strict_about_version_order_and_integer_canonicality() {
     assert_eq!(
-        ForgeTopologyCandidateV1::parse(
-            "sml-topology/v2|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4"
-        ),
+        ForgeTopologyCandidateV1::parse("sml-topology/v2|g0=0,1,6|g1=3,2,8|g2=0,0,0|out=4"),
         Err(ForgeTopologyError::ContractVersion)
     );
     assert_eq!(
-        ForgeTopologyCandidateV1::parse(
-            "sml-topology/v1|g1=0,1,6|g0=3,2,8|g2=0,0,0|out=4"
-        ),
+        ForgeTopologyCandidateV1::parse("sml-topology/v1|g1=0,1,6|g0=3,2,8|g2=0,0,0|out=4"),
         Err(ForgeTopologyError::GateIndex {
             expected: 0,
             actual: 1
         })
     );
     assert_eq!(
-        ForgeTopologyCandidateV1::parse(
-            "sml-topology/v1|g0=00,1,6|g1=3,2,8|g2=0,0,0|out=4"
-        ),
+        ForgeTopologyCandidateV1::parse("sml-topology/v1|g0=00,1,6|g1=3,2,8|g2=0,0,0|out=4"),
         Err(ForgeTopologyError::InvalidInteger)
     );
 }
 
 #[test]
 fn requalification_rejects_forward_reference() {
-    let candidate = ForgeTopologyCandidateV1::parse(
-        "sml-topology/v1|g0=3,1,6|g1=0,2,8|g2=0,0,0|out=4",
-    )
-    .unwrap();
+    let candidate =
+        ForgeTopologyCandidateV1::parse("sml-topology/v1|g0=3,1,6|g1=0,2,8|g2=0,0,0|out=4")
+            .unwrap();
 
     assert!(matches!(
         candidate.requalify(3, 3, &target_table()),
