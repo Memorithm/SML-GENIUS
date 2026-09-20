@@ -9,8 +9,8 @@ use sml_core::{
     tasks::development_suite,
     trace::run_recurrent_traced,
     BooleanWorkspace, ExecutionCounters, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
-    ReasoningStep, SML_25B_INITIAL_BUDGET,
-    TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND, TARGET_VRAM_BYTES,
+    ReasoningStep, SML_25B_INITIAL_BUDGET, TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND,
+    TARGET_VRAM_BYTES,
 };
 
 fn main() {
@@ -103,7 +103,6 @@ fn sml01_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("attention_score_ops={}", counters.attention_score_ops);
     Ok(())
 }
-
 
 struct TraceSmokeKernel;
 
