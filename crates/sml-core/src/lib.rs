@@ -11,6 +11,7 @@ use core::fmt;
 pub mod anf;
 pub mod atlas;
 pub mod audit;
+pub mod candidate;
 pub mod circuit;
 pub mod forge_topology;
 pub mod gf2;
