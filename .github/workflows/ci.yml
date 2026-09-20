@@ -38,3 +38,5 @@ jobs:
         run: cargo test --workspace
       - name: Contract probe
         run: cargo run -p sml-cli -- contract
+      - name: SML-0.1 smoke
+        run: cargo run -p sml-cli -- sml01-smoke
