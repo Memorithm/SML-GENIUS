@@ -51,6 +51,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
+- **sml-core::circuit**: fixed-wiring acyclic circuits with jointly trainable hard Boolean gate identities.
 - **sml-core::trace**: immutable recurrent-cycle evidence tied directly to execution.
 - **sml-core::tasks**: deterministic SML-1 development tasks with complete symbolic oracles.
 - **sml-core::train**: continuous-latent training of hard two-input Boolean truth tables.
@@ -59,6 +60,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/SML-0.1-ALGEBRA-MEMORY-ATLAS.md**: reference algebra/memory/page semantics.
 - **docs/SML-0.2-TRACE-TASKS.md**: recurrent trace and deterministic SML-1 task contract.
 - **docs/SML-0.3-TRAINABLE-GATES.md**: first executable Boolean trainability contract.
+- **docs/SML-0.4-TRAINABLE-CIRCUITS.md**: multi-gate acyclic trainability and representation accounting.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
@@ -72,6 +74,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo run -p sml-cli -- sml01-smoke
     cargo run -p sml-cli -- sml02-smoke
     cargo run -p sml-cli -- sml03-smoke
+    cargo run -p sml-cli -- sml04-smoke
 
 ## Scientific discipline
 
