@@ -49,11 +49,7 @@ impl Gf2Vector {
     }
 
     /// Coordinate-wise addition over GF(2).
-    pub fn xor(
-        &self,
-        other: &Self,
-        counters: &mut ExecutionCounters,
-    ) -> Result<Self, Gf2Error> {
+    pub fn xor(&self, other: &Self, counters: &mut ExecutionCounters) -> Result<Self, Gf2Error> {
         if self.len_bits != other.len_bits {
             return Err(Gf2Error::LengthMismatch {
                 left: self.len_bits,
@@ -87,9 +83,7 @@ impl Gf2Vector {
         }
 
         if self.len_bits != 0 {
-            let semantic_ops = (self.len_bits as u64)
-                .saturating_mul(2)
-                .saturating_sub(1);
+            let semantic_ops = (self.len_bits as u64).saturating_mul(2).saturating_sub(1);
             counters.gf2_ops = counters.gf2_ops.saturating_add(semantic_ops);
         }
 
