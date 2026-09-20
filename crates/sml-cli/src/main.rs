@@ -8,6 +8,7 @@ use sml_core::{
     forge_topology::ForgeTopologyCandidateV1,
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
+    routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
     tasks::development_suite,
     trace::run_recurrent_traced,
     train::{GateTrainingConfig, LatentGate2, TruthTable2},
@@ -52,10 +53,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml06-smoke" => {
+            if let Err(error) = sml06_smoke() {
+                eprintln!("SML-0.6 smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke]"
             );
             std::process::exit(2);
         }
@@ -298,5 +305,50 @@ fn sml05_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("reachable_gates={}", report.reachable_gates);
     println!("learned_boolean_bits={}", report.learned_boolean_bits);
     println!("wiring_metadata_bits={}", report.wiring_metadata_bits);
+    Ok(())
+}
+
+fn sml06_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let mut router = LatentDirectRouter::new(
+        2,
+        3,
+        RouteLearningBudget {
+            max_address_width: 2,
+            max_pages: 3,
+            max_learned_bits: 8,
+        },
+    )?;
+    let targets = [PageId(0), PageId(2), PageId(1), PageId(2)];
+    let report = router.train_complete(&targets, RouteTrainingConfig::default())?;
+    if report.hard_correct != targets.len() as u64 {
+        return Err("latent direct router did not learn the complete route oracle".into());
+    }
+
+    let accounting = router.accounting();
+    let frozen = router.freeze()?;
+    let mut counters = ExecutionCounters::default();
+    for (address, expected) in targets.iter().copied().enumerate() {
+        let workspace = BooleanWorkspace::from_bits(&[address & 1 != 0, address & 2 != 0]);
+        let page = frozen.route(&workspace, &mut counters)?;
+        if page != expected {
+            return Err(format!("frozen route mismatch at address {address}").into());
+        }
+    }
+    validate_non_attention_candidate(&counters)?;
+    if counters.route_lookups != targets.len() as u64 {
+        return Err("frozen router did not execute exactly one lookup per address".into());
+    }
+
+    println!("SML-0.6 smoke");
+    println!("addresses={}", report.address_count);
+    println!("hard_correct={}", report.hard_correct);
+    println!("initial_loss={:.8}", report.initial_loss);
+    println!("final_loss={:.8}", report.final_loss);
+    println!("learned_boolean_bits={}", accounting.learned_boolean_bits);
+    println!(
+        "latent_training_scalars={}",
+        accounting.latent_training_scalars
+    );
+    println!("route_lookups={}", counters.route_lookups);
     Ok(())
 }

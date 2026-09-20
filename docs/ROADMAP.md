@@ -31,18 +31,19 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] SML-1 deterministic task generators and complete-answer oracles;
 - [x] first continuous-latent / hard-forward trainability primitive for two-input Boolean gates;
 - [x] fixed-wiring multi-gate Boolean circuit trainability with exact hard inference;
-- [ ] learned wiring / routing trainability experiments;
+- [x] learned direct-routing bits under explicit structural budgets with hard O(1) freeze;
+- [ ] learned wiring trainability remains a separate experiment;
 - [x] discrete topology search through Forge `sml-topology/v1` with disjoint development/final-holdout rows;
 - [x] independent destination-side Forge candidate parsing and full-oracle requalification;
 - [ ] frozen SML-0 exit report.
 
 ## Immediate implementation sequence
 
-1. Add learned wiring or routing under explicit structural budgets.
-2. Train the first SML candidate on the deterministic task panel and retain full traces.
-3. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
-4. Define the first page-residency planner contract for ElasticXxx.
-5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+1. Train the first SML candidate on the deterministic task panel and retain full traces.
+2. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
+3. Define the first page-residency planner contract for ElasticXxx.
+4. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+5. Evaluate learned wiring separately against fixed/Forge-selected topology.
 6. Promote reusable primitives to SciRust only after semantics stabilize.
 
 ## Stop conditions

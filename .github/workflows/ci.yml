@@ -48,3 +48,5 @@ jobs:
         run: cargo run -p sml-cli -- sml04-smoke
       - name: SML-0.5 smoke
         run: cargo run -p sml-cli -- sml05-smoke
+      - name: SML-0.6 smoke
+        run: cargo run -p sml-cli -- sml06-smoke
