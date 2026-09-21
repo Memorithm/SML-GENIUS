@@ -20,6 +20,7 @@ pub mod memory;
 pub mod mor;
 pub mod mor_controller;
 pub mod mor_registry;
+pub mod mor_temporal;
 pub mod routing_train;
 pub mod task_loss;
 pub mod tasks;

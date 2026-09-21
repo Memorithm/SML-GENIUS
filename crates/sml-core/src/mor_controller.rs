@@ -125,6 +125,10 @@ impl MorController {
         &self.previous
     }
 
+    pub(crate) fn replace_previous_route(&mut self, previous: PreviousRoute) {
+        self.previous = previous;
+    }
+
     #[must_use]
     pub fn router_load_ppm(&self, router_id: RouterId) -> u32 {
         self.router_load_ppm.get(&router_id).copied().unwrap_or(0)
