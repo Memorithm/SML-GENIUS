@@ -97,8 +97,8 @@ Current status:
   - [x] SBG-0.10b structural BIND/SPLIT/MERGE evidence decisions;
 - [x] SBG-0.11 linguistic micro-benchmark;
 - [ ] SBG-0.12 SIMD qualification;
-  - [ ] SBG-0.12a scalar-oracle versus safe packed-u64 POPCOUNT kernel qualification;
-  - [ ] SBG-0.12b measured architecture-specific acceleration/dispatch where safe Rust permits;
+  - [x] SBG-0.12a scalar-oracle versus safe packed-u64 POPCOUNT kernel qualification;
+  - [ ] SBG-0.12b reproducible wall-clock/codegen measurement and architecture-specific acceleration/dispatch where safe Rust permits;
 - [ ] SBG-0.13 mmap semantic store;
 - [ ] SBG-0.14 integrated prototype.
 
