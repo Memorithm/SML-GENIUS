@@ -11,11 +11,11 @@ pub mod context;
 pub mod metric;
 pub mod state;
 
-pub use ambiguity::{
-    derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy, AmbiguityTransition,
-};
 pub use algebra::{
     bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
+};
+pub use ambiguity::{
+    derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy, AmbiguityTransition,
 };
 pub use bitfield::{SemanticBitField, SemanticBitFieldError};
 pub use context::{
