@@ -196,12 +196,7 @@ fn evaluate_sequence(
         };
     }
 
-    evaluate_sequence_from_chosen_pages(
-        sequence,
-        sequence_index,
-        policy,
-        &chosen_pages,
-    )
+    evaluate_sequence_from_chosen_pages(sequence, sequence_index, policy, &chosen_pages)
 }
 
 pub(crate) fn evaluate_sequence_from_chosen_pages(
