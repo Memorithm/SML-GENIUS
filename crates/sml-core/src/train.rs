@@ -360,11 +360,7 @@ impl LatentGate2 {
         Ok(weights)
     }
 
-    fn loss_for_samples(
-        &self,
-        samples: &[GateSample2],
-        epsilon: f64,
-    ) -> Result<f64, TrainError> {
+    fn loss_for_samples(&self, samples: &[GateSample2], epsilon: f64) -> Result<f64, TrainError> {
         if samples.is_empty() {
             return Err(TrainError::EmptySamples);
         }
