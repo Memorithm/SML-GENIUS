@@ -3,9 +3,7 @@ use sml_core::{
         BooleanCommitDecision, BooleanCommitPolicy, BooleanGroupObservation, BooleanPageGroup,
         HierarchicalBooleanPolicy, HierarchicalBooleanSearch,
     },
-    boolean_learning::{
-        BooleanLearningOutcome, BooleanLearningPolicy, BooleanLearningTransaction,
-    },
+    boolean_learning::{BooleanLearningOutcome, BooleanLearningPolicy, BooleanLearningTransaction},
     boolean_overlapping::OverlappingProbePolicy,
     boolean_page::{BooleanPageError, BooleanPageRead, PackedBooleanPage},
     PageId,
@@ -35,9 +33,7 @@ fn transaction_policy(rescue_groups_per_round: usize) -> BooleanLearningPolicy {
     }
 }
 
-fn cancelled_train_objective(
-    read: &dyn BooleanPageRead,
-) -> Result<u32, BooleanPageError> {
+fn cancelled_train_objective(read: &dyn BooleanPageRead) -> Result<u32, BooleanPageError> {
     let mut loss = 500_000_i64;
     if read.bit(0)? {
         loss -= 100_000;
@@ -48,9 +44,7 @@ fn cancelled_train_objective(
     Ok(loss as u32)
 }
 
-fn adverse_holdout_objective(
-    read: &dyn BooleanPageRead,
-) -> Result<u32, BooleanPageError> {
+fn adverse_holdout_objective(read: &dyn BooleanPageRead) -> Result<u32, BooleanPageError> {
     let mut loss = 500_000_i64;
     if read.bit(0)? {
         loss += 100_000;
@@ -187,6 +181,9 @@ fn complete_transaction_is_deterministic() {
 
     assert_eq!(first, second);
     for index in 0..8 {
-        assert_eq!(first_page.bit(index).unwrap(), second_page.bit(index).unwrap());
+        assert_eq!(
+            first_page.bit(index).unwrap(),
+            second_page.bit(index).unwrap()
+        );
     }
 }
