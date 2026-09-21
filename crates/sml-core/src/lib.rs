@@ -14,6 +14,7 @@ pub mod audit;
 pub mod boolean_hierarchical;
 pub mod boolean_integral;
 pub mod boolean_overlapping;
+pub mod boolean_page;
 pub mod candidate;
 pub mod circuit;
 pub mod elastic_weights;
