@@ -9,6 +9,7 @@ pub mod ambiguity;
 pub mod bitfield;
 pub mod composition;
 pub mod context;
+pub mod elastic_regions;
 pub mod metric;
 pub mod mor_routing;
 pub mod recurrent;
@@ -28,6 +29,10 @@ pub use composition::{
 pub use context::{
     derive_context_mask, update_context_mask, ContextMaskError, ContextMaskPolicy,
     ContextMaskUpdate,
+};
+pub use elastic_regions::{
+    SemanticElasticBridge, SemanticElasticError, SemanticElasticPlan, SemanticElasticPolicy,
+    SemanticElasticWorkingSet, SemanticWeightRegion, SemanticWeightRegionScore,
 };
 pub use metric::{
     hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
