@@ -10,7 +10,7 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use crate::{
-    mor::{MixtureOfRouters, PreviousRoute, RouterId, MOR_SCALE_PPM},
+    mor::{MixtureOfRouters, PreviousRoute, MOR_SCALE_PPM},
     mor_affinity::{MorAffinityError, NativeAffinityBank, NativeRouterSpec, SmlFingerprintPlan},
     BooleanWorkspace, PageId,
 };
