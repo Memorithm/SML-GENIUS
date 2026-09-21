@@ -59,15 +59,13 @@ pub fn masked_score<const BITS: usize>(
     let mut active_bits = 0_u64;
     let mut differing_bits = 0_u64;
 
-    for ((left_word, right_word), mask_word) in left
-        .words()
-        .iter()
-        .zip(right.words())
-        .zip(mask.words())
+    for ((left_word, right_word), mask_word) in
+        left.words().iter().zip(right.words()).zip(mask.words())
     {
         active_bits = active_bits.saturating_add(u64::from(mask_word.count_ones()));
-        differing_bits = differing_bits
-            .saturating_add(u64::from(((left_word ^ right_word) & mask_word).count_ones()));
+        differing_bits = differing_bits.saturating_add(u64::from(
+            ((left_word ^ right_word) & mask_word).count_ones(),
+        ));
     }
 
     if active_bits == 0 {
