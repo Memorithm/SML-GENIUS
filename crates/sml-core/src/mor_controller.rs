@@ -121,6 +121,11 @@ impl MorController {
     }
 
     #[must_use]
+    pub const fn policy(&self) -> MorControllerPolicy {
+        self.policy
+    }
+
+    #[must_use]
     pub fn previous_route(&self) -> &PreviousRoute {
         &self.previous
     }
