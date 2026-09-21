@@ -10,8 +10,7 @@ use core::fmt;
 
 use crate::{
     boolean_hierarchical::{
-        BooleanCommitDecision, BooleanCommitEvidence, BooleanCommitPolicy,
-        HierarchicalBooleanError,
+        BooleanCommitDecision, BooleanCommitEvidence, BooleanCommitPolicy, HierarchicalBooleanError,
     },
     boolean_integral::{
         BooleanCreditCell, BooleanIntegralAccumulator, BooleanIntegralDecision,
@@ -109,9 +108,7 @@ impl<const BITS: usize> SemanticEvidenceLedger<BITS> {
         let parameter_count = BITS
             .checked_mul(SEMANTIC_FIELD_COUNT)
             .ok_or(SemanticEvidenceError::ArithmeticOverflow)?;
-        let policy = policy
-            .validate()
-            .map_err(SemanticEvidenceError::Integral)?;
+        let policy = policy.validate().map_err(SemanticEvidenceError::Integral)?;
         let accumulator = BooleanIntegralAccumulator::new(parameter_count, policy)
             .map_err(SemanticEvidenceError::Integral)?;
         Ok(Self {
@@ -142,7 +139,8 @@ impl<const BITS: usize> SemanticEvidenceLedger<BITS> {
         for coordinate in &observation.coordinates {
             let flat = flat_index::<BITS>(*coordinate)?;
             mask.push(
-                u32::try_from(flat).map_err(|_| SemanticEvidenceError::FlatIndexOutOfRange(flat))?,
+                u32::try_from(flat)
+                    .map_err(|_| SemanticEvidenceError::FlatIndexOutOfRange(flat))?,
             );
         }
 
@@ -274,10 +272,8 @@ where
         )?;
     }
 
-    let train_candidate_loss_ppm =
-        evaluate_objective(&candidate_state, &mut train_objective)?;
-    let holdout_candidate_loss_ppm =
-        evaluate_objective(&candidate_state, &mut holdout_objective)?;
+    let train_candidate_loss_ppm = evaluate_objective(&candidate_state, &mut train_objective)?;
+    let holdout_candidate_loss_ppm = evaluate_objective(&candidate_state, &mut holdout_objective)?;
 
     let decision = BooleanCommitEvidence {
         train_baseline_loss_ppm,
@@ -475,7 +471,9 @@ fn convert_unit_error<E>(error: SemanticEvidenceError<()>) -> SemanticEvidenceEr
         SemanticEvidenceError::Integral(error) => SemanticEvidenceError::Integral(error),
         SemanticEvidenceError::Commit(error) => SemanticEvidenceError::Commit(error),
         SemanticEvidenceError::BitField(error) => SemanticEvidenceError::BitField(error),
-        SemanticEvidenceError::Objective(()) => unreachable!("unit objective error is never converted"),
+        SemanticEvidenceError::Objective(()) => {
+            unreachable!("unit objective error is never converted")
+        }
     }
 }
 
@@ -612,9 +610,7 @@ mod tests {
 
         ledger.observe(&observation).expect("second");
         assert_eq!(
-            ledger
-                .decision(coordinate)
-                .expect("decision"),
+            ledger.decision(coordinate).expect("decision"),
             crate::boolean_integral::BooleanIntegralDecision::Flip
         );
     }
