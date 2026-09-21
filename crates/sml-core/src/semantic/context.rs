@@ -240,9 +240,6 @@ mod tests {
             masked_hamming_distance(&anchor, &finance, &river_mask),
             Ok(4)
         );
-        assert_eq!(
-            masked_hamming_distance(&anchor, &river, &river_mask),
-            Ok(0)
-        );
+        assert_eq!(masked_hamming_distance(&anchor, &river, &river_mask), Ok(0));
     }
 }
