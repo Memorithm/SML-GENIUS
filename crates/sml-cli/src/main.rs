@@ -692,7 +692,10 @@ fn sml14_smoke() -> Result<(), Box<dyn std::error::Error>> {
         "learned_recall_code={}",
         training.recall_gate.final_table.code()
     );
-    println!("learned_copy_code={}", training.copy_gate.final_table.code());
+    println!(
+        "learned_copy_code={}",
+        training.copy_gate.final_table.code()
+    );
     println!(
         "learned_delayed_recall_exact={}/{}",
         learned_eval.exact_delayed_recall_tasks, learned_eval.delayed_recall_tasks
