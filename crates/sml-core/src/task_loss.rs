@@ -7,6 +7,10 @@
 use core::fmt;
 
 use crate::{
+    boolean_integral::{
+        train_boolean_gate_samples, BooleanGateTrainingConfig, BooleanGateTrainingReport,
+        BooleanIntegralError,
+    },
     candidate::{
         SmlTaskCandidate, TaskCandidateConfig, TaskCandidateError, TaskCandidateTrainingReport,
     },
@@ -84,6 +88,38 @@ pub struct StateUpdateTaskTrainingReport {
     pub learned_boolean_bits: u64,
     pub latent_training_scalars: u64,
     pub gate: GateSampleTrainingReport,
+    pub candidate: TaskCandidateTrainingReport,
+}
+
+/// Configuration for gradient-free Boolean-integral task learning.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BooleanIntegralTaskTrainingConfig {
+    pub train_start_case_id: u64,
+    pub train_cases: u32,
+    pub gate_training: BooleanGateTrainingConfig,
+    pub candidate: TaskCandidateConfig,
+}
+
+impl Default for BooleanIntegralTaskTrainingConfig {
+    fn default() -> Self {
+        Self {
+            train_start_case_id: 0,
+            train_cases: 64,
+            gate_training: BooleanGateTrainingConfig::default(),
+            candidate: TaskCandidateConfig::default(),
+        }
+    }
+}
+
+/// Evidence retained after integer-only Boolean-integral task learning.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BooleanIntegralTaskTrainingReport {
+    pub task_samples: u64,
+    pub input_pattern_mask: u8,
+    pub learned_boolean_bits: u64,
+    /// Four signed credit bits for each of the four active truth-table parameters.
+    pub active_credit_bits: u64,
+    pub gate: BooleanGateTrainingReport,
     pub candidate: TaskCandidateTrainingReport,
 }
 
@@ -203,6 +239,117 @@ pub fn train_state_update_from_tasks(
             input_pattern_mask,
             learned_boolean_bits: 4,
             latent_training_scalars: TRUTH_TABLE_COUNT as u64,
+            gate: gate_report,
+            candidate: candidate_report,
+        },
+    ))
+}
+
+/// Trains conjunction semantics from task examples using Boolean-integral credit only.
+pub fn train_conjunction_from_tasks_boolean_integral(
+    config: BooleanIntegralTaskTrainingConfig,
+) -> Result<(SmlTaskCandidate, BooleanIntegralTaskTrainingReport), TaskLossError> {
+    if config.train_cases == 0 {
+        return Err(TaskLossError::ZeroTrainingCases);
+    }
+
+    let suite = suite_from_case_id(config.train_start_case_id, config.train_cases)?;
+    let mut samples = Vec::with_capacity(config.train_cases as usize);
+    let mut input_pattern_mask = 0_u8;
+
+    for instance in &suite {
+        if instance.kind != TaskKind::TwoFactConjunction {
+            continue;
+        }
+        let sample = conjunction_sample(instance)?;
+        let input_index = sample.left as u8 | ((sample.right as u8) << 1);
+        input_pattern_mask |= 1_u8 << input_index;
+        samples.push(sample);
+    }
+
+    if input_pattern_mask != 0b1111 {
+        return Err(TaskLossError::IncompleteInputCoverage(input_pattern_mask));
+    }
+
+    let gate_report = train_boolean_gate_samples(
+        &samples,
+        crate::train::TruthTable2::FALSE,
+        config.gate_training,
+    )?;
+    if gate_report.hard_correct != samples.len() as u64 {
+        return Err(TaskLossError::GateNotConverged {
+            correct: gate_report.hard_correct,
+            total: samples.len() as u64,
+        });
+    }
+
+    let (candidate, candidate_report) =
+        SmlTaskCandidate::train_with_conjunction(config.candidate, gate_report.final_table)?;
+
+    Ok((
+        candidate,
+        BooleanIntegralTaskTrainingReport {
+            task_samples: samples.len() as u64,
+            input_pattern_mask,
+            learned_boolean_bits: 4,
+            active_credit_bits: 16,
+            gate: gate_report,
+            candidate: candidate_report,
+        },
+    ))
+}
+
+/// Trains overwrite-state semantics from task examples using Boolean-integral credit only.
+pub fn train_state_update_from_tasks_boolean_integral(
+    config: BooleanIntegralTaskTrainingConfig,
+) -> Result<(SmlTaskCandidate, BooleanIntegralTaskTrainingReport), TaskLossError> {
+    if config.train_cases == 0 {
+        return Err(TaskLossError::ZeroTrainingCases);
+    }
+
+    let suite = suite_from_case_id(config.train_start_case_id, config.train_cases)?;
+    let mut samples = Vec::with_capacity(config.train_cases as usize);
+    let mut input_pattern_mask = 0_u8;
+
+    for instance in &suite {
+        if instance.kind != TaskKind::OverwriteBitRecall {
+            continue;
+        }
+        let sample = state_update_sample(instance)?;
+        let input_index = sample.left as u8 | ((sample.right as u8) << 1);
+        input_pattern_mask |= 1_u8 << input_index;
+        samples.push(sample);
+    }
+
+    if input_pattern_mask != 0b1111 {
+        return Err(TaskLossError::IncompleteInputCoverage(input_pattern_mask));
+    }
+
+    let gate_report = train_boolean_gate_samples(
+        &samples,
+        crate::train::TruthTable2::FALSE,
+        config.gate_training,
+    )?;
+    if gate_report.hard_correct != samples.len() as u64 {
+        return Err(TaskLossError::GateNotConverged {
+            correct: gate_report.hard_correct,
+            total: samples.len() as u64,
+        });
+    }
+
+    let (candidate, candidate_report) = SmlTaskCandidate::train_with_micro_ops(
+        config.candidate,
+        crate::train::TruthTable2::AND,
+        gate_report.final_table,
+    )?;
+
+    Ok((
+        candidate,
+        BooleanIntegralTaskTrainingReport {
+            task_samples: samples.len() as u64,
+            input_pattern_mask,
+            learned_boolean_bits: 4,
+            active_credit_bits: 16,
             gate: gate_report,
             candidate: candidate_report,
         },
@@ -334,6 +481,7 @@ pub enum TaskLossError {
     NonScalarTarget,
     Task(TaskError),
     Train(TrainError),
+    BooleanIntegral(BooleanIntegralError),
     Candidate(TaskCandidateError),
 }
 
@@ -354,6 +502,12 @@ impl From<TaskError> for TaskLossError {
 impl From<TrainError> for TaskLossError {
     fn from(value: TrainError) -> Self {
         Self::Train(value)
+    }
+}
+
+impl From<BooleanIntegralError> for TaskLossError {
+    fn from(value: BooleanIntegralError) -> Self {
+        Self::BooleanIntegral(value)
     }
 }
 

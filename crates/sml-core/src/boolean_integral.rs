@@ -353,6 +353,161 @@ impl PackedBooleanCreditLedger {
     }
 }
 
+/// Gradient-free training settings for one hard two-input Boolean gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BooleanGateTrainingConfig {
+    /// Maximum accepted coordinate passes over the four truth-table bits.
+    pub max_passes: u32,
+    /// Evidence confidence required before a bit is eligible to flip.
+    pub decision_confidence_ppm: u32,
+}
+
+impl Default for BooleanGateTrainingConfig {
+    fn default() -> Self {
+        Self {
+            max_passes: 4,
+            decision_confidence_ppm: 500_000,
+        }
+    }
+}
+
+impl BooleanGateTrainingConfig {
+    pub fn validate(self) -> Result<Self, BooleanIntegralError> {
+        if self.max_passes == 0 {
+            return Err(BooleanIntegralError::ZeroTrainingPasses);
+        }
+        if self.decision_confidence_ppm > BOOLEAN_INTEGRAL_SCALE_PPM {
+            return Err(BooleanIntegralError::ConfidenceOutOfRange(
+                self.decision_confidence_ppm,
+            ));
+        }
+        Ok(self)
+    }
+}
+
+/// Integer-only evidence emitted by Boolean-integral gate training.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BooleanGateTrainingReport {
+    pub initial_table: crate::train::TruthTable2,
+    pub final_table: crate::train::TruthTable2,
+    pub initial_loss_ppm: u32,
+    pub final_loss_ppm: u32,
+    pub hard_correct: u64,
+    pub sample_count: u64,
+    pub passes_completed: u32,
+    pub interventions: u64,
+    pub accepted_flips: u64,
+}
+
+/// Learns a hard two-input Boolean gate without a soft surrogate or gradient.
+///
+/// Each pass measures the four possible one-bit XOR interventions, integrates
+/// their integer loss evidence, then commits only the best strictly improving
+/// flip. Recomputing evidence after each commit avoids carrying stale flip
+/// direction across a changed Boolean state.
+pub fn train_boolean_gate_samples(
+    samples: &[crate::train::GateSample2],
+    initial_table: crate::train::TruthTable2,
+    config: BooleanGateTrainingConfig,
+) -> Result<BooleanGateTrainingReport, BooleanIntegralError> {
+    let config = config.validate()?;
+    if samples.is_empty() {
+        return Err(BooleanIntegralError::EmptySamples);
+    }
+
+    let initial_loss_ppm = hard_gate_loss_ppm(initial_table, samples)?;
+    let mut current = initial_table;
+    let mut current_loss_ppm = initial_loss_ppm;
+    let mut passes_completed = 0_u32;
+    let mut interventions = 0_u64;
+    let mut accepted_flips = 0_u64;
+
+    for _ in 0..config.max_passes {
+        if current_loss_ppm == 0 {
+            break;
+        }
+
+        let policy = BooleanIntegralPolicy {
+            min_observations: 1,
+            min_confidence_ppm: config.decision_confidence_ppm,
+            max_mask_width: 1,
+        };
+        let mut integral = BooleanIntegralAccumulator::new(4, policy)?;
+        let mut candidate_losses = [0_u32; 4];
+
+        for bit in 0..4_u32 {
+            let candidate = crate::train::TruthTable2::new(current.code() ^ (1_u8 << bit))
+                .map_err(BooleanIntegralError::Train)?;
+            let loss = hard_gate_loss_ppm(candidate, samples)?;
+            candidate_losses[bit as usize] = loss;
+            integral.observe(&BooleanIntervention {
+                mask: vec![bit],
+                baseline_loss_ppm: current_loss_ppm,
+                perturbed_loss_ppm: loss,
+            })?;
+            interventions = interventions.saturating_add(1);
+        }
+
+        let mut selected: Option<(usize, u32)> = None;
+        for bit in integral.recommended_flips() {
+            let loss = candidate_losses[bit];
+            if loss >= current_loss_ppm {
+                continue;
+            }
+            match selected {
+                None => selected = Some((bit, loss)),
+                Some((best_bit, best_loss))
+                    if loss < best_loss || (loss == best_loss && bit < best_bit) =>
+                {
+                    selected = Some((bit, loss));
+                }
+                _ => {}
+            }
+        }
+
+        passes_completed = passes_completed.saturating_add(1);
+        let Some((bit, next_loss)) = selected else {
+            break;
+        };
+
+        current = crate::train::TruthTable2::new(current.code() ^ (1_u8 << bit))
+            .map_err(BooleanIntegralError::Train)?;
+        current_loss_ppm = next_loss;
+        accepted_flips = accepted_flips.saturating_add(1);
+    }
+
+    let hard_correct = samples
+        .iter()
+        .filter(|sample| current.evaluate(sample.left, sample.right) == sample.target)
+        .count() as u64;
+
+    Ok(BooleanGateTrainingReport {
+        initial_table,
+        final_table: current,
+        initial_loss_ppm,
+        final_loss_ppm: current_loss_ppm,
+        hard_correct,
+        sample_count: samples.len() as u64,
+        passes_completed,
+        interventions,
+        accepted_flips,
+    })
+}
+
+fn hard_gate_loss_ppm(
+    table: crate::train::TruthTable2,
+    samples: &[crate::train::GateSample2],
+) -> Result<u32, BooleanIntegralError> {
+    if samples.is_empty() {
+        return Err(BooleanIntegralError::EmptySamples);
+    }
+    let wrong = samples
+        .iter()
+        .filter(|sample| table.evaluate(sample.left, sample.right) != sample.target)
+        .count() as u128;
+    Ok(((wrong * BOOLEAN_INTEGRAL_SCALE_PPM as u128) / samples.len() as u128) as u32)
+}
+
 fn validate_loss(loss_ppm: u32) -> Result<(), BooleanIntegralError> {
     if loss_ppm > BOOLEAN_INTEGRAL_SCALE_PPM {
         return Err(BooleanIntegralError::LossOutOfRange(loss_ppm));
@@ -364,6 +519,8 @@ fn validate_loss(loss_ppm: u32) -> Result<(), BooleanIntegralError> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BooleanIntegralError {
     ZeroParameters,
+    EmptySamples,
+    ZeroTrainingPasses,
     ZeroMinimumObservations,
     ZeroMaximumMaskWidth,
     ConfidenceOutOfRange(u32),
@@ -375,6 +532,7 @@ pub enum BooleanIntegralError {
     InvalidPackedCredit(u8),
     InvalidPackedScore(i8),
     InvalidPackedThreshold(i8),
+    Train(crate::train::TrainError),
 }
 
 impl fmt::Display for BooleanIntegralError {
