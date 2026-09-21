@@ -12,6 +12,20 @@ SML has a large cold parameter atlas but intends to touch only a small routed su
 
 The learned parameter count does not change when a representation changes. Only physical representation cost and residency change.
 
+## Versioned interop contract
+
+SML-0.7.1 publishes the self-contained Rust contract `sml.elastic-weight-plan@1.0.0`.
+Every transition carries its logical parameter count plus source/target representation versions.
+The plan carries the RAM, VRAM and active-parameter limits under which it was produced.
+
+`ElasticWeightPlan::validate_contract_v1` independently recomputes payload bytes, RAM/VRAM totals,
+active parameters, active storage bits, movement totals and precision-change count from the page
+transitions. It also rejects duplicate pages, active-on-disk targets, invalid representation-version
+changes and budget overflow.
+
+This makes the plan suitable for an external trusted runtime such as ElasticXxx to independently
+revalidate rather than trusting SML's aggregate counters.
+
 ## Transaction boundary
 
 The reference API is intentionally transactional:
@@ -69,5 +83,6 @@ Tests establish:
 - explicit RAM/VRAM and active-parameter fail-closed limits;
 - immutable planning before commit;
 - stale-plan rejection;
+- self-contained versioned plan validation and tamper rejection;
 - representation version increments only on precision changes;
 - access observations do not mutate representation outside a commit boundary.
