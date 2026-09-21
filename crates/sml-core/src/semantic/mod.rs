@@ -5,11 +5,15 @@
 //! required by the reference state or its primitive Boolean operations.
 
 pub mod algebra;
+pub mod ambiguity;
 pub mod bitfield;
 pub mod context;
 pub mod metric;
 pub mod state;
 
+pub use ambiguity::{
+    derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy, AmbiguityTransition,
+};
 pub use algebra::{
     bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
 };
