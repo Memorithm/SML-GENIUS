@@ -72,8 +72,8 @@ fn learned_conjunction_generalizes_to_disjoint_task_case_ids() {
     let holdout = suite_from_case_id(10_000, 64).unwrap();
     let evaluation = evaluate_task_panel(&candidate, &holdout).unwrap();
 
-    assert_eq!(evaluation.tasks, 320);
-    assert_eq!(evaluation.exact_tasks, 320);
+    assert_eq!(evaluation.tasks, 384);
+    assert_eq!(evaluation.exact_tasks, 384);
     assert_eq!(evaluation.conjunction_tasks, 64);
     assert_eq!(evaluation.exact_conjunction_tasks, 64);
     assert!(evaluation.trace_records > evaluation.tasks);
@@ -96,7 +96,7 @@ fn learned_gate_beats_wrong_gate_but_not_hand_coded_and_oracle() {
     let (fixed_and, _) = SmlTaskCandidate::train(TaskCandidateConfig::default()).unwrap();
     let fixed_eval = evaluate_task_panel(&fixed_and, &holdout).unwrap();
 
-    assert_eq!(learned_eval.exact_tasks, 320);
+    assert_eq!(learned_eval.exact_tasks, 384);
     assert!(wrong_eval.exact_tasks < learned_eval.exact_tasks);
     assert!(wrong_eval.exact_conjunction_tasks < learned_eval.exact_conjunction_tasks);
     assert_eq!(fixed_eval.exact_tasks, learned_eval.exact_tasks);
