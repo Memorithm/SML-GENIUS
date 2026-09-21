@@ -231,18 +231,15 @@ impl MixtureOfRouters {
             .base_expert_mass_threshold_ppm
             .saturating_add(extra)
             .min(MOR_SCALE_PPM);
-        let selected_experts =
-            self.select_experts(&ranked_experts, expert_mass_threshold_ppm)?;
+        let selected_experts = self.select_experts(&ranked_experts, expert_mass_threshold_ppm)?;
 
         let margin = match ranked_experts.as_slice() {
             [first, second, ..] => first.final_score_ppm.saturating_sub(second.final_score_ppm),
             [_] => MOR_SCORE_CEILING_PPM,
             [] => return Err(MorError::ZeroExpertMass),
         };
-        let request_precision_escalation =
-            margin <= self.policy.precision_escalation_margin_ppm
-                || structural_disagreement_ppm
-                    >= self.policy.disagreement_precision_threshold_ppm;
+        let request_precision_escalation = margin <= self.policy.precision_escalation_margin_ppm
+            || structural_disagreement_ppm >= self.policy.disagreement_precision_threshold_ppm;
 
         Ok(MorDecision {
             active_routers,
@@ -306,8 +303,7 @@ impl MixtureOfRouters {
             .iter()
             .map(|input| {
                 let base = mul_ppm(input.affinity_ppm, input.reliability_ppm);
-                let eligibility_ppm =
-                    apply_bias(base, input.balance_bias_ppm, MOR_SCALE_PPM);
+                let eligibility_ppm = apply_bias(base, input.balance_bias_ppm, MOR_SCALE_PPM);
                 SelectedRouter {
                     input,
                     eligibility_ppm,
@@ -367,14 +363,12 @@ impl MixtureOfRouters {
             let group = groups
                 .get(&top.page_id.0)
                 .ok_or(MorError::InternalInvariant)?;
-            let credibility =
-                mul_ppm(router.input.reliability_ppm, router.input.confidence_ppm);
+            let credibility = mul_ppm(router.input.reliability_ppm, router.input.confidence_ppm);
             let bypass = credibility >= self.policy.singleton_bypass_credibility_ppm
                 && top.score_ppm >= self.policy.singleton_bypass_score_ppm;
             if count >= 3 && group.count == 1 && !bypass {
                 router.denoise_multiplier_ppm = self.policy.singleton_denoise_ppm;
-                router.weight_ppm =
-                    mul_ppm(router.weight_ppm, router.denoise_multiplier_ppm);
+                router.weight_ppm = mul_ppm(router.weight_ppm, router.denoise_multiplier_ppm);
             }
         }
         if active.iter().all(|router| router.weight_ppm == 0) {
@@ -416,8 +410,7 @@ impl MixtureOfRouters {
                     .iter()
                     .find(|proposal| proposal.page_id.0 == page)
                 {
-                    weighted_score +=
-                        router.weight_ppm as u128 * proposal.score_ppm as u128;
+                    weighted_score += router.weight_ppm as u128 * proposal.score_ppm as u128;
                     support_weight += router.weight_ppm as u128;
                     support_routers = support_routers.saturating_add(1);
                 }
@@ -445,8 +438,8 @@ impl MixtureOfRouters {
                         .saturating_add(self.policy.recurrent_hysteresis_bonus_ppm);
                 }
                 if previous.primary.map(|primary| primary.0) == Some(page) {
-                    hysteresis_bonus_ppm = hysteresis_bonus_ppm
-                        .saturating_add(self.policy.primary_switch_margin_ppm);
+                    hysteresis_bonus_ppm =
+                        hysteresis_bonus_ppm.saturating_add(self.policy.primary_switch_margin_ppm);
                 }
             }
             let final_score_ppm = (consensus_ppm as i64)
@@ -472,7 +465,12 @@ impl MixtureOfRouters {
                 .cmp(&left.final_score_ppm)
                 .then_with(|| left.page_id.0.cmp(&right.page_id.0))
         });
-        if ranked.first().map(|expert| expert.final_score_ppm).unwrap_or(0) == 0 {
+        if ranked
+            .first()
+            .map(|expert| expert.final_score_ppm)
+            .unwrap_or(0)
+            == 0
+        {
             return Err(MorError::ZeroExpertMass);
         }
         Ok(ranked)
@@ -529,7 +527,9 @@ fn top_groups(active: &[SelectedRouter<'_>]) -> Result<BTreeMap<u32, TopGroup>, 
     for router in active {
         let top = top_proposal(&router.input.proposals)
             .ok_or(MorError::EmptyProposals(router.input.router_id))?;
-        let group = groups.entry(top.page_id.0).or_insert_with(TopGroup::default);
+        let group = groups
+            .entry(top.page_id.0)
+            .or_insert_with(TopGroup::default);
         group.count = group.count.saturating_add(1);
         group.weight = group.weight.saturating_add(router.weight_ppm as u128);
     }
@@ -544,9 +544,7 @@ fn top_proposal(proposals: &[ExpertProposal]) -> Option<ExpertProposal> {
     })
 }
 
-fn hint_map(
-    hints: &[ExpertRuntimeHint],
-) -> Result<BTreeMap<u32, ExpertRuntimeHint>, MorError> {
+fn hint_map(hints: &[ExpertRuntimeHint]) -> Result<BTreeMap<u32, ExpertRuntimeHint>, MorError> {
     let mut map = BTreeMap::new();
     for hint in hints {
         if map.insert(hint.page_id.0, *hint).is_some() {
@@ -591,7 +589,10 @@ pub enum MorError {
     InvalidPolicy(&'static str),
     PolicyPpmOutOfRange,
     InputPpmOutOfRange(u32),
-    InsufficientRouters { required: usize, actual: usize },
+    InsufficientRouters {
+        required: usize,
+        actual: usize,
+    },
     InsufficientExperts,
     DuplicateRouter(RouterId),
     EmptyProposals(RouterId),
