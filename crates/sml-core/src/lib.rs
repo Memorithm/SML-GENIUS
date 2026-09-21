@@ -18,6 +18,7 @@ pub mod forge_topology;
 pub mod gf2;
 pub mod memory;
 pub mod mor;
+pub mod mor_controller;
 pub mod routing_train;
 pub mod task_loss;
 pub mod tasks;
