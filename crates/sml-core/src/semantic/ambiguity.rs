@@ -164,9 +164,7 @@ impl From<SemanticBitFieldError> for AmbiguityError {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy,
-    };
+    use super::{derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy};
     use crate::semantic::SemanticBitField;
 
     const POLICY: AmbiguityPolicy = AmbiguityPolicy {
@@ -272,8 +270,7 @@ mod tests {
         let c = SemanticBitField::<8>::from_set_indices(&[0, 3]).expect("c");
 
         let previous = derive_ambiguity(&[&a, &b], POLICY).expect("previous");
-        let transition =
-            update_ambiguity(&previous, &[&a, &c], POLICY).expect("transition");
+        let transition = update_ambiguity(&previous, &[&a, &c], POLICY).expect("transition");
 
         assert_eq!(previous.count_ones(), 2);
         assert_eq!(transition.next.count_ones(), 2);
