@@ -1,7 +1,4 @@
-use sml_core::{
-    ablation::run_sml1_ablations,
-    tasks::suite_from_case_id,
-};
+use sml_core::{ablation::run_sml1_ablations, tasks::suite_from_case_id};
 
 #[test]
 fn controlled_ablations_separate_routing_and_memory_effects() {
