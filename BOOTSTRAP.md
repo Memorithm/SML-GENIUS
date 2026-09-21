@@ -148,28 +148,29 @@ Completed:
 - SBG-0.2 contextual Boolean semantic metric merged on main as `d38023771bb5427a802b3337e40f857f0be8af50`.
 - SBG-0.3 semantic binding and bundling algebra merged on main as `776995c49e71cb6ea3209e14a7a310340f0668bb`.
 - SBG-0.4 Context Meaning Mask merged on main as `cd16486261c2b83995b2573c333571011000521d`.
-- These slices passed format, check, clippy, workspace tests and all existing SML smoke probes.
+- SBG-0.5 Ambiguity Field merged on main as `54c07e50fd313c28a041a05742f7d573b4baefd1`.
+- These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.5-ambiguity-dynamics-rebased
+research/sbg-0.6-semantic-composition
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/ambiguity.rs
+crates/sml-core/src/semantic/composition.rs
 ```
 
-Definition of done for SBG-0.5:
+Definition of done for SBG-0.6:
 
-1. ambiguity is derived from explicit competing Boolean hypotheses;
-2. the ambiguity policy uses integer minority-support thresholds only;
-3. invalid or insufficient hypothesis sets fail closed;
-4. introduced, resolved and persistent ambiguity coordinates are tracked exactly;
-5. ambiguity is permitted to increase when conflicting evidence appears;
-6. a deterministic regression proves ambiguity can later resolve when hypotheses converge;
+1. subject/action/object roles are explicit Boolean signatures and invalid role aliasing fails closed;
+2. composition exposes an order-invariant content view and a role-sensitive relational view;
+3. controlled subject/object reversal preserves content exactly while changing relational structure;
+4. negation is an explicit Boolean transform that leaves content unchanged;
+5. negation toggling is exactly reversible;
+6. no floating-point semantic score or normalization is introduced;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
