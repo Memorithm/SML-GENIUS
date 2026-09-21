@@ -11,6 +11,7 @@ pub mod composition;
 pub mod context;
 pub mod elastic_regions;
 pub mod evidence_learning;
+pub mod linguistic_bench;
 pub mod metric;
 pub mod mor_routing;
 pub mod recurrent;
@@ -41,6 +42,11 @@ pub use evidence_learning::{
     SemanticEvidenceError, SemanticEvidenceLearningOutcome, SemanticEvidenceLearningReport,
     SemanticEvidenceLedger, SemanticEvidenceObservation, SemanticLearningCandidate,
     SemanticLearningField,
+};
+pub use linguistic_bench::{
+    run_linguistic_micro_benchmark, LinguisticMetric, LinguisticMicroBenchmarkError,
+    LinguisticMicroBenchmarkReport, LinguisticProbe, LinguisticProbeResult,
+    LINGUISTIC_MICRO_BENCH_BITS,
 };
 pub use metric::{
     hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
