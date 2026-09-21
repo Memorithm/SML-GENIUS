@@ -145,28 +145,29 @@ The roadmap content originally described as SML-0.7 through SML-0.20 maps in ord
 Completed:
 
 - SBG-0.1 Semantic BitField Core merged on main as `c079acafea90549f6a97dfd8956a9f16fb58641f`.
-- Its CI passed format, check, clippy, workspace tests and all existing SML smoke probes.
+- SBG-0.2 contextual Boolean semantic metric merged on main as `d38023771bb5427a802b3337e40f857f0be8af50`.
+- Both slices passed format, check, clippy, workspace tests and all existing SML smoke probes.
 
 Active development branch:
 
 ```text
-research/sbg-0.2-contextual-metric
+research/sbg-0.3-semantic-algebra-rebased
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/metric.rs
+crates/sml-core/src/semantic/algebra.rs
 ```
 
-Definition of done for SBG-0.2:
+Definition of done for SBG-0.3:
 
-1. exact full-field Hamming and XNOR counts;
-2. exact masked Hamming and masked XNOR counts;
-3. zero-active-bit context masks fail closed;
-4. integer-only ppm reporting when normalization is required;
-5. masked comparison constructs no temporary semantic field;
-6. a deterministic regression proves that two context masks can reverse the nearest semantic candidate while the unmasked distances remain tied;
+1. deterministic reversible permutation over arbitrary non-zero logical widths;
+2. exact role/value binding and unbinding;
+3. different role keys produce distinct bindings in controlled fixtures;
+4. wrong-role unbinding does not recover the original fixture value;
+5. majority bundling preserves coordinate consensus;
+6. even-cardinality bundles fail closed rather than hide a tie policy;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
