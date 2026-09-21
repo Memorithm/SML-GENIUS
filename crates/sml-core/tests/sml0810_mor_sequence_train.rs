@@ -8,9 +8,7 @@ use sml_core::{
     mor_sequence_objective::{
         MorRouteSequenceExample, MorRouteSequencePolicy, MorRouteSequenceStep,
     },
-    mor_sequence_train::{
-        MorSequenceSearch, MorSequenceSearchConfig, MorSequenceTrainingError,
-    },
+    mor_sequence_train::{MorSequenceSearch, MorSequenceSearchConfig, MorSequenceTrainingError},
     BooleanWorkspace, PageId,
 };
 
@@ -166,10 +164,7 @@ fn affinity_bank() -> NativeAffinityBank {
 #[test]
 fn sequence_search_can_learn_to_avoid_expensive_switch_via_proposals() {
     let sequences = vec![MorRouteSequenceExample {
-        steps: vec![
-            step(&[true], 0, 200_000),
-            step(&[false], 200_000, 0),
-        ],
+        steps: vec![step(&[true], 0, 200_000), step(&[false], 200_000, 0)],
     }];
 
     let artifact = MorSequenceSearch::train(
@@ -227,10 +222,7 @@ fn sequence_search_can_learn_to_avoid_switch_via_affinity_weights() {
 #[test]
 fn sequence_search_is_deterministic() {
     let sequences = vec![MorRouteSequenceExample {
-        steps: vec![
-            step(&[true], 0, 200_000),
-            step(&[false], 200_000, 0),
-        ],
+        steps: vec![step(&[true], 0, 200_000), step(&[false], 200_000, 0)],
     }];
     let config = MorSequenceSearchConfig {
         passes: 3,
