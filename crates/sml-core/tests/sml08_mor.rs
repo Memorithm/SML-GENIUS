@@ -103,10 +103,12 @@ fn coherent_disagreement_expands_expert_budget() {
 
 #[test]
 fn bounded_hysteresis_rejects_a_small_route_flip() {
-    let mut policy = MorPolicy::default();
-    policy.min_routers = 2;
-    policy.max_routers = 2;
-    policy.router_mass_threshold_ppm = MOR_SCALE_PPM;
+    let policy = MorPolicy {
+        min_routers: 2,
+        max_routers: 2,
+        router_mass_threshold_ppm: MOR_SCALE_PPM,
+        ..MorPolicy::default()
+    };
     let mor = MixtureOfRouters::new(policy).unwrap();
     let routers = vec![
         router(
@@ -137,10 +139,12 @@ fn bounded_hysteresis_rejects_a_small_route_flip() {
 
 #[test]
 fn residency_cost_breaks_ties_but_is_capped() {
-    let mut policy = MorPolicy::default();
-    policy.min_routers = 2;
-    policy.max_routers = 2;
-    policy.router_mass_threshold_ppm = MOR_SCALE_PPM;
+    let policy = MorPolicy {
+        min_routers: 2,
+        max_routers: 2,
+        router_mass_threshold_ppm: MOR_SCALE_PPM,
+        ..MorPolicy::default()
+    };
     let mor = MixtureOfRouters::new(policy).unwrap();
     let routers = vec![
         router(
@@ -182,9 +186,11 @@ fn residency_cost_breaks_ties_but_is_capped() {
 
 #[test]
 fn router_competition_activates_only_needed_mass() {
-    let mut policy = MorPolicy::default();
-    policy.max_routers = 5;
-    policy.router_mass_threshold_ppm = 600_000;
+    let policy = MorPolicy {
+        max_routers: 5,
+        router_mass_threshold_ppm: 600_000,
+        ..MorPolicy::default()
+    };
     let mor = MixtureOfRouters::new(policy).unwrap();
     let routers = vec![
         router(0, 1_000_000, 1_000_000, 1_000_000, &[(1, 800_000)]),
