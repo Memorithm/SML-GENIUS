@@ -66,6 +66,14 @@ impl Default for GateTrainingConfig {
     }
 }
 
+/// One supervised two-input Boolean training sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GateSample2 {
+    pub left: bool,
+    pub right: bool,
+    pub target: bool,
+}
+
 impl GateTrainingConfig {
     /// Rejects non-finite and degenerate optimization settings.
     pub fn validate(self) -> Result<Self, TrainError> {
@@ -96,6 +104,18 @@ pub struct GateTrainingReport {
     pub initial_table: TruthTable2,
     pub final_table: TruthTable2,
     pub final_loss: f64,
+    pub counters: GateTrainingCounters,
+}
+
+/// Evidence from training one latent gate on arbitrary supervised samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GateSampleTrainingReport {
+    pub initial_table: TruthTable2,
+    pub final_table: TruthTable2,
+    pub initial_loss: f64,
+    pub final_loss: f64,
+    pub hard_correct: u64,
+    pub sample_count: u64,
     pub counters: GateTrainingCounters,
 }
 
@@ -154,6 +174,88 @@ impl LatentGate2 {
     pub fn soft_probability(&self, left: bool, right: bool) -> Result<f64, TrainError> {
         let weights = self.softmax_weights()?;
         Ok(weighted_output(&weights, left, right))
+    }
+
+    /// Trains against caller-owned supervised samples without requiring a truth-table oracle.
+    pub fn train_samples(
+        &mut self,
+        samples: &[GateSample2],
+        config: GateTrainingConfig,
+    ) -> Result<GateSampleTrainingReport, TrainError> {
+        let config = config.validate()?;
+        if samples.is_empty() {
+            return Err(TrainError::EmptySamples);
+        }
+
+        let initial_table = self.hard_table()?;
+        let initial_loss = self.loss_for_samples(samples, config.epsilon)?;
+        let mut counters = GateTrainingCounters::default();
+
+        for _ in 0..config.epochs {
+            let weights = self.softmax_weights()?;
+            let mut gradient = [0.0_f64; TRUTH_TABLE_COUNT];
+
+            for sample in samples {
+                let target_value = if sample.target { 1.0 } else { 0.0 };
+                let probability = weighted_output(&weights, sample.left, sample.right)
+                    .clamp(config.epsilon, 1.0 - config.epsilon);
+                let loss_gradient =
+                    (probability - target_value) / (probability * (1.0 - probability));
+
+                for candidate_code in 0..TRUTH_TABLE_COUNT {
+                    let candidate = TruthTable2::new(candidate_code as u8)?;
+                    let candidate_value = if candidate.evaluate(sample.left, sample.right) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    gradient[candidate_code] +=
+                        loss_gradient * weights[candidate_code] * (candidate_value - probability);
+                }
+            }
+
+            let normalization = samples.len() as f64;
+            for (logit, grad) in self.logits.iter_mut().zip(gradient) {
+                *logit -= config.learning_rate * grad / normalization;
+                if !logit.is_finite() {
+                    return Err(TrainError::NonFiniteLatent);
+                }
+            }
+
+            counters.epochs = counters.epochs.saturating_add(1);
+            counters.samples = counters.samples.saturating_add(samples.len() as u64);
+            counters.latent_parameter_updates = counters
+                .latent_parameter_updates
+                .saturating_add(TRUTH_TABLE_COUNT as u64);
+        }
+
+        let final_table = self.hard_table()?;
+        let hard_correct = samples
+            .iter()
+            .filter(|sample| final_table.evaluate(sample.left, sample.right) == sample.target)
+            .count() as u64;
+
+        Ok(GateSampleTrainingReport {
+            initial_table,
+            final_table,
+            initial_loss,
+            final_loss: self.loss_for_samples(samples, config.epsilon)?,
+            hard_correct,
+            sample_count: samples.len() as u64,
+            counters,
+        })
+    }
+
+    /// Hard accuracy on arbitrary supervised samples.
+    pub fn hard_accuracy_samples(&self, samples: &[GateSample2]) -> Result<u64, TrainError> {
+        if samples.is_empty() {
+            return Err(TrainError::EmptySamples);
+        }
+        let selected = self.hard_table()?;
+        Ok(samples
+            .iter()
+            .filter(|sample| selected.evaluate(sample.left, sample.right) == sample.target)
+            .count() as u64)
     }
 
     /// Trains against all four rows of a complete Boolean truth table.
@@ -258,6 +360,28 @@ impl LatentGate2 {
         Ok(weights)
     }
 
+    fn loss_for_samples(
+        &self,
+        samples: &[GateSample2],
+        epsilon: f64,
+    ) -> Result<f64, TrainError> {
+        if samples.is_empty() {
+            return Err(TrainError::EmptySamples);
+        }
+        let weights = self.softmax_weights()?;
+        let mut loss = 0.0_f64;
+
+        for sample in samples {
+            let target_value = if sample.target { 1.0 } else { 0.0 };
+            let probability =
+                weighted_output(&weights, sample.left, sample.right).clamp(epsilon, 1.0 - epsilon);
+            loss -=
+                target_value * probability.ln() + (1.0 - target_value) * (1.0 - probability).ln();
+        }
+
+        Ok(loss / samples.len() as f64)
+    }
+
     fn loss_for_truth_table(&self, target: TruthTable2, epsilon: f64) -> Result<f64, TrainError> {
         let weights = self.softmax_weights()?;
         let mut loss = 0.0_f64;
@@ -298,6 +422,7 @@ fn weighted_output(weights: &[f64; TRUTH_TABLE_COUNT], left: bool, right: bool) 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrainError {
     InvalidTruthTable(u8),
+    EmptySamples,
     ZeroEpochs,
     InvalidLearningRate,
     InvalidEpsilon,
