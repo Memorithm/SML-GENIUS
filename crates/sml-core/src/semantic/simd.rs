@@ -183,17 +183,13 @@ fn accumulate_word(
     masked_differing_bits: &mut u64,
 ) {
     let differing = left ^ right;
-    *full_differing_bits =
-        full_differing_bits.saturating_add(u64::from(differing.count_ones()));
+    *full_differing_bits = full_differing_bits.saturating_add(u64::from(differing.count_ones()));
     *masked_active_bits = masked_active_bits.saturating_add(u64::from(mask.count_ones()));
     *masked_differing_bits =
         masked_differing_bits.saturating_add(u64::from((differing & mask).count_ones()));
 }
 
-const fn same_semantics(
-    scalar: SemanticKernelEvidence,
-    packed: SemanticKernelEvidence,
-) -> bool {
+const fn same_semantics(scalar: SemanticKernelEvidence, packed: SemanticKernelEvidence) -> bool {
     scalar.logical_bits == packed.logical_bits
         && scalar.packed_words == packed.packed_words
         && scalar.full_differing_bits == packed.full_differing_bits
