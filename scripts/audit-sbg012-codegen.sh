@@ -36,11 +36,21 @@ if [[ -z "$asm_file" || -z "$line" ]]; then
   exit 1
 fi
 
-start="$line"
-end="$((line + 320))"
 snippet="$(mktemp)"
 trap 'rm -f "$snippet"' EXIT
-sed -n "${start},${end}p" "$asm_file" > "$snippet"
+
+# Start at the first symbol-bearing assembly line and stop at the first LLVM
+# function-end label. This keeps instruction counts scoped to the audited
+# function instead of relying on an arbitrary context window.
+tail -n +"$line" "$asm_file" | awk '
+  { print }
+  /\.Lfunc_end[0-9]+:/ { exit }
+' > "$snippet"
+
+if ! grep -Eq '\.Lfunc_end[0-9]+:' "$snippet"; then
+  echo "error=audit_function_end_not_found"
+  exit 1
+fi
 
 count_pattern() {
   local pattern="$1"
