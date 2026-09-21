@@ -132,9 +132,7 @@ impl BooleanLearningTransaction {
         TrainObjective: FnMut(&dyn BooleanPageRead) -> Result<u32, E>,
         HoldoutObjective: FnMut(&dyn BooleanPageRead) -> Result<u32, E>,
     {
-        let policy = policy
-            .validate()
-            .map_err(BooleanLearningError::Policy)?;
+        let policy = policy.validate().map_err(BooleanLearningError::Policy)?;
         let generation_before = page.generation();
         let train_baseline_loss_ppm = evaluate_objective(page, &mut train_objective)?;
         let holdout_baseline_loss_ppm = evaluate_objective(page, &mut holdout_objective)?;
@@ -154,9 +152,7 @@ impl BooleanLearningTransaction {
         while !groups.is_empty() && hierarchy_rounds < policy.max_hierarchy_rounds {
             let mut observations = Vec::with_capacity(groups.len());
             for group in groups.iter().copied() {
-                let view = page
-                    .group_view(group)
-                    .map_err(BooleanLearningError::Page)?;
+                let view = page.group_view(group).map_err(BooleanLearningError::Page)?;
                 let loss = evaluate_objective(&view, &mut train_objective)?;
                 observations.push(BooleanGroupObservation {
                     group,
@@ -188,9 +184,7 @@ impl BooleanLearningTransaction {
 
         for leaf in leaf_groups {
             if leaf.len == 1 {
-                let view = page
-                    .group_view(leaf)
-                    .map_err(BooleanLearningError::Page)?;
+                let view = page.group_view(leaf).map_err(BooleanLearningError::Page)?;
                 let loss = evaluate_objective(&view, &mut train_objective)?;
                 group_evaluations = group_evaluations.saturating_add(1);
                 let improvement = train_baseline_loss_ppm as i64 - loss as i64;
@@ -208,9 +202,7 @@ impl BooleanLearningTransaction {
                 .map_err(BooleanLearningError::Overlapping)?;
             let mut observations = Vec::with_capacity(plan.probe_count());
             for probe in plan.probes().iter().copied() {
-                let view = page
-                    .probe_view(probe)
-                    .map_err(BooleanLearningError::Page)?;
+                let view = page.probe_view(probe).map_err(BooleanLearningError::Page)?;
                 let loss = evaluate_objective(&view, &mut train_objective)?;
                 observations.push(OverlappingProbeObservation {
                     probe,
@@ -298,12 +290,7 @@ impl BooleanLearningTransaction {
             holdout_candidate_loss_ppm,
         };
         let commit = page
-            .commit_verified_flips(
-                &proposed_flips,
-                generation_before,
-                evidence,
-                policy.commit,
-            )
+            .commit_verified_flips(&proposed_flips, generation_before, evidence, policy.commit)
             .map_err(BooleanLearningError::Page)?;
 
         Ok(BooleanLearningReport {
@@ -345,10 +332,7 @@ where
 pub enum BooleanLearningPolicyError {
     ZeroHierarchyRounds,
     ZeroCandidateFlipBudget,
-    LeafWiderThanProbeLimit {
-        leaf_width: u64,
-        probe_limit: u64,
-    },
+    LeafWiderThanProbeLimit { leaf_width: u64, probe_limit: u64 },
     Hierarchical(HierarchicalBooleanError),
     Overlapping(OverlappingProbeError),
 }
