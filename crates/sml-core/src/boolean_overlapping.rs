@@ -19,10 +19,7 @@
 
 use core::fmt;
 
-use crate::{
-    boolean_hierarchical::BooleanPageGroup,
-    boolean_integral::BOOLEAN_INTEGRAL_SCALE_PPM,
-};
+use crate::{boolean_hierarchical::BooleanPageGroup, boolean_integral::BOOLEAN_INTEGRAL_SCALE_PPM};
 
 const MAX_PROBE_ROUNDS: u16 = 64;
 
@@ -92,10 +89,7 @@ pub struct OverlappingProbe {
 
 impl OverlappingProbe {
     /// Returns whether one absolute page-local parameter index belongs to this probe.
-    pub fn contains_parameter(
-        self,
-        parameter_index: u64,
-    ) -> Result<bool, OverlappingProbeError> {
+    pub fn contains_parameter(self, parameter_index: u64) -> Result<bool, OverlappingProbeError> {
         if parameter_index < self.group.start || parameter_index >= self.group.end_exclusive() {
             return Err(OverlappingProbeError::ParameterOutsideGroup {
                 parameter_index,
@@ -216,8 +210,7 @@ impl OverlappingProbePlan {
 
         let mut probes = Vec::with_capacity(probe_count);
         for round in 0..policy.rounds {
-            let (multiplier, offset) =
-                affine_parameters(policy.seed, round, address_mask);
+            let (multiplier, offset) = affine_parameters(policy.seed, round, address_mask);
             for dimension in 0..dimensions {
                 probes.push(OverlappingProbe {
                     group,
@@ -285,8 +278,7 @@ impl OverlappingProbePlan {
             });
         }
 
-        let mut slots: Vec<Option<OverlappingProbeObservation>> =
-            vec![None; self.probes.len()];
+        let mut slots: Vec<Option<OverlappingProbeObservation>> = vec![None; self.probes.len()];
 
         for observation in observations.iter().copied() {
             validate_ppm(observation.baseline_loss_ppm)?;
@@ -344,8 +336,7 @@ impl OverlappingProbePlan {
                         .ok_or(OverlappingProbeError::MissingObservation)?;
                     let opposite = slots[self.slot(round, dimension, !containing_side)]
                         .ok_or(OverlappingProbeError::MissingObservation)?;
-                    let contrast =
-                        selected.improvement_ppm() - opposite.improvement_ppm();
+                    let contrast = selected.improvement_ppm() - opposite.improvement_ppm();
 
                     net_score_ppm = net_score_ppm
                         .checked_add(contrast)
@@ -422,12 +413,8 @@ impl OverlappingProbePlan {
 
     #[must_use]
     fn membership(&self, local_index: u64, round: u16, dimension: u8) -> bool {
-        let (multiplier, offset) =
-            affine_parameters(self.policy.seed, round, self.address_mask);
-        let mapped = local_index
-            .wrapping_mul(multiplier)
-            .wrapping_add(offset)
-            & self.address_mask;
+        let (multiplier, offset) = affine_parameters(self.policy.seed, round, self.address_mask);
+        let mapped = local_index.wrapping_mul(multiplier).wrapping_add(offset) & self.address_mask;
         ((mapped >> dimension) & 1) != 0
     }
 }
@@ -442,13 +429,11 @@ fn ceil_log2(value: u64) -> u8 {
 
 fn affine_parameters(seed: u64, round: u16, address_mask: u64) -> (u64, u64) {
     let round_value = u64::from(round);
-    let raw_multiplier =
-        mix64(seed ^ round_value.wrapping_mul(0x9e37_79b9_7f4a_7c15)) | 1;
+    let raw_multiplier = mix64(seed ^ round_value.wrapping_mul(0x9e37_79b9_7f4a_7c15)) | 1;
     let mut multiplier = raw_multiplier & address_mask;
     multiplier |= 1;
     let offset =
-        mix64(seed ^ round_value.wrapping_mul(0xbf58_476d_1ce4_e5b9) ^ 0x1234)
-            & address_mask;
+        mix64(seed ^ round_value.wrapping_mul(0xbf58_476d_1ce4_e5b9) ^ 0x1234) & address_mask;
     (multiplier, offset)
 }
 
@@ -473,14 +458,20 @@ pub enum OverlappingProbeError {
     InvalidMaximumGroupWidth(u64),
     ZeroCandidateBudget,
     GroupTooSmall(BooleanPageGroup),
-    GroupTooWide { actual: u64, maximum: u64 },
+    GroupTooWide {
+        actual: u64,
+        maximum: u64,
+    },
     ParameterOutsideGroup {
         parameter_index: u64,
         group: BooleanPageGroup,
     },
     PpmOutOfRange(u32),
     ArithmeticOverflow,
-    ObservationCount { expected: usize, actual: usize },
+    ObservationCount {
+        expected: usize,
+        actual: usize,
+    },
     DuplicateObservation {
         round: u16,
         dimension: u8,
