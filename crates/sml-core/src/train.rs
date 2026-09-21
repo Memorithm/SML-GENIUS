@@ -23,6 +23,8 @@ impl TruthTable2 {
     pub const AND: Self = Self(0b1000);
     pub const XOR: Self = Self(0b0110);
     pub const OR: Self = Self(0b1110);
+    /// Projection of the right input, used by learned overwrite-state updates.
+    pub const RIGHT: Self = Self(0b1100);
     pub const TRUE: Self = Self(0b1111);
 
     /// Constructs a valid two-input Boolean truth table.
