@@ -27,9 +27,7 @@ impl SemanticStateDelta {
     ) -> Self {
         Self {
             value: previous.value.xor_popcount(&next.value),
-            meaning_mask: previous
-                .meaning_mask
-                .xor_popcount(&next.meaning_mask),
+            meaning_mask: previous.meaning_mask.xor_popcount(&next.meaning_mask),
             ambiguity: previous.ambiguity.xor_popcount(&next.ambiguity),
             routing: previous.routing.xor_popcount(&next.routing),
         }
@@ -46,10 +44,7 @@ impl SemanticStateDelta {
 
     #[must_use]
     pub const fn is_zero(self) -> bool {
-        self.value == 0
-            && self.meaning_mask == 0
-            && self.ambiguity == 0
-            && self.routing == 0
+        self.value == 0 && self.meaning_mask == 0 && self.ambiguity == 0 && self.routing == 0
     }
 }
 
