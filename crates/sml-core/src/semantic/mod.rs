@@ -15,6 +15,7 @@ pub mod linguistic_bench;
 pub mod metric;
 pub mod mor_routing;
 pub mod recurrent;
+pub mod simd;
 pub mod state;
 pub mod structural_learning;
 
@@ -60,6 +61,10 @@ pub use recurrent::{
     run_semantic_recurrent, SemanticHaltReason, SemanticRecurrentOutcome,
     SemanticRecurrentRunError, SemanticRewriteStep, SemanticRewriteTrace, SemanticRewriter,
     SemanticStateDelta,
+};
+pub use simd::{
+    packed_word4_score, qualify_packed_word4, scalar_reference_score, SemanticKernelEvidence,
+    SemanticKernelKind, SemanticKernelQualification, SemanticSimdError,
 };
 pub use state::SemanticState;
 pub use structural_learning::{
