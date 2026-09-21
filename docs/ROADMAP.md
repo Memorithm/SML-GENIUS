@@ -87,7 +87,7 @@ Current status:
 - [x] SBG-0.2 masked Boolean semantic metric;
 - [x] SBG-0.3 binding/bundling/permutation;
 - [x] SBG-0.4 context meaning mask;
-- [ ] SBG-0.5 ambiguity dynamics;
+- [x] SBG-0.5 ambiguity dynamics;
 - [ ] SBG-0.6 semantic composition;
 - [ ] SBG-0.7 native MOR integration;
 - [ ] SBG-0.8 recurrent semantic rewriting;
