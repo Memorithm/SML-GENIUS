@@ -2,6 +2,7 @@
 members = [
     "crates/sml-core",
     "crates/sml-cli",
+    "crates/sml-store",
 ]
 resolver = "2"
 
