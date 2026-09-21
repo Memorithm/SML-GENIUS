@@ -12,6 +12,7 @@ pub mod anf;
 pub mod atlas;
 pub mod audit;
 pub mod candidate;
+pub mod boolean_integral;
 pub mod circuit;
 pub mod elastic_weights;
 pub mod forge_topology;
