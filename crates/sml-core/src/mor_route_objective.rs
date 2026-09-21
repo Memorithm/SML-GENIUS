@@ -11,9 +11,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     mor::{MixtureOfRouters, PreviousRoute, RouterId, MOR_SCALE_PPM},
-    mor_affinity::{
-        MorAffinityError, NativeAffinityBank, NativeRouterSpec, SmlFingerprintPlan,
-    },
+    mor_affinity::{MorAffinityError, NativeAffinityBank, NativeRouterSpec, SmlFingerprintPlan},
     BooleanWorkspace, PageId,
 };
 
@@ -49,17 +47,12 @@ impl MorRouteObjectivePolicy {
             + self.compute_cost_weight_ppm as u64
             + self.io_cost_weight_ppm as u64;
         if total != MOR_SCALE_PPM as u64 {
-            return Err(MorRouteObjectiveError::PolicyWeightsMustSumToScale {
-                actual: total,
-            });
+            return Err(MorRouteObjectiveError::PolicyWeightsMustSumToScale { actual: total });
         }
         Ok(self)
     }
 
-    fn combined_cost_ppm(
-        self,
-        outcome: MorExpertOutcome,
-    ) -> Result<u32, MorRouteObjectiveError> {
+    fn combined_cost_ppm(self, outcome: MorExpertOutcome) -> Result<u32, MorRouteObjectiveError> {
         validate_outcome(outcome)?;
         let weighted = self.task_loss_weight_ppm as u128 * outcome.task_loss_ppm as u128
             + self.compute_cost_weight_ppm as u128 * outcome.compute_cost_ppm as u128
@@ -155,7 +148,8 @@ impl MorRouteObjective {
                 match oracle {
                     None => oracle = Some((cost, outcome.page_id)),
                     Some((best_cost, best_page))
-                        if cost < best_cost || (cost == best_cost && outcome.page_id.0 < best_page.0) =>
+                        if cost < best_cost
+                            || (cost == best_cost && outcome.page_id.0 < best_page.0) =>
                     {
                         oracle = Some((cost, outcome.page_id));
                     }
@@ -311,8 +305,12 @@ impl MorRouteWeightSearch {
                     }
 
                     if best_weight != current_weight {
-                        current_bank =
-                            rebuild_with_weight(&current_bank, router_index, atom_index, best_weight)?;
+                        current_bank = rebuild_with_weight(
+                            &current_bank,
+                            router_index,
+                            atom_index,
+                            best_weight,
+                        )?;
                         current_report = best_report;
                         accepted_updates = accepted_updates.saturating_add(1);
                         changed = true;
@@ -356,11 +354,8 @@ fn rebuild_with_weight(
     atom.weight_ppm = weight_ppm;
 
     NativeAffinityBank::new(
-        SmlFingerprintPlan::new(
-            bank.fingerprint_plan().positions().to_vec(),
-            bank.policy(),
-        )
-        .map_err(MorRouteObjectiveError::Affinity)?,
+        SmlFingerprintPlan::new(bank.fingerprint_plan().positions().to_vec(), bank.policy())
+            .map_err(MorRouteObjectiveError::Affinity)?,
         routers,
         bank.policy(),
     )
@@ -379,10 +374,7 @@ fn report_is_better(
             && candidate.max_regret_ppm < incumbent.max_regret_ppm)
 }
 
-fn reports_equal_rank(
-    left: &MorRouteObjectiveReport,
-    right: &MorRouteObjectiveReport,
-) -> bool {
+fn reports_equal_rank(left: &MorRouteObjectiveReport, right: &MorRouteObjectiveReport) -> bool {
     left.total_regret_ppm == right.total_regret_ppm
         && left.total_chosen_objective_ppm == right.total_chosen_objective_ppm
         && left.max_regret_ppm == right.max_regret_ppm
