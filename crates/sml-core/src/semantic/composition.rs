@@ -238,12 +238,22 @@ mod tests {
         let action = SemanticBitField::<128>::from_set_indices(&[0, 2, 33, 65]).expect("action");
         let object = SemanticBitField::<128>::from_set_indices(&[0, 3, 34, 66]).expect("object");
 
-        let affirmed =
-            compose_relation(&roles, &subject, &action, &object, SemanticPolarity::Affirmed)
-                .expect("affirmed");
-        let negated =
-            compose_relation(&roles, &subject, &action, &object, SemanticPolarity::Negated)
-                .expect("negated");
+        let affirmed = compose_relation(
+            &roles,
+            &subject,
+            &action,
+            &object,
+            SemanticPolarity::Affirmed,
+        )
+        .expect("affirmed");
+        let negated = compose_relation(
+            &roles,
+            &subject,
+            &action,
+            &object,
+            SemanticPolarity::Negated,
+        )
+        .expect("negated");
 
         assert_eq!(affirmed.content, negated.content);
         assert_ne!(affirmed.relational, negated.relational);
@@ -267,12 +277,7 @@ mod tests {
         let role_c = SemanticBitField::<64>::from_set_indices(&[3, 7]).expect("role c");
 
         assert_eq!(
-            SemanticRoleSet::new(
-                empty,
-                role_a.clone(),
-                role_b.clone(),
-                role_c.clone()
-            ),
+            SemanticRoleSet::new(empty, role_a.clone(), role_b.clone(), role_c.clone()),
             Err(SemanticCompositionError::EmptyRole(
                 SemanticRoleKind::Subject
             ))
