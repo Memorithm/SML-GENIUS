@@ -179,7 +179,11 @@ fn evaluate_sequence(
                 sequence_index,
                 step_index,
             })?;
-        if !step.outcomes.iter().any(|outcome| outcome.page_id == chosen) {
+        if !step
+            .outcomes
+            .iter()
+            .any(|outcome| outcome.page_id == chosen)
+        {
             return Err(MorRouteSequenceError::MissingChosenOutcome {
                 sequence_index,
                 step_index,
