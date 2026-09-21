@@ -350,11 +350,12 @@ fn preview_bind<const BITS: usize>(
         return Err(SemanticStructuralError::EmptyRole);
     }
     let mut hypotheses = pool.hypotheses.clone();
+    let hypothesis_count = hypotheses.len();
     let state = hypotheses
         .get_mut(hypothesis)
         .ok_or(SemanticStructuralError::HypothesisOutOfRange {
             index: hypothesis,
-            len: hypotheses.len(),
+            len: hypothesis_count,
         })?;
     state.value = bind(role, &state.value).map_err(SemanticStructuralError::Algebra)?;
     Ok(SemanticHypothesisPool { hypotheses })
