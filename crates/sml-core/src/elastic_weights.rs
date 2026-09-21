@@ -217,8 +217,7 @@ impl ElasticWeightPlan {
             }
             seen.push(transition.page_id);
 
-            let expected_payload =
-                payload_bytes(transition.parameters, transition.to_precision)?;
+            let expected_payload = payload_bytes(transition.parameters, transition.to_precision)?;
             if transition.target_payload_bytes != expected_payload {
                 return Err(ElasticWeightError::PlanPayloadBytes {
                     page_id: transition.page_id,
@@ -542,9 +541,9 @@ impl ElasticWeightPlanner {
             }
 
             let to_representation_version = if page.precision != to_precision {
-                page.representation_version
-                    .checked_add(1)
-                    .ok_or(ElasticWeightError::RepresentationVersionOverflow(page.page_id))?
+                page.representation_version.checked_add(1).ok_or(
+                    ElasticWeightError::RepresentationVersionOverflow(page.page_id),
+                )?
             } else {
                 page.representation_version
             };
