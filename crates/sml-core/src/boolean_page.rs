@@ -55,7 +55,6 @@ impl PackedBooleanPage {
         })
     }
 
-    #[must_use]
     pub fn from_bits(page_id: PageId, bits: &[bool]) -> Result<Self, BooleanPageError> {
         if bits.is_empty() {
             return Err(BooleanPageError::ZeroParameters(page_id));
