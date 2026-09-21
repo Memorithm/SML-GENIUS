@@ -72,7 +72,11 @@ This distinction is required before implementing adaptive precision training. A 
 
 ## ElasticXxx boundary
 
-The API is designed to map onto ElasticXxx's OBSERVE -> FORECAST -> PLAN -> VALIDATE -> ACT -> VERIFY -> COMMIT/ROLLBACK loop. SML remains authoritative for page identity, learned-parameter semantics, and cycle selection. ElasticXxx may become the runtime policy/execution layer for real page movement once the adapter is qualified.
+The API maps onto ElasticXxx's OBSERVE -> FORECAST -> PLAN -> VALIDATE -> ACT -> VERIFY -> COMMIT/ROLLBACK loop. SML remains authoritative for page identity, learned-parameter semantics, importance/selection policy, and the source plan.
+
+The validation/projection boundary is now qualified in ElasticXxx PR #210, merged as `5ed38b90e4e707a0b092747615ac5213b9e33838`, against exact PR head `7f4e3706b33228a99189d8f313db486e0545e83a`. That adapter pins this contract to SML merge `3e04239862c9d14cb369227f4abbe84b5c7e1d5e`, independently revalidates page and aggregate accounting, rejects `Reinterpret` for precision changes, and delegates `Reencode` / `Recompute` authorization to ElasticXxx's existing capability and attestation model.
+
+This is not physical actuation. A backend that actually moves or re-encodes weight pages must still implement ACT, post-actuation VERIFY, and rollback/fail-closed behavior with its own evidence.
 
 ## Evidence in this slice
 
