@@ -306,25 +306,24 @@ impl ElasticWeightPlanner {
             let page = self.pages[index];
             let bytes = target_bytes[index];
             let prefer_vram = page.importance_ppm >= self.policy.vram_threshold_ppm;
-            let destination = if prefer_vram
-                && fits(vram_bytes, bytes, self.policy.vram_limit_bytes)
-            {
-                vram_bytes = checked_add(vram_bytes, bytes)?;
-                ResidencyTier::Vram
-            } else if fits(ram_bytes, bytes, self.policy.ram_limit_bytes) {
-                ram_bytes = checked_add(ram_bytes, bytes)?;
-                ResidencyTier::Ram
-            } else if fits(vram_bytes, bytes, self.policy.vram_limit_bytes) {
-                vram_bytes = checked_add(vram_bytes, bytes)?;
-                ResidencyTier::Vram
-            } else {
-                return Err(ElasticWeightError::ActiveResidencyBudget {
-                    page_id: page.page_id,
-                    payload_bytes: bytes,
-                    ram_remaining: self.policy.ram_limit_bytes.saturating_sub(ram_bytes),
-                    vram_remaining: self.policy.vram_limit_bytes.saturating_sub(vram_bytes),
-                });
-            };
+            let destination =
+                if prefer_vram && fits(vram_bytes, bytes, self.policy.vram_limit_bytes) {
+                    vram_bytes = checked_add(vram_bytes, bytes)?;
+                    ResidencyTier::Vram
+                } else if fits(ram_bytes, bytes, self.policy.ram_limit_bytes) {
+                    ram_bytes = checked_add(ram_bytes, bytes)?;
+                    ResidencyTier::Ram
+                } else if fits(vram_bytes, bytes, self.policy.vram_limit_bytes) {
+                    vram_bytes = checked_add(vram_bytes, bytes)?;
+                    ResidencyTier::Vram
+                } else {
+                    return Err(ElasticWeightError::ActiveResidencyBudget {
+                        page_id: page.page_id,
+                        payload_bytes: bytes,
+                        ram_remaining: self.policy.ram_limit_bytes.saturating_sub(ram_bytes),
+                        vram_remaining: self.policy.vram_limit_bytes.saturating_sub(vram_bytes),
+                    });
+                };
             target_residency[index] = destination;
             target_active[index] = true;
         }
@@ -524,10 +523,7 @@ impl ElasticWeightPlanner {
     }
 }
 
-fn precision_for_importance(
-    importance_ppm: u32,
-    policy: ElasticWeightPolicy,
-) -> WeightPrecision {
+fn precision_for_importance(importance_ppm: u32, policy: ElasticWeightPolicy) -> WeightPrecision {
     if importance_ppm >= policy.residual4_threshold_ppm {
         WeightPrecision::Residual4
     } else if importance_ppm >= policy.ternary_threshold_ppm {
@@ -537,10 +533,7 @@ fn precision_for_importance(
     }
 }
 
-fn payload_bytes(
-    parameters: u64,
-    precision: WeightPrecision,
-) -> Result<u64, ElasticWeightError> {
+fn payload_bytes(parameters: u64, precision: WeightPrecision) -> Result<u64, ElasticWeightError> {
     let bits = parameters as u128 * precision.bits_per_parameter() as u128;
     u64::try_from(bits.div_ceil(8)).map_err(|_| ElasticWeightError::ArithmeticOverflow)
 }
