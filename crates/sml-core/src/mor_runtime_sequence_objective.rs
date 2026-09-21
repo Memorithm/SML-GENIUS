@@ -100,9 +100,7 @@ impl NativeMorRuntimeSequenceObjective {
 
         for (sequence_index, sequence) in sequences.iter().enumerate() {
             if sequence.steps.is_empty() {
-                return Err(NativeMorRuntimeSequenceError::EmptySequence(
-                    sequence_index,
-                ));
+                return Err(NativeMorRuntimeSequenceError::EmptySequence(sequence_index));
             }
 
             let mut sequence_runtime = runtime.clone();
@@ -137,13 +135,12 @@ impl NativeMorRuntimeSequenceObjective {
                         sequence_index,
                         step_index,
                     })?;
-                let committed_primary = report
-                    .committed_route
-                    .primary
-                    .ok_or(NativeMorRuntimeSequenceError::MissingCommittedRoute {
+                let committed_primary = report.committed_route.primary.ok_or(
+                    NativeMorRuntimeSequenceError::MissingCommittedRoute {
                         sequence_index,
                         step_index,
-                    })?;
+                    },
+                )?;
 
                 committed_pages.push(committed_primary);
                 let transition = report.cycle.temporal.transition;
@@ -159,14 +156,8 @@ impl NativeMorRuntimeSequenceObjective {
                     }
                     MorTemporalTransition::Initialized | MorTemporalTransition::Stable => {}
                 }
-                if report
-                    .cycle
-                    .cycle
-                    .metrics
-                    .precision_escalation_requested
-                {
-                    precision_escalation_requests =
-                        precision_escalation_requests.saturating_add(1);
+                if report.cycle.cycle.metrics.precision_escalation_requested {
+                    precision_escalation_requests = precision_escalation_requests.saturating_add(1);
                 }
 
                 runtime_steps.push(NativeMorRuntimeStepEvidence {
