@@ -8,7 +8,7 @@
 use core::fmt;
 
 use crate::{
-    mor::{ExpertRuntimeHint, MixtureOfRouters, RouterInput},
+    mor::{ExpertRuntimeHint, MixtureOfRouters, PreviousRoute, RouterInput},
     mor_affinity::{
         MorAffinityError, NativeAffinityAccounting, NativeAffinityBank, NativeAffinityBatch,
     },
@@ -31,6 +31,8 @@ pub struct NativeMorRuntimeAccounting {
 pub struct NativeMorRuntimeReport {
     pub affinity: NativeAffinityBatch,
     pub cycle: TemporalMorCycleReport,
+    /// Route committed by temporal denoising for execution/recurrent continuity.
+    pub committed_route: PreviousRoute,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,7 +110,12 @@ impl NativeMorRuntime {
             .route_cycle(&self.engine, &affinity.routers, runtime_hints)
             .map_err(NativeMorRuntimeError::Temporal)?;
 
-        Ok(NativeMorRuntimeReport { affinity, cycle })
+        let committed_route = self.controller.denoiser().stable_route().clone();
+        Ok(NativeMorRuntimeReport {
+            affinity,
+            cycle,
+            committed_route,
+        })
     }
 }
 
