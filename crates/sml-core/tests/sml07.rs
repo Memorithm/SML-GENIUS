@@ -1,7 +1,7 @@
 use sml_core::{
     elastic_weights::{
-        ElasticWeightError, ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy,
-        ResidencyTier, WeightPrecision,
+        ElasticWeightError, ElasticWeightPage, ElasticWeightPlanField, ElasticWeightPlanner,
+        ElasticWeightPolicy, ResidencyTier, WeightPrecision, ELASTIC_WEIGHT_PLAN_SCHEMA_V1,
     },
     PageId,
 };
@@ -93,6 +93,10 @@ fn cycle_plan_is_non_mutating_and_assigns_precision_residency_and_activation() {
     let plan = planner.plan_cycle(&[PageId(0), PageId(1)], 7).unwrap();
 
     assert_eq!(planner, before);
+    assert_eq!(plan.contract, ELASTIC_WEIGHT_PLAN_SCHEMA_V1);
+    assert_eq!(plan.ram_limit_bytes, 64);
+    assert_eq!(plan.vram_limit_bytes, 64);
+    assert_eq!(plan.max_active_parameters, 384);
     assert_eq!(plan.active_parameters, 384);
     assert_eq!(plan.active_storage_bits, 1_024);
     assert_eq!(plan.ram_bytes, 64);
@@ -106,6 +110,9 @@ fn cycle_plan_is_non_mutating_and_assigns_precision_residency_and_activation() {
         .iter()
         .find(|transition| transition.page_id == PageId(0))
         .unwrap();
+    assert_eq!(hot.parameters, 128);
+    assert_eq!(hot.from_representation_version, 0);
+    assert_eq!(hot.to_representation_version, 1);
     assert_eq!(hot.to_precision, WeightPrecision::Residual4);
     assert_eq!(hot.to_residency, ResidencyTier::Vram);
     assert!(hot.to_active);
@@ -124,6 +131,9 @@ fn cycle_plan_is_non_mutating_and_assigns_precision_residency_and_activation() {
         .iter()
         .find(|transition| transition.page_id == PageId(2))
         .unwrap();
+    assert_eq!(cold.parameters, 512);
+    assert_eq!(cold.from_representation_version, 0);
+    assert_eq!(cold.to_representation_version, 0);
     assert_eq!(cold.to_precision, WeightPrecision::Boolean);
     assert_eq!(cold.to_residency, ResidencyTier::Disk);
     assert!(!cold.to_active);
@@ -232,5 +242,38 @@ fn duplicate_page_ids_and_duplicate_selections_are_rejected() {
     assert_eq!(
         planner.plan_cycle(&[PageId(1), PageId(1)], 0).unwrap_err(),
         ElasticWeightError::DuplicateSelection(PageId(1))
+    );
+}
+
+
+#[test]
+fn self_contained_plan_rejects_tampered_aggregates_before_commit() {
+    let planner = ElasticWeightPlanner::new(pages(), policy()).unwrap();
+    let mut plan = planner.plan_cycle(&[PageId(0), PageId(1)], 5).unwrap();
+    plan.ram_bytes += 1;
+
+    assert_eq!(
+        plan.validate_contract_v1().unwrap_err(),
+        ElasticWeightError::PlanAccounting {
+            field: ElasticWeightPlanField::RamBytes,
+            expected: 64,
+            actual: 65,
+        }
+    );
+}
+
+#[test]
+fn self_contained_plan_rejects_tampered_representation_version() {
+    let planner = ElasticWeightPlanner::new(pages(), policy()).unwrap();
+    let mut plan = planner.plan_cycle(&[PageId(0)], 5).unwrap();
+    plan.transitions[0].to_representation_version = 9;
+
+    assert_eq!(
+        plan.validate_contract_v1().unwrap_err(),
+        ElasticWeightError::PlanRepresentationVersion {
+            page_id: PageId(0),
+            expected: 1,
+            actual: 9,
+        }
     );
 }
