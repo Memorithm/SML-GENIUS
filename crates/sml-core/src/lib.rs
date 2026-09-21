@@ -16,6 +16,7 @@ pub mod boolean_integral;
 pub mod boolean_learning;
 pub mod boolean_overlapping;
 pub mod boolean_page;
+pub mod boolean_search_bench;
 pub mod candidate;
 pub mod circuit;
 pub mod elastic_weights;
