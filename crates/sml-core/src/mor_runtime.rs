@@ -161,6 +161,9 @@ impl std::error::Error for NativeMorRuntimeError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeMorRuntimeAuditEvidence {
     pub cycle: u64,
+    /// Primary page proposed before temporal denoising.
+    pub observed_page: PageId,
+    /// Temporally committed page used for execution/accounting.
     pub chosen_page: PageId,
     pub oracle_page: PageId,
     pub chosen_objective_ppm: u32,
@@ -232,7 +235,7 @@ impl NativeMorRuntimeAuditor {
     ) -> Result<NativeMorRuntimeAuditEvidence, NativeMorRuntimeAuditError> {
         validate_runtime_outcomes(outcomes)?;
 
-        let chosen_page = report
+        let observed_page = report
             .cycle
             .cycle
             .decision
@@ -240,6 +243,10 @@ impl NativeMorRuntimeAuditor {
             .first()
             .map(|expert| expert.page_id)
             .ok_or(NativeMorRuntimeAuditError::EmptyDecision)?;
+        let chosen_page = report
+            .committed_route
+            .primary
+            .ok_or(NativeMorRuntimeAuditError::MissingCommittedRoute)?;
 
         let chosen_outcome = outcomes
             .iter()
@@ -326,6 +333,7 @@ impl NativeMorRuntimeAuditor {
 
         Ok(NativeMorRuntimeAuditEvidence {
             cycle: report.cycle.cycle.metrics.cycle,
+            observed_page,
             chosen_page,
             oracle_page,
             chosen_objective_ppm,
@@ -402,6 +410,7 @@ pub enum NativeMorRuntimeAuditError {
     DuplicateOutcome(PageId),
     OutcomePpmOutOfRange { page_id: PageId, value: u32 },
     EmptyDecision,
+    MissingCommittedRoute,
     MissingChosenOutcome(PageId),
     ArithmeticOverflow,
 }
