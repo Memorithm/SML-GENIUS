@@ -10,8 +10,8 @@ use sml_core::{
     mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
     mor_route_objective::{MorExpertOutcome, MorRouteObjectivePolicy},
     mor_runtime::{
-        NativeMorAdaptiveRuntime, NativeMorOnlineAdaptationError,
-        NativeMorOnlineAdaptationPolicy, NativeMorRuntime,
+        NativeMorAdaptiveRuntime, NativeMorOnlineAdaptationError, NativeMorOnlineAdaptationPolicy,
+        NativeMorRuntime,
     },
     mor_temporal::MorTemporalPolicy,
     BooleanWorkspace, PageId,
@@ -129,8 +129,14 @@ fn observed_objective_cost_biases_next_cycle_toward_better_expert() {
         .unwrap();
 
     let values = runtime.value_evidence();
-    let page0 = values.iter().find(|value| value.page_id == PageId(0)).unwrap();
-    let page1 = values.iter().find(|value| value.page_id == PageId(1)).unwrap();
+    let page0 = values
+        .iter()
+        .find(|value| value.page_id == PageId(0))
+        .unwrap();
+    let page1 = values
+        .iter()
+        .find(|value| value.page_id == PageId(1))
+        .unwrap();
     assert_eq!(page0.ema_objective_ppm, 660_000);
     assert_eq!(page1.ema_objective_ppm, 100_000);
     assert_eq!(page0.adaptive_bias_ppm, -280_000);
@@ -266,9 +272,7 @@ fn adaptation_rejects_unknown_outcomes_and_duplicate_caller_hints() {
     let first = runtime.route_state(&state, &[]).unwrap();
 
     assert_eq!(
-        runtime
-            .observe(&first, &[outcome(2, 0, 0, 0)])
-            .unwrap_err(),
+        runtime.observe(&first, &[outcome(2, 0, 0, 0)]).unwrap_err(),
         NativeMorOnlineAdaptationError::OutcomeOutOfRegistry {
             page_id: PageId(2),
             expert_count: 2,
