@@ -357,7 +357,7 @@ impl MixtureOfRouters {
         groups: &BTreeMap<u32, TopGroup>,
     ) -> Result<(), MorError> {
         let count = active.len();
-        for router in active {
+        for router in active.iter_mut() {
             let top = top_proposal(&router.input.proposals)
                 .ok_or(MorError::EmptyProposals(router.input.router_id))?;
             let group = groups
