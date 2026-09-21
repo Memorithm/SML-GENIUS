@@ -152,29 +152,32 @@ Completed:
 - SBG-0.6 Semantic Composition merged on main as `966518009d1360fe3fa00116b955c20e4e1c25cf`.
 - SBG-0.7 native MOR integration merged on main as `1610f6b267f8aa45d05b9969977a56c06146552c`.
 - SBG-0.8 recurrent semantic rewriting merged on main as `ae7e65c3aeec4446d3e742cd44a892cc206ac798`.
+- SBG-0.9 Elastic Weight region activation merged on main as `396b65df23c816edcd4407e8f5000ff694e516c9`.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.9-elastic-regions-rebased
+research/sbg-0.10a-evidence-learning
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/elastic_regions.rs
+crates/sml-core/src/semantic/evidence_learning.rs
 ```
 
-Definition of done for SBG-0.9:
+SBG-0.10 is intentionally split into evidence-gated sub-slices. SBG-0.10 must remain incomplete until structural BIND/SPLIT/MERGE learning semantics are executable.
 
-1. semantic region selection combines the SBG routing field with context-masked semantic value evidence;
-2. all scores remain exact/integer and page selection is explicitly bounded;
-3. every Elastic Weight page has one auditable semantic-region mapping and missing/unknown mappings fail closed;
-4. SBG selection produces an immutable native `ElasticWeightPlan` without implicitly committing or mutating page importance;
-5. the existing Elastic Weight PLAN/VALIDATE/COMMIT, stale-generation checks and RAM/VRAM budgets remain authoritative;
-6. the semantic plan exposes exact active parameters, active storage, RAM/VRAM and transfer bytes for working-set measurement;
-7. deterministic tests prove context-dependent page selection, non-mutating planning, explicit commit and stale-plan rejection;
+Definition of done for SBG-0.10a:
+
+1. V/M/A/R coordinates share one persistent native `BooleanIntegralAccumulator` evidence space;
+2. grouped XOR interventions retain the existing shared-credit semantics and bounded evidence policy;
+3. KEEP/FLIP decisions come from the existing Boolean-integral policy, while candidate flips map to explicit SBG actions such as SET/CLEAR, MASK/UNMASK, ambiguity updates and ROUTE on/off;
+4. candidate mutation is evaluated on an immutable semantic-state clone;
+5. the existing `BooleanCommitEvidence` train/holdout gate is authoritative before atomic state replacement;
+6. stale or malformed candidates fail closed and holdout rejection leaves the original semantic state unchanged;
+7. SBG-0.10 remains open for structural BIND/SPLIT/MERGE evidence semantics;
 8. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
