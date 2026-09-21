@@ -59,10 +59,7 @@ pub struct SmlFingerprintPlan {
 }
 
 impl SmlFingerprintPlan {
-    pub fn new(
-        positions: Vec<u32>,
-        policy: MorAffinityPolicy,
-    ) -> Result<Self, MorAffinityError> {
+    pub fn new(positions: Vec<u32>, policy: MorAffinityPolicy) -> Result<Self, MorAffinityError> {
         policy.validate()?;
         if positions.is_empty() {
             return Err(MorAffinityError::EmptyFingerprint);
@@ -410,8 +407,8 @@ fn score_signature(
         return Err(MorAffinityError::ZeroSignatureWeight(router.router_id));
     }
 
-    let affinity_ppm = ((matched_weight as u128 * MOR_SCALE_PPM as u128)
-        / total_weight as u128) as u32;
+    let affinity_ppm =
+        ((matched_weight as u128 * MOR_SCALE_PPM as u128) / total_weight as u128) as u32;
 
     Ok(RouterAffinityEvidence {
         router_id: router.router_id,
