@@ -6,6 +6,10 @@ use sml_core::{
     audit::validate_non_attention_candidate,
     candidate::{SmlTaskCandidate, TaskCandidateConfig},
     circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
+    elastic_weights::{
+        ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier,
+        WeightPrecision,
+    },
     forge_topology::ForgeTopologyCandidateV1,
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
@@ -61,6 +65,12 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml07-smoke" => {
+            if let Err(error) = sml07_smoke() {
+                eprintln!("SML-0.7 elastic weights smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         "sml10-smoke" => {
             if let Err(error) = sml10_smoke() {
                 eprintln!("SML-1.0 pilot smoke failed: {error}");
@@ -76,7 +86,7 @@ fn main() {
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml10-smoke|sml11-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke]"
             );
             std::process::exit(2);
         }
@@ -364,6 +374,74 @@ fn sml06_smoke() -> Result<(), Box<dyn std::error::Error>> {
         accounting.latent_training_scalars
     );
     println!("route_lookups={}", counters.route_lookups);
+    Ok(())
+}
+
+fn sml07_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let pages = vec![
+        ElasticWeightPage::new(
+            PageId(0),
+            128,
+            WeightPrecision::Boolean,
+            ResidencyTier::Disk,
+            900_000,
+        )?,
+        ElasticWeightPage::new(
+            PageId(1),
+            256,
+            WeightPrecision::Boolean,
+            ResidencyTier::Disk,
+            600_000,
+        )?,
+        ElasticWeightPage::new(
+            PageId(2),
+            512,
+            WeightPrecision::Boolean,
+            ResidencyTier::Disk,
+            100_000,
+        )?,
+    ];
+    let policy = ElasticWeightPolicy {
+        ram_limit_bytes: 64,
+        vram_limit_bytes: 64,
+        max_active_parameters: 384,
+        ternary_threshold_ppm: 500_000,
+        residual4_threshold_ppm: 800_000,
+        vram_threshold_ppm: 750_000,
+    };
+    let mut planner = ElasticWeightPlanner::new(pages, policy)?;
+    let plan = planner.plan_cycle(&[PageId(0), PageId(1)], 1)?;
+
+    if plan.active_parameters != 384
+        || plan.active_storage_bits != 1_024
+        || plan.ram_bytes != 64
+        || plan.vram_bytes != 64
+    {
+        return Err("elastic weight plan accounting mismatch".into());
+    }
+
+    planner.commit(&plan)?;
+    let accounting = planner.accounting()?;
+    if accounting.boolean_parameters != 512
+        || accounting.ternary_parameters != 256
+        || accounting.residual4_parameters != 128
+        || accounting.disk_bytes != 64
+        || accounting.ram_bytes != 64
+        || accounting.vram_bytes != 64
+    {
+        return Err("elastic weight committed accounting mismatch".into());
+    }
+
+    println!("SML-0.7 elastic weights smoke");
+    println!("generation={}", planner.generation());
+    println!("active_parameters={}", accounting.active_parameters);
+    println!("active_storage_bits={}", accounting.active_storage_bits);
+    println!("disk_bytes={}", accounting.disk_bytes);
+    println!("ram_bytes={}", accounting.ram_bytes);
+    println!("vram_bytes={}", accounting.vram_bytes);
+    println!("precision_changes={}", plan.precision_changes);
+    println!("bytes_moved_to_ram={}", plan.bytes_moved_to_ram);
+    println!("bytes_moved_to_vram={}", plan.bytes_moved_to_vram);
     Ok(())
 }
 

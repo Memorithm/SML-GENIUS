@@ -50,6 +50,8 @@ jobs:
         run: cargo run -p sml-cli -- sml05-smoke
       - name: SML-0.6 smoke
         run: cargo run -p sml-cli -- sml06-smoke
+      - name: SML-0.7 elastic weights smoke
+        run: cargo run -p sml-cli -- sml07-smoke
       - name: SML-1.0 pilot smoke
         run: cargo run -p sml-cli -- sml10-smoke
       - name: SML-1.1 task-loss smoke

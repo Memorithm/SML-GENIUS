@@ -50,6 +50,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::anf**: canonical algebraic-normal-form / Zhegalkin relation evaluation.
 - **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
 - **sml-core::routing_train**: budgeted latent-bit training that freezes into the existing O(1) direct page router.
+- **sml-core::elastic_weights**: transactional precision/residency/activation planning for elastic weight pages with exact RAM/VRAM and active-set accounting.
 - **sml-core::task_loss**: task-answer training for hard Boolean micro-operations plus held-out panel evaluation.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
@@ -67,6 +68,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/SML-0.4-TRAINABLE-CIRCUITS.md**: multi-gate acyclic trainability and representation accounting.
 - **docs/SML-0.5-FORGE-REQUALIFICATION.md**: Forge search boundary and independent destination promotion gate.
 - **docs/SML-0.6-LATENT-DIRECT-ROUTING.md**: budgeted learned route bits and hard O(1) deployment contract.
+- **docs/SML-0.7-ELASTIC-WEIGHTS.md**: deterministic elastic precision, residency, activation and plan/commit boundary.
 - **docs/SML-1.0-TASK-CANDIDATE.md**: first integrated learned-routing task pilot and evidence boundaries.
 - **docs/SML-1.1-TASK-LOSS-GATE.md**: first micro-operation learned from task answers with explicit semantic controls.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
@@ -85,6 +87,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo run -p sml-cli -- sml04-smoke
     cargo run -p sml-cli -- sml05-smoke
     cargo run -p sml-cli -- sml06-smoke
+    cargo run -p sml-cli -- sml07-smoke
     cargo run -p sml-cli -- sml10-smoke
     cargo run -p sml-cli -- sml11-smoke
 
