@@ -663,7 +663,6 @@ impl From<SemanticBitFieldError> for SemanticStoreError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::crc32c;
