@@ -6,6 +6,7 @@
 
 pub mod algebra;
 pub mod bitfield;
+pub mod context;
 pub mod metric;
 pub mod state;
 
@@ -13,6 +14,10 @@ pub use algebra::{
     bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
 };
 pub use bitfield::{SemanticBitField, SemanticBitFieldError};
+pub use context::{
+    derive_context_mask, update_context_mask, ContextMaskError, ContextMaskPolicy,
+    ContextMaskUpdate,
+};
 pub use metric::{MaskedSemanticScore, SemanticMetricError};
 pub use state::SemanticState;
 
