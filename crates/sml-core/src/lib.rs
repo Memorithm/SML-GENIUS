@@ -11,6 +11,7 @@ use core::fmt;
 pub mod anf;
 pub mod atlas;
 pub mod audit;
+pub mod boolean_hierarchical;
 pub mod boolean_integral;
 pub mod candidate;
 pub mod circuit;
