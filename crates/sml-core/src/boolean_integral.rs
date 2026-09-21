@@ -353,7 +353,6 @@ impl PackedBooleanCreditLedger {
     }
 }
 
-
 /// Gradient-free training settings for one hard two-input Boolean gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BooleanGateTrainingConfig {
