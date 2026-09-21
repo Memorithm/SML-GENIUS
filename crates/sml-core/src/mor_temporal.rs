@@ -118,6 +118,11 @@ impl MorTemporalDenoiser {
     }
 
     #[must_use]
+    pub const fn policy(&self) -> MorTemporalPolicy {
+        self.policy
+    }
+
+    #[must_use]
     pub const fn pending_primary(&self) -> Option<PageId> {
         self.pending_primary
     }

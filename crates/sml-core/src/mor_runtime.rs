@@ -89,6 +89,19 @@ impl NativeMorRuntime {
         }
     }
 
+    pub fn with_temporal_policy(
+        &self,
+        temporal_policy: MorTemporalPolicy,
+    ) -> Result<Self, NativeMorRuntimeError> {
+        Self::new(
+            self.engine,
+            self.affinity_bank.clone(),
+            self.registry.clone(),
+            self.controller.controller().policy(),
+            temporal_policy,
+        )
+    }
+
     pub fn reset(&mut self) {
         self.controller.reset();
     }
