@@ -119,7 +119,10 @@ fn duplicate_mask_indexes_fail_closed() {
 fn packed_credit_ledger_uses_four_bits_per_active_parameter() {
     let mut ledger = PackedBooleanCreditLedger::new(5).unwrap();
     assert_eq!(ledger.len(), 5);
-    assert_eq!(PackedBooleanCreditLedger::storage_bytes_for_parameters(5), 3);
+    assert_eq!(
+        PackedBooleanCreditLedger::storage_bytes_for_parameters(5),
+        3
+    );
     assert_eq!(
         PackedBooleanCreditLedger::storage_bytes_for_parameters(62_500_000),
         31_250_000
