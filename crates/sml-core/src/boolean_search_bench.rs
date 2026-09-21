@@ -353,12 +353,21 @@ where
             .cmp(&left.1)
             .then_with(|| left.0.cmp(&right.0))
     });
-    scored.dedup_by_key(|candidate| candidate.0);
-    let raw_candidates = scored.len() as u64;
-    scored.truncate(policy.max_candidates);
+    let mut unique_scored = Vec::with_capacity(scored.len());
+    for candidate in scored {
+        if unique_scored
+            .iter()
+            .any(|existing: &(u64, i64)| existing.0 == candidate.0)
+        {
+            continue;
+        }
+        unique_scored.push(candidate);
+    }
+    let raw_candidates = unique_scored.len() as u64;
+    unique_scored.truncate(policy.max_candidates);
 
     let mut candidates = Vec::new();
-    for (parameter_index, _) in scored {
+    for (parameter_index, _) in unique_scored {
         let view = page
             .index_flip_view(&[parameter_index])
             .map_err(BooleanSearchBenchmarkError::Page)?;
