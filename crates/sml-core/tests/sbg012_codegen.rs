@@ -1,6 +1,4 @@
-use sml_core::semantic::{
-    packed_word4_score, packed_word4_score_16384, SemanticBitField,
-};
+use sml_core::semantic::{packed_word4_score, packed_word4_score_16384, SemanticBitField};
 
 #[test]
 fn fixed_width_codegen_entry_point_matches_generic_kernel() {
