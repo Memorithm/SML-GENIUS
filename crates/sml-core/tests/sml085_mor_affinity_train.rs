@@ -64,10 +64,22 @@ fn trainer_recovers_separable_router_signatures() {
     let router1 = &artifact.bank.routers()[1];
     assert_eq!(router0.atoms.len(), 2);
     assert_eq!(router1.atoms.len(), 2);
-    assert!(router0.atoms.iter().any(|atom| atom.fingerprint_bit == 0 && atom.expected));
-    assert!(router0.atoms.iter().any(|atom| atom.fingerprint_bit == 2 && !atom.expected));
-    assert!(router1.atoms.iter().any(|atom| atom.fingerprint_bit == 0 && !atom.expected));
-    assert!(router1.atoms.iter().any(|atom| atom.fingerprint_bit == 2 && atom.expected));
+    assert!(router0
+        .atoms
+        .iter()
+        .any(|atom| atom.fingerprint_bit == 0 && atom.expected));
+    assert!(router0
+        .atoms
+        .iter()
+        .any(|atom| atom.fingerprint_bit == 2 && !atom.expected));
+    assert!(router1
+        .atoms
+        .iter()
+        .any(|atom| atom.fingerprint_bit == 0 && !atom.expected));
+    assert!(router1
+        .atoms
+        .iter()
+        .any(|atom| atom.fingerprint_bit == 2 && atom.expected));
 }
 
 #[test]
