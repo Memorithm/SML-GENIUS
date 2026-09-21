@@ -27,9 +27,10 @@ fn boolean_integral_task_learning_recovers_conjunction_without_latent_gradient()
 
 #[test]
 fn boolean_integral_task_learning_recovers_overwrite_projection_without_latent_gradient() {
-    let (candidate, report) =
-        train_state_update_from_tasks_boolean_integral(BooleanIntegralTaskTrainingConfig::default())
-            .unwrap();
+    let (candidate, report) = train_state_update_from_tasks_boolean_integral(
+        BooleanIntegralTaskTrainingConfig::default(),
+    )
+    .unwrap();
 
     assert_eq!(report.gate.initial_table, TruthTable2::FALSE);
     assert_eq!(report.gate.final_table, TruthTable2::RIGHT);
