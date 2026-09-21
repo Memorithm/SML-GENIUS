@@ -62,7 +62,10 @@ fn overlapping_recovers_exact_cancellation_with_far_fewer_evaluations_than_coord
     let page = PackedBooleanPage::zeros(PageId(0), 256).unwrap();
     let report = BooleanSearchBenchmark::compare(&page, policy(), cancellation_objective).unwrap();
 
-    assert_eq!(report.coordinate.strategy, BooleanSearchStrategy::Coordinate);
+    assert_eq!(
+        report.coordinate.strategy,
+        BooleanSearchStrategy::Coordinate
+    );
     assert_eq!(report.coordinate.objective_evaluations, 257);
     assert_eq!(
         report.coordinate.best_candidate().unwrap().parameter_index,
@@ -77,16 +80,17 @@ fn overlapping_recovers_exact_cancellation_with_far_fewer_evaluations_than_coord
         0
     );
     assert_eq!(
-        report.overlapping.best_candidate().unwrap().candidate_loss_ppm,
+        report
+            .overlapping
+            .best_candidate()
+            .unwrap()
+            .candidate_loss_ppm,
         400_000
     );
     assert_eq!(report.overlapping.rescued_groups, 1);
     assert_eq!(report.overlapping.probes_evaluated, 64);
     assert_eq!(report.overlapping.objective_evaluations, 67);
-    assert!(
-        report.overlapping.objective_evaluations
-            < report.coordinate.objective_evaluations
-    );
+    assert!(report.overlapping.objective_evaluations < report.coordinate.objective_evaluations);
 }
 
 #[test]
@@ -110,14 +114,8 @@ fn contiguous_hierarchy_is_cheapest_on_simple_sparse_signal() {
     assert_eq!(report.coordinate.objective_evaluations, 257);
     assert_eq!(report.contiguous.objective_evaluations, 19);
     assert_eq!(report.overlapping.objective_evaluations, 67);
-    assert!(
-        report.contiguous.objective_evaluations
-            < report.overlapping.objective_evaluations
-    );
-    assert!(
-        report.overlapping.objective_evaluations
-            < report.coordinate.objective_evaluations
-    );
+    assert!(report.contiguous.objective_evaluations < report.overlapping.objective_evaluations);
+    assert!(report.overlapping.objective_evaluations < report.coordinate.objective_evaluations);
 }
 
 #[test]
