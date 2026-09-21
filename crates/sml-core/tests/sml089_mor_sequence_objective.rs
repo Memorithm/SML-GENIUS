@@ -37,12 +37,7 @@ fn router(id: u32, expected: bool, page: u32) -> NativeRouterSpec {
 fn bank() -> NativeAffinityBank {
     let policy = MorAffinityPolicy::default();
     let plan = SmlFingerprintPlan::new(vec![0], policy).unwrap();
-    NativeAffinityBank::new(
-        plan,
-        vec![router(0, true, 0), router(1, false, 1)],
-        policy,
-    )
-    .unwrap()
+    NativeAffinityBank::new(plan, vec![router(0, true, 0), router(1, false, 1)], policy).unwrap()
 }
 
 fn engine() -> MixtureOfRouters {
@@ -87,10 +82,7 @@ fn objective(switch_penalty_ppm: u32) -> MorRouteSequencePolicy {
 #[test]
 fn dynamic_oracle_can_prefer_staying_over_per_step_best() {
     let sequences = vec![MorRouteSequenceExample {
-        steps: vec![
-            step(true, 0, 200_000),
-            step(false, 200_000, 0),
-        ],
+        steps: vec![step(true, 0, 200_000), step(false, 200_000, 0)],
     }];
 
     let report =
@@ -112,10 +104,7 @@ fn dynamic_oracle_can_prefer_staying_over_per_step_best() {
 #[test]
 fn zero_switch_penalty_recovers_per_step_oracle_path() {
     let sequences = vec![MorRouteSequenceExample {
-        steps: vec![
-            step(true, 0, 200_000),
-            step(false, 200_000, 0),
-        ],
+        steps: vec![step(true, 0, 200_000), step(false, 200_000, 0)],
     }];
 
     let report =
@@ -133,16 +122,10 @@ fn zero_switch_penalty_recovers_per_step_oracle_path() {
 fn batch_report_aggregates_sequence_regret() {
     let sequences = vec![
         MorRouteSequenceExample {
-            steps: vec![
-                step(true, 0, 200_000),
-                step(false, 200_000, 0),
-            ],
+            steps: vec![step(true, 0, 200_000), step(false, 200_000, 0)],
         },
         MorRouteSequenceExample {
-            steps: vec![
-                step(true, 0, 900_000),
-                step(true, 0, 900_000),
-            ],
+            steps: vec![step(true, 0, 900_000), step(true, 0, 900_000)],
         },
     ];
 
