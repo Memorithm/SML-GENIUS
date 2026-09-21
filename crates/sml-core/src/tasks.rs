@@ -193,10 +193,16 @@ pub fn distractor_rejection(case_id: u64, distractors: usize) -> Result<TaskInst
     })
 }
 
-/// Builds a deterministic development panel spanning every initial task family.
-pub fn development_suite(cases_per_kind: u32) -> Result<Vec<TaskInstance>, TaskError> {
-    let mut suite = Vec::with_capacity(cases_per_kind as usize * 5);
-    for case_id in 0..cases_per_kind as u64 {
+/// Builds a deterministic panel spanning every initial task family from a declared case ID.
+pub fn suite_from_case_id(
+    start_case_id: u64,
+    cases_per_kind: u32,
+) -> Result<Vec<TaskInstance>, TaskError> {
+    let end_case_id = start_case_id
+        .checked_add(cases_per_kind as u64)
+        .ok_or(TaskError::CaseIdOverflow)?;
+    let mut suite = Vec::with_capacity((cases_per_kind as usize).saturating_mul(5));
+    for case_id in start_case_id..end_case_id {
         let span = (case_id % 16) as usize;
         suite.push(delayed_bit_recall(case_id, span));
         suite.push(keyed_fact_recall(case_id, span)?);
@@ -205,6 +211,11 @@ pub fn development_suite(cases_per_kind: u32) -> Result<Vec<TaskInstance>, TaskE
         suite.push(distractor_rejection(case_id, span)?);
     }
     Ok(suite)
+}
+
+/// Builds the canonical deterministic development panel from case ID zero.
+pub fn development_suite(cases_per_kind: u32) -> Result<Vec<TaskInstance>, TaskError> {
+    suite_from_case_id(0, cases_per_kind)
 }
 
 /// Independent complete-answer oracle.
@@ -322,6 +333,7 @@ fn mix64(mut value: u64) -> u64 {
 /// Invalid generated or hand-authored task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskError {
+    CaseIdOverflow,
     InvalidPayloadLength(usize),
     TooManyDistractors(usize),
     MissingQuery,

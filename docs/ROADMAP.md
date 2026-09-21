@@ -37,14 +37,26 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] independent destination-side Forge candidate parsing and full-oracle requalification;
 - [ ] frozen SML-0 exit report.
 
+## SML-1 pilot status
+
+The following are integration milestones, not satisfaction of the SML-1 quality gate:
+
+- [x] first integrated candidate with learned hard event routing and bounded direct memory;
+- [x] deterministic disjoint case-ID holdout ranges;
+- [x] complete per-event route, answer and execution-counter evidence;
+- [x] fail-closed memory collision behavior without silent eviction;
+- [ ] learn task-state transitions or micro-operation semantics from task loss;
+- [ ] compare learned routing against fixed-routing, no-memory and memory-capacity ablations;
+- [ ] demonstrate held-out improvement attributable to learned routing/memory rather than fixed task semantics.
+
 ## Immediate implementation sequence
 
-1. Train the first SML candidate on the deterministic task panel and retain full traces.
-2. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
-3. Define the first page-residency planner contract for ElasticXxx.
-4. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
-5. Evaluate learned wiring separately against fixed/Forge-selected topology.
-6. Promote reusable primitives to SciRust only after semantics stabilize.
+1. Replace fixed task micro-operations with task-loss-trained state transitions and preserve the same holdout boundary.
+2. Run fixed-routing, no-memory and memory-capacity ablations before claiming a learned mechanism advantage.
+3. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
+4. Define the first page-residency planner contract for ElasticXxx.
+5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+6. Evaluate learned wiring separately against fixed/Forge-selected topology, then promote stable reusable primitives to SciRust.
 
 ## Stop conditions
 

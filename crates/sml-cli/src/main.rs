@@ -4,12 +4,13 @@ use sml_core::{
     anf::{AnfMonomial, AnfPolynomial},
     atlas::{AtlasPageManifest, CircuitAtlas},
     audit::validate_non_attention_candidate,
+    candidate::{SmlTaskCandidate, TaskCandidateConfig},
     circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
     forge_topology::ForgeTopologyCandidateV1,
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
-    tasks::development_suite,
+    tasks::{development_suite, suite_from_case_id},
     trace::run_recurrent_traced,
     train::{GateTrainingConfig, LatentGate2, TruthTable2},
     BooleanWorkspace, ExecutionCounters, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
@@ -59,10 +60,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml10-smoke" => {
+            if let Err(error) = sml10_smoke() {
+                eprintln!("SML-1.0 pilot smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml10-smoke]"
             );
             std::process::exit(2);
         }
@@ -350,5 +357,51 @@ fn sml06_smoke() -> Result<(), Box<dyn std::error::Error>> {
         accounting.latent_training_scalars
     );
     println!("route_lookups={}", counters.route_lookups);
+    Ok(())
+}
+
+fn sml10_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let (candidate, training) = SmlTaskCandidate::train(TaskCandidateConfig::default())?;
+    let holdout = suite_from_case_id(10_000, 8)?;
+
+    let mut exact = 0_u64;
+    let mut trace_records = 0_u64;
+    let mut route_lookups = 0_u64;
+    let mut memory_reads = 0_u64;
+    let mut memory_writes = 0_u64;
+    let mut semantic_route_bits_touched = 0_u64;
+
+    for instance in &holdout {
+        let evidence = candidate.execute(instance)?;
+        if evidence.exact {
+            exact = exact.saturating_add(1);
+        }
+        trace_records = trace_records.saturating_add(evidence.trace.len() as u64);
+        route_lookups = route_lookups.saturating_add(evidence.counters.route_lookups);
+        memory_reads = memory_reads.saturating_add(evidence.counters.memory_reads);
+        memory_writes = memory_writes.saturating_add(evidence.counters.memory_writes);
+        semantic_route_bits_touched =
+            semantic_route_bits_touched.saturating_add(evidence.semantic_route_bits_touched);
+    }
+
+    if exact != holdout.len() as u64 {
+        return Err(format!("SML-1.0 holdout mismatch: {exact}/{} exact", holdout.len()).into());
+    }
+
+    println!("SML-1.0 pilot smoke");
+    println!(
+        "route_hard_correct={}/{}",
+        training.route.hard_correct, training.route.address_count
+    );
+    println!(
+        "learned_route_bits={}",
+        training.route_accounting.learned_boolean_bits
+    );
+    println!("holdout_tasks={exact}/{}", holdout.len());
+    println!("trace_records={trace_records}");
+    println!("route_lookups={route_lookups}");
+    println!("memory_reads={memory_reads}");
+    println!("memory_writes={memory_writes}");
+    println!("semantic_route_bits_touched={semantic_route_bits_touched}");
     Ok(())
 }
