@@ -163,7 +163,6 @@ fn evaluate_sequence(
         validate_step(step, sequence_index, step_index)?;
     }
 
-    let oracle_path = optimal_path(sequence, policy)?;
     let mut previous = PreviousRoute::default();
     let mut chosen_pages = Vec::with_capacity(sequence.steps.len());
 
