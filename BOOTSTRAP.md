@@ -161,13 +161,13 @@ Completed:
 Active development branch:
 
 ```text
-research/sbg-0.12b-benchmark
+research/sbg-0.12c-codegen-audit
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-cli/src/main.rs
+scripts/audit-sbg012-codegen.sh
 ```
 
 SBG-0.11 linguistic micro-benchmark was merged through PR #51 on main as
@@ -176,18 +176,28 @@ SBG-0.11 linguistic micro-benchmark was merged through PR #51 on main as
 SBG-0.12a packed-word qualification merged on main through PR #53 as
 `7f9a6478391c4df6e6c34d9b3eeb55c7fc5e5c66`.
 
-Definition of done for SBG-0.12b:
+SBG-0.12b reproducible ARM64 benchmark merged on main through PR #54 as
+`7e4b24768fd0f0bb4405421fcba6e2526bb379d9`.
 
-1. provide a reproducible release-mode benchmark at the 16,384-bit reference width;
-2. benchmark the independent scalar oracle and packed-word kernel on identical data;
-3. warm both paths before timing and use black-box barriers plus an equality checksum;
-4. report total and per-iteration nanoseconds without setting a flaky performance threshold;
-5. run the benchmark automatically only on SBG-0.12 research branches;
-6. record the runner architecture with the measurement;
-7. use measured results to decide whether explicit architecture-specific SIMD is justified.
+The first recorded self-hosted AArch64 run used 32 warm-ups and 512 measured
+iterations at 16,384 logical bits. It measured 49,400 ns/iteration for the
+independent bit-by-bit oracle and 2,105 ns/iteration for the packed-u64 kernel,
+an observed ratio of 23.463944x for that single run. This is not a stable
+distribution and does not by itself establish NEON or other SIMD code generation.
 
-The broader SBG-0.12 milestone remains open after 0.12b until code-generation
-evidence and the safe architecture-specific strategy are frozen.
+Definition of done for SBG-0.12c:
+
+1. retain the crate-wide `#![forbid(unsafe_code)]` boundary;
+2. expose a fixed-width, non-inlined 16,384-bit audit entry point without changing semantics;
+3. emit optimized release assembly from the exact Rust 1.89 toolchain used by CI;
+4. locate the audit symbol deterministically and report instruction-family counts plus the inspected assembly snippet;
+5. distinguish packed-word acceleration from actual compiler-generated architecture-specific vector instructions;
+6. do not fail merely because a specific vector instruction is absent; absence is valid evidence;
+7. freeze the next strategy only after the ARM64 code-generation evidence is observed.
+
+The broader SBG-0.12 milestone remains open until this code-generation audit
+determines whether safe compiler auto-vectorization is sufficient or whether a
+separate safe SIMD strategy needs to be evaluated.
 
 ## Scientific boundary
 

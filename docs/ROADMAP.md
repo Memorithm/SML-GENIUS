@@ -98,7 +98,8 @@ Current status:
 - [x] SBG-0.11 linguistic micro-benchmark;
 - [ ] SBG-0.12 SIMD qualification;
   - [x] SBG-0.12a scalar-oracle versus safe packed-u64 POPCOUNT kernel qualification;
-  - [ ] SBG-0.12b reproducible wall-clock/codegen measurement and architecture-specific acceleration/dispatch where safe Rust permits;
+  - [x] SBG-0.12b reproducible wall-clock measurement on the ARM64 self-hosted runner;
+  - [ ] SBG-0.12c release code-generation audit and architecture-specific strategy under the safe-Rust boundary;
 - [ ] SBG-0.13 mmap semantic store;
 - [ ] SBG-0.14 integrated prototype.
 
