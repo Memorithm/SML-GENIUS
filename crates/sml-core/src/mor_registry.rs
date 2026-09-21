@@ -94,9 +94,7 @@ impl MorRouterRegistry {
 
         for (position, specialization) in specializations.iter().enumerate() {
             if index.insert(specialization.router_id, position).is_some() {
-                return Err(MorRegistryError::DuplicateRouter(
-                    specialization.router_id,
-                ));
+                return Err(MorRegistryError::DuplicateRouter(specialization.router_id));
             }
             if specialization.experts.is_empty() {
                 return Err(MorRegistryError::EmptySpecialization(
@@ -154,16 +152,17 @@ impl MorRouterRegistry {
             .ok_or(MorRegistryError::ArithmeticOverflow)?;
         let edge_density_ppm = ratio_ppm(edge_count as u64, dense_edge_count);
         let coverage_ppm = ratio_ppm(covered.len() as u64, policy.expert_count as u64);
-        let average_fanout_milli = ((edge_count as u128 * 1_000)
-            / specializations.len() as u128) as u32;
+        let average_fanout_milli =
+            ((edge_count as u128 * 1_000) / specializations.len() as u128) as u32;
         let overlap_edges = edge_count.saturating_sub(covered.len());
+        let router_count = specializations.len();
 
         Ok(Self {
             policy,
             specializations,
             index,
             accounting: MorRegistryAccounting {
-                router_count: specializations.len(),
+                router_count,
                 expert_count: policy.expert_count,
                 covered_experts: covered.len() as u32,
                 edge_count,
@@ -233,9 +232,7 @@ impl MorRouterRegistry {
 
         for specialization in &self.specializations {
             if !seen.contains(&specialization.router_id) {
-                return Err(MorRegistryError::MissingRouter(
-                    specialization.router_id,
-                ));
+                return Err(MorRegistryError::MissingRouter(specialization.router_id));
             }
         }
 
