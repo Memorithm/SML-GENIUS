@@ -96,11 +96,13 @@ Current status:
   - [x] SBG-0.10a V/M/A/R Boolean-integral coordinate credit and train/holdout commit gate;
   - [x] SBG-0.10b structural BIND/SPLIT/MERGE evidence decisions;
 - [x] SBG-0.11 linguistic micro-benchmark;
-- [ ] SBG-0.12 SIMD qualification;
+- [x] SBG-0.12 SIMD qualification on the current ARM64 reference runner;
   - [x] SBG-0.12a scalar-oracle versus safe packed-u64 POPCOUNT kernel qualification;
   - [x] SBG-0.12b reproducible wall-clock measurement on the ARM64 self-hosted runner;
-  - [ ] SBG-0.12c release code-generation audit and architecture-specific strategy under the safe-Rust boundary;
+  - [x] SBG-0.12c exact release code-generation audit under the safe-Rust boundary;
 - [ ] SBG-0.13 mmap semantic store;
+  - [ ] SBG-0.13a versioned checksummed mmap-friendly binary format;
+  - [ ] SBG-0.13b read-only mapped runtime with bounded per-record decoding;
 - [ ] SBG-0.14 integrated prototype.
 
 The SBG track is an experimental hypothesis. It does not yet establish language quality, optimal semantic width, or 25B-scale trainability.

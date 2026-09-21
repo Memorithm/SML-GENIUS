@@ -17,6 +17,7 @@ pub mod mor_routing;
 pub mod recurrent;
 pub mod simd;
 pub mod state;
+pub mod store_format;
 pub mod structural_learning;
 
 pub use algebra::{
@@ -67,6 +68,11 @@ pub use simd::{
     SemanticKernelEvidence, SemanticKernelKind, SemanticKernelQualification, SemanticSimdError,
 };
 pub use state::SemanticState;
+pub use store_format::{
+    build_semantic_store, SemanticStoreError, SemanticStoreHeader, SemanticStoreIndexEntry,
+    SemanticStoreView, SEMANTIC_STORE_HEADER_BYTES, SEMANTIC_STORE_INDEX_ENTRY_BYTES,
+    SEMANTIC_STORE_MAGIC, SEMANTIC_STORE_PAGE_ALIGNMENT, SEMANTIC_STORE_VERSION,
+};
 pub use structural_learning::{
     commit_structural_candidate, SemanticHypothesisPool, SemanticStructuralCandidate,
     SemanticStructuralError, SemanticStructuralEvidenceLedger, SemanticStructuralLearningReport,
