@@ -7,11 +7,13 @@
 use core::fmt;
 
 use crate::{
-    candidate::{SmlTaskCandidate, TaskCandidateConfig, TaskCandidateError, TaskCandidateTrainingReport},
+    candidate::{
+        SmlTaskCandidate, TaskCandidateConfig, TaskCandidateError, TaskCandidateTrainingReport,
+    },
     tasks::{suite_from_case_id, TaskAnswer, TaskError, TaskEvent, TaskInstance, TaskKind},
     train::{
         GateSample2, GateSampleTrainingReport, GateTrainingConfig, LatentGate2, TrainError,
-        TruthTable2, TRUTH_TABLE_COUNT,
+        TRUTH_TABLE_COUNT,
     },
 };
 
