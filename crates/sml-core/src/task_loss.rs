@@ -1,8 +1,8 @@
 //! Task-loss training for the first learnable SML task micro-operation.
 //!
-//! This slice learns the hard Boolean function used by QueryConjunction from
-//! complete task examples. It never receives the AND truth-table identity as a
-//! training target. Event routing and memory semantics remain separate systems.
+//! This module learns hard Boolean micro-operations from complete task examples.
+//! It does not pass target truth-table identities to the optimizer. Event routing
+//! and associative-memory semantics remain separate systems.
 
 use core::fmt;
 
@@ -41,9 +41,44 @@ impl Default for ConjunctionTaskTrainingConfig {
     }
 }
 
+/// Configuration for task-loss training of the overwrite state transition.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StateUpdateTaskTrainingConfig {
+    pub train_start_case_id: u64,
+    pub train_cases: u32,
+    pub gate_training: GateTrainingConfig,
+    pub candidate: TaskCandidateConfig,
+}
+
+impl Default for StateUpdateTaskTrainingConfig {
+    fn default() -> Self {
+        Self {
+            train_start_case_id: 0,
+            train_cases: 64,
+            gate_training: GateTrainingConfig {
+                epochs: 600,
+                learning_rate: 0.2,
+                epsilon: 1.0e-6,
+            },
+            candidate: TaskCandidateConfig::default(),
+        }
+    }
+}
+
 /// Evidence retained after learning one task micro-operation from task answers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConjunctionTaskTrainingReport {
+    pub task_samples: u64,
+    pub input_pattern_mask: u8,
+    pub learned_boolean_bits: u64,
+    pub latent_training_scalars: u64,
+    pub gate: GateSampleTrainingReport,
+    pub candidate: TaskCandidateTrainingReport,
+}
+
+/// Evidence retained after learning the overwrite state update from task answers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StateUpdateTaskTrainingReport {
     pub task_samples: u64,
     pub input_pattern_mask: u8,
     pub learned_boolean_bits: u64,
@@ -59,6 +94,8 @@ pub struct TaskPanelEvaluation {
     pub exact_tasks: u64,
     pub conjunction_tasks: u64,
     pub exact_conjunction_tasks: u64,
+    pub overwrite_tasks: u64,
+    pub exact_overwrite_tasks: u64,
     pub trace_records: u64,
     pub route_lookups: u64,
     pub memory_reads: u64,
@@ -117,6 +154,61 @@ pub fn train_conjunction_from_tasks(
     ))
 }
 
+/// Trains overwrite-state semantics strictly from generated task answers.
+pub fn train_state_update_from_tasks(
+    config: StateUpdateTaskTrainingConfig,
+) -> Result<(SmlTaskCandidate, StateUpdateTaskTrainingReport), TaskLossError> {
+    if config.train_cases == 0 {
+        return Err(TaskLossError::ZeroTrainingCases);
+    }
+
+    let suite = suite_from_case_id(config.train_start_case_id, config.train_cases)?;
+    let mut samples = Vec::with_capacity(config.train_cases as usize);
+    let mut input_pattern_mask = 0_u8;
+
+    for instance in &suite {
+        if instance.kind != TaskKind::OverwriteBitRecall {
+            continue;
+        }
+        let sample = state_update_sample(instance)?;
+        let input_index = sample.left as u8 | ((sample.right as u8) << 1);
+        input_pattern_mask |= 1_u8 << input_index;
+        samples.push(sample);
+    }
+
+    if input_pattern_mask != 0b1111 {
+        return Err(TaskLossError::IncompleteInputCoverage(input_pattern_mask));
+    }
+
+    let mut gate = LatentGate2::default();
+    let gate_report = gate.train_samples(&samples, config.gate_training)?;
+    if gate_report.hard_correct != samples.len() as u64 {
+        return Err(TaskLossError::GateNotConverged {
+            correct: gate_report.hard_correct,
+            total: samples.len() as u64,
+        });
+    }
+
+    let hard_table = gate.hard_table()?;
+    let (candidate, candidate_report) = SmlTaskCandidate::train_with_micro_ops(
+        config.candidate,
+        crate::train::TruthTable2::AND,
+        hard_table,
+    )?;
+
+    Ok((
+        candidate,
+        StateUpdateTaskTrainingReport {
+            task_samples: samples.len() as u64,
+            input_pattern_mask,
+            learned_boolean_bits: 4,
+            latent_training_scalars: TRUTH_TABLE_COUNT as u64,
+            gate: gate_report,
+            candidate: candidate_report,
+        },
+    ))
+}
+
 /// Evaluates a frozen candidate and aggregates its held-out evidence counters.
 pub fn evaluate_task_panel(
     candidate: &SmlTaskCandidate,
@@ -147,6 +239,12 @@ pub fn evaluate_task_panel(
             report.conjunction_tasks = report.conjunction_tasks.saturating_add(1);
             if evidence.exact {
                 report.exact_conjunction_tasks = report.exact_conjunction_tasks.saturating_add(1);
+            }
+        }
+        if instance.kind == TaskKind::OverwriteBitRecall {
+            report.overwrite_tasks = report.overwrite_tasks.saturating_add(1);
+            if evidence.exact {
+                report.exact_overwrite_tasks = report.exact_overwrite_tasks.saturating_add(1);
             }
         }
     }
@@ -181,6 +279,34 @@ fn conjunction_sample(instance: &TaskInstance) -> Result<GateSample2, TaskLossEr
     })
 }
 
+fn state_update_sample(instance: &TaskInstance) -> Result<GateSample2, TaskLossError> {
+    if instance.kind != TaskKind::OverwriteBitRecall {
+        return Err(TaskLossError::WrongTaskKind(instance.kind));
+    }
+
+    let stores: Vec<bool> = instance
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            TaskEvent::StoreBit(value) => Some(*value),
+            _ => None,
+        })
+        .collect();
+    if stores.len() != 2 {
+        return Err(TaskLossError::MissingStateUpdatePair);
+    }
+    let target = match &instance.expected {
+        TaskAnswer::Bit(value) => *value,
+        TaskAnswer::Bits(_) => return Err(TaskLossError::NonScalarTarget),
+    };
+
+    Ok(GateSample2 {
+        left: stores[0],
+        right: stores[1],
+        target,
+    })
+}
+
 fn fact_before(instance: &TaskInstance, key: u16, before: usize) -> Result<bool, TaskLossError> {
     instance.events[..before]
         .iter()
@@ -203,6 +329,7 @@ pub enum TaskLossError {
     GateNotConverged { correct: u64, total: u64 },
     WrongTaskKind(TaskKind),
     MissingQuery,
+    MissingStateUpdatePair,
     MissingFact(u16),
     NonScalarTarget,
     Task(TaskError),
