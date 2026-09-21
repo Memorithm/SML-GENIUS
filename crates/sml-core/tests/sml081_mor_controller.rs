@@ -1,7 +1,5 @@
 use sml_core::{
-    mor::{
-        ExpertProposal, MixtureOfRouters, MorPolicy, RouterId, RouterInput, MOR_SCALE_PPM,
-    },
+    mor::{ExpertProposal, MixtureOfRouters, MorPolicy, RouterId, RouterInput, MOR_SCALE_PPM},
     mor_controller::{MorController, MorControllerPolicy},
     PageId,
 };
@@ -85,21 +83,13 @@ fn controller_carries_previous_route_into_recurrent_hysteresis() {
     })
     .unwrap();
 
-    let first_routers = vec![router(
-        0,
-        MOR_SCALE_PPM,
-        &[(1, 515_000), (2, 500_000)],
-    )];
+    let first_routers = vec![router(0, MOR_SCALE_PPM, &[(1, 515_000), (2, 500_000)])];
     let first = controller
         .route_cycle(&engine, &first_routers, &[])
         .unwrap();
     assert_eq!(first.decision.ranked_experts[0].page_id, PageId(1));
 
-    let second_routers = vec![router(
-        0,
-        MOR_SCALE_PPM,
-        &[(1, 500_000), (2, 515_000)],
-    )];
+    let second_routers = vec![router(0, MOR_SCALE_PPM, &[(1, 500_000), (2, 515_000)])];
     let second = controller
         .route_cycle(&engine, &second_routers, &[])
         .unwrap();
@@ -161,11 +151,7 @@ fn expert_balancing_is_native_and_bounded() {
         max_expert_adjustment_ppm: 100_000,
     })
     .unwrap();
-    let routers = vec![router(
-        0,
-        MOR_SCALE_PPM,
-        &[(1, 900_000), (2, 890_000)],
-    )];
+    let routers = vec![router(0, MOR_SCALE_PPM, &[(1, 900_000), (2, 890_000)])];
 
     let first = controller.route_cycle(&engine, &routers, &[]).unwrap();
     assert_eq!(first.decision.selected_experts, vec![PageId(1)]);
