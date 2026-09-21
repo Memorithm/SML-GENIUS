@@ -19,11 +19,7 @@ fn atom(bit: u16, expected: bool, weight: u32) -> RouterSignatureAtom {
     }
 }
 
-fn router(
-    id: u32,
-    atoms: Vec<RouterSignatureAtom>,
-    page: u32,
-) -> NativeRouterSpec {
+fn router(id: u32, atoms: Vec<RouterSignatureAtom>, page: u32) -> NativeRouterSpec {
     NativeRouterSpec {
         router_id: RouterId(id),
         atoms,
@@ -108,16 +104,8 @@ fn weight_search_reduces_route_regret_on_noisy_fingerprint_bit() {
     let bank = NativeAffinityBank::new(
         plan,
         vec![
-            router(
-                0,
-                vec![atom(0, true, 500_000), atom(1, true, 500_000)],
-                0,
-            ),
-            router(
-                1,
-                vec![atom(0, false, 500_000), atom(1, false, 500_000)],
-                1,
-            ),
+            router(0, vec![atom(0, true, 500_000), atom(1, true, 500_000)], 0),
+            router(1, vec![atom(0, false, 500_000), atom(1, false, 500_000)], 1),
         ],
         policy,
     )
@@ -180,16 +168,8 @@ fn weight_search_is_deterministic() {
     let bank = NativeAffinityBank::new(
         plan,
         vec![
-            router(
-                0,
-                vec![atom(0, true, 500_000), atom(1, true, 500_000)],
-                0,
-            ),
-            router(
-                1,
-                vec![atom(0, false, 500_000), atom(1, false, 500_000)],
-                1,
-            ),
+            router(0, vec![atom(0, true, 500_000), atom(1, true, 500_000)], 0),
+            router(1, vec![atom(0, false, 500_000), atom(1, false, 500_000)], 1),
         ],
         policy,
     )
@@ -214,9 +194,14 @@ fn weight_search_is_deterministic() {
         candidate_weights_ppm: vec![100_000, 900_000],
     };
 
-    let first =
-        MorRouteWeightSearch::train(bank.clone(), &engine(), &examples, objective, search.clone())
-            .unwrap();
+    let first = MorRouteWeightSearch::train(
+        bank.clone(),
+        &engine(),
+        &examples,
+        objective,
+        search.clone(),
+    )
+    .unwrap();
     let second =
         MorRouteWeightSearch::train(bank, &engine(), &examples, objective, search).unwrap();
 
