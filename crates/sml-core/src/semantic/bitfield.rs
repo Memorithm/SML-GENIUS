@@ -206,14 +206,9 @@ const fn validate_width<const BITS: usize>() -> Result<(), SemanticBitFieldError
     }
 }
 
-const fn validate_index<const BITS: usize>(
-    index: usize,
-) -> Result<(), SemanticBitFieldError> {
+const fn validate_index<const BITS: usize>(index: usize) -> Result<(), SemanticBitFieldError> {
     if index >= BITS {
-        Err(SemanticBitFieldError::IndexOutOfRange {
-            index,
-            width: BITS,
-        })
+        Err(SemanticBitFieldError::IndexOutOfRange { index, width: BITS })
     } else {
         Ok(())
     }
