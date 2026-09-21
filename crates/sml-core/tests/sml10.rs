@@ -38,10 +38,17 @@ fn holdout_task_panel_executes_exactly_with_full_event_traces() {
     assert_eq!(holdout.len(), 320);
     for instance in &holdout {
         let evidence = candidate.execute(instance).unwrap();
-        assert!(evidence.exact, "{:?} case {}", instance.kind, instance.case_id);
+        assert!(
+            evidence.exact,
+            "{:?} case {}",
+            instance.kind, instance.case_id
+        );
         assert_eq!(evidence.predicted, instance.expected);
         assert_eq!(evidence.trace.len(), instance.events.len());
-        assert_eq!(evidence.counters.route_lookups, instance.events.len() as u64);
+        assert_eq!(
+            evidence.counters.route_lookups,
+            instance.events.len() as u64
+        );
         assert_eq!(
             evidence.semantic_route_bits_touched,
             instance.events.len() as u64 * 4
@@ -66,7 +73,10 @@ fn candidate_training_and_holdout_execution_are_deterministic() {
     assert_eq!(left_report, right_report);
 
     let instance = &suite_from_case_id(20_000, 1).unwrap()[4];
-    assert_eq!(left.execute(instance).unwrap(), right.execute(instance).unwrap());
+    assert_eq!(
+        left.execute(instance).unwrap(),
+        right.execute(instance).unwrap()
+    );
 }
 
 #[test]
@@ -112,9 +122,7 @@ fn development_and_holdout_case_ranges_are_disjoint_and_reproducible() {
     assert_eq!(holdout_a, holdout_b);
     assert!(development.iter().all(|item| item.case_id < 8));
     assert!(holdout_a.iter().all(|item| item.case_id >= 10_000));
-    assert!(development.iter().all(|left| {
-        holdout_a
-            .iter()
-            .all(|right| left.case_id != right.case_id)
-    }));
+    assert!(development
+        .iter()
+        .all(|left| { holdout_a.iter().all(|right| left.case_id != right.case_id) }));
 }
