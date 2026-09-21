@@ -13,6 +13,7 @@ pub mod atlas;
 pub mod audit;
 pub mod candidate;
 pub mod circuit;
+pub mod elastic_weights;
 pub mod forge_topology;
 pub mod gf2;
 pub mod memory;
