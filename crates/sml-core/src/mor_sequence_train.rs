@@ -26,12 +26,8 @@ impl Default for MorSequenceSearchConfig {
     fn default() -> Self {
         Self {
             passes: 4,
-            candidate_signature_weights_ppm: vec![
-                100_000, 250_000, 500_000, 750_000, 1_000_000,
-            ],
-            candidate_proposal_scores_ppm: vec![
-                100_000, 250_000, 500_000, 750_000, 1_000_000,
-            ],
+            candidate_signature_weights_ppm: vec![100_000, 250_000, 500_000, 750_000, 1_000_000],
+            candidate_proposal_scores_ppm: vec![100_000, 250_000, 500_000, 750_000, 1_000_000],
         }
     }
 }
@@ -82,13 +78,9 @@ impl MorSequenceSearch {
         config: MorSequenceSearchConfig,
     ) -> Result<MorSequenceSearchArtifact, MorSequenceTrainingError> {
         let config = config.validate()?;
-        let baseline = MorRouteSequenceObjective::evaluate(
-            &bank,
-            engine,
-            sequences,
-            objective_policy,
-        )
-        .map_err(MorSequenceTrainingError::SequenceObjective)?;
+        let baseline =
+            MorRouteSequenceObjective::evaluate(&bank, engine, sequences, objective_policy)
+                .map_err(MorSequenceTrainingError::SequenceObjective)?;
 
         let mut current_bank = bank;
         let mut current_report = baseline.clone();
@@ -103,8 +95,7 @@ impl MorSequenceSearch {
             for router_index in 0..current_bank.routers().len() {
                 let atom_count = current_bank.routers()[router_index].atoms.len();
                 for atom_index in 0..atom_count {
-                    let current =
-                        current_bank.routers()[router_index].atoms[atom_index].weight_ppm;
+                    let current = current_bank.routers()[router_index].atoms[atom_index].weight_ppm;
                     let mut best_value = current;
                     let mut best_report = current_report.clone();
 
@@ -118,12 +109,8 @@ impl MorSequenceSearch {
                             atom_index,
                             *candidate,
                         )?;
-                        let candidate_report = evaluate(
-                            &candidate_bank,
-                            engine,
-                            sequences,
-                            objective_policy,
-                        )?;
+                        let candidate_report =
+                            evaluate(&candidate_bank, engine, sequences, objective_policy)?;
                         candidate_evaluations = candidate_evaluations.saturating_add(1);
 
                         if report_is_better(&candidate_report, &best_report)
@@ -167,12 +154,8 @@ impl MorSequenceSearch {
                             proposal_index,
                             *candidate,
                         )?;
-                        let candidate_report = evaluate(
-                            &candidate_bank,
-                            engine,
-                            sequences,
-                            objective_policy,
-                        )?;
+                        let candidate_report =
+                            evaluate(&candidate_bank, engine, sequences, objective_policy)?;
                         candidate_evaluations = candidate_evaluations.saturating_add(1);
 
                         if report_is_better(&candidate_report, &best_report)
@@ -268,12 +251,10 @@ fn rebuild_bank(
     bank: &NativeAffinityBank,
     routers: Vec<NativeRouterSpec>,
 ) -> Result<NativeAffinityBank, MorSequenceTrainingError> {
-    let plan = SmlFingerprintPlan::new(
-        bank.fingerprint_plan().positions().to_vec(),
-        bank.policy(),
-    )
-    .map_err(MorSequenceTrainingError::Affinity)?;
-    NativeAffinityBank::new(plan, routers, bank.policy()).map_err(MorSequenceTrainingError::Affinity)
+    let plan = SmlFingerprintPlan::new(bank.fingerprint_plan().positions().to_vec(), bank.policy())
+        .map_err(MorSequenceTrainingError::Affinity)?;
+    NativeAffinityBank::new(plan, routers, bank.policy())
+        .map_err(MorSequenceTrainingError::Affinity)
 }
 
 fn report_is_better(
