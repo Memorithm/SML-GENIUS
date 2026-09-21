@@ -18,7 +18,10 @@ pub use context::{
     derive_context_mask, update_context_mask, ContextMaskError, ContextMaskPolicy,
     ContextMaskUpdate,
 };
-pub use metric::{MaskedSemanticScore, SemanticMetricError};
+pub use metric::{
+    hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
+    xnor_similarity, MaskedSemanticScore, SemanticMetricError,
+};
 pub use state::SemanticState;
 
 /// Initial experimental semantic width.
