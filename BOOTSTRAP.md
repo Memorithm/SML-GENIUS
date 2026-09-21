@@ -153,31 +153,32 @@ Completed:
 - SBG-0.7 native MOR integration merged on main as `1610f6b267f8aa45d05b9969977a56c06146552c`.
 - SBG-0.8 recurrent semantic rewriting merged on main as `ae7e65c3aeec4446d3e742cd44a892cc206ac798`.
 - SBG-0.9 Elastic Weight region activation merged on main as `396b65df23c816edcd4407e8f5000ff694e516c9`.
+- SBG-0.10a V/M/A/R Boolean evidence learning merged on main as `f9361eb96094035b18d7f0c2fcc5d564e37b22d1`.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.10a-evidence-learning
+research/sbg-0.10b-structural-evidence
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/evidence_learning.rs
+crates/sml-core/src/semantic/structural_learning.rs
 ```
 
-SBG-0.10 is intentionally split into evidence-gated sub-slices. SBG-0.10 must remain incomplete until structural BIND/SPLIT/MERGE learning semantics are executable.
+SBG-0.10 completes only when this structural slice passes the same evidence and CI gates as SBG-0.10a.
 
-Definition of done for SBG-0.10a:
+Definition of done for SBG-0.10b:
 
-1. V/M/A/R coordinates share one persistent native `BooleanIntegralAccumulator` evidence space;
-2. grouped XOR interventions retain the existing shared-credit semantics and bounded evidence policy;
-3. KEEP/FLIP decisions come from the existing Boolean-integral policy, while candidate flips map to explicit SBG actions such as SET/CLEAR, MASK/UNMASK, ambiguity updates and ROUTE on/off;
-4. candidate mutation is evaluated on an immutable semantic-state clone;
-5. the existing `BooleanCommitEvidence` train/holdout gate is authoritative before atomic state replacement;
-6. stale or malformed candidates fail closed and holdout rejection leaves the original semantic state unchanged;
-7. SBG-0.10 remains open for structural BIND/SPLIT/MERGE evidence semantics;
+1. BIND is an executable mutation using the existing native SBG `bind` algebra on a hypothesis state;
+2. SPLIT creates two hypotheses only from a disjoint and exhaustive partition of the parent Context Meaning Mask, failing closed otherwise;
+3. MERGE uses an explicit third anchor and strict-majority bundling for V/M/A/R, with no hidden two-way tie-break rule;
+4. structural proposal credit reuses the native `BooleanIntegralAccumulator`; grouped proposal interventions remain shared evidence rather than individual causal proof;
+5. every candidate is previewed on an immutable hypothesis-pool clone and the existing `BooleanCommitEvidence` train/holdout gate remains authoritative before commit;
+6. malformed structural transforms fail closed and holdout rejection leaves the original hypothesis pool unchanged;
+7. deterministic tests exercise real BIND, SPLIT and MERGE transformations, evidence qualification, successful commit and holdout rejection;
 8. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary

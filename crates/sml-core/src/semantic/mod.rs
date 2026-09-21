@@ -15,6 +15,7 @@ pub mod metric;
 pub mod mor_routing;
 pub mod recurrent;
 pub mod state;
+pub mod structural_learning;
 
 pub use algebra::{
     bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
@@ -55,6 +56,11 @@ pub use recurrent::{
     SemanticStateDelta,
 };
 pub use state::SemanticState;
+pub use structural_learning::{
+    commit_structural_candidate, SemanticHypothesisPool, SemanticStructuralCandidate,
+    SemanticStructuralError, SemanticStructuralEvidenceLedger, SemanticStructuralLearningReport,
+    SemanticStructuralMutation, SemanticStructuralObservation, SemanticStructuralProposal,
+};
 
 /// Initial experimental semantic width.
 ///

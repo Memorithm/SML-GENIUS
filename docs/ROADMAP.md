@@ -92,9 +92,9 @@ Current status:
 - [x] SBG-0.7 native MOR integration;
 - [x] SBG-0.8 recurrent semantic rewriting;
 - [x] SBG-0.9 Elastic Weight region activation;
-- [ ] SBG-0.10 Boolean evidence learning integration;
+- [x] SBG-0.10 Boolean evidence learning integration;
   - [x] SBG-0.10a V/M/A/R Boolean-integral coordinate credit and train/holdout commit gate;
-  - [ ] SBG-0.10b structural BIND/SPLIT/MERGE evidence decisions;
+  - [x] SBG-0.10b structural BIND/SPLIT/MERGE evidence decisions;
 - [ ] SBG-0.11 linguistic micro-benchmark;
 - [ ] SBG-0.12 SIMD qualification;
 - [ ] SBG-0.13 mmap semantic store;
