@@ -407,7 +407,6 @@ impl fmt::Display for NativeMorRuntimeAuditError {
 
 impl std::error::Error for NativeMorRuntimeAuditError {}
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeMorOnlineAdaptationPolicy {
     pub ema_retention_ppm: u32,
@@ -433,9 +432,7 @@ impl NativeMorOnlineAdaptationPolicy {
             self.max_bias_adjustment_ppm,
         ] {
             if value > MOR_SCALE_PPM {
-                return Err(NativeMorOnlineAdaptationError::PolicyPpmOutOfRange(
-                    value,
-                ));
+                return Err(NativeMorOnlineAdaptationError::PolicyPpmOutOfRange(value));
             }
         }
         Ok(self)
@@ -608,13 +605,14 @@ impl NativeMorAdaptiveRuntime {
         }
 
         for value in values {
-            let base = hints.get(&value.page_id.0).copied().unwrap_or(
-                ExpertRuntimeHint {
+            let base = hints
+                .get(&value.page_id.0)
+                .copied()
+                .unwrap_or(ExpertRuntimeHint {
                     page_id: value.page_id,
                     balance_bias_ppm: 0,
                     residency_penalty_ppm: 0,
-                },
-            );
+                });
             hints.insert(
                 value.page_id.0,
                 ExpertRuntimeHint {
@@ -663,8 +661,7 @@ fn ema_objective_ppm(old: u32, observed: u32, retention_ppm: u32) -> u32 {
 }
 
 fn bounded_runtime_bias_add(base: i32, adjustment: i32) -> i32 {
-    (base as i64 + adjustment as i64)
-        .clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
+    (base as i64 + adjustment as i64).clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
