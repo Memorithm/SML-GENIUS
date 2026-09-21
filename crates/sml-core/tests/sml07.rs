@@ -230,9 +230,7 @@ fn duplicate_page_ids_and_duplicate_selections_are_rejected() {
 
     let planner = ElasticWeightPlanner::new(pages(), policy()).unwrap();
     assert_eq!(
-        planner
-            .plan_cycle(&[PageId(1), PageId(1)], 0)
-            .unwrap_err(),
+        planner.plan_cycle(&[PageId(1), PageId(1)], 0).unwrap_err(),
         ElasticWeightError::DuplicateSelection(PageId(1))
     );
 }
