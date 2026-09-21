@@ -11,6 +11,8 @@ use crate::{PageId, ParameterBudget};
 
 /// Parts-per-million scale used by page importance scores.
 pub const IMPORTANCE_SCALE_PPM: u32 = 1_000_000;
+/// Versioned self-contained contract exported by elastic weight plans.
+pub const ELASTIC_WEIGHT_PLAN_SCHEMA_V1: &str = "sml.elastic-weight-plan@1.0.0";
 
 /// Physical representation class for one logical learned-weight page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -143,6 +145,9 @@ impl ElasticWeightPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElasticWeightTransition {
     pub page_id: PageId,
+    pub parameters: u64,
+    pub from_representation_version: u64,
+    pub to_representation_version: u64,
     pub from_precision: WeightPrecision,
     pub to_precision: WeightPrecision,
     pub from_residency: ResidencyTier,
@@ -155,8 +160,12 @@ pub struct ElasticWeightTransition {
 /// Immutable result of PLAN/VALIDATE. Applying it requires an explicit commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElasticWeightPlan {
+    pub contract: &'static str,
     pub base_generation: u64,
     pub epoch: u64,
+    pub ram_limit_bytes: u64,
+    pub vram_limit_bytes: u64,
+    pub max_active_parameters: u64,
     pub transitions: Vec<ElasticWeightTransition>,
     pub ram_bytes: u64,
     pub vram_bytes: u64,
@@ -165,6 +174,176 @@ pub struct ElasticWeightPlan {
     pub bytes_moved_to_ram: u64,
     pub bytes_moved_to_vram: u64,
     pub precision_changes: u64,
+}
+
+/// Aggregate fields independently recomputed by ElasticWeightPlan::validate_contract_v1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElasticWeightPlanField {
+    RamBytes,
+    VramBytes,
+    ActiveParameters,
+    ActiveStorageBits,
+    BytesMovedToRam,
+    BytesMovedToVram,
+    PrecisionChanges,
+}
+
+impl ElasticWeightPlan {
+    /// Independently validates every self-contained SML elastic-weight plan field.
+    ///
+    /// This is deliberately callable without an ElasticWeightPlanner so a
+    /// downstream runtime can reject malformed or internally inconsistent plans
+    /// before considering physical actuation.
+    pub fn validate_contract_v1(&self) -> Result<(), ElasticWeightError> {
+        if self.contract != ELASTIC_WEIGHT_PLAN_SCHEMA_V1 {
+            return Err(ElasticWeightError::InvalidPlanContract);
+        }
+
+        let mut seen = Vec::with_capacity(self.transitions.len());
+        let mut ram_bytes = 0_u64;
+        let mut vram_bytes = 0_u64;
+        let mut active_parameters = 0_u64;
+        let mut active_storage_bits = 0_u128;
+        let mut bytes_moved_to_ram = 0_u64;
+        let mut bytes_moved_to_vram = 0_u64;
+        let mut precision_changes = 0_u64;
+
+        for transition in &self.transitions {
+            if transition.parameters == 0 {
+                return Err(ElasticWeightError::ZeroParameters(transition.page_id));
+            }
+            if seen.contains(&transition.page_id) {
+                return Err(ElasticWeightError::DuplicatePlanPageId(transition.page_id));
+            }
+            seen.push(transition.page_id);
+
+            let expected_payload =
+                payload_bytes(transition.parameters, transition.to_precision)?;
+            if transition.target_payload_bytes != expected_payload {
+                return Err(ElasticWeightError::PlanPayloadBytes {
+                    page_id: transition.page_id,
+                    expected: expected_payload,
+                    actual: transition.target_payload_bytes,
+                });
+            }
+
+            let expected_version = if transition.from_precision != transition.to_precision {
+                transition
+                    .from_representation_version
+                    .checked_add(1)
+                    .ok_or(ElasticWeightError::RepresentationVersionOverflow(
+                        transition.page_id,
+                    ))?
+            } else {
+                transition.from_representation_version
+            };
+            if transition.to_representation_version != expected_version {
+                return Err(ElasticWeightError::PlanRepresentationVersion {
+                    page_id: transition.page_id,
+                    expected: expected_version,
+                    actual: transition.to_representation_version,
+                });
+            }
+
+            if transition.to_active && transition.to_residency == ResidencyTier::Disk {
+                return Err(ElasticWeightError::ActivePageOnDisk(transition.page_id));
+            }
+
+            match transition.to_residency {
+                ResidencyTier::Disk => {}
+                ResidencyTier::Ram => {
+                    ram_bytes = checked_add(ram_bytes, transition.target_payload_bytes)?;
+                }
+                ResidencyTier::Vram => {
+                    vram_bytes = checked_add(vram_bytes, transition.target_payload_bytes)?;
+                }
+            }
+
+            if transition.to_active {
+                active_parameters = checked_add(active_parameters, transition.parameters)?;
+                active_storage_bits = active_storage_bits
+                    .checked_add(
+                        transition.parameters as u128
+                            * transition.to_precision.bits_per_parameter() as u128,
+                    )
+                    .ok_or(ElasticWeightError::ArithmeticOverflow)?;
+            }
+
+            if transition.from_precision != transition.to_precision {
+                precision_changes = precision_changes.saturating_add(1);
+            }
+            if transition.from_residency != transition.to_residency {
+                match transition.to_residency {
+                    ResidencyTier::Disk => {}
+                    ResidencyTier::Ram => {
+                        bytes_moved_to_ram =
+                            checked_add(bytes_moved_to_ram, transition.target_payload_bytes)?;
+                    }
+                    ResidencyTier::Vram => {
+                        bytes_moved_to_vram =
+                            checked_add(bytes_moved_to_vram, transition.target_payload_bytes)?;
+                    }
+                }
+            }
+        }
+
+        if ram_bytes > self.ram_limit_bytes {
+            return Err(ElasticWeightError::RamBudget {
+                actual: ram_bytes,
+                maximum: self.ram_limit_bytes,
+            });
+        }
+        if vram_bytes > self.vram_limit_bytes {
+            return Err(ElasticWeightError::VramBudget {
+                actual: vram_bytes,
+                maximum: self.vram_limit_bytes,
+            });
+        }
+        if active_parameters > self.max_active_parameters {
+            return Err(ElasticWeightError::ActiveParameterBudget {
+                actual: active_parameters,
+                maximum: self.max_active_parameters,
+            });
+        }
+
+        validate_plan_field(
+            ElasticWeightPlanField::RamBytes,
+            ram_bytes as u128,
+            self.ram_bytes as u128,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::VramBytes,
+            vram_bytes as u128,
+            self.vram_bytes as u128,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::ActiveParameters,
+            active_parameters as u128,
+            self.active_parameters as u128,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::ActiveStorageBits,
+            active_storage_bits,
+            self.active_storage_bits,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::BytesMovedToRam,
+            bytes_moved_to_ram as u128,
+            self.bytes_moved_to_ram as u128,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::BytesMovedToVram,
+            bytes_moved_to_vram as u128,
+            self.bytes_moved_to_vram as u128,
+        )?;
+        validate_plan_field(
+            ElasticWeightPlanField::PrecisionChanges,
+            precision_changes as u128,
+            self.precision_changes as u128,
+        )?;
+
+        Ok(())
+    }
 }
 
 /// Exact current logical/physical accounting across all page descriptors.
@@ -362,8 +541,19 @@ impl ElasticWeightPlanner {
                     .ok_or(ElasticWeightError::ArithmeticOverflow)?;
             }
 
+            let to_representation_version = if page.precision != to_precision {
+                page.representation_version
+                    .checked_add(1)
+                    .ok_or(ElasticWeightError::RepresentationVersionOverflow(page.page_id))?
+            } else {
+                page.representation_version
+            };
+
             transitions.push(ElasticWeightTransition {
                 page_id: page.page_id,
+                parameters: page.parameters,
+                from_representation_version: page.representation_version,
+                to_representation_version,
                 from_precision: page.precision,
                 to_precision,
                 from_residency: page.residency,
@@ -374,9 +564,13 @@ impl ElasticWeightPlanner {
             });
         }
 
-        Ok(ElasticWeightPlan {
+        let plan = ElasticWeightPlan {
+            contract: ELASTIC_WEIGHT_PLAN_SCHEMA_V1,
             base_generation: self.generation,
             epoch,
+            ram_limit_bytes: self.policy.ram_limit_bytes,
+            vram_limit_bytes: self.policy.vram_limit_bytes,
+            max_active_parameters: self.policy.max_active_parameters,
             transitions,
             ram_bytes,
             vram_bytes,
@@ -385,11 +579,14 @@ impl ElasticWeightPlanner {
             bytes_moved_to_ram,
             bytes_moved_to_vram,
             precision_changes,
-        })
+        };
+        plan.validate_contract_v1()?;
+        Ok(plan)
     }
 
     /// Atomically applies a plan if its generation and source states still match.
     pub fn commit(&mut self, plan: &ElasticWeightPlan) -> Result<(), ElasticWeightError> {
+        plan.validate_contract_v1()?;
         if plan.base_generation != self.generation {
             return Err(ElasticWeightError::StalePlan {
                 expected_generation: self.generation,
@@ -405,7 +602,9 @@ impl ElasticWeightPlanner {
 
         for transition in &plan.transitions {
             let page = self.page(transition.page_id)?;
-            if page.precision != transition.from_precision
+            if page.parameters != transition.parameters
+                || page.representation_version != transition.from_representation_version
+                || page.precision != transition.from_precision
                 || page.residency != transition.from_residency
                 || page.active != transition.from_active
             {
@@ -415,9 +614,7 @@ impl ElasticWeightPlanner {
 
         for transition in &plan.transitions {
             let page = self.page_mut(transition.page_id)?;
-            if page.precision != transition.to_precision {
-                page.representation_version = page.representation_version.saturating_add(1);
-            }
+            page.representation_version = transition.to_representation_version;
             page.precision = transition.to_precision;
             page.residency = transition.to_residency;
             page.active = transition.to_active;
@@ -550,6 +747,21 @@ fn checked_add(left: u64, right: u64) -> Result<u64, ElasticWeightError> {
         .ok_or(ElasticWeightError::ArithmeticOverflow)
 }
 
+fn validate_plan_field(
+    field: ElasticWeightPlanField,
+    expected: u128,
+    actual: u128,
+) -> Result<(), ElasticWeightError> {
+    if expected != actual {
+        return Err(ElasticWeightError::PlanAccounting {
+            field,
+            expected,
+            actual,
+        });
+    }
+    Ok(())
+}
+
 fn validate_importance(page_id: PageId, importance_ppm: u32) -> Result<(), ElasticWeightError> {
     if importance_ppm > IMPORTANCE_SCALE_PPM {
         return Err(ElasticWeightError::ImportanceOutOfRange {
@@ -569,7 +781,9 @@ pub enum ElasticWeightError {
         actual: u32,
     },
     InvalidPolicyThresholds,
+    InvalidPlanContract,
     DuplicatePageId(PageId),
+    DuplicatePlanPageId(PageId),
     DuplicateSelection(PageId),
     UnknownPage(PageId),
     ActivePageOnDisk(PageId),
@@ -600,6 +814,22 @@ pub enum ElasticWeightError {
         actual: usize,
     },
     PlanStateMismatch(PageId),
+    RepresentationVersionOverflow(PageId),
+    PlanPayloadBytes {
+        page_id: PageId,
+        expected: u64,
+        actual: u64,
+    },
+    PlanRepresentationVersion {
+        page_id: PageId,
+        expected: u64,
+        actual: u64,
+    },
+    PlanAccounting {
+        field: ElasticWeightPlanField,
+        expected: u128,
+        actual: u128,
+    },
     ArithmeticOverflow,
 }
 
