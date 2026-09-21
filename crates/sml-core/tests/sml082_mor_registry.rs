@@ -3,9 +3,7 @@ use sml_core::{
         ExpertProposal, ExpertRuntimeHint, MixtureOfRouters, MorPolicy, PreviousRoute, RouterId,
         RouterInput, MOR_SCALE_PPM,
     },
-    mor_registry::{
-        MorRegistryError, MorRegistryPolicy, MorRouterRegistry, RouterSpecialization,
-    },
+    mor_registry::{MorRegistryError, MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
     PageId,
 };
 
