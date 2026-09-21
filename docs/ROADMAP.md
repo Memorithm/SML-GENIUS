@@ -89,7 +89,7 @@ Current status:
 - [x] SBG-0.4 context meaning mask;
 - [x] SBG-0.5 ambiguity dynamics;
 - [x] SBG-0.6 semantic composition;
-- [ ] SBG-0.7 native MOR integration;
+- [x] SBG-0.7 native MOR integration;
 - [ ] SBG-0.8 recurrent semantic rewriting;
 - [ ] SBG-0.9 Elastic Weight region activation;
 - [ ] SBG-0.10 Boolean evidence learning integration;
