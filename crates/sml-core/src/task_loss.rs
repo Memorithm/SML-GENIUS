@@ -17,8 +17,8 @@ use crate::{
     tasks::{suite_from_case_id, TaskAnswer, TaskError, TaskEvent, TaskInstance, TaskKind},
     train::{
         GateSample1, GateSample2, GateSampleTrainingReport, GateSampleTrainingReport1,
-        GateTrainingConfig, LatentGate1, LatentGate2, TrainError, TruthTable1,
-        TRUTH_TABLE_COUNT, UNARY_TRUTH_TABLE_COUNT,
+        GateTrainingConfig, LatentGate1, LatentGate2, TrainError, TruthTable1, TRUTH_TABLE_COUNT,
+        UNARY_TRUTH_TABLE_COUNT,
     },
 };
 
