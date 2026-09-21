@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// One compact contiguous parameter group inside a single circuit-atlas page.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BooleanPageGroup {
     pub page_id: PageId,
     /// Page-local parameter offset.
@@ -246,8 +246,12 @@ impl HierarchicalBooleanSearch {
             round.next_groups.push(right);
         }
 
-        round.next_groups.sort_unstable();
-        round.leaf_candidates.sort_unstable();
+        round
+            .next_groups
+            .sort_by_key(|group| (group.page_id.0, group.start, group.len, group.depth));
+        round
+            .leaf_candidates
+            .sort_by_key(|group| (group.page_id.0, group.start, group.len, group.depth));
         Ok(round)
     }
 }
