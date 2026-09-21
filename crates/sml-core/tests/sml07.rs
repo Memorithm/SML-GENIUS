@@ -245,7 +245,6 @@ fn duplicate_page_ids_and_duplicate_selections_are_rejected() {
     );
 }
 
-
 #[test]
 fn self_contained_plan_rejects_tampered_aggregates_before_commit() {
     let planner = ElasticWeightPlanner::new(pages(), policy()).unwrap();
