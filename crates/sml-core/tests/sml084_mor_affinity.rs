@@ -1,7 +1,5 @@
 use sml_core::{
-    mor::{
-        ExpertProposal, MixtureOfRouters, MorPolicy, PreviousRoute, RouterId, MOR_SCALE_PPM,
-    },
+    mor::{ExpertProposal, MixtureOfRouters, MorPolicy, PreviousRoute, RouterId, MOR_SCALE_PPM},
     mor_affinity::{
         MorAffinityError, MorAffinityPolicy, NativeAffinityBank, NativeRouterSpec,
         RouterSignatureAtom, SmlFingerprintPlan,
@@ -17,11 +15,7 @@ fn atom(bit: u16, expected: bool, weight_ppm: u32) -> RouterSignatureAtom {
     }
 }
 
-fn router(
-    id: u32,
-    atoms: Vec<RouterSignatureAtom>,
-    proposals: &[(u32, u32)],
-) -> NativeRouterSpec {
+fn router(id: u32, atoms: Vec<RouterSignatureAtom>, proposals: &[(u32, u32)]) -> NativeRouterSpec {
     NativeRouterSpec {
         router_id: RouterId(id),
         atoms,
@@ -140,11 +134,7 @@ fn affinity_bank_reports_exact_signature_accounting() {
     let bank = NativeAffinityBank::new(
         plan,
         vec![
-            router(
-                0,
-                vec![atom(0, true, 1), atom(3, false, 1)],
-                &[(0, 1)],
-            ),
+            router(0, vec![atom(0, true, 1), atom(3, false, 1)], &[(0, 1)]),
             router(1, vec![atom(1, true, 1)], &[(1, 1)]),
         ],
         policy,
