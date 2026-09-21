@@ -150,28 +150,29 @@ Completed:
 - SBG-0.4 Context Meaning Mask merged on main as `cd16486261c2b83995b2573c333571011000521d`.
 - SBG-0.5 Ambiguity Field merged on main as `54c07e50fd313c28a041a05742f7d573b4baefd1`.
 - SBG-0.6 Semantic Composition merged on main as `966518009d1360fe3fa00116b955c20e4e1c25cf`.
+- SBG-0.7 native MOR integration merged on main as `1610f6b267f8aa45d05b9969977a56c06146552c`.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.7-mor-routing
+research/sbg-0.8-recurrent-semantic
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/mor_routing.rs
+crates/sml-core/src/semantic/recurrent.rs
 ```
 
-Definition of done for SBG-0.7:
+Definition of done for SBG-0.8:
 
-1. the SBG routing field R is scored directly against Boolean router and expert signatures;
-2. XNOR/POPCOUNT similarity is normalized using integer parts-per-million only;
-3. expert proposal fanout is explicitly bounded by Top-1, Top-2 or Top-4 policy;
-4. all generated proposals remain constrained by `MorRouterRegistry` specialization edges;
-5. the bridge feeds the existing `MixtureOfRouters` engine rather than introducing a second router;
-6. missing, duplicate or out-of-range semantic signatures fail closed;
+1. recurrent semantic rewriting reuses the existing SML `HaltingPolicy` depth contract;
+2. every cycle records exact Hamming deltas for V, M, A and R separately;
+3. stability halting uses the total Boolean change with no floating-point score;
+4. kernels may explicitly block one stability halt for unresolved internal work, but never exceed `max_depth`;
+5. the outcome distinguishes stable convergence from hard maximum-depth termination;
+6. deterministic tests cover convergence, blocked stability, exact delta accounting and hard depth bounds;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
