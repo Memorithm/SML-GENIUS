@@ -161,25 +161,32 @@ Completed:
 Active development branch:
 
 ```text
-research/sbg-0.11-linguistic-microbench
+research/sbg-0.12a-packed-word-kernel
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/linguistic_bench.rs
+crates/sml-core/src/semantic/simd.rs
 ```
 
-Definition of done for SBG-0.11:
+SBG-0.11 linguistic micro-benchmark was merged through PR #51 on main as
+`9da53048e4e3b4ad56adbc566b7bbbe29f2485a7`.
 
-1. one deterministic suite exposes seven controlled probes: synonym/antonym distance ordering, role reversal, negation, simple reference/correspondence, contextual polysemy, semantic composition and bounded associative retrieval;
-2. every probe records exact integer evidence and an explicit Boolean pass/fail result;
-3. linguistic labels are documented as mnemonic fixtures only and are not presented as evidence of natural-language understanding;
-4. role reversal preserves content while changing relation structure, and negation preserves content while applying the explicit negation signature;
-5. independently derived context masks reverse the nearest controlled polysemy candidate;
-6. reference correspondence must recover the bound entity with the correct role and reject a wrong-role control;
-7. associative retrieval uses the existing bounded deterministic memory and records exact read/hit/write counters;
-8. the complete suite passes deterministically under `cargo test --workspace`, alongside format, check, clippy and all existing smoke probes.
+Definition of done for SBG-0.12a:
+
+1. retain an independent bit-by-bit scalar oracle;
+2. add a safe packed-u64 kernel using XOR/AND/POPCOUNT without temporary semantic fields;
+3. qualify exact equality at the 16,384-bit reference width and at a non-word-aligned width;
+4. expose deterministic work accounting for logical coordinates, packed words, four-word groups and POPCOUNT calls;
+5. preserve fail-closed empty-mask behavior;
+6. make no AVX/NEON or throughput claim until generated code and wall-clock benchmarks are measured;
+7. pass format, check, clippy and the complete workspace test suite.
+
+The broader SBG-0.12 milestone remains open after 0.12a. Architecture-specific
+AVX2/AVX-512/NEON qualification is a later sub-slice and must respect the
+crate-wide `#![forbid(unsafe_code)]` boundary unless that boundary is explicitly
+revisited with evidence.
 
 ## Scientific boundary
 
