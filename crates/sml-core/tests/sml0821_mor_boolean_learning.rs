@@ -4,9 +4,7 @@ use sml_core::{
     boolean_overlapping::OverlappingProbePolicy,
     boolean_page::{BooleanPageError, BooleanPageRead, PackedBooleanPage},
     mor::MorDecision,
-    mor_boolean_learning::{
-        MorBooleanLearning, MorBooleanLearningError, MorBooleanLearningPolicy,
-    },
+    mor_boolean_learning::{MorBooleanLearning, MorBooleanLearningError, MorBooleanLearningPolicy},
     PageId,
 };
 
@@ -47,10 +45,7 @@ fn page_policy() -> BooleanLearningPolicy {
     }
 }
 
-fn objective(
-    page_id: PageId,
-    read: &dyn BooleanPageRead,
-) -> Result<u32, BooleanPageError> {
+fn objective(page_id: PageId, read: &dyn BooleanPageRead) -> Result<u32, BooleanPageError> {
     let mut loss = 500_000_i64;
     match page_id.0 {
         0 => {
