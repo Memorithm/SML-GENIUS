@@ -67,12 +67,7 @@ impl BooleanPageGroup {
             .ok_or(HierarchicalBooleanError::DepthOverflow)?;
         Ok((
             Self::new(self.page_id, self.start, left_len, next_depth)?,
-            Self::new(
-                self.page_id,
-                self.start + left_len,
-                right_len,
-                next_depth,
-            )?,
+            Self::new(self.page_id, self.start + left_len, right_len, next_depth)?,
         ))
     }
 }
