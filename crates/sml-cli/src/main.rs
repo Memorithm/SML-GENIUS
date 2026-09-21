@@ -15,7 +15,7 @@ use sml_core::{
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
     semantic::{
-        qualify_packed_word4, packed_word4_score, scalar_reference_score, SemanticBitField,
+        packed_word4_score, qualify_packed_word4, scalar_reference_score, SemanticBitField,
     },
     task_loss::{
         evaluate_task_panel, train_conjunction_from_tasks, train_state_update_from_tasks,
@@ -630,7 +630,6 @@ fn sml12_smoke() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 fn sbg012_bench() -> Result<(), Box<dyn std::error::Error>> {
     const BITS: usize = 16_384;
     const WARMUP_ITERATIONS: u64 = 32;
@@ -668,9 +667,7 @@ fn sbg012_bench() -> Result<(), Box<dyn std::error::Error>> {
             std::hint::black_box(&mask),
         )?;
         scalar_checksum = scalar_checksum.wrapping_add(
-            evidence.full_differing_bits
-                ^ evidence.masked_differing_bits
-                ^ iteration,
+            evidence.full_differing_bits ^ evidence.masked_differing_bits ^ iteration,
         );
         std::hint::black_box(scalar_checksum);
     }
@@ -685,9 +682,7 @@ fn sbg012_bench() -> Result<(), Box<dyn std::error::Error>> {
             std::hint::black_box(&mask),
         )?;
         packed_checksum = packed_checksum.wrapping_add(
-            evidence.full_differing_bits
-                ^ evidence.masked_differing_bits
-                ^ iteration,
+            evidence.full_differing_bits ^ evidence.masked_differing_bits ^ iteration,
         );
         std::hint::black_box(packed_checksum);
     }
