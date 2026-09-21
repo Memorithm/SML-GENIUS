@@ -219,8 +219,7 @@ impl MorTemporalDenoiser {
             required = required.saturating_add(self.policy.noise_extra_confirmation_cycles);
         }
         if decision.structural_disagreement_ppm >= self.policy.disagreement_threshold_ppm {
-            required =
-                required.saturating_add(self.policy.disagreement_extra_confirmation_cycles);
+            required = required.saturating_add(self.policy.disagreement_extra_confirmation_cycles);
         }
         required.min(self.policy.max_confirmation_cycles)
     }
