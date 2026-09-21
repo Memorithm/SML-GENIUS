@@ -88,11 +88,7 @@ fn runtime() -> NativeMorRuntime {
 }
 
 fn state(true_bits: usize) -> BooleanWorkspace {
-    BooleanWorkspace::from_bits(
-        &(0..10)
-            .map(|index| index < true_bits)
-            .collect::<Vec<_>>(),
-    )
+    BooleanWorkspace::from_bits(&(0..10).map(|index| index < true_bits).collect::<Vec<_>>())
 }
 
 fn outcome(page: u32, task_loss_ppm: u32) -> MorExpertOutcome {
@@ -120,7 +116,10 @@ fn audit_attributes_held_cycle_to_committed_route() {
         .unwrap();
 
     let second = runtime.route_state(&state(4), &[]).unwrap();
-    assert_eq!(second.cycle.temporal.transition, MorTemporalTransition::Held);
+    assert_eq!(
+        second.cycle.temporal.transition,
+        MorTemporalTransition::Held
+    );
     assert_eq!(
         second.cycle.cycle.decision.ranked_experts[0].page_id,
         PageId(1)
