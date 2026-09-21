@@ -151,7 +151,7 @@ Completed:
 Active development branch:
 
 ```text
-research/sbg-0.3-semantic-algebra
+research/sbg-0.3-semantic-algebra-rebased
 ```
 
 Current implementation target:
