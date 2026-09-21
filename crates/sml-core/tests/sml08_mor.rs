@@ -39,9 +39,7 @@ fn singleton_router_jitter_is_aggressively_downweighted() {
         router(3, 1_000_000, 800_000, 500_000, &[(9, 980_000)]),
     ];
 
-    let decision = mor
-        .route(&routers, &[], &PreviousRoute::default())
-        .unwrap();
+    let decision = mor.route(&routers, &[], &PreviousRoute::default()).unwrap();
 
     assert_eq!(decision.selected_experts[0], PageId(1));
     assert!(decision.noise_ppm > 100_000);
@@ -62,15 +60,37 @@ fn singleton_router_jitter_is_aggressively_downweighted() {
 fn coherent_disagreement_expands_expert_budget() {
     let mor = MixtureOfRouters::new(MorPolicy::default()).unwrap();
     let routers = vec![
-        router(0, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(1, 900_000)]),
-        router(1, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(1, 900_000)]),
-        router(2, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(2, 900_000)]),
-        router(3, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(2, 900_000)]),
+        router(
+            0,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(1, 900_000)],
+        ),
+        router(
+            1,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(1, 900_000)],
+        ),
+        router(
+            2,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(2, 900_000)],
+        ),
+        router(
+            3,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(2, 900_000)],
+        ),
     ];
 
-    let decision = mor
-        .route(&routers, &[], &PreviousRoute::default())
-        .unwrap();
+    let decision = mor.route(&routers, &[], &PreviousRoute::default()).unwrap();
 
     assert_eq!(decision.noise_ppm, 0);
     assert_eq!(decision.structural_disagreement_ppm, 500_000);
@@ -174,9 +194,7 @@ fn router_competition_activates_only_needed_mass() {
         router(4, 50_000, 1_000_000, 1_000_000, &[(1, 800_000)]),
     ];
 
-    let decision = mor
-        .route(&routers, &[], &PreviousRoute::default())
-        .unwrap();
+    let decision = mor.route(&routers, &[], &PreviousRoute::default()).unwrap();
 
     assert_eq!(decision.active_routers.len(), 2);
     assert_eq!(decision.active_routers[0].router_id, RouterId(0));
@@ -187,8 +205,20 @@ fn router_competition_activates_only_needed_mass() {
 fn duplicate_router_and_proposal_fail_closed() {
     let mor = MixtureOfRouters::new(MorPolicy::default()).unwrap();
     let duplicated_router = vec![
-        router(0, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(1, 900_000)]),
-        router(0, MOR_SCALE_PPM, MOR_SCALE_PPM, MOR_SCALE_PPM, &[(2, 900_000)]),
+        router(
+            0,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(1, 900_000)],
+        ),
+        router(
+            0,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            MOR_SCALE_PPM,
+            &[(2, 900_000)],
+        ),
     ];
     assert_eq!(
         mor.route(&duplicated_router, &[], &PreviousRoute::default())
