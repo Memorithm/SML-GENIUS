@@ -413,16 +413,27 @@ impl ElasticWeightPlanner {
         &self.pages
     }
 
-    /// Updates caller-owned importance evidence without changing representation.
+    /// Updates caller-owned importance evidence without changing representation,
+    /// residency, activation state, or access counters.
+    pub fn record_importance(
+        &mut self,
+        page_id: PageId,
+        importance_ppm: u32,
+    ) -> Result<(), ElasticWeightError> {
+        validate_importance(page_id, importance_ppm)?;
+        self.page_mut(page_id)?.importance_ppm = importance_ppm;
+        Ok(())
+    }
+
+    /// Updates importance and records a runtime access event.
     pub fn record_access(
         &mut self,
         page_id: PageId,
         importance_ppm: u32,
         epoch: u64,
     ) -> Result<(), ElasticWeightError> {
-        validate_importance(page_id, importance_ppm)?;
+        self.record_importance(page_id, importance_ppm)?;
         let page = self.page_mut(page_id)?;
-        page.importance_ppm = importance_ppm;
         page.access_count = page.access_count.saturating_add(1);
         page.last_access_epoch = epoch;
         Ok(())
