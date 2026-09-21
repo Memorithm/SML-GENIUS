@@ -19,6 +19,7 @@ pub mod gf2;
 pub mod memory;
 pub mod mor;
 pub mod mor_affinity;
+pub mod mor_affinity_train;
 pub mod mor_controller;
 pub mod mor_registry;
 pub mod mor_temporal;
