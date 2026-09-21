@@ -146,28 +146,29 @@ Completed:
 
 - SBG-0.1 Semantic BitField Core merged on main as `c079acafea90549f6a97dfd8956a9f16fb58641f`.
 - SBG-0.2 contextual Boolean semantic metric merged on main as `d38023771bb5427a802b3337e40f857f0be8af50`.
-- Both slices passed format, check, clippy, workspace tests and all existing SML smoke probes.
+- SBG-0.3 semantic binding and bundling algebra merged on main as `776995c49e71cb6ea3209e14a7a310340f0668bb`.
+- These slices passed format, check, clippy, workspace tests and all existing SML smoke probes.
 
 Active development branch:
 
 ```text
-research/sbg-0.3-semantic-algebra-rebased
+research/sbg-0.4-context-meaning-mask
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/algebra.rs
+crates/sml-core/src/semantic/context.rs
 ```
 
-Definition of done for SBG-0.3:
+Definition of done for SBG-0.4:
 
-1. deterministic reversible permutation over arbitrary non-zero logical widths;
-2. exact role/value binding and unbinding;
-3. different role keys produce distinct bindings in controlled fixtures;
-4. wrong-role unbinding does not recover the original fixture value;
-5. majority bundling preserves coordinate consensus;
-6. even-cardinality bundles fail closed rather than hide a tie policy;
+1. context masks are derived deterministically from explicit Boolean cue fields;
+2. support thresholds are integer-only and validated fail-closed;
+3. Replace, Expand and Refine update policies are explicit;
+4. no floating-point semantic score or hidden normalization is required;
+5. controlled contextual cues derive distinct masks rather than injecting masks directly;
+6. those derived masks reverse the nearest candidate in the controlled polysemy fixture;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
