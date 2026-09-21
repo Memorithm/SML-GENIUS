@@ -295,8 +295,7 @@ where
     page.validate_group(plan.group())
         .map_err(BooleanProbeExecutionError::Page)?;
 
-    let baseline_loss_ppm =
-        objective(page).map_err(BooleanProbeExecutionError::Objective)?;
+    let baseline_loss_ppm = objective(page).map_err(BooleanProbeExecutionError::Objective)?;
     validate_loss(baseline_loss_ppm).map_err(BooleanProbeExecutionError::Page)?;
 
     let mut observations = Vec::with_capacity(plan.probe_count());
@@ -304,8 +303,7 @@ where
         let view = page
             .probe_view(probe)
             .map_err(BooleanProbeExecutionError::Page)?;
-        let perturbed_loss_ppm =
-            objective(&view).map_err(BooleanProbeExecutionError::Objective)?;
+        let perturbed_loss_ppm = objective(&view).map_err(BooleanProbeExecutionError::Objective)?;
         validate_loss(perturbed_loss_ppm).map_err(BooleanProbeExecutionError::Page)?;
         observations.push(OverlappingProbeObservation {
             probe,
