@@ -430,7 +430,10 @@ mod tests {
 
         let plan = bridge.plan(&state, &planner, 7).expect("plan");
         assert_eq!(planner.generation(), 0);
-        assert_eq!(planner.accounting().expect("accounting").active_parameters, 0);
+        assert_eq!(
+            planner.accounting().expect("accounting").active_parameters,
+            0
+        );
 
         let working_set = plan.working_set();
         assert_eq!(working_set.selected_pages, 1);
