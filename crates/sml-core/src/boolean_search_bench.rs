@@ -347,12 +347,7 @@ where
         );
     }
 
-    scored.sort_by(|left, right| {
-        right
-            .1
-            .cmp(&left.1)
-            .then_with(|| left.0.cmp(&right.0))
-    });
+    scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
     let mut unique_scored = Vec::with_capacity(scored.len());
     for candidate in scored {
         if unique_scored
