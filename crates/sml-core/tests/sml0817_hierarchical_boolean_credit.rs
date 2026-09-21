@@ -26,15 +26,15 @@ fn active_page_is_partitioned_without_materializing_parameter_indexes() {
     let groups = HierarchicalBooleanSearch::initial_groups(PageId(7), 10_000, policy()).unwrap();
 
     assert_eq!(groups.len(), 10);
-    assert_eq!(groups[0], BooleanPageGroup::new(PageId(7), 0, 1_024, 0).unwrap());
+    assert_eq!(
+        groups[0],
+        BooleanPageGroup::new(PageId(7), 0, 1_024, 0).unwrap()
+    );
     assert_eq!(
         *groups.last().unwrap(),
         BooleanPageGroup::new(PageId(7), 9_216, 784, 0).unwrap()
     );
-    assert_eq!(
-        groups.iter().map(|group| group.len).sum::<u64>(),
-        10_000
-    );
+    assert_eq!(groups.iter().map(|group| group.len).sum::<u64>(), 10_000);
 }
 
 #[test]
@@ -165,8 +165,7 @@ fn page_credit_updates_elastic_importance_without_faking_runtime_access() {
 #[test]
 fn target_active_scale_stays_compact_at_group_level() {
     let policy = HierarchicalBooleanPolicy::default();
-    let groups =
-        HierarchicalBooleanSearch::initial_groups(PageId(0), 62_500_000, policy).unwrap();
+    let groups = HierarchicalBooleanSearch::initial_groups(PageId(0), 62_500_000, policy).unwrap();
 
     assert_eq!(groups.len(), 60);
     assert_eq!(
