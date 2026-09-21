@@ -149,28 +149,29 @@ Completed:
 - SBG-0.3 semantic binding and bundling algebra merged on main as `776995c49e71cb6ea3209e14a7a310340f0668bb`.
 - SBG-0.4 Context Meaning Mask merged on main as `cd16486261c2b83995b2573c333571011000521d`.
 - SBG-0.5 Ambiguity Field merged on main as `54c07e50fd313c28a041a05742f7d573b4baefd1`.
+- SBG-0.6 Semantic Composition merged on main as `966518009d1360fe3fa00116b955c20e4e1c25cf`.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.6-semantic-composition
+research/sbg-0.7-mor-routing
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/composition.rs
+crates/sml-core/src/semantic/mor_routing.rs
 ```
 
-Definition of done for SBG-0.6:
+Definition of done for SBG-0.7:
 
-1. subject/action/object roles are explicit Boolean signatures and invalid role aliasing fails closed;
-2. composition exposes an order-invariant content view and a role-sensitive relational view;
-3. controlled subject/object reversal preserves content exactly while changing relational structure;
-4. negation is an explicit Boolean transform that leaves content unchanged;
-5. negation toggling is exactly reversible;
-6. no floating-point semantic score or normalization is introduced;
+1. the SBG routing field R is scored directly against Boolean router and expert signatures;
+2. XNOR/POPCOUNT similarity is normalized using integer parts-per-million only;
+3. expert proposal fanout is explicitly bounded by Top-1, Top-2 or Top-4 policy;
+4. all generated proposals remain constrained by `MorRouterRegistry` specialization edges;
+5. the bridge feeds the existing `MixtureOfRouters` engine rather than introducing a second router;
+6. missing, duplicate or out-of-range semantic signatures fail closed;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
