@@ -48,13 +48,15 @@ The following are integration milestones, not satisfaction of the SML-1 quality 
 - [x] fail-closed memory collision behavior without silent eviction;
 - [x] learn the first micro-operation (Boolean conjunction) from task-answer loss with complete input coverage;
 - [x] compare that learned gate against a deliberately wrong XOR control and the hand-coded AND oracle;
-- [ ] learn the remaining task-state transitions / micro-operation semantics from task loss;
+- [x] learn overwrite-state update semantics from task-answer loss with complete previous-state/incoming-value coverage;
+- [x] compare the learned state update against a deliberately wrong XOR control and the fixed RIGHT-projection overwrite oracle;
+- [ ] learn the remaining recall/copy control and other micro-operation semantics from task loss;
 - [ ] compare learned routing against fixed-routing, no-memory and memory-capacity ablations;
 - [ ] demonstrate held-out improvement attributable to learned routing/memory rather than fixed task semantics.
 
 ## Immediate implementation sequence
 
-1. Extend task-loss training beyond conjunction to state update, recall/copy control and other micro-operation semantics while preserving the same holdout boundary.
+1. Extend task-loss training from conjunction and overwrite-state update into recall/copy control and remaining micro-operation semantics while preserving the same holdout boundary.
 2. Run fixed-routing, no-memory and memory-capacity ablations before claiming a learned mechanism advantage.
 3. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
 4. Connect the SML-0.7 elastic-weight planner to an ElasticXxx runtime adapter with real page materialization and VERIFY/ROLLBACK evidence.
