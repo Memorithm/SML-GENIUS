@@ -146,8 +146,7 @@ pub fn evaluate_task_panel(
         if instance.kind == TaskKind::TwoFactConjunction {
             report.conjunction_tasks = report.conjunction_tasks.saturating_add(1);
             if evidence.exact {
-                report.exact_conjunction_tasks =
-                    report.exact_conjunction_tasks.saturating_add(1);
+                report.exact_conjunction_tasks = report.exact_conjunction_tasks.saturating_add(1);
             }
         }
     }
@@ -182,11 +181,7 @@ fn conjunction_sample(instance: &TaskInstance) -> Result<GateSample2, TaskLossEr
     })
 }
 
-fn fact_before(
-    instance: &TaskInstance,
-    key: u16,
-    before: usize,
-) -> Result<bool, TaskLossError> {
+fn fact_before(instance: &TaskInstance, key: u16, before: usize) -> Result<bool, TaskLossError> {
     instance.events[..before]
         .iter()
         .rev()
