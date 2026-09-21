@@ -14,6 +14,9 @@ use sml_core::{
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
+    semantic::{
+        packed_word4_score, qualify_packed_word4, scalar_reference_score, SemanticBitField,
+    },
     task_loss::{
         evaluate_task_panel, train_conjunction_from_tasks, train_state_update_from_tasks,
         ConjunctionTaskTrainingConfig, StateUpdateTaskTrainingConfig,
@@ -92,10 +95,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sbg012-bench" => {
+            if let Err(error) = sbg012_bench() {
+                eprintln!("SBG-0.12 benchmark failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke|sml12-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke|sml12-smoke|sbg012-bench]"
             );
             std::process::exit(2);
         }
@@ -618,5 +627,89 @@ fn sml12_smoke() -> Result<(), Box<dyn std::error::Error>> {
         "fixed_holdout_exact={}/{}",
         fixed_eval.exact_tasks, fixed_eval.tasks
     );
+    Ok(())
+}
+
+fn sbg012_bench() -> Result<(), Box<dyn std::error::Error>> {
+    const BITS: usize = 16_384;
+    const WARMUP_ITERATIONS: u64 = 32;
+    const MEASURED_ITERATIONS: u64 = 512;
+
+    let left_indices: Vec<usize> = (0..BITS).filter(|index| index % 3 == 0).collect();
+    let right_indices: Vec<usize> = (0..BITS).filter(|index| index % 5 == 1).collect();
+    let mask_indices: Vec<usize> = (0..BITS).filter(|index| index % 7 == 2).collect();
+
+    let left = SemanticBitField::<BITS>::from_set_indices(&left_indices)?;
+    let right = SemanticBitField::<BITS>::from_set_indices(&right_indices)?;
+    let mask = SemanticBitField::<BITS>::from_set_indices(&mask_indices)?;
+
+    let qualification = qualify_packed_word4(&left, &right, &mask)?;
+
+    for _ in 0..WARMUP_ITERATIONS {
+        std::hint::black_box(scalar_reference_score(
+            std::hint::black_box(&left),
+            std::hint::black_box(&right),
+            std::hint::black_box(&mask),
+        )?);
+        std::hint::black_box(packed_word4_score(
+            std::hint::black_box(&left),
+            std::hint::black_box(&right),
+            std::hint::black_box(&mask),
+        )?);
+    }
+
+    let scalar_start = std::time::Instant::now();
+    let mut scalar_checksum = 0_u64;
+    for iteration in 0..MEASURED_ITERATIONS {
+        let evidence = scalar_reference_score(
+            std::hint::black_box(&left),
+            std::hint::black_box(&right),
+            std::hint::black_box(&mask),
+        )?;
+        scalar_checksum = scalar_checksum.wrapping_add(
+            evidence.full_differing_bits ^ evidence.masked_differing_bits ^ iteration,
+        );
+        std::hint::black_box(scalar_checksum);
+    }
+    let scalar_ns = scalar_start.elapsed().as_nanos();
+
+    let packed_start = std::time::Instant::now();
+    let mut packed_checksum = 0_u64;
+    for iteration in 0..MEASURED_ITERATIONS {
+        let evidence = packed_word4_score(
+            std::hint::black_box(&left),
+            std::hint::black_box(&right),
+            std::hint::black_box(&mask),
+        )?;
+        packed_checksum = packed_checksum.wrapping_add(
+            evidence.full_differing_bits ^ evidence.masked_differing_bits ^ iteration,
+        );
+        std::hint::black_box(packed_checksum);
+    }
+    let packed_ns = packed_start.elapsed().as_nanos();
+
+    if scalar_checksum != packed_checksum {
+        return Err("benchmark checksum mismatch".into());
+    }
+
+    let scalar_ns_per_iteration = scalar_ns / u128::from(MEASURED_ITERATIONS);
+    let packed_ns_per_iteration = packed_ns / u128::from(MEASURED_ITERATIONS);
+    let relative_throughput_ppm = scalar_ns
+        .saturating_mul(1_000_000)
+        .checked_div(packed_ns.max(1))
+        .unwrap_or(0);
+
+    println!("SBG-0.12 packed semantic benchmark");
+    println!("arch={}", std::env::consts::ARCH);
+    println!("logical_bits={BITS}");
+    println!("packed_words={}", qualification.packed.packed_words);
+    println!("warmup_iterations={WARMUP_ITERATIONS}");
+    println!("measured_iterations={MEASURED_ITERATIONS}");
+    println!("scalar_ns_total={scalar_ns}");
+    println!("packed_ns_total={packed_ns}");
+    println!("scalar_ns_per_iteration={scalar_ns_per_iteration}");
+    println!("packed_ns_per_iteration={packed_ns_per_iteration}");
+    println!("relative_throughput_ppm={relative_throughput_ppm}");
+    println!("checksum={scalar_checksum}");
     Ok(())
 }

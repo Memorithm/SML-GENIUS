@@ -36,6 +36,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: SBG-0.12 packed semantic benchmark
+        if: startsWith(github.head_ref, 'research/sbg-0.12')
+        run: cargo run --release -p sml-cli -- sbg012-bench
       - name: Contract probe
         run: cargo run -p sml-cli -- contract
       - name: SML-0.1 smoke
