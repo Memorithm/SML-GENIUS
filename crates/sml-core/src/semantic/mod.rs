@@ -9,7 +9,9 @@ pub mod bitfield;
 pub mod metric;
 pub mod state;
 
-pub use algebra::{bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError};
+pub use algebra::{
+    bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
+};
 pub use bitfield::{SemanticBitField, SemanticBitFieldError};
 pub use metric::{MaskedSemanticScore, SemanticMetricError};
 pub use state::SemanticState;
