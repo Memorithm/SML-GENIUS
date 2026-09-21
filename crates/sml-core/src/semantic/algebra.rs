@@ -140,8 +140,7 @@ impl From<SemanticBitFieldError> for SemanticAlgebraError {
 #[cfg(test)]
 mod tests {
     use super::{
-        bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind,
-        SemanticAlgebraError,
+        bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
     };
     use crate::semantic::SemanticBitField;
 
@@ -158,8 +157,7 @@ mod tests {
     #[test]
     fn binding_and_unbinding_are_exact() {
         let role = SemanticBitField::<128>::from_set_indices(&[1, 7, 63, 90]).expect("role");
-        let value =
-            SemanticBitField::<128>::from_set_indices(&[0, 2, 64, 65, 127]).expect("value");
+        let value = SemanticBitField::<128>::from_set_indices(&[0, 2, 64, 65, 127]).expect("value");
 
         let bound = bind(&role, &value).expect("bind");
         assert_ne!(bound, value);
