@@ -194,8 +194,8 @@ impl SmlTaskCandidate {
 
         validate_non_attention_candidate(&counters)?;
         let predicted = predicted.ok_or(TaskCandidateError::MissingPrediction)?;
-        let semantic_route_bits_touched = (trace.len() as u64)
-            .saturating_mul(self.route_accounting.bits_per_route as u64);
+        let semantic_route_bits_touched =
+            (trace.len() as u64).saturating_mul(self.route_accounting.bits_per_route as u64);
 
         Ok(TaskExecutionEvidence {
             kind: instance.kind,
@@ -226,21 +226,17 @@ impl SmlTaskCandidate {
                 Ok(None)
             }
             (PAGE_FACT, TaskEvent::Fact { key, value }) => {
-                let outcome = memory.write(
-                    key as u64,
-                    BooleanWorkspace::from_bits(&[value]),
-                    counters,
-                )?;
+                let outcome =
+                    memory.write(key as u64, BooleanWorkspace::from_bits(&[value]), counters)?;
                 match outcome {
                     WriteOutcome::Inserted { .. } | WriteOutcome::Updated { .. } => Ok(None),
-                    WriteOutcome::CollisionRejected {
-                        slot,
-                        resident_key,
-                    } => Err(TaskCandidateError::MemoryCollision {
-                        key,
-                        slot,
-                        resident_key,
-                    }),
+                    WriteOutcome::CollisionRejected { slot, resident_key } => {
+                        Err(TaskCandidateError::MemoryCollision {
+                            key,
+                            slot,
+                            resident_key,
+                        })
+                    }
                     WriteOutcome::Replaced { .. } => Err(TaskCandidateError::UnexpectedReplacement),
                 }
             }
@@ -268,10 +264,7 @@ impl SmlTaskCandidate {
             (PAGE_QUERY_KEY, TaskEvent::QueryKey(key)) => {
                 Ok(Some(TaskAnswer::Bit(read_fact(memory, key, counters)?)))
             }
-            (
-                PAGE_QUERY_CONJUNCTION,
-                TaskEvent::QueryConjunction { left, right },
-            ) => {
+            (PAGE_QUERY_CONJUNCTION, TaskEvent::QueryConjunction { left, right }) => {
                 let left_value = read_fact(memory, left, counters)?;
                 let right_value = read_fact(memory, right, counters)?;
                 Ok(Some(TaskAnswer::Bit(left_value & right_value)))
@@ -293,9 +286,9 @@ fn read_fact(
     counters: &mut ExecutionCounters,
 ) -> Result<bool, TaskCandidateError> {
     match memory.read(key as u64, counters) {
-        ReadOutcome::Hit { value, .. } => value
-            .get(0)
-            .ok_or(TaskCandidateError::CorruptMemoryValue),
+        ReadOutcome::Hit { value, .. } => {
+            value.get(0).ok_or(TaskCandidateError::CorruptMemoryValue)
+        }
         ReadOutcome::EmptyMiss { .. } | ReadOutcome::KeyMismatch { .. } => {
             Err(TaskCandidateError::MissingFact(key))
         }
@@ -342,14 +335,19 @@ fn routing_oracle() -> [PageId; ROUTE_ENTRY_COUNT] {
 pub enum TaskCandidateError {
     ZeroMemoryCapacity,
     ZeroPayloadBudget,
-    RouteNotConverged { correct: u64, total: u64 },
+    RouteNotConverged {
+        correct: u64,
+        total: u64,
+    },
     MultiplePredictions,
     MissingPrediction,
     MissingStoredBit,
     MissingFact(u16),
     MissingPayload,
     PayloadBeforeMarker,
-    PayloadBudget { maximum: usize },
+    PayloadBudget {
+        maximum: usize,
+    },
     CorruptMemoryValue,
     MemoryCollision {
         key: u16,
@@ -357,7 +355,10 @@ pub enum TaskCandidateError {
         resident_key: u64,
     },
     UnexpectedReplacement,
-    EventPageMismatch { event: TaskEvent, page: PageId },
+    EventPageMismatch {
+        event: TaskEvent,
+        page: PageId,
+    },
     RouteLearning(RouteLearningError),
     Route(RouteError),
     Memory(MemoryError),
