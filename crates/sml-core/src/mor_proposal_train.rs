@@ -10,8 +10,8 @@ use crate::{
     mor::{MixtureOfRouters, MOR_SCALE_PPM},
     mor_affinity::{MorAffinityError, NativeAffinityBank, NativeRouterSpec, SmlFingerprintPlan},
     mor_route_objective::{
-        MorRouteObjective, MorRouteObjectiveError, MorRouteObjectivePolicy, MorRouteObjectiveReport,
-        MorRouteTrainingExample,
+        MorRouteObjective, MorRouteObjectiveError, MorRouteObjectivePolicy,
+        MorRouteObjectiveReport, MorRouteTrainingExample,
     },
 };
 
@@ -75,9 +75,8 @@ impl MorProposalScoreSearch {
         search_config: MorProposalScoreSearchConfig,
     ) -> Result<MorProposalScoreSearchArtifact, MorProposalTrainingError> {
         let search_config = search_config.validate()?;
-        let baseline =
-            MorRouteObjective::evaluate(&bank, engine, examples, objective_policy)
-                .map_err(MorProposalTrainingError::Objective)?;
+        let baseline = MorRouteObjective::evaluate(&bank, engine, examples, objective_policy)
+            .map_err(MorProposalTrainingError::Objective)?;
         let mut current_bank = bank;
         let mut current_report = baseline.clone();
         let mut passes_completed = 0_u32;
@@ -174,13 +173,11 @@ fn rebuild_with_score(
         .ok_or(MorProposalTrainingError::InternalInvariant)?;
     proposal.score_ppm = score_ppm;
 
-    let plan = SmlFingerprintPlan::new(
-        bank.fingerprint_plan().positions().to_vec(),
-        bank.policy(),
-    )
-    .map_err(MorProposalTrainingError::Affinity)?;
+    let plan = SmlFingerprintPlan::new(bank.fingerprint_plan().positions().to_vec(), bank.policy())
+        .map_err(MorProposalTrainingError::Affinity)?;
 
-    NativeAffinityBank::new(plan, routers, bank.policy()).map_err(MorProposalTrainingError::Affinity)
+    NativeAffinityBank::new(plan, routers, bank.policy())
+        .map_err(MorProposalTrainingError::Affinity)
 }
 
 fn report_is_better(
@@ -195,10 +192,7 @@ fn report_is_better(
             && candidate.max_regret_ppm < incumbent.max_regret_ppm)
 }
 
-fn reports_equal_rank(
-    left: &MorRouteObjectiveReport,
-    right: &MorRouteObjectiveReport,
-) -> bool {
+fn reports_equal_rank(left: &MorRouteObjectiveReport, right: &MorRouteObjectiveReport) -> bool {
     left.total_regret_ppm == right.total_regret_ppm
         && left.total_chosen_objective_ppm == right.total_chosen_objective_ppm
         && left.max_regret_ppm == right.max_regret_ppm
