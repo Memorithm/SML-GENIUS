@@ -10,6 +10,7 @@ use sml_core::{
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
+    task_loss::{evaluate_task_panel, train_conjunction_from_tasks, ConjunctionTaskTrainingConfig},
     tasks::{development_suite, suite_from_case_id},
     trace::run_recurrent_traced,
     train::{GateTrainingConfig, LatentGate2, TruthTable2},
@@ -66,10 +67,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml11-smoke" => {
+            if let Err(error) = sml11_smoke() {
+                eprintln!("SML-1.1 task-loss smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml10-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml10-smoke|sml11-smoke]"
             );
             std::process::exit(2);
         }
@@ -403,5 +410,64 @@ fn sml10_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!("memory_reads={memory_reads}");
     println!("memory_writes={memory_writes}");
     println!("semantic_route_bits_touched={semantic_route_bits_touched}");
+    Ok(())
+}
+
+fn sml11_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let (learned, training) =
+        train_conjunction_from_tasks(ConjunctionTaskTrainingConfig::default())?;
+    let holdout = suite_from_case_id(10_000, 16)?;
+    let learned_eval = evaluate_task_panel(&learned, &holdout)?;
+
+    let (wrong_xor, _) =
+        SmlTaskCandidate::train_with_conjunction(TaskCandidateConfig::default(), TruthTable2::XOR)?;
+    let wrong_eval = evaluate_task_panel(&wrong_xor, &holdout)?;
+
+    let (fixed_and, _) = SmlTaskCandidate::train(TaskCandidateConfig::default())?;
+    let fixed_eval = evaluate_task_panel(&fixed_and, &holdout)?;
+
+    if training.gate.final_table != TruthTable2::AND {
+        return Err(format!(
+            "task-loss gate selected table code {} instead of AND",
+            training.gate.final_table.code()
+        )
+        .into());
+    }
+    if learned_eval.exact_tasks != learned_eval.tasks {
+        return Err(format!(
+            "learned task-loss candidate mismatch: {}/{} exact",
+            learned_eval.exact_tasks, learned_eval.tasks
+        )
+        .into());
+    }
+    if wrong_eval.exact_conjunction_tasks >= learned_eval.exact_conjunction_tasks {
+        return Err("wrong-gate ablation did not reduce conjunction accuracy".into());
+    }
+    if fixed_eval.exact_tasks != learned_eval.exact_tasks {
+        return Err("learned gate did not recover the fixed AND oracle baseline".into());
+    }
+
+    println!("SML-1.1 task-loss smoke");
+    println!("task_training_samples={}", training.task_samples);
+    println!("input_pattern_mask={:#06b}", training.input_pattern_mask);
+    println!("initial_gate_code={}", training.gate.initial_table.code());
+    println!("learned_gate_code={}", training.gate.final_table.code());
+    println!("learned_gate_bits={}", training.learned_boolean_bits);
+    println!(
+        "learned_holdout_exact={}/{}",
+        learned_eval.exact_tasks, learned_eval.tasks
+    );
+    println!(
+        "learned_conjunction_exact={}/{}",
+        learned_eval.exact_conjunction_tasks, learned_eval.conjunction_tasks
+    );
+    println!(
+        "wrong_xor_conjunction_exact={}/{}",
+        wrong_eval.exact_conjunction_tasks, wrong_eval.conjunction_tasks
+    );
+    println!(
+        "fixed_and_holdout_exact={}/{}",
+        fixed_eval.exact_tasks, fixed_eval.tasks
+    );
     Ok(())
 }

@@ -15,6 +15,7 @@ use crate::{
         RouteTrainingConfig, RouteTrainingReport,
     },
     tasks::{TaskAnswer, TaskEvent, TaskInstance, TaskKind},
+    train::TruthTable2,
     BooleanWorkspace, DirectRouteTable, ExecutionCounters, PageId, RouteError,
 };
 
@@ -95,12 +96,24 @@ pub struct SmlTaskCandidate {
     route_accounting: RouteLearningAccounting,
     memory_capacity: usize,
     max_payload_bits: usize,
+    conjunction_table: TruthTable2,
 }
 
 impl SmlTaskCandidate {
     /// Trains the non-trivial event-to-page permutation and freezes it to hard routing.
     pub fn train(
         config: TaskCandidateConfig,
+    ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
+        Self::train_with_conjunction(config, TruthTable2::AND)
+    }
+
+    /// Trains event routing while injecting an explicit hard conjunction micro-operation.
+    ///
+    /// This constructor exists so later task-loss experiments and fixed-gate
+    /// ablations can reuse the identical router, memory, and evidence path.
+    pub fn train_with_conjunction(
+        config: TaskCandidateConfig,
+        conjunction_table: TruthTable2,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
         if config.memory_capacity == 0 {
             return Err(TaskCandidateError::ZeroMemoryCapacity);
@@ -131,12 +144,19 @@ impl SmlTaskCandidate {
                 route_accounting,
                 memory_capacity: config.memory_capacity,
                 max_payload_bits: config.max_payload_bits,
+                conjunction_table,
             },
             TaskCandidateTrainingReport {
                 route: report,
                 route_accounting,
             },
         ))
+    }
+
+    /// Hard conjunction table used by the current frozen candidate.
+    #[must_use]
+    pub const fn conjunction_table(&self) -> TruthTable2 {
+        self.conjunction_table
     }
 
     /// Executes one task through the frozen learned router and retains every event record.
@@ -267,7 +287,9 @@ impl SmlTaskCandidate {
             (PAGE_QUERY_CONJUNCTION, TaskEvent::QueryConjunction { left, right }) => {
                 let left_value = read_fact(memory, left, counters)?;
                 let right_value = read_fact(memory, right, counters)?;
-                Ok(Some(TaskAnswer::Bit(left_value & right_value)))
+                Ok(Some(TaskAnswer::Bit(
+                    self.conjunction_table.evaluate(left_value, right_value),
+                )))
             }
             (PAGE_QUERY_COPY, TaskEvent::QueryCopy) => {
                 if !*copy_active || payload.is_empty() {
