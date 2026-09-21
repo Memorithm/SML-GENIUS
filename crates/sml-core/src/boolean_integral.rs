@@ -6,7 +6,7 @@
 //!
 //! For one intervention mask M and integer loss L, the discrete evidence is:
 //!
-//!     delta(M) = L(base) - L(base XOR M)
+//! `delta(M) = L(base) - L(base XOR M)`
 //!
 //! Positive delta means the intervention improved the objective. Its magnitude
 //! is divided across the bits in the mask before being accumulated. Repeated,
