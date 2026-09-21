@@ -21,6 +21,7 @@ pub mod mor;
 pub mod mor_affinity;
 pub mod mor_affinity_train;
 pub mod mor_controller;
+pub mod mor_proposal_train;
 pub mod mor_registry;
 pub mod mor_route_objective;
 pub mod mor_runtime;
