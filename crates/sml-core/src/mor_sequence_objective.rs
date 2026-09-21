@@ -163,7 +163,6 @@ fn evaluate_sequence(
         validate_step(step, sequence_index, step_index)?;
     }
 
-    let oracle_path = optimal_path(sequence, policy)?;
     let mut previous = PreviousRoute::default();
     let mut chosen_pages = Vec::with_capacity(sequence.steps.len());
 
@@ -197,6 +196,35 @@ fn evaluate_sequence(
         };
     }
 
+    evaluate_sequence_from_chosen_pages(
+        sequence,
+        sequence_index,
+        policy,
+        &chosen_pages,
+    )
+}
+
+pub(crate) fn evaluate_sequence_from_chosen_pages(
+    sequence: &MorRouteSequenceExample,
+    sequence_index: usize,
+    policy: MorRouteSequencePolicy,
+    chosen_pages: &[PageId],
+) -> Result<MorRouteSequenceEvidence, MorRouteSequenceError> {
+    if sequence.steps.is_empty() {
+        return Err(MorRouteSequenceError::EmptySequence(sequence_index));
+    }
+    if chosen_pages.len() != sequence.steps.len() {
+        return Err(MorRouteSequenceError::ChosenPathLength {
+            sequence_index,
+            expected: sequence.steps.len(),
+            actual: chosen_pages.len(),
+        });
+    }
+    for (step_index, step) in sequence.steps.iter().enumerate() {
+        validate_step(step, sequence_index, step_index)?;
+    }
+
+    let oracle_path = optimal_path(sequence, policy)?;
     let mut steps = Vec::with_capacity(sequence.steps.len());
     let mut chosen_total = 0_u64;
     let mut oracle_total = 0_u64;
@@ -207,8 +235,13 @@ fn evaluate_sequence(
         let chosen_page = chosen_pages[step_index];
         let oracle_page = oracle_path[step_index];
         let chosen_base = outcome_cost(
-            outcome_for(&sequence.steps[step_index], chosen_page)
-                .ok_or(MorRouteSequenceError::InternalInvariant)?,
+            outcome_for(&sequence.steps[step_index], chosen_page).ok_or(
+                MorRouteSequenceError::MissingChosenOutcome {
+                    sequence_index,
+                    step_index,
+                    page_id: chosen_page,
+                },
+            )?,
             policy.step_objective,
         )?;
         let oracle_base = outcome_cost(
@@ -426,6 +459,11 @@ pub enum MorRouteSequenceError {
         sequence_index: usize,
         step_index: usize,
         page_id: PageId,
+    },
+    ChosenPathLength {
+        sequence_index: usize,
+        expected: usize,
+        actual: usize,
     },
     ArithmeticOverflow,
     InternalInvariant,
