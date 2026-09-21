@@ -77,15 +77,15 @@ impl LinguisticMicroBenchmarkReport {
 pub fn run_linguistic_micro_benchmark(
 ) -> Result<LinguisticMicroBenchmarkReport, LinguisticMicroBenchmarkError> {
     let roles = fixture_roles()?;
-    let mut cases = Vec::with_capacity(7);
-
-    cases.push(probe_synonym_antonym()?);
-    cases.push(probe_role_reversal(&roles)?);
-    cases.push(probe_negation(&roles)?);
-    cases.push(probe_reference_correspondence()?);
-    cases.push(probe_controlled_polysemy()?);
-    cases.push(probe_semantic_composition(&roles)?);
-    cases.push(probe_associative_retrieval()?);
+    let cases = vec![
+        probe_synonym_antonym()?,
+        probe_role_reversal(&roles)?,
+        probe_negation(&roles)?,
+        probe_reference_correspondence()?,
+        probe_controlled_polysemy()?,
+        probe_semantic_composition(&roles)?,
+        probe_associative_retrieval()?,
+    ];
 
     Ok(LinguisticMicroBenchmarkReport { cases })
 }
