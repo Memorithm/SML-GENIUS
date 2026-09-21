@@ -226,14 +226,15 @@ impl MorAffinityTrainer {
             }
 
             let strongest_separation_ppm = candidates[0].separation_ppm;
-            let weakest_selected_separation_ppm =
-                candidates.last().map(|candidate| candidate.separation_ppm).unwrap_or(0);
+            let weakest_selected_separation_ppm = candidates
+                .last()
+                .map(|candidate| candidate.separation_ppm)
+                .unwrap_or(0);
             let separation_sum = candidates
                 .iter()
                 .map(|candidate| candidate.separation_ppm as u64)
                 .sum::<u64>();
-            let mean_selected_separation_ppm =
-                (separation_sum / candidates.len() as u64) as u32;
+            let mean_selected_separation_ppm = (separation_sum / candidates.len() as u64) as u32;
 
             let atoms = candidates
                 .iter()
