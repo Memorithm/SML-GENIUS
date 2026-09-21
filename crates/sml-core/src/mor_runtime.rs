@@ -151,7 +151,6 @@ impl fmt::Display for NativeMorRuntimeError {
 
 impl std::error::Error for NativeMorRuntimeError {}
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeMorRuntimeAuditEvidence {
     pub cycle: u64,
@@ -239,7 +238,9 @@ impl NativeMorRuntimeAuditor {
             .iter()
             .copied()
             .find(|outcome| outcome.page_id == chosen_page)
-            .ok_or(NativeMorRuntimeAuditError::MissingChosenOutcome(chosen_page))?;
+            .ok_or(NativeMorRuntimeAuditError::MissingChosenOutcome(
+                chosen_page,
+            ))?;
         let chosen_objective_ppm = runtime_outcome_cost(self.objective_policy, chosen_outcome)?;
 
         let mut oracle: Option<(u32, PageId)> = None;
@@ -304,22 +305,17 @@ impl NativeMorRuntimeAuditor {
             | MorTemporalTransition::Stable
             | MorTemporalTransition::Confirmed => {}
         }
-        if report
-            .cycle
-            .cycle
-            .metrics
-            .precision_escalation_requested
-        {
-            self.snapshot.precision_escalation_requests =
-                self.snapshot.precision_escalation_requests.saturating_add(1);
+        if report.cycle.cycle.metrics.precision_escalation_requested {
+            self.snapshot.precision_escalation_requests = self
+                .snapshot
+                .precision_escalation_requests
+                .saturating_add(1);
         }
 
         self.snapshot.mean_regret_ppm =
             (self.snapshot.total_regret_ppm / self.snapshot.cycles) as u32;
-        self.snapshot.zero_regret_fraction_ppm = fraction_ppm_u64(
-            self.snapshot.zero_regret_cycles,
-            self.snapshot.cycles,
-        );
+        self.snapshot.zero_regret_fraction_ppm =
+            fraction_ppm_u64(self.snapshot.zero_regret_cycles, self.snapshot.cycles);
 
         Ok(NativeMorRuntimeAuditEvidence {
             cycle: report.cycle.cycle.metrics.cycle,
@@ -338,11 +334,7 @@ impl NativeMorRuntimeAuditor {
                 .metrics
                 .precision_escalation_requested,
             noise_ppm: report.cycle.cycle.metrics.noise_ppm,
-            structural_disagreement_ppm: report
-                .cycle
-                .cycle
-                .metrics
-                .structural_disagreement_ppm,
+            structural_disagreement_ppm: report.cycle.cycle.metrics.structural_disagreement_ppm,
         })
     }
 }
