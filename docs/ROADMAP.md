@@ -95,7 +95,7 @@ Current status:
 - [x] SBG-0.10 Boolean evidence learning integration;
   - [x] SBG-0.10a V/M/A/R Boolean-integral coordinate credit and train/holdout commit gate;
   - [x] SBG-0.10b structural BIND/SPLIT/MERGE evidence decisions;
-- [ ] SBG-0.11 linguistic micro-benchmark;
+- [x] SBG-0.11 linguistic micro-benchmark;
 - [ ] SBG-0.12 SIMD qualification;
 - [ ] SBG-0.13 mmap semantic store;
 - [ ] SBG-0.14 integrated prototype.
