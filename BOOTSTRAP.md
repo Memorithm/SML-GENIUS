@@ -161,32 +161,33 @@ Completed:
 Active development branch:
 
 ```text
-research/sbg-0.12a-packed-word-kernel
+research/sbg-0.12b-benchmark
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/simd.rs
+crates/sml-cli/src/main.rs
 ```
 
 SBG-0.11 linguistic micro-benchmark was merged through PR #51 on main as
 `9da53048e4e3b4ad56adbc566b7bbbe29f2485a7`.
 
-Definition of done for SBG-0.12a:
+SBG-0.12a packed-word qualification merged on main through PR #53 as
+`7f9a6478391c4df6e6c34d9b3eeb55c7fc5e5c66`.
 
-1. retain an independent bit-by-bit scalar oracle;
-2. add a safe packed-u64 kernel using XOR/AND/POPCOUNT without temporary semantic fields;
-3. qualify exact equality at the 16,384-bit reference width and at a non-word-aligned width;
-4. expose deterministic work accounting for logical coordinates, packed words, four-word groups and POPCOUNT calls;
-5. preserve fail-closed empty-mask behavior;
-6. make no AVX/NEON or throughput claim until generated code and wall-clock benchmarks are measured;
-7. pass format, check, clippy and the complete workspace test suite.
+Definition of done for SBG-0.12b:
 
-The broader SBG-0.12 milestone remains open after 0.12a. Architecture-specific
-AVX2/AVX-512/NEON qualification is a later sub-slice and must respect the
-crate-wide `#![forbid(unsafe_code)]` boundary unless that boundary is explicitly
-revisited with evidence.
+1. provide a reproducible release-mode benchmark at the 16,384-bit reference width;
+2. benchmark the independent scalar oracle and packed-word kernel on identical data;
+3. warm both paths before timing and use black-box barriers plus an equality checksum;
+4. report total and per-iteration nanoseconds without setting a flaky performance threshold;
+5. run the benchmark automatically only on SBG-0.12 research branches;
+6. record the runner architecture with the measurement;
+7. use measured results to decide whether explicit architecture-specific SIMD is justified.
+
+The broader SBG-0.12 milestone remains open after 0.12b until code-generation
+evidence and the safe architecture-specific strategy are frozen.
 
 ## Scientific boundary
 
