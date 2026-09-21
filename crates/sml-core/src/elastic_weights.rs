@@ -256,7 +256,7 @@ impl ElasticWeightPlanner {
         selected_pages: &[PageId],
         epoch: u64,
     ) -> Result<ElasticWeightPlan, ElasticWeightError> {
-        let mut selected_indices = Vec::with_capacity(selected_pages.len());
+        let mut selected_indices: Vec<usize> = Vec::with_capacity(selected_pages.len());
         for page_id in selected_pages.iter().copied() {
             if selected_indices
                 .iter()
