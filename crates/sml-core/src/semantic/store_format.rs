@@ -647,3 +647,14 @@ impl From<SemanticBitFieldError> for SemanticStoreError {
         Self::BitField(value)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::crc32c;
+
+    #[test]
+    fn crc32c_matches_castagnoli_check_vector() {
+        assert_eq!(crc32c(b"123456789"), 0xe306_9283);
+    }
+}
