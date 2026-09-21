@@ -20,9 +20,7 @@ use crate::{
     },
 };
 
-use super::{
-    bind, bundle_majority, SemanticAlgebraError, SemanticBitField, SemanticState,
-};
+use super::{bind, bundle_majority, SemanticAlgebraError, SemanticBitField, SemanticState};
 
 /// Small explicit set of competing semantic hypotheses.
 ///
@@ -153,10 +151,7 @@ impl<const BITS: usize> SemanticStructuralEvidenceLedger<BITS> {
             .map_err(SemanticStructuralError::Integral)?;
         let mut proposal_index = BTreeMap::new();
         for (index, proposal) in proposals.iter().enumerate() {
-            if proposal_index
-                .insert(proposal.proposal_id, index)
-                .is_some()
-            {
+            if proposal_index.insert(proposal.proposal_id, index).is_some() {
                 return Err(SemanticStructuralError::DuplicateProposalId(
                     proposal.proposal_id,
                 ));
@@ -214,10 +209,7 @@ impl<const BITS: usize> SemanticStructuralEvidenceLedger<BITS> {
             .map_err(SemanticStructuralError::Integral)
     }
 
-    pub fn cell(
-        &self,
-        proposal_id: u64,
-    ) -> Result<BooleanCreditCell, SemanticStructuralError<()>> {
+    pub fn cell(&self, proposal_id: u64) -> Result<BooleanCreditCell, SemanticStructuralError<()>> {
         let index = self
             .proposal_index
             .get(&proposal_id)
@@ -287,12 +279,7 @@ pub struct SemanticStructuralLearningReport<const BITS: usize> {
 }
 
 /// Evaluates and atomically commits one evidence-qualified structural candidate.
-pub fn commit_structural_candidate<
-    const BITS: usize,
-    E,
-    TrainObjective,
-    HoldoutObjective,
->(
+pub fn commit_structural_candidate<const BITS: usize, E, TrainObjective, HoldoutObjective>(
     pool: &mut SemanticHypothesisPool<BITS>,
     candidate: &SemanticStructuralCandidate<BITS>,
     commit_policy: BooleanCommitPolicy,
@@ -310,10 +297,8 @@ where
         .mutation
         .preview(pool)
         .map_err(convert_unit_error)?;
-    let train_candidate_loss_ppm =
-        evaluate_objective(&candidate_pool, &mut train_objective)?;
-    let holdout_candidate_loss_ppm =
-        evaluate_objective(&candidate_pool, &mut holdout_objective)?;
+    let train_candidate_loss_ppm = evaluate_objective(&candidate_pool, &mut train_objective)?;
+    let holdout_candidate_loss_ppm = evaluate_objective(&candidate_pool, &mut holdout_objective)?;
 
     let decision = BooleanCommitEvidence {
         train_baseline_loss_ppm,
@@ -351,12 +336,13 @@ fn preview_bind<const BITS: usize>(
     }
     let mut hypotheses = pool.hypotheses.clone();
     let hypothesis_count = hypotheses.len();
-    let state = hypotheses
-        .get_mut(hypothesis)
-        .ok_or(SemanticStructuralError::HypothesisOutOfRange {
-            index: hypothesis,
-            len: hypothesis_count,
-        })?;
+    let state =
+        hypotheses
+            .get_mut(hypothesis)
+            .ok_or(SemanticStructuralError::HypothesisOutOfRange {
+                index: hypothesis,
+                len: hypothesis_count,
+            })?;
     state.value = bind(role, &state.value).map_err(SemanticStructuralError::Algebra)?;
     Ok(SemanticHypothesisPool { hypotheses })
 }
@@ -371,13 +357,13 @@ fn preview_split<const BITS: usize>(
         return Err(SemanticStructuralError::EmptySplitMask);
     }
 
-    let parent = pool
-        .hypotheses
-        .get(hypothesis)
-        .ok_or(SemanticStructuralError::HypothesisOutOfRange {
-            index: hypothesis,
-            len: pool.hypotheses.len(),
-        })?;
+    let parent =
+        pool.hypotheses
+            .get(hypothesis)
+            .ok_or(SemanticStructuralError::HypothesisOutOfRange {
+                index: hypothesis,
+                len: pool.hypotheses.len(),
+            })?;
 
     let mut overlap = left_mask.clone();
     overlap.and_assign(right_mask);
@@ -523,10 +509,7 @@ fn convert_unit_error<E>(error: SemanticStructuralError<()>) -> SemanticStructur
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SemanticStructuralError<E> {
     EmptyHypothesisPool,
-    HypothesisOutOfRange {
-        index: usize,
-        len: usize,
-    },
+    HypothesisOutOfRange { index: usize, len: usize },
     EmptyRole,
     EmptySplitMask,
     OverlappingSplitMasks,
@@ -557,8 +540,8 @@ impl<E: fmt::Debug> std::error::Error for SemanticStructuralError<E> {}
 mod tests {
     use super::{
         commit_structural_candidate, SemanticHypothesisPool, SemanticStructuralCandidate,
-        SemanticStructuralEvidenceLedger, SemanticStructuralMutation, SemanticStructuralObservation,
-        SemanticStructuralProposal,
+        SemanticStructuralEvidenceLedger, SemanticStructuralMutation,
+        SemanticStructuralObservation, SemanticStructuralProposal,
     };
     use crate::{
         boolean_hierarchical::{BooleanCommitDecision, BooleanCommitPolicy},
@@ -600,12 +583,7 @@ mod tests {
 
     #[test]
     fn split_creates_two_context_partition_hypotheses() {
-        let original = state(
-            &[0, 2, 4, 6],
-            &[0, 1, 4, 5],
-            &[0, 4, 7],
-            &[2, 3],
-        );
+        let original = state(&[0, 2, 4, 6], &[0, 1, 4, 5], &[0, 4, 7], &[2, 3]);
         let pool = SemanticHypothesisPool::new(vec![original]).expect("pool");
         let left = SemanticBitField::<8>::from_set_indices(&[0, 1]).expect("left");
         let right = SemanticBitField::<8>::from_set_indices(&[4, 5]).expect("right");
@@ -630,8 +608,7 @@ mod tests {
         let left = state(&[0, 1], &[0, 1], &[0], &[6]);
         let right = state(&[0, 2], &[0, 2], &[2], &[6]);
         let anchor = state(&[0, 3], &[0, 3], &[3], &[6]);
-        let pool =
-            SemanticHypothesisPool::new(vec![left.clone(), right.clone()]).expect("pool");
+        let pool = SemanticHypothesisPool::new(vec![left.clone(), right.clone()]).expect("pool");
 
         let preview = SemanticStructuralMutation::Merge {
             left: 0,
@@ -680,9 +657,7 @@ mod tests {
             .is_empty());
 
         ledger.observe(&observation).expect("second");
-        let candidates = ledger
-            .recommended_candidates(1)
-            .expect("candidates");
+        let candidates = ledger.recommended_candidates(1).expect("candidates");
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].proposal_id, 17);
     }
