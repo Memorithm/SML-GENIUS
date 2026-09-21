@@ -63,8 +63,8 @@ pub use recurrent::{
     SemanticStateDelta,
 };
 pub use simd::{
-    packed_word4_score, qualify_packed_word4, scalar_reference_score, SemanticKernelEvidence,
-    SemanticKernelKind, SemanticKernelQualification, SemanticSimdError,
+    packed_word4_score, packed_word4_score_16384, qualify_packed_word4, scalar_reference_score,
+    SemanticKernelEvidence, SemanticKernelKind, SemanticKernelQualification, SemanticSimdError,
 };
 pub use state::SemanticState;
 pub use structural_learning::{
