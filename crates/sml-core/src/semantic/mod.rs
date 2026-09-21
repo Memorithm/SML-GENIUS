@@ -7,6 +7,7 @@
 pub mod algebra;
 pub mod ambiguity;
 pub mod bitfield;
+pub mod composition;
 pub mod context;
 pub mod metric;
 pub mod state;
@@ -18,6 +19,10 @@ pub use ambiguity::{
     derive_ambiguity, update_ambiguity, AmbiguityError, AmbiguityPolicy, AmbiguityTransition,
 };
 pub use bitfield::{SemanticBitField, SemanticBitFieldError};
+pub use composition::{
+    compose_relation, SemanticComposition, SemanticCompositionError, SemanticPolarity,
+    SemanticRoleKind, SemanticRoleSet,
+};
 pub use context::{
     derive_context_mask, update_context_mask, ContextMaskError, ContextMaskPolicy,
     ContextMaskUpdate,
