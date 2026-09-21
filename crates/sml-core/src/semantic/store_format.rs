@@ -41,6 +41,127 @@ pub struct SemanticStoreIndexEntry {
     pub payload_bytes: u32,
 }
 
+/// Reusable validation descriptor for one immutable semantic-store image.
+///
+/// The descriptor is intentionally non-borrowing so an OS-backed mapping owner
+/// can retain it without a self-referential Rust structure. Callers must keep
+/// the underlying bytes immutable for the descriptor lifetime. Each access
+/// revalidates the small fixed header and exact file length; the sorted index is
+/// fully validated once when the descriptor is created.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SemanticStoreDescriptor<const BITS: usize> {
+    header: SemanticStoreHeader,
+    file_bytes: u64,
+}
+
+impl<const BITS: usize> SemanticStoreDescriptor<BITS> {
+    /// Validates the complete header/index structure without decoding payloads.
+    pub fn validate(bytes: &[u8]) -> Result<Self, SemanticStoreError> {
+        let header = parse_header::<BITS>(bytes)?;
+        validate_index(bytes, header)?;
+        let file_bytes =
+            u64::try_from(bytes.len()).map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
+        Ok(Self { header, file_bytes })
+    }
+
+    #[must_use]
+    pub const fn header(&self) -> SemanticStoreHeader {
+        self.header
+    }
+
+    #[must_use]
+    pub const fn record_count(&self) -> u64 {
+        self.header.record_count
+    }
+
+    #[must_use]
+    pub const fn file_bytes(&self) -> u64 {
+        self.file_bytes
+    }
+
+    /// Reads and locally validates one index entry against the frozen layout.
+    pub fn index_entry(
+        &self,
+        bytes: &[u8],
+        position: u64,
+    ) -> Result<SemanticStoreIndexEntry, SemanticStoreError> {
+        self.validate_image_identity(bytes)?;
+        self.index_entry_after_identity(bytes, position)
+    }
+
+    /// Binary-searches the validated immutable index and lazily decodes one record.
+    pub fn get(
+        &self,
+        bytes: &[u8],
+        semantic_id: u64,
+    ) -> Result<Option<SemanticState<BITS>>, SemanticStoreError> {
+        self.validate_image_identity(bytes)?;
+        let mut low = 0_u64;
+        let mut high = self.header.record_count;
+
+        while low < high {
+            let mid = low + (high - low) / 2;
+            let entry = self.index_entry_after_identity(bytes, mid)?;
+            if entry.semantic_id < semantic_id {
+                low = mid + 1;
+            } else if entry.semantic_id > semantic_id {
+                high = mid;
+            } else {
+                return decode_record::<BITS>(bytes, entry).map(Some);
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn validate_image_identity(&self, bytes: &[u8]) -> Result<(), SemanticStoreError> {
+        let header = parse_header::<BITS>(bytes)?;
+        let file_bytes =
+            u64::try_from(bytes.len()).map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
+        if header != self.header || file_bytes != self.file_bytes {
+            return Err(SemanticStoreError::DescriptorImageMismatch);
+        }
+        Ok(())
+    }
+
+    fn index_entry_after_identity(
+        &self,
+        bytes: &[u8],
+        position: u64,
+    ) -> Result<SemanticStoreIndexEntry, SemanticStoreError> {
+        if position >= self.header.record_count {
+            return Err(SemanticStoreError::IndexOutOfRange {
+                position,
+                record_count: self.header.record_count,
+            });
+        }
+
+        let entry = read_index_entry(bytes, self.header, position)?;
+        if entry.payload_bytes != self.header.payload_bytes {
+            return Err(SemanticStoreError::PayloadLength {
+                expected: self.header.payload_bytes,
+                actual: entry.payload_bytes,
+            });
+        }
+        let expected_offset = self
+            .header
+            .records_offset
+            .checked_add(
+                position
+                    .checked_mul(self.header.record_stride)
+                    .ok_or(SemanticStoreError::LayoutOverflow)?,
+            )
+            .ok_or(SemanticStoreError::LayoutOverflow)?;
+        if entry.record_offset != expected_offset {
+            return Err(SemanticStoreError::InvalidRecordOffset {
+                expected: expected_offset,
+                actual: entry.record_offset,
+            });
+        }
+        Ok(entry)
+    }
+}
+
 /// Borrowed zero-copy view over semantic-store metadata and record bytes.
 ///
 /// Parsing does not decode all records. The get method verifies and reconstructs
@@ -54,9 +175,11 @@ pub struct SemanticStoreView<'a, const BITS: usize> {
 impl<'a, const BITS: usize> SemanticStoreView<'a, BITS> {
     /// Parses and validates header/index structure without touching every payload.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, SemanticStoreError> {
-        let header = parse_header::<BITS>(bytes)?;
-        validate_index(bytes, header)?;
-        Ok(Self { bytes, header })
+        let descriptor = SemanticStoreDescriptor::<BITS>::validate(bytes)?;
+        Ok(Self {
+            bytes,
+            header: descriptor.header(),
+        })
     }
 
     #[must_use]
@@ -618,6 +741,7 @@ pub enum SemanticStoreError {
         actual: u32,
     },
     HeaderRoundTrip,
+    DescriptorImageMismatch,
     DuplicateSemanticId(u64),
     UnsortedIndex,
     IndexOutOfRange {
