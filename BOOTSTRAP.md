@@ -151,29 +151,31 @@ Completed:
 - SBG-0.5 Ambiguity Field merged on main as `54c07e50fd313c28a041a05742f7d573b4baefd1`.
 - SBG-0.6 Semantic Composition merged on main as `966518009d1360fe3fa00116b955c20e4e1c25cf`.
 - SBG-0.7 native MOR integration merged on main as `1610f6b267f8aa45d05b9969977a56c06146552c`.
+- SBG-0.8 recurrent semantic rewriting merged on main as `ae7e65c3aeec4446d3e742cd44a892cc206ac798`.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.8-recurrent-semantic
+research/sbg-0.9-elastic-regions-rebased
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/recurrent.rs
+crates/sml-core/src/semantic/elastic_regions.rs
 ```
 
-Definition of done for SBG-0.8:
+Definition of done for SBG-0.9:
 
-1. recurrent semantic rewriting reuses the existing SML `HaltingPolicy` depth contract;
-2. every cycle records exact Hamming deltas for V, M, A and R separately;
-3. stability halting uses the total Boolean change with no floating-point score;
-4. kernels may explicitly block one stability halt for unresolved internal work, but never exceed `max_depth`;
-5. the outcome distinguishes stable convergence from hard maximum-depth termination;
-6. deterministic tests cover convergence, blocked stability, exact delta accounting and hard depth bounds;
-7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
+1. semantic region selection combines the SBG routing field with context-masked semantic value evidence;
+2. all scores remain exact/integer and page selection is explicitly bounded;
+3. every Elastic Weight page has one auditable semantic-region mapping and missing/unknown mappings fail closed;
+4. SBG selection produces an immutable native `ElasticWeightPlan` without implicitly committing or mutating page importance;
+5. the existing Elastic Weight PLAN/VALIDATE/COMMIT, stale-generation checks and RAM/VRAM budgets remain authoritative;
+6. the semantic plan exposes exact active parameters, active storage, RAM/VRAM and transfer bytes for working-set measurement;
+7. deterministic tests prove context-dependent page selection, non-mutating planning, explicit commit and stale-plan rejection;
+8. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
 
