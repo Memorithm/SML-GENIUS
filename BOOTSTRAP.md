@@ -154,32 +154,32 @@ Completed:
 - SBG-0.8 recurrent semantic rewriting merged on main as `ae7e65c3aeec4446d3e742cd44a892cc206ac798`.
 - SBG-0.9 Elastic Weight region activation merged on main as `396b65df23c816edcd4407e8f5000ff694e516c9`.
 - SBG-0.10a V/M/A/R Boolean evidence learning merged on main as `f9361eb96094035b18d7f0c2fcc5d564e37b22d1`.
+- SBG-0.10b structural BIND/SPLIT/MERGE evidence learning merged on main as `3788d1223d0d7224b2f60464141f2e79827ca487`.
+- SBG-0.10 Boolean Evidence Learning is therefore complete at reference-semantics level.
 - These slices passed the repository CI gates before merge.
 
 Active development branch:
 
 ```text
-research/sbg-0.10b-structural-evidence
+research/sbg-0.11-linguistic-microbench
 ```
 
 Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/structural_learning.rs
+crates/sml-core/src/semantic/linguistic_bench.rs
 ```
 
-SBG-0.10 completes only when this structural slice passes the same evidence and CI gates as SBG-0.10a.
+Definition of done for SBG-0.11:
 
-Definition of done for SBG-0.10b:
-
-1. BIND is an executable mutation using the existing native SBG `bind` algebra on a hypothesis state;
-2. SPLIT creates two hypotheses only from a disjoint and exhaustive partition of the parent Context Meaning Mask, failing closed otherwise;
-3. MERGE uses an explicit third anchor and strict-majority bundling for V/M/A/R, with no hidden two-way tie-break rule;
-4. structural proposal credit reuses the native `BooleanIntegralAccumulator`; grouped proposal interventions remain shared evidence rather than individual causal proof;
-5. every candidate is previewed on an immutable hypothesis-pool clone and the existing `BooleanCommitEvidence` train/holdout gate remains authoritative before commit;
-6. malformed structural transforms fail closed and holdout rejection leaves the original hypothesis pool unchanged;
-7. deterministic tests exercise real BIND, SPLIT and MERGE transformations, evidence qualification, successful commit and holdout rejection;
-8. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
+1. one deterministic suite exposes seven controlled probes: synonym/antonym distance ordering, role reversal, negation, simple reference/correspondence, contextual polysemy, semantic composition and bounded associative retrieval;
+2. every probe records exact integer evidence and an explicit Boolean pass/fail result;
+3. linguistic labels are documented as mnemonic fixtures only and are not presented as evidence of natural-language understanding;
+4. role reversal preserves content while changing relation structure, and negation preserves content while applying the explicit negation signature;
+5. independently derived context masks reverse the nearest controlled polysemy candidate;
+6. reference correspondence must recover the bound entity with the correct role and reject a wrong-role control;
+7. associative retrieval uses the existing bounded deterministic memory and records exact read/hit/write counters;
+8. the complete suite passes deterministically under `cargo test --workspace`, alongside format, check, clippy and all existing smoke probes.
 
 ## Scientific boundary
 
