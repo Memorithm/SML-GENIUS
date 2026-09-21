@@ -74,3 +74,28 @@ Scaling stops if any of the following persists after a bounded research iteratio
 - routing degenerates into an all-history scan or all-pairs scoring mechanism;
 - metadata/index storage overwhelms the low-bit weight advantage;
 - the target memory hierarchy cannot hide storage traffic sufficiently for the SML-4 throughput gate.
+
+
+## Semantic Boolean Geometry track
+
+SBG is a parallel evidence-gated semantic-representation track. It does not reuse occupied SML-0.x milestone numbers; implementation slices use the `SBG-0.x` namespace. The durable detailed sequence is recorded in `BOOTSTRAP.md`.
+
+Current status:
+
+- [x] SBG-0.1 packed const-generic Semantic BitField reference implementation;
+- [x] SBG-0.1 native V/M/A/R SemanticState payload accounting;
+- [ ] SBG-0.2 masked Boolean semantic metric;
+- [ ] SBG-0.3 binding/bundling/permutation;
+- [ ] SBG-0.4 context meaning mask;
+- [ ] SBG-0.5 ambiguity dynamics;
+- [ ] SBG-0.6 semantic composition;
+- [ ] SBG-0.7 native MOR integration;
+- [ ] SBG-0.8 recurrent semantic rewriting;
+- [ ] SBG-0.9 Elastic Weight region activation;
+- [ ] SBG-0.10 Boolean evidence learning integration;
+- [ ] SBG-0.11 linguistic micro-benchmark;
+- [ ] SBG-0.12 SIMD qualification;
+- [ ] SBG-0.13 mmap semantic store;
+- [ ] SBG-0.14 integrated prototype.
+
+The SBG track is an experimental hypothesis. It does not yet establish language quality, optimal semantic width, or 25B-scale trainability.
