@@ -320,10 +320,7 @@ impl LatentGate1 {
     }
 }
 
-fn unary_weighted_output(
-    weights: &[f64; UNARY_TRUTH_TABLE_COUNT],
-    input: bool,
-) -> f64 {
+fn unary_weighted_output(weights: &[f64; UNARY_TRUTH_TABLE_COUNT], input: bool) -> f64 {
     weights
         .iter()
         .enumerate()
