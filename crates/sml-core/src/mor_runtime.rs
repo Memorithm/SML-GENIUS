@@ -6,7 +6,7 @@
 //! state and optional runtime hints; they no longer assemble RouterInput values.
 
 use core::fmt;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     mor::{ExpertRuntimeHint, MixtureOfRouters, RouterInput, MOR_SCALE_PPM},
@@ -406,3 +406,277 @@ impl fmt::Display for NativeMorRuntimeAuditError {
 }
 
 impl std::error::Error for NativeMorRuntimeAuditError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeMorOnlineAdaptationPolicy {
+    pub ema_retention_ppm: u32,
+    pub objective_gain_ppm: u32,
+    pub max_bias_adjustment_ppm: u32,
+}
+
+impl Default for NativeMorOnlineAdaptationPolicy {
+    fn default() -> Self {
+        Self {
+            ema_retention_ppm: 900_000,
+            objective_gain_ppm: 500_000,
+            max_bias_adjustment_ppm: 150_000,
+        }
+    }
+}
+
+impl NativeMorOnlineAdaptationPolicy {
+    pub fn validate(self) -> Result<Self, NativeMorOnlineAdaptationError> {
+        for value in [
+            self.ema_retention_ppm,
+            self.objective_gain_ppm,
+            self.max_bias_adjustment_ppm,
+        ] {
+            if value > MOR_SCALE_PPM {
+                return Err(NativeMorOnlineAdaptationError::PolicyPpmOutOfRange(value));
+            }
+        }
+        Ok(self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeMorPageValueEvidence {
+    pub page_id: PageId,
+    pub observations: u64,
+    pub ema_objective_ppm: u32,
+    pub adaptive_bias_ppm: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeMorAdaptiveRuntimeReport {
+    pub runtime: NativeMorRuntimeReport,
+    pub effective_hints: Vec<ExpertRuntimeHint>,
+    pub values_before_route: Vec<NativeMorPageValueEvidence>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NativeMorPageValueState {
+    observations: u64,
+    ema_objective_ppm: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeMorAdaptiveRuntime {
+    runtime: NativeMorRuntime,
+    auditor: NativeMorRuntimeAuditor,
+    policy: NativeMorOnlineAdaptationPolicy,
+    page_values: BTreeMap<u32, NativeMorPageValueState>,
+}
+
+impl NativeMorAdaptiveRuntime {
+    pub fn new(
+        runtime: NativeMorRuntime,
+        objective_policy: MorRouteObjectivePolicy,
+        adaptation_policy: NativeMorOnlineAdaptationPolicy,
+    ) -> Result<Self, NativeMorOnlineAdaptationError> {
+        let policy = adaptation_policy.validate()?;
+        let auditor = NativeMorRuntimeAuditor::new(objective_policy)
+            .map_err(NativeMorOnlineAdaptationError::Audit)?;
+        Ok(Self {
+            runtime,
+            auditor,
+            policy,
+            page_values: BTreeMap::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn runtime(&self) -> &NativeMorRuntime {
+        &self.runtime
+    }
+
+    #[must_use]
+    pub fn auditor(&self) -> &NativeMorRuntimeAuditor {
+        &self.auditor
+    }
+
+    #[must_use]
+    pub const fn policy(&self) -> NativeMorOnlineAdaptationPolicy {
+        self.policy
+    }
+
+    #[must_use]
+    pub fn value_evidence(&self) -> Vec<NativeMorPageValueEvidence> {
+        let mean = mean_page_objective(&self.page_values);
+        self.page_values
+            .iter()
+            .map(|(page, state)| NativeMorPageValueEvidence {
+                page_id: PageId(*page),
+                observations: state.observations,
+                ema_objective_ppm: state.ema_objective_ppm,
+                adaptive_bias_ppm: adaptive_objective_bias(
+                    mean,
+                    state.ema_objective_ppm,
+                    self.policy,
+                ),
+            })
+            .collect()
+    }
+
+    pub fn reset(&mut self) {
+        self.runtime.reset();
+        self.auditor.reset();
+        self.page_values.clear();
+    }
+
+    pub fn route_state(
+        &mut self,
+        state: &BooleanWorkspace,
+        caller_hints: &[ExpertRuntimeHint],
+    ) -> Result<NativeMorAdaptiveRuntimeReport, NativeMorOnlineAdaptationError> {
+        let values_before_route = self.value_evidence();
+        let effective_hints = self.effective_hints(caller_hints, &values_before_route)?;
+        let runtime = self
+            .runtime
+            .route_state(state, &effective_hints)
+            .map_err(NativeMorOnlineAdaptationError::Runtime)?;
+
+        Ok(NativeMorAdaptiveRuntimeReport {
+            runtime,
+            effective_hints,
+            values_before_route,
+        })
+    }
+
+    pub fn observe(
+        &mut self,
+        report: &NativeMorAdaptiveRuntimeReport,
+        outcomes: &[MorExpertOutcome],
+    ) -> Result<NativeMorRuntimeAuditEvidence, NativeMorOnlineAdaptationError> {
+        let expert_count = self.runtime.registry().accounting().expert_count;
+        for outcome in outcomes {
+            if outcome.page_id.0 >= expert_count {
+                return Err(NativeMorOnlineAdaptationError::OutcomeOutOfRegistry {
+                    page_id: outcome.page_id,
+                    expert_count,
+                });
+            }
+        }
+
+        let evidence = self
+            .auditor
+            .observe(&report.runtime, outcomes)
+            .map_err(NativeMorOnlineAdaptationError::Audit)?;
+
+        for outcome in outcomes.iter().copied() {
+            let objective = runtime_outcome_cost(self.auditor.objective_policy(), outcome)
+                .map_err(NativeMorOnlineAdaptationError::Audit)?;
+            match self.page_values.get_mut(&outcome.page_id.0) {
+                Some(state) => {
+                    state.ema_objective_ppm = ema_objective_ppm(
+                        state.ema_objective_ppm,
+                        objective,
+                        self.policy.ema_retention_ppm,
+                    );
+                    state.observations = state.observations.saturating_add(1);
+                }
+                None => {
+                    self.page_values.insert(
+                        outcome.page_id.0,
+                        NativeMorPageValueState {
+                            observations: 1,
+                            ema_objective_ppm: objective,
+                        },
+                    );
+                }
+            }
+        }
+
+        Ok(evidence)
+    }
+
+    fn effective_hints(
+        &self,
+        caller_hints: &[ExpertRuntimeHint],
+        values: &[NativeMorPageValueEvidence],
+    ) -> Result<Vec<ExpertRuntimeHint>, NativeMorOnlineAdaptationError> {
+        let mut hints = BTreeMap::new();
+        for hint in caller_hints {
+            if hints.insert(hint.page_id.0, *hint).is_some() {
+                return Err(NativeMorOnlineAdaptationError::DuplicateCallerHint(
+                    hint.page_id,
+                ));
+            }
+        }
+
+        for value in values {
+            let base = hints
+                .get(&value.page_id.0)
+                .copied()
+                .unwrap_or(ExpertRuntimeHint {
+                    page_id: value.page_id,
+                    balance_bias_ppm: 0,
+                    residency_penalty_ppm: 0,
+                });
+            hints.insert(
+                value.page_id.0,
+                ExpertRuntimeHint {
+                    page_id: value.page_id,
+                    balance_bias_ppm: bounded_runtime_bias_add(
+                        base.balance_bias_ppm,
+                        value.adaptive_bias_ppm,
+                    ),
+                    residency_penalty_ppm: base.residency_penalty_ppm,
+                },
+            );
+        }
+
+        Ok(hints.into_values().collect())
+    }
+}
+
+fn mean_page_objective(values: &BTreeMap<u32, NativeMorPageValueState>) -> u32 {
+    if values.is_empty() {
+        return 0;
+    }
+    let sum = values
+        .values()
+        .map(|state| state.ema_objective_ppm as u64)
+        .sum::<u64>();
+    (sum / values.len() as u64) as u32
+}
+
+fn adaptive_objective_bias(
+    mean_objective_ppm: u32,
+    page_objective_ppm: u32,
+    policy: NativeMorOnlineAdaptationPolicy,
+) -> i32 {
+    let delta = mean_objective_ppm as i64 - page_objective_ppm as i64;
+    let scaled = delta * policy.objective_gain_ppm as i64 / MOR_SCALE_PPM as i64;
+    scaled.clamp(
+        -(policy.max_bias_adjustment_ppm as i64),
+        policy.max_bias_adjustment_ppm as i64,
+    ) as i32
+}
+
+fn ema_objective_ppm(old: u32, observed: u32, retention_ppm: u32) -> u32 {
+    let retained = old as u64 * retention_ppm as u64;
+    let fresh = observed as u64 * (MOR_SCALE_PPM - retention_ppm) as u64;
+    ((retained + fresh) / MOR_SCALE_PPM as u64) as u32
+}
+
+fn bounded_runtime_bias_add(base: i32, adjustment: i32) -> i32 {
+    (base as i64 + adjustment as i64).clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeMorOnlineAdaptationError {
+    PolicyPpmOutOfRange(u32),
+    DuplicateCallerHint(PageId),
+    OutcomeOutOfRegistry { page_id: PageId, expert_count: u32 },
+    Runtime(NativeMorRuntimeError),
+    Audit(NativeMorRuntimeAuditError),
+}
+
+impl fmt::Display for NativeMorOnlineAdaptationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for NativeMorOnlineAdaptationError {}
