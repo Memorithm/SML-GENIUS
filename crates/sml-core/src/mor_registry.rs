@@ -221,7 +221,7 @@ impl MorRouterRegistry {
             }
 
             for proposal in &router.proposals {
-                if !allowed.iter().any(|page| *page == proposal.page_id) {
+                if !allowed.contains(&proposal.page_id) {
                     return Err(MorRegistryError::UnauthorizedProposal {
                         router_id: router.router_id,
                         page_id: proposal.page_id,
