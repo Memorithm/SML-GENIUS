@@ -60,8 +60,14 @@ fn one_cycle_low_margin_flip_is_held_out_of_recurrent_memory() {
         router(1, &[(1, 900_000), (2, 100_000)]),
     ];
     let first = controller.route_cycle(&engine, &initial, &[]).unwrap();
-    assert_eq!(first.temporal.transition, MorTemporalTransition::Initialized);
-    assert_eq!(controller.controller().previous_route().primary, Some(PageId(1)));
+    assert_eq!(
+        first.temporal.transition,
+        MorTemporalTransition::Initialized
+    );
+    assert_eq!(
+        controller.controller().previous_route().primary,
+        Some(PageId(1))
+    );
 
     let flip = vec![
         router(0, &[(1, 400_000), (2, 520_000)]),
@@ -73,7 +79,10 @@ fn one_cycle_low_margin_flip_is_held_out_of_recurrent_memory() {
     assert_eq!(second.temporal.transition, MorTemporalTransition::Held);
     assert_eq!(second.temporal.pending_primary, Some(PageId(2)));
     assert_eq!(second.temporal.pending_streak, 1);
-    assert_eq!(controller.controller().previous_route().primary, Some(PageId(1)));
+    assert_eq!(
+        controller.controller().previous_route().primary,
+        Some(PageId(1))
+    );
 }
 
 #[test]
@@ -101,7 +110,10 @@ fn repeated_low_margin_flip_is_confirmed() {
         MorTemporalTransition::Confirmed
     );
     assert!(confirmed.temporal.accepted_route_switch);
-    assert_eq!(controller.controller().previous_route().primary, Some(PageId(2)));
+    assert_eq!(
+        controller.controller().previous_route().primary,
+        Some(PageId(2))
+    );
 }
 
 #[test]
@@ -124,7 +136,10 @@ fn high_margin_change_bypasses_temporal_confirmation() {
 
     assert_eq!(report.temporal.transition, MorTemporalTransition::Urgent);
     assert!(report.temporal.accepted_route_switch);
-    assert_eq!(controller.controller().previous_route().primary, Some(PageId(2)));
+    assert_eq!(
+        controller.controller().previous_route().primary,
+        Some(PageId(2))
+    );
 }
 
 #[test]
