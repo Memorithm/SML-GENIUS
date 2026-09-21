@@ -322,8 +322,7 @@ impl BooleanPageRead for BooleanGroupView<'_> {
     fn bit(&self, parameter_index: u64) -> Result<bool, BooleanPageError> {
         let base = self.page.bit(parameter_index)?;
         Ok(base
-            ^ (parameter_index >= self.group.start
-                && parameter_index < self.group.end_exclusive()))
+            ^ (parameter_index >= self.group.start && parameter_index < self.group.end_exclusive()))
     }
 }
 
