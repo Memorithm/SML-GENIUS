@@ -7,9 +7,7 @@ use sml_core::{
         SmlFingerprintPlan,
     },
     mor_controller::MorControllerPolicy,
-    mor_registry::{
-        MorRegistryError, MorRegistryPolicy, MorRouterRegistry, RouterSpecialization,
-    },
+    mor_registry::{MorRegistryError, MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
     mor_runtime::{NativeMorRuntime, NativeMorRuntimeError},
     mor_temporal::{MorTemporalPolicy, MorTemporalTransition},
     BooleanWorkspace, PageId,
@@ -23,11 +21,7 @@ fn atom(bit: u16, expected: bool) -> RouterSignatureAtom {
     }
 }
 
-fn router(
-    id: u32,
-    atoms: Vec<RouterSignatureAtom>,
-    page: u32,
-) -> NativeRouterSpec {
+fn router(id: u32, atoms: Vec<RouterSignatureAtom>, page: u32) -> NativeRouterSpec {
     NativeRouterSpec {
         router_id: RouterId(id),
         atoms,
