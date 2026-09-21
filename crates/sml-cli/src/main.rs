@@ -2,9 +2,9 @@
 
 use sml_core::{
     anf::{AnfMonomial, AnfPolynomial},
-    candidate::{SmlTaskCandidate, TaskCandidateConfig},
     atlas::{AtlasPageManifest, CircuitAtlas},
     audit::validate_non_attention_candidate,
+    candidate::{SmlTaskCandidate, TaskCandidateConfig},
     circuit::{CircuitNodeSpec, CircuitSample, LatentBooleanCircuit, SignalRef},
     forge_topology::ForgeTopologyCandidateV1,
     gf2::{Gf2LinearMap, Gf2Vector},
@@ -380,16 +380,12 @@ fn sml10_smoke() -> Result<(), Box<dyn std::error::Error>> {
         route_lookups = route_lookups.saturating_add(evidence.counters.route_lookups);
         memory_reads = memory_reads.saturating_add(evidence.counters.memory_reads);
         memory_writes = memory_writes.saturating_add(evidence.counters.memory_writes);
-        semantic_route_bits_touched = semantic_route_bits_touched
-            .saturating_add(evidence.semantic_route_bits_touched);
+        semantic_route_bits_touched =
+            semantic_route_bits_touched.saturating_add(evidence.semantic_route_bits_touched);
     }
 
     if exact != holdout.len() as u64 {
-        return Err(format!(
-            "SML-1.0 holdout mismatch: {exact}/{} exact",
-            holdout.len()
-        )
-        .into());
+        return Err(format!("SML-1.0 holdout mismatch: {exact}/{} exact", holdout.len()).into());
     }
 
     println!("SML-1.0 pilot smoke");
@@ -397,7 +393,10 @@ fn sml10_smoke() -> Result<(), Box<dyn std::error::Error>> {
         "route_hard_correct={}/{}",
         training.route.hard_correct, training.route.address_count
     );
-    println!("learned_route_bits={}", training.route_accounting.learned_boolean_bits);
+    println!(
+        "learned_route_bits={}",
+        training.route_accounting.learned_boolean_bits
+    );
     println!("holdout_tasks={exact}/{}", holdout.len());
     println!("trace_records={trace_records}");
     println!("route_lookups={route_lookups}");
