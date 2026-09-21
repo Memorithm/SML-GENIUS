@@ -11,6 +11,7 @@ pub mod composition;
 pub mod context;
 pub mod metric;
 pub mod mor_routing;
+pub mod recurrent;
 pub mod state;
 
 pub use algebra::{
@@ -35,6 +36,11 @@ pub use metric::{
 pub use mor_routing::{
     SemanticExpertSignature, SemanticMorBridge, SemanticMorError, SemanticMorRoute,
     SemanticMorTopK, SemanticRouterSignature,
+};
+pub use recurrent::{
+    run_semantic_recurrent, SemanticHaltReason, SemanticRecurrentOutcome,
+    SemanticRecurrentRunError, SemanticRewriteStep, SemanticRewriteTrace, SemanticRewriter,
+    SemanticStateDelta,
 };
 pub use state::SemanticState;
 
