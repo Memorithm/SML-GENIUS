@@ -277,10 +277,7 @@ pub enum SemanticMorError {
     MissingRouterSignature(RouterId),
     UnknownRouterSignature(RouterId),
     MissingExpertSignature(PageId),
-    ExpertSignatureOutOfRange {
-        page_id: PageId,
-        expert_count: u32,
-    },
+    ExpertSignatureOutOfRange { page_id: PageId, expert_count: u32 },
     ZeroSemanticWidth,
     ArithmeticOverflow,
     Registry(MorRegistryError),
@@ -334,23 +331,19 @@ mod tests {
             vec![
                 SemanticExpertSignature {
                     page_id: PageId(0),
-                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3])
-                        .expect("expert 0"),
+                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3]).expect("expert 0"),
                 },
                 SemanticExpertSignature {
                     page_id: PageId(1),
-                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 4])
-                        .expect("expert 1"),
+                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 4]).expect("expert 1"),
                 },
                 SemanticExpertSignature {
                     page_id: PageId(2),
-                    signature: SemanticBitField::from_set_indices(&[0, 1, 4, 5])
-                        .expect("expert 2"),
+                    signature: SemanticBitField::from_set_indices(&[0, 1, 4, 5]).expect("expert 2"),
                 },
                 SemanticExpertSignature {
                     page_id: PageId(3),
-                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7])
-                        .expect("expert 3"),
+                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7]).expect("expert 3"),
                 },
             ],
             top_k,
@@ -358,7 +351,9 @@ mod tests {
         .expect("bridge")
     }
 
-    fn state_with_routing<const BITS: usize>(routing: SemanticBitField<BITS>) -> SemanticState<BITS> {
+    fn state_with_routing<const BITS: usize>(
+        routing: SemanticBitField<BITS>,
+    ) -> SemanticState<BITS> {
         let mut state = SemanticState::zeroed().expect("state");
         state.routing = routing;
         state
@@ -415,25 +410,21 @@ mod tests {
             vec![
                 SemanticRouterSignature {
                     router_id: RouterId(0),
-                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7])
-                        .expect("router 0"),
+                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7]).expect("router 0"),
                 },
                 SemanticRouterSignature {
                     router_id: RouterId(1),
-                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3])
-                        .expect("router 1"),
+                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3]).expect("router 1"),
                 },
             ],
             vec![
                 SemanticExpertSignature {
                     page_id: PageId(0),
-                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7])
-                        .expect("expert 0"),
+                    signature: SemanticBitField::from_set_indices(&[4, 5, 6, 7]).expect("expert 0"),
                 },
                 SemanticExpertSignature {
                     page_id: PageId(1),
-                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3])
-                        .expect("expert 1"),
+                    signature: SemanticBitField::from_set_indices(&[0, 1, 2, 3]).expect("expert 1"),
                 },
             ],
             SemanticMorTopK::One,
