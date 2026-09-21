@@ -29,6 +29,7 @@ pub mod mor_runtime_sequence_objective;
 pub mod mor_sequence_objective;
 pub mod mor_sequence_train;
 pub mod mor_temporal;
+pub mod mor_temporal_search;
 pub mod routing_train;
 pub mod task_loss;
 pub mod tasks;
