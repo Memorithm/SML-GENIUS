@@ -85,7 +85,7 @@ Current status:
 - [x] SBG-0.1 packed const-generic Semantic BitField reference implementation;
 - [x] SBG-0.1 native V/M/A/R SemanticState payload accounting;
 - [x] SBG-0.2 masked Boolean semantic metric;
-- [ ] SBG-0.3 binding/bundling/permutation;
+- [x] SBG-0.3 binding/bundling/permutation;
 - [ ] SBG-0.4 context meaning mask;
 - [ ] SBG-0.5 ambiguity dynamics;
 - [ ] SBG-0.6 semantic composition;
