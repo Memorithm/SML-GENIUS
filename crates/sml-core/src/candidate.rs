@@ -361,13 +361,11 @@ impl SmlTaskCandidate {
             (PAGE_QUERY_RECALL, TaskEvent::QueryRecall) => Ok(Some(TaskAnswer::Bit(
                 stored_bit.ok_or(TaskCandidateError::MissingStoredBit)?,
             ))),
-            (PAGE_QUERY_KEY, TaskEvent::QueryKey(key)) => {
-                Ok(Some(TaskAnswer::Bit(read_fact(
-                    memory.as_ref(),
-                    key,
-                    counters,
-                )?)))
-            }
+            (PAGE_QUERY_KEY, TaskEvent::QueryKey(key)) => Ok(Some(TaskAnswer::Bit(read_fact(
+                memory.as_ref(),
+                key,
+                counters,
+            )?))),
             (PAGE_QUERY_CONJUNCTION, TaskEvent::QueryConjunction { left, right }) => {
                 let left_value = read_fact(memory.as_ref(), left, counters)?;
                 let right_value = read_fact(memory.as_ref(), right, counters)?;
