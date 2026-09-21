@@ -10,6 +10,7 @@ pub mod bitfield;
 pub mod composition;
 pub mod context;
 pub mod metric;
+pub mod mor_routing;
 pub mod state;
 
 pub use algebra::{
@@ -30,6 +31,10 @@ pub use context::{
 pub use metric::{
     hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
     xnor_similarity, MaskedSemanticScore, SemanticMetricError,
+};
+pub use mor_routing::{
+    SemanticExpertSignature, SemanticMorBridge, SemanticMorError, SemanticMorRoute,
+    SemanticMorTopK, SemanticRouterSignature,
 };
 pub use state::SemanticState;
 
