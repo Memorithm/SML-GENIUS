@@ -1,9 +1,9 @@
 //! First integrated SML-1 task candidate pilot.
 //!
-//! Only event routing is learned in this slice. Task micro-operations and
-//! associative-memory semantics remain fixed reference code. Held-out task
-//! execution therefore validates integration and evidence capture, not learned
-//! task-semantic generalization.
+//! Event routing is learned and selected hard micro-operations can be injected
+//! from task-loss training. Associative-memory semantics remain fixed reference
+//! code. Held-out execution therefore validates bounded learned mechanisms, not
+//! general language-model capability.
 
 use core::fmt;
 
@@ -97,6 +97,7 @@ pub struct SmlTaskCandidate {
     memory_capacity: usize,
     max_payload_bits: usize,
     conjunction_table: TruthTable2,
+    state_update_table: TruthTable2,
 }
 
 impl SmlTaskCandidate {
@@ -104,7 +105,7 @@ impl SmlTaskCandidate {
     pub fn train(
         config: TaskCandidateConfig,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
-        Self::train_with_conjunction(config, TruthTable2::AND)
+        Self::train_with_micro_ops(config, TruthTable2::AND, TruthTable2::RIGHT)
     }
 
     /// Trains event routing while injecting an explicit hard conjunction micro-operation.
@@ -114,6 +115,18 @@ impl SmlTaskCandidate {
     pub fn train_with_conjunction(
         config: TaskCandidateConfig,
         conjunction_table: TruthTable2,
+    ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
+        Self::train_with_micro_ops(config, conjunction_table, TruthTable2::RIGHT)
+    }
+
+    /// Trains event routing while injecting both currently learnable hard micro-operations.
+    ///
+    /// The state-update table receives (previous_state, incoming_value). The
+    /// reference overwrite semantics are therefore the RIGHT projection.
+    pub fn train_with_micro_ops(
+        config: TaskCandidateConfig,
+        conjunction_table: TruthTable2,
+        state_update_table: TruthTable2,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
         if config.memory_capacity == 0 {
             return Err(TaskCandidateError::ZeroMemoryCapacity);
@@ -145,6 +158,7 @@ impl SmlTaskCandidate {
                 memory_capacity: config.memory_capacity,
                 max_payload_bits: config.max_payload_bits,
                 conjunction_table,
+                state_update_table,
             },
             TaskCandidateTrainingReport {
                 route: report,
@@ -157,6 +171,12 @@ impl SmlTaskCandidate {
     #[must_use]
     pub const fn conjunction_table(&self) -> TruthTable2 {
         self.conjunction_table
+    }
+
+    /// Hard state-update table used by the current frozen candidate.
+    #[must_use]
+    pub const fn state_update_table(&self) -> TruthTable2 {
+        self.state_update_table
     }
 
     /// Executes one task through the frozen learned router and retains every event record.
@@ -242,7 +262,8 @@ impl SmlTaskCandidate {
     ) -> Result<Option<TaskAnswer>, TaskCandidateError> {
         match (page.0, event) {
             (PAGE_STORE_BIT, TaskEvent::StoreBit(value)) => {
-                *stored_bit = Some(value);
+                let previous = stored_bit.unwrap_or(false);
+                *stored_bit = Some(self.state_update_table.evaluate(previous, value));
                 Ok(None)
             }
             (PAGE_FACT, TaskEvent::Fact { key, value }) => {

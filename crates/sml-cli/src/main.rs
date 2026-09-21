@@ -14,7 +14,10 @@ use sml_core::{
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
-    task_loss::{evaluate_task_panel, train_conjunction_from_tasks, ConjunctionTaskTrainingConfig},
+    task_loss::{
+        evaluate_task_panel, train_conjunction_from_tasks, train_state_update_from_tasks,
+        ConjunctionTaskTrainingConfig, StateUpdateTaskTrainingConfig,
+    },
     tasks::{development_suite, suite_from_case_id},
     trace::run_recurrent_traced,
     train::{GateTrainingConfig, LatentGate2, TruthTable2},
@@ -83,10 +86,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml12-smoke" => {
+            if let Err(error) = sml12_smoke() {
+                eprintln!("SML-1.2 state-update smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke|sml12-smoke]"
             );
             std::process::exit(2);
         }
@@ -545,6 +554,68 @@ fn sml11_smoke() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!(
         "fixed_and_holdout_exact={}/{}",
+        fixed_eval.exact_tasks, fixed_eval.tasks
+    );
+    Ok(())
+}
+
+fn sml12_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let (learned, training) =
+        train_state_update_from_tasks(StateUpdateTaskTrainingConfig::default())?;
+    let holdout = suite_from_case_id(10_000, 16)?;
+    let learned_eval = evaluate_task_panel(&learned, &holdout)?;
+
+    let (wrong_xor, _) = SmlTaskCandidate::train_with_micro_ops(
+        TaskCandidateConfig::default(),
+        TruthTable2::AND,
+        TruthTable2::XOR,
+    )?;
+    let wrong_eval = evaluate_task_panel(&wrong_xor, &holdout)?;
+
+    let (fixed, _) = SmlTaskCandidate::train(TaskCandidateConfig::default())?;
+    let fixed_eval = evaluate_task_panel(&fixed, &holdout)?;
+
+    if training.gate.final_table != TruthTable2::RIGHT {
+        return Err(format!(
+            "task-loss state update selected table code {} instead of RIGHT projection",
+            training.gate.final_table.code()
+        )
+        .into());
+    }
+    if learned_eval.exact_tasks != learned_eval.tasks {
+        return Err(format!(
+            "learned state-update candidate mismatch: {}/{} exact",
+            learned_eval.exact_tasks, learned_eval.tasks
+        )
+        .into());
+    }
+    if wrong_eval.exact_overwrite_tasks >= learned_eval.exact_overwrite_tasks {
+        return Err("wrong XOR state update did not reduce overwrite accuracy".into());
+    }
+    if fixed_eval.exact_tasks != learned_eval.exact_tasks {
+        return Err("learned state update did not recover the fixed overwrite baseline".into());
+    }
+
+    println!("SML-1.2 state-update smoke");
+    println!("task_training_samples={}", training.task_samples);
+    println!("input_pattern_mask={:#06b}", training.input_pattern_mask);
+    println!("initial_gate_code={}", training.gate.initial_table.code());
+    println!("learned_gate_code={}", training.gate.final_table.code());
+    println!("learned_gate_bits={}", training.learned_boolean_bits);
+    println!(
+        "learned_holdout_exact={}/{}",
+        learned_eval.exact_tasks, learned_eval.tasks
+    );
+    println!(
+        "learned_overwrite_exact={}/{}",
+        learned_eval.exact_overwrite_tasks, learned_eval.overwrite_tasks
+    );
+    println!(
+        "wrong_xor_overwrite_exact={}/{}",
+        wrong_eval.exact_overwrite_tasks, wrong_eval.overwrite_tasks
+    );
+    println!(
+        "fixed_holdout_exact={}/{}",
         fixed_eval.exact_tasks, fixed_eval.tasks
     );
     Ok(())

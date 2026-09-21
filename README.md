@@ -51,16 +51,16 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
 - **sml-core::routing_train**: budgeted latent-bit training that freezes into the existing O(1) direct page router.
 - **sml-core::elastic_weights**: transactional precision/residency/activation planning for elastic weight pages with exact RAM/VRAM and active-set accounting.
-- **sml-core::task_loss**: task-answer training for hard Boolean micro-operations plus held-out panel evaluation.
+- **sml-core::task_loss**: task-answer training for hard Boolean conjunction and overwrite-state micro-operations plus held-out panel evaluation.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
-- **sml-core::candidate**: first integrated SML-1 pilot combining learned hard event routing, bounded memory and per-event evidence.
+- **sml-core::candidate**: integrated SML-1 pilot combining learned hard event routing, injectable learned Boolean micro-operations, bounded memory and per-event evidence.
 - **sml-core::circuit**: fixed-wiring acyclic circuits with jointly trainable hard Boolean gate identities.
 - **sml-core::forge_topology**: strict `sml-topology/v1` parser and independent full-oracle destination requalification.
 - **sml-core::trace**: immutable recurrent-cycle evidence tied directly to execution.
 - **sml-core::tasks**: deterministic SML-1 development tasks with complete symbolic oracles.
 - **sml-core::train**: continuous-latent training of hard two-input Boolean truth tables.
-- **sml-cli**: executable contract, SML-0.x probes, and SML-1.0/SML-1.1 candidate qualification smokes.
+- **sml-cli**: executable contract, SML-0.x probes, and SML-1.0 through SML-1.2 candidate qualification smokes.
 - **docs/SML-0-SPEC.md**: executable SML-0 architecture boundary.
 - **docs/SML-0.1-ALGEBRA-MEMORY-ATLAS.md**: reference algebra/memory/page semantics.
 - **docs/SML-0.2-TRACE-TASKS.md**: recurrent trace and deterministic SML-1 task contract.
@@ -71,6 +71,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/SML-0.7-ELASTIC-WEIGHTS.md**: deterministic elastic precision, residency, activation and plan/commit boundary.
 - **docs/SML-1.0-TASK-CANDIDATE.md**: first integrated learned-routing task pilot and evidence boundaries.
 - **docs/SML-1.1-TASK-LOSS-GATE.md**: first micro-operation learned from task answers with explicit semantic controls.
+- **docs/SML-1.2-STATE-UPDATE.md**: overwrite-state transition learned from task answers with complete state/input coverage.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
@@ -90,6 +91,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
     cargo run -p sml-cli -- sml07-smoke
     cargo run -p sml-cli -- sml10-smoke
     cargo run -p sml-cli -- sml11-smoke
+    cargo run -p sml-cli -- sml12-smoke
 
 ## Scientific discipline
 

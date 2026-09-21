@@ -1,7 +1,7 @@
 use sml_core::{
     tasks::{
         copy_after_marker, development_suite, distractor_rejection, keyed_fact_recall,
-        two_fact_conjunction, TaskAnswer,
+        overwrite_bit_recall, two_fact_conjunction, TaskAnswer,
     },
     trace::{run_recurrent_traced, TraceValidationError},
     BooleanWorkspace, HaltingPolicy, PageId, ReasoningKernel, ReasoningStep,
@@ -107,7 +107,7 @@ fn trace_rejects_hidden_pairwise_work() {
 #[test]
 fn development_task_suite_has_complete_answers() {
     let suite = development_suite(64).unwrap();
-    assert_eq!(suite.len(), 320);
+    assert_eq!(suite.len(), 384);
     for instance in &suite {
         assert!(instance.oracle_matches().unwrap());
     }
@@ -123,6 +123,7 @@ fn task_generation_is_reproducible() {
         copy_after_marker(42, 7).unwrap(),
         copy_after_marker(42, 7).unwrap()
     );
+    assert_eq!(overwrite_bit_recall(42, 7), overwrite_bit_recall(42, 7));
 }
 
 #[test]

@@ -9,6 +9,7 @@ use core::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskKind {
     DelayedBitRecall,
+    OverwriteBitRecall,
     KeyedFactRecall,
     CopyAfterMarker,
     TwoFactConjunction,
@@ -73,6 +74,34 @@ pub fn delayed_bit_recall(case_id: u64, delay: usize) -> TaskInstance {
         case_id,
         events,
         expected: TaskAnswer::Bit(value),
+    }
+}
+
+/// Overwrites one stored bit and recalls the final state.
+///
+/// Across the canonical development range this task exposes all four
+/// (previous_state, incoming_value) combinations required to identify the
+/// overwrite transition rather than merely fitting first-write behavior.
+#[must_use]
+pub fn overwrite_bit_recall(case_id: u64, delay: usize) -> TaskInstance {
+    let first = deterministic_bit(case_id, 41);
+    let second = deterministic_bit(case_id, 42);
+    let mut events = Vec::with_capacity(delay.saturating_mul(2) + 3);
+    events.push(TaskEvent::StoreBit(first));
+    for index in 0..delay {
+        events.push(TaskEvent::Distractor(index as u16));
+    }
+    events.push(TaskEvent::StoreBit(second));
+    for index in 0..delay {
+        events.push(TaskEvent::Distractor((16_384 + index) as u16));
+    }
+    events.push(TaskEvent::QueryRecall);
+
+    TaskInstance {
+        kind: TaskKind::OverwriteBitRecall,
+        case_id,
+        events,
+        expected: TaskAnswer::Bit(second),
     }
 }
 
@@ -201,10 +230,11 @@ pub fn suite_from_case_id(
     let end_case_id = start_case_id
         .checked_add(cases_per_kind as u64)
         .ok_or(TaskError::CaseIdOverflow)?;
-    let mut suite = Vec::with_capacity((cases_per_kind as usize).saturating_mul(5));
+    let mut suite = Vec::with_capacity((cases_per_kind as usize).saturating_mul(6));
     for case_id in start_case_id..end_case_id {
         let span = (case_id % 16) as usize;
         suite.push(delayed_bit_recall(case_id, span));
+        suite.push(overwrite_bit_recall(case_id, span));
         suite.push(keyed_fact_recall(case_id, span)?);
         suite.push(copy_after_marker(case_id, 1 + (case_id % 8) as usize)?);
         suite.push(two_fact_conjunction(case_id, span)?);
@@ -221,7 +251,7 @@ pub fn development_suite(cases_per_kind: u32) -> Result<Vec<TaskInstance>, TaskE
 /// Independent complete-answer oracle.
 pub fn solve_task(instance: &TaskInstance) -> Result<TaskAnswer, TaskError> {
     match instance.kind {
-        TaskKind::DelayedBitRecall => {
+        TaskKind::DelayedBitRecall | TaskKind::OverwriteBitRecall => {
             let query = find_event(&instance.events, |event| {
                 matches!(event, TaskEvent::QueryRecall)
             })

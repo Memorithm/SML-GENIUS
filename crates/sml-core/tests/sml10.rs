@@ -35,7 +35,7 @@ fn holdout_task_panel_executes_exactly_with_full_event_traces() {
     let (candidate, _) = SmlTaskCandidate::train(TaskCandidateConfig::default()).unwrap();
     let holdout = suite_from_case_id(10_000, 64).unwrap();
 
-    assert_eq!(holdout.len(), 320);
+    assert_eq!(holdout.len(), 384);
     for instance in &holdout {
         let evidence = candidate.execute(instance).unwrap();
         assert!(
