@@ -115,8 +115,8 @@ pub fn build_semantic_store<const BITS: usize>(
     let record_count =
         u64::try_from(records.len()).map_err(|_| SemanticStoreError::LayoutOverflow)?;
     let layout = store_layout::<BITS>(record_count)?;
-    let file_len = usize::try_from(layout.file_bytes)
-        .map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
+    let file_len =
+        usize::try_from(layout.file_bytes).map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
     let mut bytes = vec![0_u8; file_len];
 
     let mut ordered: Vec<(u64, &SemanticState<BITS>)> =
@@ -332,10 +332,7 @@ fn parse_header<const BITS: usize>(
     })
 }
 
-fn validate_index(
-    bytes: &[u8],
-    header: SemanticStoreHeader,
-) -> Result<(), SemanticStoreError> {
+fn validate_index(bytes: &[u8], header: SemanticStoreHeader) -> Result<(), SemanticStoreError> {
     let index_bytes = header
         .record_count
         .checked_mul(u64::from(SEMANTIC_STORE_INDEX_ENTRY_BYTES))
@@ -479,8 +476,8 @@ fn decode_record<const BITS: usize>(
     bytes: &[u8],
     entry: SemanticStoreIndexEntry,
 ) -> Result<SemanticState<BITS>, SemanticStoreError> {
-    let start =
-        usize::try_from(entry.record_offset).map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
+    let start = usize::try_from(entry.record_offset)
+        .map_err(|_| SemanticStoreError::AddressSpaceOverflow)?;
     let payload_len = entry.payload_bytes as usize;
     let end = start
         .checked_add(payload_len)
@@ -608,26 +605,44 @@ pub enum SemanticStoreError {
     InvalidMagic,
     UnsupportedVersion(u16),
     InvalidHeaderBytes(u16),
-    DimensionMismatch { expected: usize, actual: u32 },
+    DimensionMismatch {
+        expected: usize,
+        actual: u32,
+    },
     InvalidFieldCount,
     InvalidWordBytes,
     InvalidIndexEntryBytes,
     UnsupportedFlags,
-    HeaderChecksumMismatch { expected: u32, actual: u32 },
+    HeaderChecksumMismatch {
+        expected: u32,
+        actual: u32,
+    },
     HeaderRoundTrip,
     DuplicateSemanticId(u64),
     UnsortedIndex,
-    IndexOutOfRange { position: u64, record_count: u64 },
+    IndexOutOfRange {
+        position: u64,
+        record_count: u64,
+    },
     IndexOverlapsRecords,
     InvalidAlignment,
-    InvalidRecordOffset { expected: u64, actual: u64 },
-    PayloadLength { expected: u32, actual: u32 },
+    InvalidRecordOffset {
+        expected: u64,
+        actual: u64,
+    },
+    PayloadLength {
+        expected: u32,
+        actual: u32,
+    },
     RecordChecksumMismatch {
         semantic_id: u64,
         expected: u32,
         actual: u32,
     },
-    FileLength { expected: u64, actual: u64 },
+    FileLength {
+        expected: u64,
+        actual: u64,
+    },
     LayoutOverflow,
     AddressSpaceOverflow,
     TruncatedFile,
