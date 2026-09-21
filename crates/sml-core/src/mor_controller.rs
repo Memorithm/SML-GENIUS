@@ -233,7 +233,8 @@ impl MorController {
             .route(&adjusted_routers, &adjusted_hints, &self.previous)
             .map_err(MorControllerError::Mor)?;
         let new_primary = decision.ranked_experts.first().map(|expert| expert.page_id);
-        let route_switch = matches!((old_primary, new_primary), (Some(old), Some(new)) if old != new);
+        let route_switch =
+            matches!((old_primary, new_primary), (Some(old), Some(new)) if old != new);
 
         update_loads(
             &mut self.router_load_ppm,
@@ -279,10 +280,7 @@ impl MorController {
             route_switch,
             precision_escalation_requested: decision.request_precision_escalation,
             router_load_spread_ppm: load_spread_router(&self.router_load_ppm, &router_ids),
-            expert_load_spread_ppm: load_spread_expert(
-                &self.expert_load_ppm,
-                &candidate_pages,
-            ),
+            expert_load_spread_ppm: load_spread_expert(&self.expert_load_ppm, &candidate_pages),
         };
 
         Ok(MorCycleReport {
@@ -344,8 +342,7 @@ fn adaptive_adjustment(mean: u32, load: u32, gain_ppm: u32, cap_ppm: u32) -> i32
 }
 
 fn bounded_bias_add(base: i32, adjustment: i32) -> i32 {
-    (base as i64 + adjustment as i64)
-        .clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
+    (base as i64 + adjustment as i64).clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
 }
 
 fn update_loads(
