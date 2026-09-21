@@ -225,5 +225,7 @@ fn invalid_runtime_hint_fails_closed_through_runtime_objective() {
         }],
     }];
 
-    assert!(NativeMorRuntimeSequenceObjective::evaluate(&runtime(), &sequences, policy(0)).is_err());
+    assert!(
+        NativeMorRuntimeSequenceObjective::evaluate(&runtime(), &sequences, policy(0)).is_err()
+    );
 }
