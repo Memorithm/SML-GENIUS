@@ -33,6 +33,7 @@ The following are reference-semantics milestones, not model-quality results:
 - [x] fixed-wiring multi-gate Boolean circuit trainability with exact hard inference;
 - [x] learned direct-routing bits under explicit structural budgets with hard O(1) freeze;
 - [x] transactional elastic-weight precision/residency/activation planner with exact RAM/VRAM and active-set accounting;
+- [x] versioned ElasticXxx validation/projection adapter for `sml.elastic-weight-plan@1.0.0`, qualified without physical actuation claims;
 - [ ] learned wiring trainability remains a separate experiment;
 - [x] discrete topology search through Forge `sml-topology/v1` with disjoint development/final-holdout rows;
 - [x] independent destination-side Forge candidate parsing and full-oracle requalification;
@@ -59,7 +60,7 @@ The following are integration milestones, not satisfaction of the SML-1 quality 
 1. Extend task-loss training from conjunction and overwrite-state update into recall/copy control and remaining micro-operation semantics while preserving the same holdout boundary.
 2. Run fixed-routing, no-memory and memory-capacity ablations before claiming a learned mechanism advantage.
 3. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
-4. Connect the SML-0.7 elastic-weight planner to an ElasticXxx runtime adapter with real page materialization and VERIFY/ROLLBACK evidence.
+4. Build physical elastic-weight page materialization plus VERIFY/ROLLBACK behind the qualified ElasticXxx SML plan adapter; the validation/projection boundary is complete, physical actuation is not.
 5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
 6. Evaluate learned wiring separately against fixed/Forge-selected topology, then promote stable reusable primitives to SciRust.
 
