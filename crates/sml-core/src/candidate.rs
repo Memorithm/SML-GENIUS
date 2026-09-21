@@ -1,9 +1,9 @@
 //! First integrated SML-1 task candidate pilot.
 //!
-//! Only event routing is learned in this slice. Task micro-operations and
-//! associative-memory semantics remain fixed reference code. Held-out task
-//! execution therefore validates integration and evidence capture, not learned
-//! task-semantic generalization.
+//! The default SML-1.0 path learns event routing and uses bounded direct
+//! associative memory. Explicit fixed-routing and no-associative-memory modes
+//! are also available for controlled ablations. Task execution always retains
+//! the same evidence surface.
 
 use core::fmt;
 
@@ -34,10 +34,20 @@ const PAGE_PAYLOAD_BIT: u32 = 7;
 const PAGE_DISTRACTOR: u32 = 8;
 const PAGE_NOOP: u32 = 9;
 
+/// Keyed associative-memory behavior used by controlled SML-1 ablations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssociativeMemoryMode {
+    /// Normal bounded direct-address memory with fail-closed collisions.
+    Direct,
+    /// No keyed memory state: writes are discarded and reads deterministically return false.
+    DisabledZeroRead,
+}
+
 /// Structural and optimization limits for the first integrated task candidate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TaskCandidateConfig {
     pub memory_capacity: usize,
+    pub memory_mode: AssociativeMemoryMode,
     pub max_payload_bits: usize,
     pub route_budget: RouteLearningBudget,
     pub route_training: RouteTrainingConfig,
@@ -47,6 +57,7 @@ impl Default for TaskCandidateConfig {
     fn default() -> Self {
         Self {
             memory_capacity: 65_536,
+            memory_mode: AssociativeMemoryMode::Direct,
             max_payload_bits: 4_096,
             route_budget: RouteLearningBudget {
                 max_address_width: EVENT_ADDRESS_WIDTH,
@@ -95,6 +106,7 @@ pub struct SmlTaskCandidate {
     router: DirectRouteTable,
     route_accounting: RouteLearningAccounting,
     memory_capacity: usize,
+    memory_mode: AssociativeMemoryMode,
     max_payload_bits: usize,
     conjunction_table: TruthTable2,
 }
@@ -115,12 +127,7 @@ impl SmlTaskCandidate {
         config: TaskCandidateConfig,
         conjunction_table: TruthTable2,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
-        if config.memory_capacity == 0 {
-            return Err(TaskCandidateError::ZeroMemoryCapacity);
-        }
-        if config.max_payload_bits == 0 {
-            return Err(TaskCandidateError::ZeroPayloadBudget);
-        }
+        validate_candidate_config(config)?;
 
         let mut router = LatentDirectRouter::new(
             EVENT_ADDRESS_WIDTH,
@@ -143,6 +150,7 @@ impl SmlTaskCandidate {
                 router: frozen,
                 route_accounting,
                 memory_capacity: config.memory_capacity,
+                memory_mode: config.memory_mode,
                 max_payload_bits: config.max_payload_bits,
                 conjunction_table,
             },
@@ -159,16 +167,57 @@ impl SmlTaskCandidate {
         self.conjunction_table
     }
 
+    /// Constructs the identical event map as fixed metadata rather than learned parameters.
+    pub fn fixed_route_with_conjunction(
+        config: TaskCandidateConfig,
+        conjunction_table: TruthTable2,
+    ) -> Result<Self, TaskCandidateError> {
+        validate_candidate_config(config)?;
+
+        let router = DirectRouteTable::new(EVENT_ADDRESS_WIDTH, routing_oracle().to_vec())?;
+        let route_accounting = RouteLearningAccounting {
+            entry_count: ROUTE_ENTRY_COUNT as u64,
+            page_count: MICRO_OP_PAGE_COUNT,
+            bits_per_route: 4,
+            learned_boolean_bits: 0,
+            latent_training_scalars: 0,
+        };
+
+        Ok(Self {
+            router,
+            route_accounting,
+            memory_capacity: config.memory_capacity,
+            memory_mode: config.memory_mode,
+            max_payload_bits: config.max_payload_bits,
+            conjunction_table,
+        })
+    }
+
+    /// Route accounting distinguishes learned parameters from fixed route metadata.
+    #[must_use]
+    pub const fn route_accounting(&self) -> RouteLearningAccounting {
+        self.route_accounting
+    }
+
+    /// Associative-memory mode used by this frozen candidate.
+    #[must_use]
+    pub const fn memory_mode(&self) -> AssociativeMemoryMode {
+        self.memory_mode
+    }
+
     /// Executes one task through the frozen learned router and retains every event record.
     pub fn execute(
         &self,
         instance: &TaskInstance,
     ) -> Result<TaskExecutionEvidence, TaskCandidateError> {
-        let mut memory = BoundedAssociativeMemory::new(
-            self.memory_capacity,
-            1,
-            ReplacementPolicy::RejectCollision,
-        )?;
+        let mut memory = match self.memory_mode {
+            AssociativeMemoryMode::Direct => Some(BoundedAssociativeMemory::new(
+                self.memory_capacity,
+                1,
+                ReplacementPolicy::RejectCollision,
+            )?),
+            AssociativeMemoryMode::DisabledZeroRead => None,
+        };
         let mut counters = ExecutionCounters::default();
         let mut stored_bit = None;
         let mut copy_active = false;
@@ -234,7 +283,7 @@ impl SmlTaskCandidate {
         &self,
         page: PageId,
         event: TaskEvent,
-        memory: &mut BoundedAssociativeMemory,
+        memory: &mut Option<BoundedAssociativeMemory>,
         counters: &mut ExecutionCounters,
         stored_bit: &mut Option<bool>,
         copy_active: &mut bool,
@@ -246,6 +295,9 @@ impl SmlTaskCandidate {
                 Ok(None)
             }
             (PAGE_FACT, TaskEvent::Fact { key, value }) => {
+                let Some(memory) = memory.as_mut() else {
+                    return Ok(None);
+                };
                 let outcome =
                     memory.write(key as u64, BooleanWorkspace::from_bits(&[value]), counters)?;
                 match outcome {
@@ -282,11 +334,15 @@ impl SmlTaskCandidate {
                 stored_bit.ok_or(TaskCandidateError::MissingStoredBit)?,
             ))),
             (PAGE_QUERY_KEY, TaskEvent::QueryKey(key)) => {
-                Ok(Some(TaskAnswer::Bit(read_fact(memory, key, counters)?)))
+                Ok(Some(TaskAnswer::Bit(read_fact(
+                    memory.as_ref(),
+                    key,
+                    counters,
+                )?)))
             }
             (PAGE_QUERY_CONJUNCTION, TaskEvent::QueryConjunction { left, right }) => {
-                let left_value = read_fact(memory, left, counters)?;
-                let right_value = read_fact(memory, right, counters)?;
+                let left_value = read_fact(memory.as_ref(), left, counters)?;
+                let right_value = read_fact(memory.as_ref(), right, counters)?;
                 Ok(Some(TaskAnswer::Bit(
                     self.conjunction_table.evaluate(left_value, right_value),
                 )))
@@ -303,10 +359,13 @@ impl SmlTaskCandidate {
 }
 
 fn read_fact(
-    memory: &BoundedAssociativeMemory,
+    memory: Option<&BoundedAssociativeMemory>,
     key: u16,
     counters: &mut ExecutionCounters,
 ) -> Result<bool, TaskCandidateError> {
+    let Some(memory) = memory else {
+        return Ok(false);
+    };
     match memory.read(key as u64, counters) {
         ReadOutcome::Hit { value, .. } => {
             value.get(0).ok_or(TaskCandidateError::CorruptMemoryValue)
@@ -329,6 +388,16 @@ const fn event_address(event: TaskEvent) -> u8 {
         TaskEvent::QueryConjunction { .. } => 7,
         TaskEvent::QueryCopy => 8,
     }
+}
+
+fn validate_candidate_config(config: TaskCandidateConfig) -> Result<(), TaskCandidateError> {
+    if config.memory_mode == AssociativeMemoryMode::Direct && config.memory_capacity == 0 {
+        return Err(TaskCandidateError::ZeroMemoryCapacity);
+    }
+    if config.max_payload_bits == 0 {
+        return Err(TaskCandidateError::ZeroPayloadBudget);
+    }
+    Ok(())
 }
 
 fn routing_oracle() -> [PageId; ROUTE_ENTRY_COUNT] {
