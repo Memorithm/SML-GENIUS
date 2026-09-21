@@ -125,6 +125,32 @@ impl PackedBooleanPage {
         Ok(BooleanProbeView { page: self, probe })
     }
 
+    /// Creates a read-only view that toggles every parameter in one contiguous group.
+    pub fn group_view(
+        &self,
+        group: BooleanPageGroup,
+    ) -> Result<BooleanGroupView<'_>, BooleanPageError> {
+        self.validate_group(group)?;
+        Ok(BooleanGroupView { page: self, group })
+    }
+
+    /// Creates a read-only view that toggles an explicit, validated set of indexes.
+    pub fn index_flip_view(
+        &self,
+        parameter_indexes: &[u64],
+    ) -> Result<BooleanIndexFlipView<'_>, BooleanPageError> {
+        if parameter_indexes.is_empty() {
+            return Err(BooleanPageError::EmptyCommit);
+        }
+        let mut indexes = parameter_indexes.to_vec();
+        indexes.sort_unstable();
+        self.validate_indexes(&indexes)?;
+        Ok(BooleanIndexFlipView {
+            page: self,
+            indexes,
+        })
+    }
+
     /// Atomically commits verified hard flips.
     ///
     /// All indexes, generation state, and train/holdout evidence are validated
@@ -148,19 +174,7 @@ impl PackedBooleanPage {
 
         let mut indexes = parameter_indexes.to_vec();
         indexes.sort_unstable();
-        for index in indexes.iter().copied() {
-            if index >= self.parameter_count {
-                return Err(BooleanPageError::ParameterOutOfRange {
-                    parameter_index: index,
-                    parameter_count: self.parameter_count,
-                });
-            }
-        }
-        for pair in indexes.windows(2) {
-            if pair[0] == pair[1] {
-                return Err(BooleanPageError::DuplicateCommitIndex(pair[0]));
-            }
-        }
+        self.validate_indexes(&indexes)?;
 
         let decision = evidence
             .decide(policy)
@@ -208,6 +222,23 @@ impl PackedBooleanPage {
                 group,
                 parameter_count: self.parameter_count,
             });
+        }
+        Ok(())
+    }
+
+    fn validate_indexes(&self, indexes: &[u64]) -> Result<(), BooleanPageError> {
+        for index in indexes.iter().copied() {
+            if index >= self.parameter_count {
+                return Err(BooleanPageError::ParameterOutOfRange {
+                    parameter_index: index,
+                    parameter_count: self.parameter_count,
+                });
+            }
+        }
+        for pair in indexes.windows(2) {
+            if pair[0] == pair[1] {
+                return Err(BooleanPageError::DuplicateCommitIndex(pair[0]));
+            }
         }
         Ok(())
     }
@@ -269,6 +300,51 @@ impl BooleanPageRead for BooleanProbeView<'_> {
             .contains_parameter(parameter_index)
             .map_err(BooleanPageError::Probe)?;
         Ok(base ^ toggled)
+    }
+}
+
+/// Ephemeral view that toggles one complete contiguous page-local group.
+#[derive(Debug, Clone, Copy)]
+pub struct BooleanGroupView<'a> {
+    page: &'a PackedBooleanPage,
+    group: BooleanPageGroup,
+}
+
+impl BooleanPageRead for BooleanGroupView<'_> {
+    fn page_id(&self) -> PageId {
+        self.page.page_id
+    }
+
+    fn parameter_count(&self) -> u64 {
+        self.page.parameter_count
+    }
+
+    fn bit(&self, parameter_index: u64) -> Result<bool, BooleanPageError> {
+        let base = self.page.bit(parameter_index)?;
+        Ok(base
+            ^ (parameter_index >= self.group.start && parameter_index < self.group.end_exclusive()))
+    }
+}
+
+/// Ephemeral view that toggles a validated sorted set of explicit indexes.
+#[derive(Debug, Clone)]
+pub struct BooleanIndexFlipView<'a> {
+    page: &'a PackedBooleanPage,
+    indexes: Vec<u64>,
+}
+
+impl BooleanPageRead for BooleanIndexFlipView<'_> {
+    fn page_id(&self) -> PageId {
+        self.page.page_id
+    }
+
+    fn parameter_count(&self) -> u64 {
+        self.page.parameter_count
+    }
+
+    fn bit(&self, parameter_index: u64) -> Result<bool, BooleanPageError> {
+        let base = self.page.bit(parameter_index)?;
+        Ok(base ^ self.indexes.binary_search(&parameter_index).is_ok())
     }
 }
 

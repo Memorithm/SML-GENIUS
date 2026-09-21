@@ -13,6 +13,7 @@ pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
 pub mod boolean_integral;
+pub mod boolean_learning;
 pub mod boolean_overlapping;
 pub mod boolean_page;
 pub mod candidate;
