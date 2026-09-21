@@ -12,9 +12,9 @@ use crate::{
 };
 
 use super::{
-    bind, compose_relation, derive_context_mask, masked_hamming_distance, unbind,
-    ContextMaskError, SemanticAlgebraError, SemanticBitField, SemanticBitFieldError,
-    SemanticCompositionError, SemanticMetricError, SemanticPolarity, SemanticRoleSet,
+    bind, compose_relation, derive_context_mask, masked_hamming_distance, unbind, ContextMaskError,
+    SemanticAlgebraError, SemanticBitField, SemanticBitFieldError, SemanticCompositionError,
+    SemanticMetricError, SemanticPolarity, SemanticRoleSet,
 };
 
 /// Fixed width used only by the deterministic SBG-0.11 fixture suite.
@@ -142,8 +142,7 @@ fn probe_negation(
     let chase = fixture_chase()?;
     let mouse = fixture_mouse()?;
 
-    let affirmed =
-        compose_relation(roles, &cat, &chase, &mouse, SemanticPolarity::Affirmed)?;
+    let affirmed = compose_relation(roles, &cat, &chase, &mouse, SemanticPolarity::Affirmed)?;
     let negated = compose_relation(roles, &cat, &chase, &mouse, SemanticPolarity::Negated)?;
 
     let content_distance = affirmed.content_distance(&negated);
@@ -161,8 +160,8 @@ fn probe_negation(
     })
 }
 
-fn probe_reference_correspondence(
-) -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError> {
+fn probe_reference_correspondence() -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError>
+{
     // A reference role binds one entity and must recover it exactly with the
     // matching role while a deliberately wrong role is a negative control.
     let reference_role = field(&[1, 7, 19, 67])?;
@@ -186,8 +185,7 @@ fn probe_reference_correspondence(
     })
 }
 
-fn probe_controlled_polysemy(
-) -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError> {
+fn probe_controlled_polysemy() -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError> {
     // Mnemonic fixture: one anchor is compared to "finance" and "river"
     // candidates. Independently derived context masks must reverse the nearest
     // candidate. This is a geometry control, not a lexical-language claim.
@@ -230,8 +228,7 @@ fn probe_semantic_composition(
     let observe = field(&[1, 5, 10, 14, 18, 22, 65, 69, 74, 78, 82, 86])?;
     let mouse = fixture_mouse()?;
 
-    let chase_relation =
-        compose_relation(roles, &cat, &chase, &mouse, SemanticPolarity::Affirmed)?;
+    let chase_relation = compose_relation(roles, &cat, &chase, &mouse, SemanticPolarity::Affirmed)?;
     let observe_relation =
         compose_relation(roles, &cat, &observe, &mouse, SemanticPolarity::Affirmed)?;
 
@@ -248,18 +245,23 @@ fn probe_semantic_composition(
     })
 }
 
-fn probe_associative_retrieval(
-) -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError> {
+fn probe_associative_retrieval() -> Result<LinguisticProbeResult, LinguisticMicroBenchmarkError> {
     let concept = field(&[0, 3, 8, 13, 21, 34, 55, 89])?;
     let expected = field_to_workspace(&concept)?;
 
-    let mut memory =
-        BoundedAssociativeMemory::new(16, LINGUISTIC_MICRO_BENCH_BITS, ReplacementPolicy::RejectCollision)?;
+    let mut memory = BoundedAssociativeMemory::new(
+        16,
+        LINGUISTIC_MICRO_BENCH_BITS,
+        ReplacementPolicy::RejectCollision,
+    )?;
     let mut counters = ExecutionCounters::default();
     let key = 0x5342_4700_0011_u64;
 
     let write = memory.write(key, expected.clone(), &mut counters)?;
-    let write_ok = matches!(write, WriteOutcome::Inserted { .. } | WriteOutcome::Updated { .. });
+    let write_ok = matches!(
+        write,
+        WriteOutcome::Inserted { .. } | WriteOutcome::Updated { .. }
+    );
 
     let read = memory.read(key, &mut counters);
     let retrieval_distance = match read {
