@@ -3,10 +3,7 @@ use sml_core::semantic::{
     SemanticKernelKind, SemanticSimdError,
 };
 
-fn patterned_field<const BITS: usize>(
-    stride: usize,
-    offset: usize,
-) -> SemanticBitField<BITS> {
+fn patterned_field<const BITS: usize>(stride: usize, offset: usize) -> SemanticBitField<BITS> {
     let indices: Vec<usize> = (offset..BITS).step_by(stride).collect();
     SemanticBitField::from_set_indices(&indices).unwrap()
 }
