@@ -142,29 +142,31 @@ The roadmap content originally described as SML-0.7 through SML-0.20 maps in ord
 
 ## Current work
 
+Completed:
+
+- SBG-0.1 Semantic BitField Core merged on main as `c079acafea90549f6a97dfd8956a9f16fb58641f`.
+- Its CI passed format, check, clippy, workspace tests and all existing SML smoke probes.
+
 Active development branch:
 
 ```text
-research/sbg-0.1-semantic-bitfield
+research/sbg-0.2-contextual-metric
 ```
 
-First implementation target:
+Current implementation target:
 
 ```text
-crates/sml-core/src/semantic/
-  mod.rs
-  bitfield.rs
-  state.rs
+crates/sml-core/src/semantic/metric.rs
 ```
 
-Definition of done for SBG-0.1:
+Definition of done for SBG-0.2:
 
-1. the semantic module is exported from `sml-core`;
-2. width-zero and malformed-padding inputs fail closed;
-3. fields are packed in `u64` words;
-4. in-place Boolean operations perform no allocation;
-5. V/M/A/R have one compile-time logical dimension;
-6. 16,384-bit V/M/A/R payload accounting is exactly 8 KiB;
+1. exact full-field Hamming and XNOR counts;
+2. exact masked Hamming and masked XNOR counts;
+3. zero-active-bit context masks fail closed;
+4. integer-only ppm reporting when normalization is required;
+5. masked comparison constructs no temporary semantic field;
+6. a deterministic regression proves that two context masks can reverse the nearest semantic candidate while the unmasked distances remain tied;
 7. `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass in CI.
 
 ## Scientific boundary
