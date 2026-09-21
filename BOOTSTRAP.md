@@ -161,43 +161,34 @@ Completed:
 Active development branch:
 
 ```text
-research/sbg-0.12c-codegen-audit
+research/sbg-0.13a-store-format
 ```
 
 Current implementation target:
 
 ```text
-scripts/audit-sbg012-codegen.sh
+crates/sml-core/src/semantic/store_format.rs
 ```
 
-SBG-0.11 linguistic micro-benchmark was merged through PR #51 on main as
-`9da53048e4e3b4ad56adbc566b7bbbe29f2485a7`.
+SBG-0.12 ARM64 semantic-kernel qualification is complete. The final
+code-generation audit merged through PR #55 as
+`ef96cd721124ca53960b254814a84ca949a82bf1`. Frozen evidence is recorded in
+`docs/SBG-0.12-ARM64-QUALIFICATION.md`.
 
-SBG-0.12a packed-word qualification merged on main through PR #53 as
-`7f9a6478391c4df6e6c34d9b3eeb55c7fc5e5c66`.
+Definition of done for SBG-0.13a:
 
-SBG-0.12b reproducible ARM64 benchmark merged on main through PR #54 as
-`7e4b24768fd0f0bb4405421fcba6e2526bb379d9`.
+1. versioned little-endian store header with explicit dimension and layout metadata;
+2. strictly sorted fixed-width semantic-ID index suitable for binary search in mapped bytes;
+3. page-aligned record offsets and deterministic record stride;
+4. V/M/A/R payload encoding using the existing packed u64 representation;
+5. CRC32C header and lazy per-record corruption detection;
+6. borrowed parser that does not reconstruct the complete store in RAM;
+7. deterministic tests for round trip, non-word-aligned widths, default 16,384-bit layout, absent IDs, duplicate IDs, dimension mismatch and corruption;
+8. complete repository format/check/clippy/test/smoke gates remain green.
 
-The first recorded self-hosted AArch64 run used 32 warm-ups and 512 measured
-iterations at 16,384 logical bits. It measured 49,400 ns/iteration for the
-independent bit-by-bit oracle and 2,105 ns/iteration for the packed-u64 kernel,
-an observed ratio of 23.463944x for that single run. This is not a stable
-distribution and does not by itself establish NEON or other SIMD code generation.
-
-Definition of done for SBG-0.12c:
-
-1. retain the crate-wide `#![forbid(unsafe_code)]` boundary;
-2. expose a fixed-width, non-inlined 16,384-bit audit entry point without changing semantics;
-3. emit optimized release assembly from the exact Rust 1.89 toolchain used by CI;
-4. locate the audit symbol deterministically and report instruction-family counts plus the inspected assembly snippet;
-5. distinguish packed-word acceleration from actual compiler-generated architecture-specific vector instructions;
-6. do not fail merely because a specific vector instruction is absent; absence is valid evidence;
-7. freeze the next strategy only after the ARM64 code-generation evidence is observed.
-
-The broader SBG-0.12 milestone remains open until this code-generation audit
-determines whether safe compiler auto-vectorization is sufficient or whether a
-separate safe SIMD strategy needs to be evaluated.
+SBG-0.13b will bind this exact byte format to a read-only OS-backed mapping
+mechanism without weakening the safe-Rust boundary unless evidence demonstrates
+that no suitable safe abstraction exists.
 
 ## Scientific boundary
 
