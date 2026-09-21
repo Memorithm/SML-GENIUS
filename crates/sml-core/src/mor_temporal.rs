@@ -84,6 +84,16 @@ pub struct MorTemporalReport {
     pub accepted_route_switch: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MorTemporalReportContext {
+    transition: MorTemporalTransition,
+    observed_primary: PageId,
+    stable_primary: PageId,
+    required_streak: u32,
+    route_margin_ppm: u32,
+    accepted_route_switch: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MorTemporalDenoiser {
     policy: MorTemporalPolicy,
@@ -142,13 +152,15 @@ impl MorTemporalDenoiser {
             self.stable = candidate;
             self.clear_pending();
             return Ok(self.report(
-                MorTemporalTransition::Initialized,
-                observed_primary,
-                observed_primary,
-                1,
-                route_margin_ppm,
+                MorTemporalReportContext {
+                    transition: MorTemporalTransition::Initialized,
+                    observed_primary,
+                    stable_primary: observed_primary,
+                    required_streak: 1,
+                    route_margin_ppm,
+                    accepted_route_switch: false,
+                },
                 decision,
-                false,
             ));
         };
 
@@ -156,13 +168,15 @@ impl MorTemporalDenoiser {
             self.stable.selected = decision.selected_experts.clone();
             self.clear_pending();
             return Ok(self.report(
-                MorTemporalTransition::Stable,
-                observed_primary,
-                stable_primary,
-                0,
-                route_margin_ppm,
+                MorTemporalReportContext {
+                    transition: MorTemporalTransition::Stable,
+                    observed_primary,
+                    stable_primary,
+                    required_streak: 0,
+                    route_margin_ppm,
+                    accepted_route_switch: false,
+                },
                 decision,
-                false,
             ));
         }
 
@@ -170,13 +184,15 @@ impl MorTemporalDenoiser {
             self.stable = candidate;
             self.clear_pending();
             return Ok(self.report(
-                MorTemporalTransition::Urgent,
-                observed_primary,
-                observed_primary,
-                1,
-                route_margin_ppm,
+                MorTemporalReportContext {
+                    transition: MorTemporalTransition::Urgent,
+                    observed_primary,
+                    stable_primary: observed_primary,
+                    required_streak: 1,
+                    route_margin_ppm,
+                    accepted_route_switch: true,
+                },
                 decision,
-                true,
             ));
         }
 
@@ -192,24 +208,28 @@ impl MorTemporalDenoiser {
             self.stable = candidate;
             self.clear_pending();
             return Ok(self.report(
-                MorTemporalTransition::Confirmed,
-                observed_primary,
-                observed_primary,
-                required_streak,
-                route_margin_ppm,
+                MorTemporalReportContext {
+                    transition: MorTemporalTransition::Confirmed,
+                    observed_primary,
+                    stable_primary: observed_primary,
+                    required_streak,
+                    route_margin_ppm,
+                    accepted_route_switch: true,
+                },
                 decision,
-                true,
             ));
         }
 
         Ok(self.report(
-            MorTemporalTransition::Held,
-            observed_primary,
-            stable_primary,
-            required_streak,
-            route_margin_ppm,
+            MorTemporalReportContext {
+                transition: MorTemporalTransition::Held,
+                observed_primary,
+                stable_primary,
+                required_streak,
+                route_margin_ppm,
+                accepted_route_switch: false,
+            },
             decision,
-            false,
         ))
     }
 
@@ -231,25 +251,20 @@ impl MorTemporalDenoiser {
 
     fn report(
         &self,
-        transition: MorTemporalTransition,
-        observed_primary: PageId,
-        stable_primary: PageId,
-        required_streak: u32,
-        route_margin_ppm: u32,
+        context: MorTemporalReportContext,
         decision: &MorDecision,
-        accepted_route_switch: bool,
     ) -> MorTemporalReport {
         MorTemporalReport {
-            transition,
-            observed_primary,
-            stable_primary,
+            transition: context.transition,
+            observed_primary: context.observed_primary,
+            stable_primary: context.stable_primary,
             pending_primary: self.pending_primary,
             pending_streak: self.pending_streak,
-            required_streak,
-            route_margin_ppm,
+            required_streak: context.required_streak,
+            route_margin_ppm: context.route_margin_ppm,
             noise_ppm: decision.noise_ppm,
             structural_disagreement_ppm: decision.structural_disagreement_ppm,
-            accepted_route_switch,
+            accepted_route_switch: context.accepted_route_switch,
         }
     }
 }
