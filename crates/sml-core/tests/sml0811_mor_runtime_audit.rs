@@ -7,9 +7,7 @@ use sml_core::{
     mor_controller::MorControllerPolicy,
     mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
     mor_route_objective::{MorExpertOutcome, MorRouteObjectivePolicy},
-    mor_runtime::{
-        NativeMorRuntime, NativeMorRuntimeAuditError, NativeMorRuntimeAuditor,
-    },
+    mor_runtime::{NativeMorRuntime, NativeMorRuntimeAuditError, NativeMorRuntimeAuditor},
     mor_temporal::{MorTemporalPolicy, MorTemporalTransition},
     BooleanWorkspace, PageId,
 };
@@ -237,10 +235,7 @@ fn runtime_auditor_rejects_duplicate_and_out_of_range_outcomes() {
         auditor
             .observe(
                 &report,
-                &[
-                    outcome(0, MOR_SCALE_PPM + 1, 0, 0),
-                    outcome(1, 0, 0, 0),
-                ],
+                &[outcome(0, MOR_SCALE_PPM + 1, 0, 0), outcome(1, 0, 0, 0),],
             )
             .unwrap_err(),
         NativeMorRuntimeAuditError::OutcomePpmOutOfRange {
