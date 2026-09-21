@@ -18,12 +18,13 @@ use sml_core::{
         packed_word4_score, qualify_packed_word4, scalar_reference_score, SemanticBitField,
     },
     task_loss::{
-        evaluate_task_panel, train_conjunction_from_tasks, train_state_update_from_tasks,
-        ConjunctionTaskTrainingConfig, StateUpdateTaskTrainingConfig,
+        evaluate_task_panel, train_conjunction_from_tasks, train_recall_copy_from_tasks,
+        train_state_update_from_tasks, ConjunctionTaskTrainingConfig, RecallCopyTaskTrainingConfig,
+        StateUpdateTaskTrainingConfig,
     },
     tasks::{development_suite, suite_from_case_id},
     trace::run_recurrent_traced,
-    train::{GateTrainingConfig, LatentGate2, TruthTable2},
+    train::{GateTrainingConfig, LatentGate2, TruthTable1, TruthTable2},
     BooleanWorkspace, ExecutionCounters, HaltingPolicy, PageId, ParameterBudget, ReasoningKernel,
     ReasoningStep, SML_25B_INITIAL_BUDGET, TARGET_RAM_BYTES, TARGET_TOKENS_PER_SECOND,
     TARGET_VRAM_BYTES,
@@ -95,6 +96,12 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "sml14-smoke" => {
+            if let Err(error) = sml14_smoke() {
+                eprintln!("SML-1.4 recall/copy task-loss smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
         "sbg012-bench" => {
             if let Err(error) = sbg012_bench() {
                 eprintln!("SBG-0.12 benchmark failed: {error}");
@@ -104,7 +111,7 @@ fn main() {
         other => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke|sml12-smoke|sbg012-bench]"
+                "usage: sml-cli [contract|sml01-smoke|sml02-smoke|sml03-smoke|sml04-smoke|sml05-smoke|sml06-smoke|sml07-smoke|sml10-smoke|sml11-smoke|sml12-smoke|sml14-smoke|sbg012-bench]"
             );
             std::process::exit(2);
         }
@@ -626,6 +633,84 @@ fn sml12_smoke() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "fixed_holdout_exact={}/{}",
         fixed_eval.exact_tasks, fixed_eval.tasks
+    );
+    Ok(())
+}
+
+fn sml14_smoke() -> Result<(), Box<dyn std::error::Error>> {
+    let (learned, training) =
+        train_recall_copy_from_tasks(RecallCopyTaskTrainingConfig::default())?;
+    let holdout = suite_from_case_id(10_000, 16)?;
+    let learned_eval = evaluate_task_panel(&learned, &holdout)?;
+
+    let (wrong_not, _) = SmlTaskCandidate::train_with_all_micro_ops(
+        TaskCandidateConfig::default(),
+        TruthTable2::AND,
+        TruthTable2::RIGHT,
+        TruthTable1::NOT,
+        TruthTable1::NOT,
+    )?;
+    let wrong_eval = evaluate_task_panel(&wrong_not, &holdout)?;
+
+    let (fixed, _) = SmlTaskCandidate::train(TaskCandidateConfig::default())?;
+    let fixed_eval = evaluate_task_panel(&fixed, &holdout)?;
+
+    if training.recall_gate.final_table != TruthTable1::IDENTITY
+        || training.copy_gate.final_table != TruthTable1::IDENTITY
+    {
+        return Err("task-loss recall/copy gates did not recover identity semantics".into());
+    }
+    if learned_eval.exact_tasks != learned_eval.tasks {
+        return Err(format!(
+            "learned recall/copy candidate mismatch: {}/{} exact",
+            learned_eval.exact_tasks, learned_eval.tasks
+        )
+        .into());
+    }
+    if wrong_eval.exact_delayed_recall_tasks >= learned_eval.exact_delayed_recall_tasks {
+        return Err("wrong NOT recall control did not reduce delayed-recall accuracy".into());
+    }
+    if wrong_eval.exact_copy_tasks >= learned_eval.exact_copy_tasks {
+        return Err("wrong NOT copy control did not reduce copy accuracy".into());
+    }
+    if fixed_eval.exact_tasks != learned_eval.exact_tasks {
+        return Err("learned unary semantics did not recover the fixed identity baseline".into());
+    }
+
+    println!("SML-1.4 recall/copy task-loss smoke");
+    println!("recall_samples={}", training.recall_samples);
+    println!("copy_samples={}", training.copy_samples);
+    println!(
+        "recall_input_pattern_mask={:#04b}",
+        training.recall_input_pattern_mask
+    );
+    println!(
+        "copy_input_pattern_mask={:#04b}",
+        training.copy_input_pattern_mask
+    );
+    println!(
+        "learned_recall_code={}",
+        training.recall_gate.final_table.code()
+    );
+    println!(
+        "learned_copy_code={}",
+        training.copy_gate.final_table.code()
+    );
+    println!(
+        "learned_delayed_recall_exact={}/{}",
+        learned_eval.exact_delayed_recall_tasks, learned_eval.delayed_recall_tasks
+    );
+    println!(
+        "wrong_not_delayed_recall_exact={}/{}",
+        wrong_eval.exact_delayed_recall_tasks, wrong_eval.delayed_recall_tasks
+    );
+    println!(
+        "learned_copy_exact={}/{}",
+        learned_eval.exact_copy_tasks, learned_eval.copy_tasks
+    );
+    println!(
+        "wrong_not_copy_exact={}/{}",
+        wrong_eval.exact_copy_tasks, wrong_eval.copy_tasks
     );
     Ok(())
 }

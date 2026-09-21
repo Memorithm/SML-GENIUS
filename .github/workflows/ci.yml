@@ -64,3 +64,5 @@ jobs:
         run: cargo run -p sml-cli -- sml11-smoke
       - name: SML-1.2 state-update smoke
         run: cargo run -p sml-cli -- sml12-smoke
+      - name: SML-1.4 recall/copy task-loss smoke
+        run: cargo run -p sml-cli -- sml14-smoke

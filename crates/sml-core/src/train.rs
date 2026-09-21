@@ -5,8 +5,44 @@
 
 use core::fmt;
 
+/// Number of distinct Boolean functions of one Boolean input.
+pub const UNARY_TRUTH_TABLE_COUNT: usize = 4;
 /// Number of distinct Boolean functions of two Boolean inputs.
 pub const TRUTH_TABLE_COUNT: usize = 16;
+
+/// Canonical two-bit truth table for one Boolean input.
+///
+/// Bit order is 0 = false input, 1 = true input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TruthTable1(u8);
+
+impl TruthTable1 {
+    pub const FALSE: Self = Self(0b00);
+    pub const NOT: Self = Self(0b01);
+    pub const IDENTITY: Self = Self(0b10);
+    pub const TRUE: Self = Self(0b11);
+
+    /// Constructs a valid one-input Boolean truth table.
+    pub const fn new(code: u8) -> Result<Self, TrainError> {
+        if code < UNARY_TRUTH_TABLE_COUNT as u8 {
+            Ok(Self(code))
+        } else {
+            Err(TrainError::InvalidUnaryTruthTable(code))
+        }
+    }
+
+    /// Returns the canonical two-bit code.
+    #[must_use]
+    pub const fn code(self) -> u8 {
+        self.0
+    }
+
+    /// Evaluates the hard unary Boolean function.
+    #[must_use]
+    pub const fn evaluate(self, input: bool) -> bool {
+        self.0 & (1_u8 << input as u8) != 0
+    }
+}
 
 /// Canonical four-bit truth table for two Boolean inputs.
 ///
@@ -68,6 +104,13 @@ impl Default for GateTrainingConfig {
     }
 }
 
+/// One supervised one-input Boolean training sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GateSample1 {
+    pub input: bool,
+    pub target: bool,
+}
+
 /// One supervised two-input Boolean training sample.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GateSample2 {
@@ -109,6 +152,18 @@ pub struct GateTrainingReport {
     pub counters: GateTrainingCounters,
 }
 
+/// Evidence from training one latent unary gate on arbitrary supervised samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GateSampleTrainingReport1 {
+    pub initial_table: TruthTable1,
+    pub final_table: TruthTable1,
+    pub initial_loss: f64,
+    pub final_loss: f64,
+    pub hard_correct: u64,
+    pub sample_count: u64,
+    pub counters: GateTrainingCounters,
+}
+
 /// Evidence from training one latent gate on arbitrary supervised samples.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GateSampleTrainingReport {
@@ -119,6 +174,164 @@ pub struct GateSampleTrainingReport {
     pub hard_correct: u64,
     pub sample_count: u64,
     pub counters: GateTrainingCounters,
+}
+
+/// Trainable latent selector over all four one-input Boolean functions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LatentGate1 {
+    logits: [f64; UNARY_TRUTH_TABLE_COUNT],
+}
+
+impl Default for LatentGate1 {
+    fn default() -> Self {
+        Self {
+            logits: [0.0; UNARY_TRUTH_TABLE_COUNT],
+        }
+    }
+}
+
+impl LatentGate1 {
+    /// Returns the hard selected unary truth table using lowest-index tie breaking.
+    pub fn hard_table(&self) -> Result<TruthTable1, TrainError> {
+        if self.logits.iter().any(|value| !value.is_finite()) {
+            return Err(TrainError::NonFiniteLatent);
+        }
+
+        let mut best_index = 0_usize;
+        let mut best_value = self.logits[0];
+        for (index, value) in self.logits.iter().copied().enumerate().skip(1) {
+            if value > best_value {
+                best_index = index;
+                best_value = value;
+            }
+        }
+        TruthTable1::new(best_index as u8)
+    }
+
+    /// Trains a unary hard Boolean gate from caller-owned supervised samples.
+    pub fn train_samples(
+        &mut self,
+        samples: &[GateSample1],
+        config: GateTrainingConfig,
+    ) -> Result<GateSampleTrainingReport1, TrainError> {
+        let config = config.validate()?;
+        if samples.is_empty() {
+            return Err(TrainError::EmptySamples);
+        }
+
+        let initial_table = self.hard_table()?;
+        let initial_loss = self.loss_for_samples(samples, config.epsilon)?;
+        let mut counters = GateTrainingCounters::default();
+
+        for _ in 0..config.epochs {
+            let weights = self.softmax_weights()?;
+            let mut gradient = [0.0_f64; UNARY_TRUTH_TABLE_COUNT];
+
+            for sample in samples {
+                let target_value = if sample.target { 1.0 } else { 0.0 };
+                let probability = unary_weighted_output(&weights, sample.input)
+                    .clamp(config.epsilon, 1.0 - config.epsilon);
+                let loss_gradient =
+                    (probability - target_value) / (probability * (1.0 - probability));
+
+                for candidate_code in 0..UNARY_TRUTH_TABLE_COUNT {
+                    let candidate = TruthTable1::new(candidate_code as u8)?;
+                    let candidate_value = if candidate.evaluate(sample.input) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    gradient[candidate_code] +=
+                        loss_gradient * weights[candidate_code] * (candidate_value - probability);
+                }
+            }
+
+            let normalization = samples.len() as f64;
+            for (logit, grad) in self.logits.iter_mut().zip(gradient) {
+                *logit -= config.learning_rate * grad / normalization;
+                if !logit.is_finite() {
+                    return Err(TrainError::NonFiniteLatent);
+                }
+            }
+
+            counters.epochs = counters.epochs.saturating_add(1);
+            counters.samples = counters.samples.saturating_add(samples.len() as u64);
+            counters.latent_parameter_updates = counters
+                .latent_parameter_updates
+                .saturating_add(UNARY_TRUTH_TABLE_COUNT as u64);
+        }
+
+        let final_table = self.hard_table()?;
+        let hard_correct = samples
+            .iter()
+            .filter(|sample| final_table.evaluate(sample.input) == sample.target)
+            .count() as u64;
+
+        Ok(GateSampleTrainingReport1 {
+            initial_table,
+            final_table,
+            initial_loss,
+            final_loss: self.loss_for_samples(samples, config.epsilon)?,
+            hard_correct,
+            sample_count: samples.len() as u64,
+            counters,
+        })
+    }
+
+    fn softmax_weights(&self) -> Result<[f64; UNARY_TRUTH_TABLE_COUNT], TrainError> {
+        if self.logits.iter().any(|value| !value.is_finite()) {
+            return Err(TrainError::NonFiniteLatent);
+        }
+
+        let maximum = self
+            .logits
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let mut weights = [0.0_f64; UNARY_TRUTH_TABLE_COUNT];
+        let mut denominator = 0.0_f64;
+        for (weight, logit) in weights.iter_mut().zip(self.logits) {
+            *weight = (logit - maximum).exp();
+            denominator += *weight;
+        }
+        if !denominator.is_finite() || denominator <= 0.0 {
+            return Err(TrainError::InvalidSoftmax);
+        }
+        for weight in &mut weights {
+            *weight /= denominator;
+        }
+        Ok(weights)
+    }
+
+    fn loss_for_samples(&self, samples: &[GateSample1], epsilon: f64) -> Result<f64, TrainError> {
+        if samples.is_empty() {
+            return Err(TrainError::EmptySamples);
+        }
+        let weights = self.softmax_weights()?;
+        let mut loss = 0.0_f64;
+        for sample in samples {
+            let target_value = if sample.target { 1.0 } else { 0.0 };
+            let probability =
+                unary_weighted_output(&weights, sample.input).clamp(epsilon, 1.0 - epsilon);
+            loss -=
+                target_value * probability.ln() + (1.0 - target_value) * (1.0 - probability).ln();
+        }
+        Ok(loss / samples.len() as f64)
+    }
+}
+
+fn unary_weighted_output(weights: &[f64; UNARY_TRUTH_TABLE_COUNT], input: bool) -> f64 {
+    weights
+        .iter()
+        .enumerate()
+        .map(|(code, weight)| {
+            if TruthTable1(code as u8).evaluate(input) {
+                *weight
+            } else {
+                0.0
+            }
+        })
+        .sum()
 }
 
 /// Trainable latent selector over all 16 two-input Boolean functions.
@@ -419,6 +632,7 @@ fn weighted_output(weights: &[f64; TRUTH_TABLE_COUNT], left: bool, right: bool) 
 /// Invalid truth table, latent state, or training configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrainError {
+    InvalidUnaryTruthTable(u8),
     InvalidTruthTable(u8),
     EmptySamples,
     ZeroEpochs,

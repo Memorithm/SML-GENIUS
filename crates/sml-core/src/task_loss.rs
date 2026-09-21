@@ -16,8 +16,9 @@ use crate::{
     },
     tasks::{suite_from_case_id, TaskAnswer, TaskError, TaskEvent, TaskInstance, TaskKind},
     train::{
-        GateSample2, GateSampleTrainingReport, GateTrainingConfig, LatentGate2, TrainError,
-        TRUTH_TABLE_COUNT,
+        GateSample1, GateSample2, GateSampleTrainingReport, GateSampleTrainingReport1,
+        GateTrainingConfig, LatentGate1, LatentGate2, TrainError, TRUTH_TABLE_COUNT,
+        UNARY_TRUTH_TABLE_COUNT,
     },
 };
 
@@ -69,6 +70,30 @@ impl Default for StateUpdateTaskTrainingConfig {
     }
 }
 
+/// Configuration for task-loss training of recall and payload-copy projections.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RecallCopyTaskTrainingConfig {
+    pub train_start_case_id: u64,
+    pub train_cases: u32,
+    pub gate_training: GateTrainingConfig,
+    pub candidate: TaskCandidateConfig,
+}
+
+impl Default for RecallCopyTaskTrainingConfig {
+    fn default() -> Self {
+        Self {
+            train_start_case_id: 0,
+            train_cases: 64,
+            gate_training: GateTrainingConfig {
+                epochs: 600,
+                learning_rate: 0.2,
+                epsilon: 1.0e-6,
+            },
+            candidate: TaskCandidateConfig::default(),
+        }
+    }
+}
+
 /// Evidence retained after learning one task micro-operation from task answers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConjunctionTaskTrainingReport {
@@ -88,6 +113,20 @@ pub struct StateUpdateTaskTrainingReport {
     pub learned_boolean_bits: u64,
     pub latent_training_scalars: u64,
     pub gate: GateSampleTrainingReport,
+    pub candidate: TaskCandidateTrainingReport,
+}
+
+/// Evidence retained after learning unary recall and payload-copy semantics.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RecallCopyTaskTrainingReport {
+    pub recall_samples: u64,
+    pub copy_samples: u64,
+    pub recall_input_pattern_mask: u8,
+    pub copy_input_pattern_mask: u8,
+    pub learned_boolean_bits: u64,
+    pub latent_training_scalars: u64,
+    pub recall_gate: GateSampleTrainingReport1,
+    pub copy_gate: GateSampleTrainingReport1,
     pub candidate: TaskCandidateTrainingReport,
 }
 
@@ -132,6 +171,10 @@ pub struct TaskPanelEvaluation {
     pub exact_conjunction_tasks: u64,
     pub overwrite_tasks: u64,
     pub exact_overwrite_tasks: u64,
+    pub delayed_recall_tasks: u64,
+    pub exact_delayed_recall_tasks: u64,
+    pub copy_tasks: u64,
+    pub exact_copy_tasks: u64,
     pub trace_records: u64,
     pub route_lookups: u64,
     pub memory_reads: u64,
@@ -240,6 +283,94 @@ pub fn train_state_update_from_tasks(
             learned_boolean_bits: 4,
             latent_training_scalars: TRUTH_TABLE_COUNT as u64,
             gate: gate_report,
+            candidate: candidate_report,
+        },
+    ))
+}
+
+/// Trains delayed-recall and payload-copy projections strictly from task answers.
+///
+/// Both learned operations are unary Boolean functions, so all two input rows
+/// (false and true) must be observed independently for recall and copy before
+/// either table can be committed.
+pub fn train_recall_copy_from_tasks(
+    config: RecallCopyTaskTrainingConfig,
+) -> Result<(SmlTaskCandidate, RecallCopyTaskTrainingReport), TaskLossError> {
+    if config.train_cases == 0 {
+        return Err(TaskLossError::ZeroTrainingCases);
+    }
+
+    let suite = suite_from_case_id(config.train_start_case_id, config.train_cases)?;
+    let mut recall_samples = Vec::with_capacity(config.train_cases as usize);
+    let mut copy_samples = Vec::new();
+    let mut recall_input_pattern_mask = 0_u8;
+    let mut copy_input_pattern_mask = 0_u8;
+
+    for instance in &suite {
+        match instance.kind {
+            TaskKind::DelayedBitRecall => {
+                let sample = recall_sample(instance)?;
+                recall_input_pattern_mask |= 1_u8 << sample.input as u8;
+                recall_samples.push(sample);
+            }
+            TaskKind::CopyAfterMarker => {
+                for sample in copy_samples_from_instance(instance)? {
+                    copy_input_pattern_mask |= 1_u8 << sample.input as u8;
+                    copy_samples.push(sample);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if recall_input_pattern_mask != 0b11 {
+        return Err(TaskLossError::IncompleteUnaryInputCoverage(
+            recall_input_pattern_mask,
+        ));
+    }
+    if copy_input_pattern_mask != 0b11 {
+        return Err(TaskLossError::IncompleteUnaryInputCoverage(
+            copy_input_pattern_mask,
+        ));
+    }
+
+    let mut recall_gate = LatentGate1::default();
+    let recall_report = recall_gate.train_samples(&recall_samples, config.gate_training)?;
+    if recall_report.hard_correct != recall_samples.len() as u64 {
+        return Err(TaskLossError::GateNotConverged {
+            correct: recall_report.hard_correct,
+            total: recall_samples.len() as u64,
+        });
+    }
+
+    let mut copy_gate = LatentGate1::default();
+    let copy_report = copy_gate.train_samples(&copy_samples, config.gate_training)?;
+    if copy_report.hard_correct != copy_samples.len() as u64 {
+        return Err(TaskLossError::GateNotConverged {
+            correct: copy_report.hard_correct,
+            total: copy_samples.len() as u64,
+        });
+    }
+
+    let (candidate, candidate_report) = SmlTaskCandidate::train_with_all_micro_ops(
+        config.candidate,
+        crate::train::TruthTable2::AND,
+        crate::train::TruthTable2::RIGHT,
+        recall_gate.hard_table()?,
+        copy_gate.hard_table()?,
+    )?;
+
+    Ok((
+        candidate,
+        RecallCopyTaskTrainingReport {
+            recall_samples: recall_samples.len() as u64,
+            copy_samples: copy_samples.len() as u64,
+            recall_input_pattern_mask,
+            copy_input_pattern_mask,
+            learned_boolean_bits: 4,
+            latent_training_scalars: (UNARY_TRUTH_TABLE_COUNT as u64).saturating_mul(2),
+            recall_gate: recall_report,
+            copy_gate: copy_report,
             candidate: candidate_report,
         },
     ))
@@ -394,9 +525,78 @@ pub fn evaluate_task_panel(
                 report.exact_overwrite_tasks = report.exact_overwrite_tasks.saturating_add(1);
             }
         }
+        if instance.kind == TaskKind::DelayedBitRecall {
+            report.delayed_recall_tasks = report.delayed_recall_tasks.saturating_add(1);
+            if evidence.exact {
+                report.exact_delayed_recall_tasks =
+                    report.exact_delayed_recall_tasks.saturating_add(1);
+            }
+        }
+        if instance.kind == TaskKind::CopyAfterMarker {
+            report.copy_tasks = report.copy_tasks.saturating_add(1);
+            if evidence.exact {
+                report.exact_copy_tasks = report.exact_copy_tasks.saturating_add(1);
+            }
+        }
     }
 
     Ok(report)
+}
+
+fn recall_sample(instance: &TaskInstance) -> Result<GateSample1, TaskLossError> {
+    if instance.kind != TaskKind::DelayedBitRecall {
+        return Err(TaskLossError::WrongTaskKind(instance.kind));
+    }
+
+    let input = instance
+        .events
+        .iter()
+        .find_map(|event| match event {
+            TaskEvent::StoreBit(value) => Some(*value),
+            _ => None,
+        })
+        .ok_or(TaskLossError::MissingStoredBit)?;
+    let target = match &instance.expected {
+        TaskAnswer::Bit(value) => *value,
+        TaskAnswer::Bits(_) => return Err(TaskLossError::NonScalarTarget),
+    };
+
+    Ok(GateSample1 { input, target })
+}
+
+fn copy_samples_from_instance(instance: &TaskInstance) -> Result<Vec<GateSample1>, TaskLossError> {
+    if instance.kind != TaskKind::CopyAfterMarker {
+        return Err(TaskLossError::WrongTaskKind(instance.kind));
+    }
+
+    let inputs: Vec<bool> = instance
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            TaskEvent::PayloadBit(value) => Some(*value),
+            _ => None,
+        })
+        .collect();
+    let targets = match &instance.expected {
+        TaskAnswer::Bits(values) => values,
+        TaskAnswer::Bit(_) => return Err(TaskLossError::NonVectorTarget),
+    };
+
+    if inputs.len() != targets.len() {
+        return Err(TaskLossError::CopyLengthMismatch {
+            inputs: inputs.len(),
+            targets: targets.len(),
+        });
+    }
+    if inputs.is_empty() {
+        return Err(TaskLossError::MissingPayload);
+    }
+
+    Ok(inputs
+        .into_iter()
+        .zip(targets.iter().copied())
+        .map(|(input, target)| GateSample1 { input, target })
+        .collect())
 }
 
 fn conjunction_sample(instance: &TaskInstance) -> Result<GateSample2, TaskLossError> {
@@ -473,12 +673,17 @@ fn fact_before(instance: &TaskInstance, key: u16, before: usize) -> Result<bool,
 pub enum TaskLossError {
     ZeroTrainingCases,
     IncompleteInputCoverage(u8),
+    IncompleteUnaryInputCoverage(u8),
     GateNotConverged { correct: u64, total: u64 },
     WrongTaskKind(TaskKind),
     MissingQuery,
     MissingStateUpdatePair,
+    MissingStoredBit,
+    MissingPayload,
     MissingFact(u16),
+    CopyLengthMismatch { inputs: usize, targets: usize },
     NonScalarTarget,
+    NonVectorTarget,
     Task(TaskError),
     Train(TrainError),
     BooleanIntegral(BooleanIntegralError),
