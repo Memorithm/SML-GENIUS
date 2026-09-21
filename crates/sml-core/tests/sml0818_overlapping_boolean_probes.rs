@@ -1,8 +1,8 @@
 use sml_core::{
     boolean_hierarchical::BooleanPageGroup,
     boolean_overlapping::{
-        OverlappingProbeObservation, OverlappingProbePlan, OverlappingProbePolicy,
-        OverlappingProbeError,
+        OverlappingProbeError, OverlappingProbeObservation, OverlappingProbePlan,
+        OverlappingProbePolicy,
     },
     PageId,
 };
@@ -111,7 +111,10 @@ fn score_is_invariant_to_observation_order() {
     let mut reversed = ordered.clone();
     reversed.reverse();
 
-    assert_eq!(plan.score(&ordered).unwrap(), plan.score(&reversed).unwrap());
+    assert_eq!(
+        plan.score(&ordered).unwrap(),
+        plan.score(&reversed).unwrap()
+    );
 }
 
 #[test]
