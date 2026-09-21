@@ -152,10 +152,12 @@ impl BooleanGroupObservation {
 pub struct HierarchicalBooleanRound {
     /// Groups that should be evaluated in the next round.
     pub next_groups: Vec<BooleanPageGroup>,
-    /// Promising groups already small enough for leaf-level credit assignment.
+    /// Promising or deliberately rescued groups ready for leaf-level credit assignment.
     pub leaf_candidates: Vec<BooleanPageGroup>,
     pub rejected_groups: u64,
     pub favorable_groups: u64,
+    /// Rejected groups deliberately explored because their net evidence may hide cancellation.
+    pub rescued_groups: u64,
 }
 
 /// Deterministic scheduler for active-page Boolean credit search.
@@ -201,6 +203,20 @@ impl HierarchicalBooleanSearch {
         observations: &[BooleanGroupObservation],
         policy: HierarchicalBooleanPolicy,
     ) -> Result<HierarchicalBooleanRound, HierarchicalBooleanError> {
+        Self::refine_with_rescue(observations, policy, 0)
+    }
+
+    /// Refines favorable groups and deterministically rescues a bounded number
+    /// of rejected groups with the smallest absolute net effect.
+    ///
+    /// Near-zero group evidence can hide cancellation between useful and harmful
+    /// parameters. Rescue preserves bounded exploration without turning the
+    /// hierarchy into an exhaustive search.
+    pub fn refine_with_rescue(
+        observations: &[BooleanGroupObservation],
+        policy: HierarchicalBooleanPolicy,
+        rescue_budget: usize,
+    ) -> Result<HierarchicalBooleanRound, HierarchicalBooleanError> {
         let policy = policy.validate()?;
         if observations.is_empty() {
             return Err(HierarchicalBooleanError::EmptyObservations);
@@ -208,6 +224,7 @@ impl HierarchicalBooleanSearch {
 
         let mut seen = Vec::with_capacity(observations.len());
         let mut round = HierarchicalBooleanRound::default();
+        let mut rescue_candidates: Vec<(u64, BooleanGroupObservation)> = Vec::new();
 
         for observation in observations.iter().copied() {
             let observation = observation.validate()?;
@@ -219,26 +236,27 @@ impl HierarchicalBooleanSearch {
             let improvement = observation.improvement_ppm();
             if improvement < policy.min_improvement_ppm as i64 {
                 round.rejected_groups = round.rejected_groups.saturating_add(1);
+                rescue_candidates.push((improvement.unsigned_abs(), observation));
                 continue;
             }
+
             round.favorable_groups = round.favorable_groups.saturating_add(1);
+            schedule_group(observation.group, &mut round, policy)?;
+        }
 
-            if observation.group.len <= policy.leaf_width
-                || observation.group.depth >= policy.max_depth
-            {
-                round.leaf_candidates.push(observation.group);
-                continue;
-            }
+        rescue_candidates.sort_by_key(|(magnitude, observation)| {
+            (
+                *magnitude,
+                observation.group.page_id.0,
+                observation.group.start,
+                observation.group.len,
+                observation.group.depth,
+            )
+        });
 
-            let (left, right) = observation.group.split()?;
-            if round.next_groups.len().saturating_add(2) > policy.max_next_groups {
-                return Err(HierarchicalBooleanError::GroupBudgetExceeded {
-                    required: round.next_groups.len().saturating_add(2),
-                    maximum: policy.max_next_groups,
-                });
-            }
-            round.next_groups.push(left);
-            round.next_groups.push(right);
+        for (_, observation) in rescue_candidates.into_iter().take(rescue_budget) {
+            round.rescued_groups = round.rescued_groups.saturating_add(1);
+            schedule_group(observation.group, &mut round, policy)?;
         }
 
         round
@@ -249,6 +267,28 @@ impl HierarchicalBooleanSearch {
             .sort_by_key(|group| (group.page_id.0, group.start, group.len, group.depth));
         Ok(round)
     }
+}
+
+fn schedule_group(
+    group: BooleanPageGroup,
+    round: &mut HierarchicalBooleanRound,
+    policy: HierarchicalBooleanPolicy,
+) -> Result<(), HierarchicalBooleanError> {
+    if group.len <= policy.leaf_width || group.depth >= policy.max_depth {
+        round.leaf_candidates.push(group);
+        return Ok(());
+    }
+
+    let (left, right) = group.split()?;
+    if round.next_groups.len().saturating_add(2) > policy.max_next_groups {
+        return Err(HierarchicalBooleanError::GroupBudgetExceeded {
+            required: round.next_groups.len().saturating_add(2),
+            maximum: policy.max_next_groups,
+        });
+    }
+    round.next_groups.push(left);
+    round.next_groups.push(right);
+    Ok(())
 }
 
 /// Independent train/holdout evidence required before mutating hard weights.
