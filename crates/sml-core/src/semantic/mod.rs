@@ -10,6 +10,7 @@ pub mod bitfield;
 pub mod composition;
 pub mod context;
 pub mod elastic_regions;
+pub mod evidence_learning;
 pub mod metric;
 pub mod mor_routing;
 pub mod recurrent;
@@ -33,6 +34,12 @@ pub use context::{
 pub use elastic_regions::{
     SemanticElasticBridge, SemanticElasticError, SemanticElasticPlan, SemanticElasticPolicy,
     SemanticElasticWorkingSet, SemanticWeightRegion, SemanticWeightRegionScore,
+};
+pub use evidence_learning::{
+    commit_semantic_candidates, SemanticCoordinate, SemanticCoordinateAction,
+    SemanticEvidenceError, SemanticEvidenceLearningOutcome, SemanticEvidenceLearningReport,
+    SemanticEvidenceLedger, SemanticEvidenceObservation, SemanticLearningCandidate,
+    SemanticLearningField,
 };
 pub use metric::{
     hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
