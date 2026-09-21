@@ -7,9 +7,7 @@ use sml_core::{
     mor_proposal_train::{
         MorProposalScoreSearch, MorProposalScoreSearchConfig, MorProposalTrainingError,
     },
-    mor_route_objective::{
-        MorExpertOutcome, MorRouteObjectivePolicy, MorRouteTrainingExample,
-    },
+    mor_route_objective::{MorExpertOutcome, MorRouteObjectivePolicy, MorRouteTrainingExample},
     BooleanWorkspace, PageId,
 };
 
@@ -21,11 +19,7 @@ fn atom(bit: u16, expected: bool) -> RouterSignatureAtom {
     }
 }
 
-fn router(
-    id: u32,
-    expected: bool,
-    proposals: &[(u32, u32)],
-) -> NativeRouterSpec {
+fn router(id: u32, expected: bool, proposals: &[(u32, u32)]) -> NativeRouterSpec {
     NativeRouterSpec {
         router_id: RouterId(id),
         atoms: vec![atom(0, expected)],
@@ -67,10 +61,7 @@ fn example(bit: bool, best_page: u32) -> MorRouteTrainingExample {
     let other = 1_u32.saturating_sub(best_page);
     MorRouteTrainingExample {
         state: BooleanWorkspace::from_bits(&[bit]),
-        outcomes: vec![
-            outcome(best_page, 0),
-            outcome(other, MOR_SCALE_PPM),
-        ],
+        outcomes: vec![outcome(best_page, 0), outcome(other, MOR_SCALE_PPM)],
     }
 }
 
@@ -153,14 +144,9 @@ fn proposal_score_search_is_deterministic() {
         candidate_scores_ppm: vec![100_000, 500_000, 900_000],
     };
 
-    let first = MorProposalScoreSearch::train(
-        bank(),
-        &engine(),
-        &examples,
-        objective(),
-        config.clone(),
-    )
-    .unwrap();
+    let first =
+        MorProposalScoreSearch::train(bank(), &engine(), &examples, objective(), config.clone())
+            .unwrap();
     let second =
         MorProposalScoreSearch::train(bank(), &engine(), &examples, objective(), config).unwrap();
 
