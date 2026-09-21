@@ -56,3 +56,5 @@ jobs:
         run: cargo run -p sml-cli -- sml10-smoke
       - name: SML-1.1 task-loss smoke
         run: cargo run -p sml-cli -- sml11-smoke
+      - name: SML-1.2 state-update smoke
+        run: cargo run -p sml-cli -- sml12-smoke
