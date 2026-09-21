@@ -53,10 +53,12 @@ impl MorBooleanLearningPolicy {
             return Err(MorBooleanLearningPolicyError::ZeroCommitBudget);
         }
         if self.max_commits_per_step > self.max_pages_per_step {
-            return Err(MorBooleanLearningPolicyError::CommitBudgetExceedsPageBudget {
-                commits: self.max_commits_per_step,
-                pages: self.max_pages_per_step,
-            });
+            return Err(
+                MorBooleanLearningPolicyError::CommitBudgetExceedsPageBudget {
+                    commits: self.max_commits_per_step,
+                    pages: self.max_pages_per_step,
+                },
+            );
         }
         Ok(self)
     }
@@ -100,9 +102,7 @@ impl MorBooleanLearning {
         TrainObjective: FnMut(PageId, &dyn BooleanPageRead) -> Result<u32, E>,
         HoldoutObjective: FnMut(PageId, &dyn BooleanPageRead) -> Result<u32, E>,
     {
-        let policy = policy
-            .validate()
-            .map_err(MorBooleanLearningError::Policy)?;
+        let policy = policy.validate().map_err(MorBooleanLearningError::Policy)?;
 
         validate_inventory(pages)?;
         validate_selection(&decision.selected_experts, pages)?;
@@ -172,9 +172,7 @@ impl MorBooleanLearning {
     }
 }
 
-fn validate_inventory<E>(
-    pages: &[PackedBooleanPage],
-) -> Result<(), MorBooleanLearningError<E>> {
+fn validate_inventory<E>(pages: &[PackedBooleanPage]) -> Result<(), MorBooleanLearningError<E>> {
     for (index, page) in pages.iter().enumerate() {
         if pages[..index]
             .iter()
