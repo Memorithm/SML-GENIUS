@@ -156,9 +156,13 @@ fn weight_search_reduces_route_regret_on_noisy_fingerprint_bit() {
     assert!(artifact.report.accepted_updates > 0);
 
     let router0 = &artifact.bank.routers()[0];
-    let router1 = &artifact.bank.routers()[1];
     assert!(router0.atoms[0].weight_ppm > router0.atoms[1].weight_ppm);
-    assert!(router1.atoms[0].weight_ppm > router1.atoms[1].weight_ppm);
+    assert!(artifact
+        .report
+        .final_report
+        .cases
+        .iter()
+        .all(|case| case.chosen_page == case.oracle_page));
 }
 
 #[test]
