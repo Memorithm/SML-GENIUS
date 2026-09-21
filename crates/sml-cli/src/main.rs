@@ -10,9 +10,7 @@ use sml_core::{
     gf2::{Gf2LinearMap, Gf2Vector},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
     routing_train::{LatentDirectRouter, RouteLearningBudget, RouteTrainingConfig},
-    task_loss::{
-        evaluate_task_panel, train_conjunction_from_tasks, ConjunctionTaskTrainingConfig,
-    },
+    task_loss::{evaluate_task_panel, train_conjunction_from_tasks, ConjunctionTaskTrainingConfig},
     tasks::{development_suite, suite_from_case_id},
     trace::run_recurrent_traced,
     train::{GateTrainingConfig, LatentGate2, TruthTable2},
