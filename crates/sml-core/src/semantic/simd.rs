@@ -158,6 +158,19 @@ pub fn packed_word4_score<const BITS: usize>(
     })
 }
 
+/// Fixed-width entry point used for reproducible SBG-0.12 code-generation audits.
+///
+/// Keeping this wrapper non-generic and non-inlined gives release builds a stable
+/// semantic target to inspect without changing the generic reference API.
+#[inline(never)]
+pub fn packed_word4_score_16384(
+    left: &SemanticBitField<16_384>,
+    right: &SemanticBitField<16_384>,
+    mask: &SemanticBitField<16_384>,
+) -> Result<SemanticKernelEvidence, SemanticSimdError> {
+    packed_word4_score(left, right, mask)
+}
+
 /// Qualifies the packed kernel against the independent scalar oracle.
 pub fn qualify_packed_word4<const BITS: usize>(
     left: &SemanticBitField<BITS>,
