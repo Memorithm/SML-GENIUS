@@ -15,7 +15,7 @@ use crate::{
         RouteTrainingConfig, RouteTrainingReport,
     },
     tasks::{TaskAnswer, TaskEvent, TaskInstance, TaskKind},
-    train::TruthTable2,
+    train::{TruthTable1, TruthTable2},
     BooleanWorkspace, DirectRouteTable, ExecutionCounters, PageId, RouteError,
 };
 
@@ -110,6 +110,8 @@ pub struct SmlTaskCandidate {
     max_payload_bits: usize,
     conjunction_table: TruthTable2,
     state_update_table: TruthTable2,
+    recall_table: TruthTable1,
+    copy_table: TruthTable1,
 }
 
 impl SmlTaskCandidate {
@@ -117,7 +119,13 @@ impl SmlTaskCandidate {
     pub fn train(
         config: TaskCandidateConfig,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
-        Self::train_with_micro_ops(config, TruthTable2::AND, TruthTable2::RIGHT)
+        Self::train_with_all_micro_ops(
+            config,
+            TruthTable2::AND,
+            TruthTable2::RIGHT,
+            TruthTable1::IDENTITY,
+            TruthTable1::IDENTITY,
+        )
     }
 
     /// Trains event routing while injecting an explicit hard conjunction micro-operation.
@@ -128,7 +136,13 @@ impl SmlTaskCandidate {
         config: TaskCandidateConfig,
         conjunction_table: TruthTable2,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
-        Self::train_with_micro_ops(config, conjunction_table, TruthTable2::RIGHT)
+        Self::train_with_all_micro_ops(
+            config,
+            conjunction_table,
+            TruthTable2::RIGHT,
+            TruthTable1::IDENTITY,
+            TruthTable1::IDENTITY,
+        )
     }
 
     /// Trains event routing while injecting both currently learnable hard micro-operations.
@@ -139,6 +153,23 @@ impl SmlTaskCandidate {
         config: TaskCandidateConfig,
         conjunction_table: TruthTable2,
         state_update_table: TruthTable2,
+    ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
+        Self::train_with_all_micro_ops(
+            config,
+            conjunction_table,
+            state_update_table,
+            TruthTable1::IDENTITY,
+            TruthTable1::IDENTITY,
+        )
+    }
+
+    /// Trains event routing while injecting all currently learnable hard micro-operations.
+    pub fn train_with_all_micro_ops(
+        config: TaskCandidateConfig,
+        conjunction_table: TruthTable2,
+        state_update_table: TruthTable2,
+        recall_table: TruthTable1,
+        copy_table: TruthTable1,
     ) -> Result<(Self, TaskCandidateTrainingReport), TaskCandidateError> {
         validate_candidate_config(config)?;
 
@@ -167,6 +198,8 @@ impl SmlTaskCandidate {
                 max_payload_bits: config.max_payload_bits,
                 conjunction_table,
                 state_update_table,
+                recall_table,
+                copy_table,
             },
             TaskCandidateTrainingReport {
                 route: report,
@@ -187,9 +220,27 @@ impl SmlTaskCandidate {
         self.state_update_table
     }
 
+    /// Hard delayed-recall projection used by the frozen candidate.
+    #[must_use]
+    pub const fn recall_table(&self) -> TruthTable1 {
+        self.recall_table
+    }
+
+    /// Hard payload-copy projection used by the frozen candidate.
+    #[must_use]
+    pub const fn copy_table(&self) -> TruthTable1 {
+        self.copy_table
+    }
+
     /// Constructs the reference micro-operations with a fixed event-to-page map.
     pub fn fixed_route(config: TaskCandidateConfig) -> Result<Self, TaskCandidateError> {
-        Self::fixed_route_with_micro_ops(config, TruthTable2::AND, TruthTable2::RIGHT)
+        Self::fixed_route_with_all_micro_ops(
+            config,
+            TruthTable2::AND,
+            TruthTable2::RIGHT,
+            TruthTable1::IDENTITY,
+            TruthTable1::IDENTITY,
+        )
     }
 
     /// Constructs a fixed event map while injecting explicit hard micro-operations.
@@ -197,6 +248,23 @@ impl SmlTaskCandidate {
         config: TaskCandidateConfig,
         conjunction_table: TruthTable2,
         state_update_table: TruthTable2,
+    ) -> Result<Self, TaskCandidateError> {
+        Self::fixed_route_with_all_micro_ops(
+            config,
+            conjunction_table,
+            state_update_table,
+            TruthTable1::IDENTITY,
+            TruthTable1::IDENTITY,
+        )
+    }
+
+    /// Constructs a fixed event map with all explicit hard micro-operations.
+    pub fn fixed_route_with_all_micro_ops(
+        config: TaskCandidateConfig,
+        conjunction_table: TruthTable2,
+        state_update_table: TruthTable2,
+        recall_table: TruthTable1,
+        copy_table: TruthTable1,
     ) -> Result<Self, TaskCandidateError> {
         validate_candidate_config(config)?;
 
@@ -217,6 +285,8 @@ impl SmlTaskCandidate {
             max_payload_bits: config.max_payload_bits,
             conjunction_table,
             state_update_table,
+            recall_table,
+            copy_table,
         })
     }
 
@@ -358,9 +428,10 @@ impl SmlTaskCandidate {
                 payload.push(value);
                 Ok(None)
             }
-            (PAGE_QUERY_RECALL, TaskEvent::QueryRecall) => Ok(Some(TaskAnswer::Bit(
-                stored_bit.ok_or(TaskCandidateError::MissingStoredBit)?,
-            ))),
+            (PAGE_QUERY_RECALL, TaskEvent::QueryRecall) => {
+                let value = stored_bit.ok_or(TaskCandidateError::MissingStoredBit)?;
+                Ok(Some(TaskAnswer::Bit(self.recall_table.evaluate(value))))
+            }
             (PAGE_QUERY_KEY, TaskEvent::QueryKey(key)) => Ok(Some(TaskAnswer::Bit(read_fact(
                 memory.as_ref(),
                 key,
@@ -377,7 +448,13 @@ impl SmlTaskCandidate {
                 if !*copy_active || payload.is_empty() {
                     return Err(TaskCandidateError::MissingPayload);
                 }
-                Ok(Some(TaskAnswer::Bits(payload.clone())))
+                Ok(Some(TaskAnswer::Bits(
+                    payload
+                        .iter()
+                        .copied()
+                        .map(|value| self.copy_table.evaluate(value))
+                        .collect(),
+                )))
             }
             _ => Err(TaskCandidateError::EventPageMismatch { event, page }),
         }
