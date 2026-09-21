@@ -5,9 +5,11 @@
 //! required by the reference state or its primitive Boolean operations.
 
 pub mod bitfield;
+pub mod metric;
 pub mod state;
 
 pub use bitfield::{SemanticBitField, SemanticBitFieldError};
+pub use metric::{MaskedSemanticScore, SemanticMetricError};
 pub use state::SemanticState;
 
 /// Initial experimental semantic width.
