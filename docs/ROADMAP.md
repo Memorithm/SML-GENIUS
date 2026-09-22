@@ -61,9 +61,9 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Qualify SBG-0.13b Linux mapped storage on current CI; preserve immutable-artifact assumptions and freeze dependencies before merge.
-2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate.
-3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting, with common evidence and ablations.
+1. Advance the first-class SML-D decision programme from its bounded D0/D1a reference slice: trained conditional experts, calibration, batched sparse execution and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each PR before promotion.
+2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
+3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
 4. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
 5. Build native SML physical elastic-weight page materialization plus VERIFY/ROLLBACK. The ElasticXxx plan adapter is a qualification boundary, not a mandatory SML runtime dependency.
 6. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
@@ -106,13 +106,29 @@ Current status:
   - [x] SBG-0.12c exact release code-generation audit under the safe-Rust boundary;
 - [ ] SBG-0.13 mmap semantic store and resource qualification;
   - [x] SBG-0.13a versioned checksummed mmap-friendly binary format (PR #57);
-  - [x] SBG-0.13b Linux read-only mapped reader, bounded per-record decoding, corruption/lock/reopen/replacement tests (PR #60; merge requires green CI);
+  - [x] SBG-0.13b Linux read-only mapped reader, bounded per-record decoding, corruption/lock/reopen/replacement tests (merged PR #60);
   - [ ] SBG-0.13c growing-store resource/latency evidence, immutable-artifact hardening and authenticated index/manifest evaluation;
-- [ ] SBG-0.14 integrated prototype.
+- [ ] SBG-0.14 integrated prototype, including native decision outputs.
 
 SBG-0.13b is Linux-specific and relies on an immutable mapped inode with cooperative locking. It rejects heap fallback and does not impose an OS page-cache/RSS ceiling. Other platforms, streaming writes, cryptographic authenticity and production deployment hardening remain unqualified. See `docs/SBG-0.13b-MAPPED-RUNTIME.md`.
 
 The SBG track is an experimental hypothesis. It does not yet establish language quality, optimal semantic width, or 25B-scale trainability. The SBG-0.12 ratio is relative to the independent bit-by-bit oracle, not a model throughput measurement or a comparison against every packed-word alternative.
+
+## SML-D — first-class native decision programme
+
+The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md`](SML-D-BOOTSTRAP.md). A substantial decision capacity is part of the target architecture, with separate total/active parameter accounting and dedicated training objectives. No fixed fraction of the 25B atlas is justified yet. Native direct and recurrent decisions must not require the text decoder.
+
+- [x] D0 reference implementation: typed Boolean/choice/ordinal heads, explicit unknowns and abstention, shared circuit evaluation, 64-lane bit-sliced groups and admission budgets (PR #61).
+- [x] D1a finite two-input expert-fitting fixture: training-only selection, validation rejection, separate test fixtures. This is not the general D1 gate.
+- [ ] D1 substantial trained experts, SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
+- [ ] D2 reserved-set calibration, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
+- [ ] D3 streamed/columnar bounded batches, sparse expert scheduling and complete packing/I/O/output cost measurements.
+- [ ] D4 bounded memory/recurrent escalation with matched fixed/adaptive baselines.
+- [ ] D5 independently reproducible comparisons at matched quality/coverage against exact rules, small classifiers, constrained generative models and declared decision baselines.
+
+D0 outputs are uncalibrated proposals, never action authorization. Numeric question IDs and caller-supplied features do not implement natural-language question understanding. Logical truth-table bits are not physical in-memory storage. A reduction in word-kernel call count is not a measured speedup; report decisions/sec and latency distributions only from actual end-to-end benchmarks. D0/D1a do not close the SML-1 or SML-2 model gates.
+
+The existing Forge `sml-topology/v1` contract was inspected for reuse; its single-output, at-most-eight-input search boundary differs from these typed multi-head batches. See `SML-D-REUSE.md` before integrating or modifying either repository.
 
 ## CSP — BANC v888 Connectomic Structural Prior track
 
