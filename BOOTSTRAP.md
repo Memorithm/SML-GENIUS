@@ -129,7 +129,9 @@ Implementation uses the independent **SBG-0.x** slice namespace while preserving
   - versioned semantic dictionary/signature store;
   - checksummed format;
   - mmap-friendly alignment/indexing;
-  - no mandatory full reconstruction into RAM.
+  - no mandatory full reconstruction into RAM;
+  - Linux read-only mapped reference implementation;
+  - independent growing-store resource/latency and integrity qualification before scale claims.
 
 - **SBG-0.14 — Integrated SBG Prototype**
   - encoder -> SBG -> MOR -> Elastic Weights -> expert compute -> recurrent semantic rewrite;
@@ -140,55 +142,45 @@ Implementation uses the independent **SBG-0.x** slice namespace while preserving
 
 The roadmap content originally described as SML-0.7 through SML-0.20 maps in order to SBG-0.1 through SBG-0.14. This rename exists solely to avoid colliding with already merged repository milestones.
 
-## Current work
+## Current work and durable checkpoints
 
-Completed:
+Reference-semantic SBG-0.1 through SBG-0.11 slices are merged. SBG-0.12 ARM64 kernel qualification merged through PRs #53-55; frozen evidence is in `docs/SBG-0.12-ARM64-QUALIFICATION.md`. Its timing ratio compares against a bit-by-bit oracle, not a complete model or all alternative packed kernels.
 
-- SBG-0.1 Semantic BitField Core merged on main as `c079acafea90549f6a97dfd8956a9f16fb58641f`.
-- SBG-0.2 contextual Boolean semantic metric merged on main as `d38023771bb5427a802b3337e40f857f0be8af50`.
-- SBG-0.3 semantic binding and bundling algebra merged on main as `776995c49e71cb6ea3209e14a7a310340f0668bb`.
-- SBG-0.4 Context Meaning Mask merged on main as `cd16486261c2b83995b2573c333571011000521d`.
-- SBG-0.5 Ambiguity Field merged on main as `54c07e50fd313c28a041a05742f7d573b4baefd1`.
-- SBG-0.6 Semantic Composition merged on main as `966518009d1360fe3fa00116b955c20e4e1c25cf`.
-- SBG-0.7 native MOR integration merged on main as `1610f6b267f8aa45d05b9969977a56c06146552c`.
-- SBG-0.8 recurrent semantic rewriting merged on main as `ae7e65c3aeec4446d3e742cd44a892cc206ac798`.
-- SBG-0.9 Elastic Weight region activation merged on main as `396b65df23c816edcd4407e8f5000ff694e516c9`.
-- SBG-0.10a V/M/A/R Boolean evidence learning merged on main as `f9361eb96094035b18d7f0c2fcc5d564e37b22d1`.
-- SBG-0.10b structural BIND/SPLIT/MERGE evidence learning merged on main as `3788d1223d0d7224b2f60464141f2e79827ca487`.
-- SBG-0.10 Boolean Evidence Learning is therefore complete at reference-semantics level.
-- These slices passed the repository CI gates before merge.
+SML-1.3 controlled routing/keyed-memory ablations merged through PR #52. Learned routing does not beat fixed routing on that reference panel. SML-1.4 unary recall/copy projections merged through PR #56; marker activation and payload/control-flow semantics remain fixed and require separate learning experiments.
 
-Active development branch:
+SBG-0.13a byte format merged through PR #57 as `786c0d549c78aae550bff14157d95ed472af2e8d`.
 
-```text
-research/sbg-0.13a-store-format
-```
+Latest implementation slice: **SBG-0.13b**, PR #60, branch `research/sbg-0.13b-mapped-runtime`. Check the live PR status before resuming: once merged, branch from current `main` rather than reusing this slice branch.
 
-Current implementation target:
+Implementation surfaces:
 
 ```text
 crates/sml-core/src/semantic/store_format.rs
+crates/sml-store/src/lib.rs
+crates/sml-store/tests/mapped_store.rs
+docs/SBG-0.13b-MAPPED-RUNTIME.md
+scripts/check-lockfile.sh
 ```
 
-SBG-0.12 ARM64 semantic-kernel qualification is complete. The final
-code-generation audit merged through PR #55 as
-`ef96cd721124ca53960b254814a84ca949a82bf1`. Frozen evidence is recorded in
-`docs/SBG-0.12-ARM64-QUALIFICATION.md`.
+Definition of done for SBG-0.13b:
 
-Definition of done for SBG-0.13a:
+1. actual read-only Linux file mapping, with no full-file heap fallback;
+2. one-time descriptor/index validation and lazy per-record CRC32C/V/M/A/R decoding;
+3. explicit virtual-file, record-count and decoded-payload limits;
+4. canonical layout checks reject zero or insufficient record strides before decoding;
+5. shared-lock ownership survives for the mapping lifetime, with explicit immutable-inode assumptions;
+6. tests cover actual mapping, corruption before mapping, truncation, budgets, reopen, concurrent readers, exclusive-writer rejection and atomic replacement;
+7. dependency versions are frozen in a tracked Cargo.lock;
+8. format/check/clippy/workspace tests, store evidence and existing CLI smoke gates all pass on the latest PR head before merge.
 
-1. versioned little-endian store header with explicit dimension and layout metadata;
-2. strictly sorted fixed-width semantic-ID index suitable for binary search in mapped bytes;
-3. page-aligned record offsets and deterministic record stride;
-4. V/M/A/R payload encoding using the existing packed u64 representation;
-5. CRC32C header and lazy per-record corruption detection;
-6. borrowed parser that does not reconstruct the complete store in RAM;
-7. deterministic tests for round trip, non-word-aligned widths, default 16,384-bit layout, absent IDs, duplicate IDs, dimension mismatch and corruption;
-8. complete repository format/check/clippy/test/smoke gates remain green.
+The workspace retains `forbid(unsafe_code)` and the core retains no external dependencies. OS mapping uses pinned mmap-guard, which encapsulates unsafe code in its dependencies. This is not a safety proof against arbitrary external mutation: mapped inodes must never be modified/truncated while in use. Locks are cooperative; CRC32C is not authentication. Reader counters are logical payload/mapping counters, not RSS, page-cache or actual I/O measurements.
 
-SBG-0.13b will bind this exact byte format to a read-only OS-backed mapping
-mechanism without weakening the safe-Rust boundary unless evidence demonstrates
-that no suitable safe abstraction exists.
+Next implementation gates:
+
+- **SBG-0.13c**: cold/warm latency, RSS/page faults and traffic on growing stores; streamed publication and stronger immutable/index-integrity contracts. Do not mark the broad store/resource gate complete from small fixtures alone.
+- **SBG-0.14**: connect mapped lookup to native SBG/MOR/Elastic/expert/memory/recurrent execution with end-to-end evidence.
+- **SML-1 follow-up**: learned marker/control, wider matched ablations, fixed-versus-adaptive depth. Freeze SML-0/SML-1 protocols before SML-2.
+- **Elastic actuation**: native SML physical page materialization and VERIFY/ROLLBACK; other Memorithm repositories are research/qualification partners, not mandatory inference dependencies.
 
 ## Scientific boundary
 
