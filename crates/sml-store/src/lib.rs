@@ -18,9 +18,8 @@ use std::{fmt, fs::File, io, path::Path};
 
 use mmap_guard::FileData;
 use sml_core::semantic::{
-    store_format::SemanticStoreDescriptor, SemanticState, SemanticStoreError,
-    SemanticStoreHeader, SEMANTIC_STORE_HEADER_BYTES, SEMANTIC_STORE_INDEX_ENTRY_BYTES,
-    SEMANTIC_STORE_PAGE_ALIGNMENT,
+    store_format::SemanticStoreDescriptor, SemanticState, SemanticStoreError, SemanticStoreHeader,
+    SEMANTIC_STORE_HEADER_BYTES, SEMANTIC_STORE_INDEX_ENTRY_BYTES, SEMANTIC_STORE_PAGE_ALIGNMENT,
 };
 
 /// Explicit admission limits; virtual mapping and decoded payload are separate.
@@ -137,9 +136,10 @@ impl<const BITS: usize> MappedSemanticStore<BITS> {
         match self.descriptor.get(&self.data, semantic_id) {
             Ok(Some(state)) => {
                 self.stats.decoded_records = self.stats.decoded_records.saturating_add(1);
-                self.stats.decoded_payload_bytes = self.stats.decoded_payload_bytes.saturating_add(
-                    u64::from(self.descriptor.header().payload_bytes),
-                );
+                self.stats.decoded_payload_bytes = self
+                    .stats
+                    .decoded_payload_bytes
+                    .saturating_add(u64::from(self.descriptor.header().payload_bytes));
                 Ok(Some(state))
             }
             Ok(None) => {

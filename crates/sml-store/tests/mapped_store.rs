@@ -111,10 +111,9 @@ fn corrupt_payload_is_detected_lazily_without_decoding_other_records() {
     assert_eq!(store.get(1).unwrap(), Some(state::<65>(1)));
     assert!(matches!(
         store.get(2),
-        Err(MappedStoreError::Format(SemanticStoreError::RecordChecksumMismatch {
-            semantic_id: 2,
-            ..
-        }))
+        Err(MappedStoreError::Format(
+            SemanticStoreError::RecordChecksumMismatch { semantic_id: 2, .. }
+        ))
     ));
     assert_eq!(store.stats().decoded_records, 1);
     assert_eq!(store.stats().failed_lookups, 1);
@@ -126,13 +125,17 @@ fn corrupt_header_and_wrong_width_are_rejected() {
     let artifact = Artifact::new(&bytes);
     assert!(matches!(
         MappedSemanticStore::<66>::open(&artifact.path, limits()),
-        Err(MappedStoreError::Format(SemanticStoreError::DimensionMismatch { .. }))
+        Err(MappedStoreError::Format(
+            SemanticStoreError::DimensionMismatch { .. }
+        ))
     ));
     bytes[56] ^= 1;
     fs::write(&artifact.path, &bytes).unwrap();
     assert!(matches!(
         MappedSemanticStore::<65>::open(&artifact.path, limits()),
-        Err(MappedStoreError::Format(SemanticStoreError::HeaderChecksumMismatch { .. }))
+        Err(MappedStoreError::Format(
+            SemanticStoreError::HeaderChecksumMismatch { .. }
+        ))
     ));
 }
 
@@ -148,7 +151,9 @@ fn empty_file_and_truncated_image_are_rejected_but_empty_store_is_valid() {
     let truncated = Artifact::new(&bytes);
     assert!(matches!(
         MappedSemanticStore::<65>::open(&truncated.path, limits()),
-        Err(MappedStoreError::Format(SemanticStoreError::FileLength { .. }))
+        Err(MappedStoreError::Format(
+            SemanticStoreError::FileLength { .. }
+        ))
     ));
     let valid_empty = Artifact::new(&build_semantic_store::<65>(&[]).unwrap());
     let mut store = MappedSemanticStore::<65>::open(&valid_empty.path, limits()).unwrap();
@@ -163,21 +168,30 @@ fn admission_limits_are_independent() {
     assert!(matches!(
         MappedSemanticStore::<257>::open(
             &artifact.path,
-            MappedStoreLimits { max_file_bytes: bytes.len() as u64 - 1, ..limits() }
+            MappedStoreLimits {
+                max_file_bytes: bytes.len() as u64 - 1,
+                ..limits()
+            }
         ),
         Err(MappedStoreError::FileLimit { .. })
     ));
     assert!(matches!(
         MappedSemanticStore::<257>::open(
             &artifact.path,
-            MappedStoreLimits { max_records: 0, ..limits() }
+            MappedStoreLimits {
+                max_records: 0,
+                ..limits()
+            }
         ),
         Err(MappedStoreError::RecordLimit { .. })
     ));
     assert!(matches!(
         MappedSemanticStore::<257>::open(
             &artifact.path,
-            MappedStoreLimits { max_decoded_record_bytes: 159, ..limits() }
+            MappedStoreLimits {
+                max_decoded_record_bytes: 159,
+                ..limits()
+            }
         ),
         Err(MappedStoreError::PayloadLimit { .. })
     ));
@@ -197,10 +211,20 @@ fn shared_locks_live_until_the_last_reader_is_dropped() {
     let artifact = Artifact::new(&build_semantic_store(&[(1, state::<65>(1))]).unwrap());
     let first = MappedSemanticStore::<65>::open(&artifact.path, limits()).unwrap();
     let second = MappedSemanticStore::<65>::open(&artifact.path, limits()).unwrap();
-    let writer = OpenOptions::new().read(true).write(true).open(&artifact.path).unwrap();
-    assert!(matches!(FileExt::try_lock_exclusive(&writer), Err(fs4::TryLockError::WouldBlock)));
+    let writer = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&artifact.path)
+        .unwrap();
+    assert!(matches!(
+        FileExt::try_lock_exclusive(&writer),
+        Err(fs4::TryLockError::WouldBlock)
+    ));
     drop(first);
-    assert!(matches!(FileExt::try_lock_exclusive(&writer), Err(fs4::TryLockError::WouldBlock)));
+    assert!(matches!(
+        FileExt::try_lock_exclusive(&writer),
+        Err(fs4::TryLockError::WouldBlock)
+    ));
     drop(second);
     FileExt::try_lock_exclusive(&writer).unwrap();
     FileExt::unlock(&writer).unwrap();
@@ -225,7 +249,11 @@ fn atomic_replacement_keeps_old_mapping_and_opens_new_generation() {
     let artifact = Artifact::new(&build_semantic_store(&[(1, old.clone())]).unwrap());
     let mut old_reader = MappedSemanticStore::<65>::open(&artifact.path, limits()).unwrap();
     let replacement = artifact.dir.join("next.bin");
-    fs::write(&replacement, build_semantic_store(&[(1, new.clone())]).unwrap()).unwrap();
+    fs::write(
+        &replacement,
+        build_semantic_store(&[(1, new.clone())]).unwrap(),
+    )
+    .unwrap();
     fs::rename(replacement, &artifact.path).unwrap();
     let mut new_reader = MappedSemanticStore::<65>::open(&artifact.path, limits()).unwrap();
     assert_eq!(old_reader.get(1).unwrap(), Some(old));

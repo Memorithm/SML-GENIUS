@@ -39,7 +39,7 @@ jobs:
       - name: Mapped semantic store evidence
         run: cargo test -p sml-store -- --nocapture
       - name: Lockfile reproducibility
-        run: git diff --exit-code -- Cargo.lock
+        run: bash scripts/check-lockfile.sh
       - name: SBG-0.12 packed semantic benchmark
         if: startsWith(github.head_ref, 'research/sbg-0.12')
         run: cargo run --release -p sml-cli -- sbg012-bench
