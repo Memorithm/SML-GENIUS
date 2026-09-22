@@ -11,6 +11,7 @@ use core::{fmt, mem::size_of};
 
 pub use sml_core::{circuit::SignalRef, train::TruthTable2};
 
+pub mod semantic;
 pub mod training;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

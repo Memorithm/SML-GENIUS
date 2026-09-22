@@ -61,7 +61,7 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Advance the first-class SML-D decision programme from its bounded D0/D1a reference slice: trained conditional experts, calibration, batched sparse execution and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each PR before promotion.
+1. Qualify the D1b observed-SBG bridge in PR #62 after merged D0/D1a (PR #61), then advance learned feature selection/conditional experts, calibration, batched sparse execution and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each exact PR head before promotion. Fixed coordinates and finite truth-table fitting do not satisfy the substantial decision-capacity gate.
 2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
 3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
 4. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
@@ -118,15 +118,16 @@ The SBG track is an experimental hypothesis. It does not yet establish language 
 
 The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md`](SML-D-BOOTSTRAP.md). A substantial decision capacity is part of the target architecture, with separate total/active parameter accounting and dedicated training objectives. No fixed fraction of the 25B atlas is justified yet. Native direct and recurrent decisions must not require the text decoder.
 
-- [x] D0 reference implementation: typed Boolean/choice/ordinal heads, explicit unknowns and abstention, shared circuit evaluation, 64-lane bit-sliced groups and admission budgets (PR #61).
+- [x] D0 reference implementation: typed Boolean/choice/ordinal heads, explicit unknowns and abstention, shared circuit evaluation, 64-lane bit-sliced groups and admission budgets (merged PR #61).
 - [x] D1a finite two-input expert-fitting fixture: training-only selection, validation rejection, separate test fixtures. This is not the general D1 gate.
-- [ ] D1 substantial trained experts, SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
+- [x] D1b reference implementation: observed V/M/A/R coordinate projection, shared inference/finite-training path and separate projection budgets (PR #62; merge requires exact-head green CI). See `SML-D1b-SBG-BRIDGE.md`.
+- [ ] D1 substantial trained experts, learned SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
 - [ ] D2 reserved-set calibration, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
 - [ ] D3 streamed/columnar bounded batches, sparse expert scheduling and complete packing/I/O/output cost measurements.
 - [ ] D4 bounded memory/recurrent escalation with matched fixed/adaptive baselines.
 - [ ] D5 independently reproducible comparisons at matched quality/coverage against exact rules, small classifiers, constrained generative models and declared decision baselines.
 
-D0 outputs are uncalibrated proposals, never action authorization. Numeric question IDs and caller-supplied features do not implement natural-language question understanding. Logical truth-table bits are not physical in-memory storage. A reduction in word-kernel call count is not a measured speedup; report decisions/sec and latency distributions only from actual end-to-end benchmarks. D0/D1a do not close the SML-1 or SML-2 model gates.
+D0 outputs are uncalibrated proposals, never action authorization. Numeric question IDs and caller-supplied features do not implement natural-language question understanding. Logical truth-table bits are not physical in-memory storage. A reduction in word-kernel call count is not a measured speedup; report decisions/sec and latency distributions only from actual end-to-end benchmarks. D0/D1a/D1b do not close the SML-1 or SML-2 model gates. D1b observation masks remain explicit caller metadata; M is relevance rather than availability, and clear A is not calibrated confidence. Store v1 does not supply those observation masks.
 
 The existing Forge `sml-topology/v1` contract was inspected for reuse; its single-output, at-most-eight-input search boundary differs from these typed multi-head batches. See `SML-D-REUSE.md` before integrating or modifying either repository.
 

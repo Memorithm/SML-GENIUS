@@ -18,7 +18,31 @@ Long-term input: state + question + candidate definitions. Output: typed value,
 uncertainty/abstention, evidence references, model/schema/policy versions and
 resource evidence. Dynamic natural-language questions are NOT implemented by D0.
 
-## Slice implemented here: SML-D0 and a narrow SML-D1a fixture
+## Durable checkpoints and active slice
+
+D0/D1a merged through PR #61 at 9749086c5ad9b77208d53539b179537dc844fc8c.
+The exact pre-merge head 4d2f17a41b0a64a2c83e92a4b7838d9fbccdb18d passed
+CI run 35785060702, including the four boundary tests previously held pending.
+
+Active slice: **D1b observed-SBG decision bridge** on
+`research/sml-d1b-observed-sbg`. Check its live PR and CI before resuming; once
+merged, use current main rather than appending commits to this slice branch.
+Detailed contract: [SML-D1b-SBG-BRIDGE.md](SML-D1b-SBG-BRIDGE.md).
+
+D1b projects explicitly selected SBG coordinates into D0. Independent masks
+state whether V, M, A and R were observed. Relevance M and absence of ambiguity A
+are not substitutes for observation. A ContextValue is usable only when V/M/A
+are observed, M is true and A false. Metadata features use their own availability.
+The same versioned projection supplies inference and finite D1a training samples;
+unknown training inputs reject the experiment instead of being filled or dropped.
+Projection coordinates remain fixed metadata, not a learned semantic encoder.
+
+D1b completion requires full CI, semantic-mask truth cases, schema/version/shape
+rejection, budgets, large-width multi-head evidence, finite fitting, validation
+rejection and source immutability. No wall-clock or language-quality claim.
+Broad D1, D2-D5 and SBG-0.14 remain open after this narrow bridge.
+
+## Reference implementation: SML-D0 and a narrow SML-D1a fixture
 
 Code: crates/sml-decision. Dependencies: existing native sml-core only. The core
 stays unchanged and dependency-free. No external Memorithm runtime dependency,
@@ -59,8 +83,6 @@ weights. Hand-authored circuit tables are not automatically learned parameters.
 
 ## Qualification
 
-Run:
-
 ```sh
 cargo test --locked -p sml-decision -- --nocapture
 cargo fmt --all -- --check
@@ -70,28 +92,30 @@ cargo test --locked --workspace
 bash scripts/check-lockfile.sh
 ```
 
-Tests exhaust all 16 tables and 9 partial-input combinations; compare with an
+D0 tests exhaust all 16 tables and 9 partial-input combinations; compare with an
 independent scalar completion oracle; test 0/1/63/64/65/127/128/129/4096 records;
 exercise composition, aliasing, multiple heads, constraints, schemas, budgets,
 overflow, deterministic fitting, split overlap and validation rejection.
+D1b adds explicit observations and real SBG states at 257 and 16,384 bits/field.
 
-Count logical gate-lanes, word-gate kernel calls, feature extraction, head
-signal reads, output cardinality and text tokens separately. A 64:1 ratio of
-logical gate-lanes to grouped calls is NOT a 64x speedup: packing, unknown-value
-logic, head resolution, allocation and I/O still cost work. No throughput or
-Jev superiority claim is supported by this reference fixture.
+Count logical gate-lanes, word-gate kernel calls, semantic/mask reads, feature
+extraction, head signal reads, output cardinality and text tokens separately.
+A 64:1 ratio of logical gate-lanes to grouped calls is NOT a 64x speedup: packing,
+unknown-value logic, head resolution, allocation and I/O still cost work.
+No throughput or Jev superiority claim is supported by these reference fixtures.
 
 ## Full evidence-gated roadmap
 
 | Gate | Work and admission evidence |
 |---|---|
-| D0 | Typed decision contract, abstention, bounded batch execution, scalar equivalence. This slice. |
-| D1a | Finite two-input supervised expert fitting and validation rejection. Reference fixture only. |
-| D1 | Substantial trained decision experts; SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
-| D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probability representation only after validation. Open. |
-| D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation, storage integration; complete encoding-to-result latency and throughput. Open. |
-| D4 | Explicit escalation to bounded memory/recurrent refinement; compare fixed/adaptive depth and abstention at matched costs. Open. |
-| D5 | Independent repeated evaluation against exact rules, small classifiers, constrained generative systems and a declared external decision baseline where available. Open. |
+| D0 | Typed decision contract, abstention, bounded batches, scalar equivalence. Merged PR #61. |
+| D1a | Finite two-input fitting and validation rejection. Merged PR #61; reference fixture only. |
+| D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Active slice; requires green CI. |
+| D1 | Substantial trained experts; learned SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
+| D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probabilities only after validation. Open. |
+| D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation and storage; full encoding-to-result latency/throughput. Open. |
+| D4 | Explicit escalation to bounded memory/recurrent refinement; fixed/adaptive depth and abstention at matched costs. Open. |
+| D5 | Independent repeated evaluation against exact rules, small classifiers, constrained generative systems and external decision baselines. Open. |
 
 Report decisions/sec at matched error/coverage, p50/p95/p99, admission failures,
 RAM/RSS, page faults, disk traffic, compute and retained output size. The language
@@ -100,12 +124,15 @@ and warm measurements and never infer whole-system speed from one kernel.
 
 ## Integration and ecosystem
 
-SBG-0.14 must feed native decision experts as well as optional generation. D0 does
-not replace SBG-0.13c storage qualification, native Elastic actuation, learned
-marker/control, learned wiring, or the V888/CSP matched-control programme.
+SBG-0.14 must feed native decision experts as well as optional generation. D1b
+reuses actual sml-core SemanticState and the v1 store decoder in a test without
+adding a store runtime dependency. It does not yet schedule mapped pages, MOR,
+Elastic Weights or recurrent experts. Observation masks are external metadata;
+the existing store v1 does not supply or authenticate them.
 
-Reuse candidates: SciRust Boolean circuit conformance, Forge topology search,
-TDI matched-budget decision panels, ElasticXxx admission policies and CCOS memory
-selection. Promote only tested primitives after inspecting destination contracts;
-never add these repositories as mandatory SML inference dependencies. Raw V888
-is not an inference dependency and grants no performance/quality presumption.
+SML-D does not replace SBG-0.13c resource qualification, native Elastic actuation,
+learned marker/control, learned wiring, or the V888/CSP matched-control programme.
+Reuse candidates: SciRust Boolean conformance, Forge topology search, TDI matched
+panels, ElasticXxx admission and CCOS memory selection. Promote tested primitives
+only after inspecting destination contracts; no mandatory external Memorithm
+inference dependencies. Raw V888 grants no quality/performance presumption.
