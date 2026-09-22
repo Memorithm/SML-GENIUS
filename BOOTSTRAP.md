@@ -6,6 +6,8 @@ This file is the durable re-entry point for continuing the SML-GENIUS research p
 
 SML is an independent, predominantly Boolean / low-bit autoregressive architecture. It is not defined by reference to Transformer internals. Its native mechanisms include direct routing, Mixture-of-Routers / sparse expert selection, bounded associative memory, recurrent depth, Elastic Weights, and Boolean-integral learning experiments.
 
+Native decision capability is a first-class parallel objective. A substantial decision-expert family and dedicated training objectives must be evaluated before SML-2, not bolted onto a finished language model. Direct decisions and bounded recurrent refinement must work without a text decoder; language generation is optional. See `docs/SML-D-BOOTSTRAP.md`. Total decision capacity, active work per decision and direct-decision coverage are separate quantities; no arbitrary 25B percentage is frozen.
+
 The new semantic representation programme is **Semantic Boolean Geometry (SBG)**.
 
 SBG treats meaning as a context-sensitive Boolean state rather than as a fixed real-valued embedding.
@@ -44,7 +46,7 @@ The repository already uses `SML-0.7` for Elastic Weights and has merged later `
 
 Do **not** reuse those occupied SML labels.
 
-Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content.
+Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content. Native decision work uses **SML-D**; connectomic structural priors use **CSP**.
 
 ## Semantic Boolean Geometry implementation roadmap
 
@@ -135,6 +137,7 @@ Implementation uses the independent **SBG-0.x** slice namespace while preserving
 
 - **SBG-0.14 — Integrated SBG Prototype**
   - encoder -> SBG -> MOR -> Elastic Weights -> expert compute -> recurrent semantic rewrite;
+  - feed native decision heads without mandatory text decoding;
   - end-to-end evidence and ablations;
   - promotion only after reproducible tests.
 
@@ -150,41 +153,47 @@ SML-1.3 controlled routing/keyed-memory ablations merged through PR #52. Learned
 
 SBG-0.13a byte format merged through PR #57 as `786c0d549c78aae550bff14157d95ed472af2e8d`.
 
-Latest implementation slice: **SBG-0.13b**, PR #60, branch `research/sbg-0.13b-mapped-runtime`. Check the live PR status before resuming: once merged, branch from current `main` rather than reusing this slice branch.
+SBG-0.13b Linux mapped reader merged through PR #60 as `d2ba5c9999379e5a8bd75838f98a8f7823ec2f89`. Its qualification and limits are documented in `docs/SBG-0.13b-MAPPED-RUNTIME.md`.
+
+Latest implementation slice: **SML-D0 / narrow D1a**, PR #61, branch `research/sml-d0-native-decision`. Read `docs/SML-D-BOOTSTRAP.md` and check live PR/CI state before continuing. Once merged, branch from current `main` rather than reviving this slice branch.
 
 Implementation surfaces:
 
 ```text
-crates/sml-core/src/semantic/store_format.rs
-crates/sml-store/src/lib.rs
-crates/sml-store/tests/mapped_store.rs
-docs/SBG-0.13b-MAPPED-RUNTIME.md
-scripts/check-lockfile.sh
+crates/sml-decision/src/lib.rs
+crates/sml-decision/src/training.rs
+crates/sml-decision/tests/decision.rs
+crates/sml-decision/tests/boundaries.rs
+docs/SML-D-BOOTSTRAP.md
 ```
 
-Definition of done for SBG-0.13b:
+Definition of done for SML-D0:
 
-1. actual read-only Linux file mapping, with no full-file heap fallback;
-2. one-time descriptor/index validation and lazy per-record CRC32C/V/M/A/R decoding;
-3. explicit virtual-file, record-count and decoded-payload limits;
-4. canonical layout checks reject zero or insufficient record strides before decoding;
-5. shared-lock ownership survives for the mapping lifetime, with explicit immutable-inode assumptions;
-6. tests cover actual mapping, corruption before mapping, truncation, budgets, reopen, concurrent readers, exclusive-writer rejection and atomic replacement;
-7. dependency versions are frozen in a tracked Cargo.lock;
-8. format/check/clippy/workspace tests, store evidence and existing CLI smoke gates all pass on the latest PR head before merge.
+1. validated acyclic Boolean program with typed binary/choice/ordinal outputs;
+2. unknown-feature masks and explicit abstention rather than false defaults;
+3. many heads share one circuit evaluation and one feature packing pass;
+4. bit-sliced groups of at most 64 records match independent scalar semantics;
+5. budgets checked before internal execution/allocation and counters distinguish logical work from word-kernel calls;
+6. no text decoder, calibrated-probability claim or external action authorization;
+7. exhaustive tables/partial-input cases, boundary groups, highest feature bit, constraints, malformed inputs and reconvergent unknown soundness tests;
+8. complete locked workspace CI and decision evidence on the exact latest head before merge.
+
+D1a adds only a finite two-input supervised-table fitting fixture with train-only selection and validation rejection. It is not a general decision model, not learned wiring and not a protected-final-holdout scaling result. Logical table bits are not physical Vec storage or a live persisted parameter commit.
 
 The workspace retains `forbid(unsafe_code)` and the core retains no external dependencies. OS mapping uses pinned mmap-guard, which encapsulates unsafe code in its dependencies. This is not a safety proof against arbitrary external mutation: mapped inodes must never be modified/truncated while in use. Locks are cooperative; CRC32C is not authentication. Reader counters are logical payload/mapping counters, not RSS, page-cache or actual I/O measurements.
 
 Next implementation gates:
 
+- **SML-D1/D2**: substantial trained decision experts conditioned by SBG/state/questions, calibration and risk/coverage; no hand-authored feature schema may be presented as general language comprehension.
+- **SML-D3/D4/D5**: streaming/sparse batches, bounded recurrent refinement and end-to-end matched-quality qualification; grouped call counts are not throughput gains.
 - **SBG-0.13c**: cold/warm latency, RSS/page faults and traffic on growing stores; streamed publication and stronger immutable/index-integrity contracts. Do not mark the broad store/resource gate complete from small fixtures alone.
-- **SBG-0.14**: connect mapped lookup to native SBG/MOR/Elastic/expert/memory/recurrent execution with end-to-end evidence.
+- **SBG-0.14**: connect mapped lookup to native SBG/MOR/Elastic/expert/memory/recurrent execution and native decision outputs with end-to-end evidence.
 - **SML-1 follow-up**: learned marker/control, wider matched ablations, fixed-versus-adaptive depth. Freeze SML-0/SML-1 protocols before SML-2.
 - **Elastic actuation**: native SML physical page materialization and VERIFY/ROLLBACK; other Memorithm repositories are research/qualification partners, not mandatory inference dependencies.
 
 ## Scientific boundary
 
-SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above.
+SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above. SML-D0 adds a bounded structured-feature decision runtime, not evidence of Jev-level capabilities or a measured whole-system speedup.
 
 ## BANC v888 Connectomic Structural Prior track
 
