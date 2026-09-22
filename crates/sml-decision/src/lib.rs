@@ -32,7 +32,10 @@ pub enum HeadKind {
     /// Exactly one candidate must be known eligible. No hidden tie breaking.
     Choice(Vec<Candidate>),
     /// Little-endian output bits with an inclusive, explicitly declared maximum.
-    Ordinal { bits: Vec<SignalRef>, maximum: u16 },
+    Ordinal {
+        bits: Vec<SignalRef>,
+        maximum: u16,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,7 +104,11 @@ pub struct ProgramLimits {
 
 impl Default for ProgramLimits {
     fn default() -> Self {
-        Self { max_gates: 4096, max_heads: 256, max_head_signals: 4096 }
+        Self {
+            max_gates: 4096,
+            max_heads: 256,
+            max_head_signals: 4096,
+        }
     }
 }
 
@@ -172,8 +179,10 @@ impl DecisionProgram {
         if !(1..=64).contains(&inputs) || heads.is_empty() {
             return Err(DecisionError::InvalidShape);
         }
-        if gates.len() > limits.max_gates || gates.len() > u16::MAX as usize
-            || heads.len() > limits.max_heads || heads.len() > u16::MAX as usize
+        if gates.len() > limits.max_gates
+            || gates.len() > u16::MAX as usize
+            || heads.len() > limits.max_heads
+            || heads.len() > u16::MAX as usize
         {
             return Err(DecisionError::ProgramBudget);
         }
@@ -183,7 +192,10 @@ impl DecisionProgram {
         }
         let mut head_signals = 0_usize;
         for (index, head) in heads.iter().enumerate() {
-            if heads[..index].iter().any(|prior| prior.question_id == head.question_id) {
+            if heads[..index]
+                .iter()
+                .any(|prior| prior.question_id == head.question_id)
+            {
                 return Err(DecisionError::DuplicateQuestion);
             }
             validate_signal(head.applicable, inputs, gates.len())?;
@@ -198,65 +210,113 @@ impl DecisionProgram {
                     }
                     for (position, candidate) in candidates.iter().enumerate() {
                         validate_signal(candidate.eligible, inputs, gates.len())?;
-                        if candidates[..position].iter().any(|prior| prior.id == candidate.id) {
+                        if candidates[..position]
+                            .iter()
+                            .any(|prior| prior.id == candidate.id)
+                        {
                             return Err(DecisionError::DuplicateCandidate);
                         }
                     }
                     candidates.len()
                 }
                 HeadKind::Ordinal { bits, maximum } => {
-                    if bits.is_empty() || bits.len() > 16 || u32::from(*maximum) >= (1_u32 << bits.len()) {
+                    if bits.is_empty()
+                        || bits.len() > 16
+                        || u32::from(*maximum) >= (1_u32 << bits.len())
+                    {
                         return Err(DecisionError::InvalidShape);
                     }
-                    for bit in bits { validate_signal(*bit, inputs, gates.len())?; }
+                    for bit in bits {
+                        validate_signal(*bit, inputs, gates.len())?;
+                    }
                     bits.len()
                 }
             };
-            head_signals = head_signals.checked_add(count + 1).ok_or(DecisionError::Overflow)?;
-            if head_signals > limits.max_head_signals { return Err(DecisionError::ProgramBudget); }
+            head_signals = head_signals
+                .checked_add(count + 1)
+                .ok_or(DecisionError::Overflow)?;
+            if head_signals > limits.max_head_signals {
+                return Err(DecisionError::ProgramBudget);
+            }
         }
-        Ok(Self { schema_id, model_version, inputs, gates, heads, head_signals })
+        Ok(Self {
+            schema_id,
+            model_version,
+            inputs,
+            gates,
+            heads,
+            head_signals,
+        })
     }
 
-    /// Stored truth-table bits are not automatically counted as learned parameters.
-    pub fn table_storage_bits(&self) -> u64 { self.gates.len() as u64 * 4 }
+    /// Semantic table bits, NOT physical Vec<GateSpec> storage or learned provenance.
+    pub fn logical_table_bits(&self) -> u64 {
+        self.gates.len() as u64 * 4
+    }
 
     pub fn plan(&self, records: usize, budget: BatchBudget) -> Result<BatchPlan, DecisionError> {
-        let results = records.checked_mul(self.heads.len()).ok_or(DecisionError::Overflow)?;
-        let result_bytes = results.checked_mul(size_of::<DecisionRecord>()).ok_or(DecisionError::Overflow)?;
-        let scratch_bytes = if records == 0 { 0 } else {
-            (self.inputs + self.gates.len()).checked_mul(size_of::<Plane>()).ok_or(DecisionError::Overflow)?
+        let results = records
+            .checked_mul(self.heads.len())
+            .ok_or(DecisionError::Overflow)?;
+        let result_bytes = results
+            .checked_mul(size_of::<DecisionRecord>())
+            .ok_or(DecisionError::Overflow)?;
+        let scratch_bytes = if records == 0 {
+            0
+        } else {
+            (self.inputs + self.gates.len())
+                .checked_mul(size_of::<Plane>())
+                .ok_or(DecisionError::Overflow)?
         };
         let logical_gate_evaluations = product(records, self.gates.len())?;
         let word_gate_evaluations = product(records.div_ceil(64), self.gates.len())?;
         let plan = BatchPlan {
-            records, results, result_bytes, scratch_bytes, logical_gate_evaluations,
-            word_gate_evaluations, feature_extractions: product(records, self.inputs)?,
+            records,
+            results,
+            result_bytes,
+            scratch_bytes,
+            logical_gate_evaluations,
+            word_gate_evaluations,
+            feature_extractions: product(records, self.inputs)?,
             head_signal_read_bound: product(records, self.head_signals)?,
         };
-        if records > budget.max_records || results > budget.max_results
-            || result_bytes > budget.max_result_bytes || scratch_bytes > budget.max_scratch_bytes
+        if records > budget.max_records
+            || results > budget.max_results
+            || result_bytes > budget.max_result_bytes
+            || scratch_bytes > budget.max_scratch_bytes
             || logical_gate_evaluations > budget.max_logical_gate_evaluations
-        { return Err(DecisionError::BatchBudget); }
+        {
+            return Err(DecisionError::BatchBudget);
+        }
         Ok(plan)
     }
 
-    pub fn evaluate(&self, records: &[InputRecord], budget: BatchBudget) -> Result<BatchResult, DecisionError> {
+    pub fn evaluate(
+        &self,
+        records: &[InputRecord],
+        budget: BatchBudget,
+    ) -> Result<BatchResult, DecisionError> {
         let plan = self.plan(records.len(), budget)?;
         let input_mask = lane_mask(self.inputs);
         // Reject the whole batch before any gate/output work. Unknown payload bits
         // and undeclared feature bits are not silently interpreted as evidence.
         for record in records {
-            if record.schema_id != self.schema_id { return Err(DecisionError::SchemaMismatch); }
+            if record.schema_id != self.schema_id {
+                return Err(DecisionError::SchemaMismatch);
+            }
             if record.known & !input_mask != 0 || record.values & !record.known != 0 {
                 return Err(DecisionError::InvalidRecord);
             }
         }
         let mut decisions = Vec::new();
-        decisions.try_reserve_exact(plan.results).map_err(|_| DecisionError::Allocation)?;
+        decisions
+            .try_reserve_exact(plan.results)
+            .map_err(|_| DecisionError::Allocation)?;
         let mut planes = Vec::new();
         if !records.is_empty() {
-            planes.try_reserve_exact(self.inputs + self.gates.len()).map_err(|_| DecisionError::Allocation)?;
+            planes
+                .try_reserve_exact(self.inputs + self.gates.len())
+                .map_err(|_| DecisionError::Allocation)?;
             planes.resize(self.inputs + self.gates.len(), Plane::default());
         }
         let mut abstentions = 0;
@@ -280,35 +340,62 @@ impl DecisionProgram {
                     let outcome = resolve_head(head, |signal| {
                         head_signal_reads += 1;
                         let plane = planes[signal_index(signal, self.inputs)];
-                        if plane.known & (1_u64 << lane) == 0 { None }
-                        else { Some(plane.values & (1_u64 << lane) != 0) }
+                        if plane.known & (1_u64 << lane) == 0 {
+                            None
+                        } else {
+                            Some(plane.values & (1_u64 << lane) != 0)
+                        }
                     });
-                    if matches!(outcome, DecisionOutcome::Abstain(_)) { abstentions += 1; }
+                    if matches!(outcome, DecisionOutcome::Abstain(_)) {
+                        abstentions += 1;
+                    }
                     decisions.push(DecisionRecord {
-                        record_id: record.record_id, question_id: head.question_id,
-                        schema_id: self.schema_id, model_version: self.model_version,
-                        outcome, uncertainty: Uncertainty::Uncalibrated,
+                        record_id: record.record_id,
+                        question_id: head.question_id,
+                        schema_id: self.schema_id,
+                        model_version: self.model_version,
+                        outcome,
+                        uncertainty: Uncertainty::Uncalibrated,
                     });
                 }
             }
         }
-        Ok(BatchResult { decisions, plan, abstentions, head_signal_reads, text_tokens_generated: 0 })
+        Ok(BatchResult {
+            decisions,
+            plan,
+            abstentions,
+            head_signal_reads,
+            text_tokens_generated: 0,
+        })
     }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct Plane { values: u64, known: u64 }
+struct Plane {
+    values: u64,
+    known: u64,
+}
 
 fn lane_mask(lanes: usize) -> u64 {
-    if lanes == 64 { u64::MAX } else { (1_u64 << lanes) - 1 }
+    if lanes == 64 {
+        u64::MAX
+    } else {
+        (1_u64 << lanes) - 1
+    }
 }
 
 fn product(left: usize, right: usize) -> Result<u64, DecisionError> {
-    let result = (left as u128).checked_mul(right as u128).ok_or(DecisionError::Overflow)?;
+    let result = (left as u128)
+        .checked_mul(right as u128)
+        .ok_or(DecisionError::Overflow)?;
     u64::try_from(result).map_err(|_| DecisionError::Overflow)
 }
 
-fn validate_signal(signal: SignalRef, inputs: usize, earlier_gates: usize) -> Result<(), DecisionError> {
+fn validate_signal(
+    signal: SignalRef,
+    inputs: usize,
+    earlier_gates: usize,
+) -> Result<(), DecisionError> {
     match signal {
         SignalRef::Input(index) if (index as usize) < inputs => Ok(()),
         SignalRef::Gate(index) if (index as usize) < earlier_gates => Ok(()),
@@ -317,7 +404,10 @@ fn validate_signal(signal: SignalRef, inputs: usize, earlier_gates: usize) -> Re
 }
 
 fn signal_index(signal: SignalRef, inputs: usize) -> usize {
-    match signal { SignalRef::Input(index) => index as usize, SignalRef::Gate(index) => inputs + index as usize }
+    match signal {
+        SignalRef::Input(index) => index as usize,
+        SignalRef::Gate(index) => inputs + index as usize,
+    }
 }
 
 fn gate_plane(gate: GateSpec, left: Plane, right: Plane, live: u64) -> Plane {
@@ -326,21 +416,41 @@ fn gate_plane(gate: GateSpec, left: Plane, right: Plane, live: u64) -> Plane {
     for row in 0..4 {
         // Preserve immediate aliasing (e.g. XOR(x,x)). Wider reconvergent
         // correlations are conservative: extra abstention, not invented evidence.
-        if gate.left == gate.right && (row == 1 || row == 2) { continue; }
-        let l = if row & 1 != 0 { left.values | !left.known } else { !left.values };
-        let r = if row & 2 != 0 { right.values | !right.known } else { !right.values };
+        if gate.left == gate.right && (row == 1 || row == 2) {
+            continue;
+        }
+        let l = if row & 1 != 0 {
+            left.values | !left.known
+        } else {
+            !left.values
+        };
+        let r = if row & 2 != 0 {
+            right.values | !right.known
+        } else {
+            !right.values
+        };
         let possible = l & r & live;
-        if gate.table.code() & (1_u8 << row) != 0 { yes |= possible; } else { no |= possible; }
+        if gate.table.code() & (1_u8 << row) != 0 {
+            yes |= possible;
+        } else {
+            no |= possible;
+        }
     }
     let known = live & !(yes & no);
-    Plane { values: yes & known, known }
+    Plane {
+        values: yes & known,
+        known,
+    }
 }
 
-fn resolve_head(head: &DecisionHead, mut read: impl FnMut(SignalRef) -> Option<bool>) -> DecisionOutcome {
+fn resolve_head(
+    head: &DecisionHead,
+    mut read: impl FnMut(SignalRef) -> Option<bool>,
+) -> DecisionOutcome {
     use Abstention as A;
     use DecisionOutcome::{Abstain, Proposed};
     match read(head.applicable) {
-        Some(true) => {},
+        Some(true) => {}
         Some(false) => return Abstain(A::Inapplicable),
         None => return Abstain(A::MissingInformation),
     }
@@ -356,40 +466,60 @@ fn resolve_head(head: &DecisionHead, mut read: impl FnMut(SignalRef) -> Option<b
             for candidate in candidates {
                 match read(candidate.eligible) {
                     Some(true) => {
-                        if selected.is_some() { multiple = true; }
+                        if selected.is_some() {
+                            multiple = true;
+                        }
                         selected = Some(candidate.id);
                     }
-                    Some(false) => {},
+                    Some(false) => {}
                     None => missing = true,
                 }
             }
-            if multiple { Abstain(A::AmbiguousCandidates) }
-            else if missing { Abstain(A::MissingInformation) }
-            else if let Some(id) = selected { Proposed(DecisionValue::Choice(id)) }
-            else { Abstain(A::NoEligibleCandidate) }
+            if multiple {
+                Abstain(A::AmbiguousCandidates)
+            } else if missing {
+                Abstain(A::MissingInformation)
+            } else if let Some(id) = selected {
+                Proposed(DecisionValue::Choice(id))
+            } else {
+                Abstain(A::NoEligibleCandidate)
+            }
         }
         HeadKind::Ordinal { bits, maximum } => {
             let mut value = 0_u16;
             for (index, signal) in bits.iter().enumerate() {
                 match read(*signal) {
                     Some(true) => value |= 1_u16 << index,
-                    Some(false) => {},
+                    Some(false) => {}
                     None => return Abstain(A::MissingInformation),
                 }
             }
-            if value > *maximum { Abstain(A::OrdinalOutOfRange) }
-            else { Proposed(DecisionValue::Ordinal(value)) }
+            if value > *maximum {
+                Abstain(A::OrdinalOutOfRange)
+            } else {
+                Proposed(DecisionValue::Ordinal(value))
+            }
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecisionError {
-    InvalidShape, ProgramBudget, DuplicateQuestion, DuplicateCandidate, InvalidSignal,
-    Overflow, BatchBudget, SchemaMismatch, InvalidRecord, Allocation,
+    InvalidShape,
+    ProgramBudget,
+    DuplicateQuestion,
+    DuplicateCandidate,
+    InvalidSignal,
+    Overflow,
+    BatchBudget,
+    SchemaMismatch,
+    InvalidRecord,
+    Allocation,
 }
 
 impl fmt::Display for DecisionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{self:?}") }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 impl std::error::Error for DecisionError {}

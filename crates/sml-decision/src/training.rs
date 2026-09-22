@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use crate::{DecisionError, TruthTable2};
+use crate::TruthTable2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LabeledDecision {
@@ -52,8 +52,8 @@ pub struct FitReport {
     pub candidate_validation_errors: u64,
     pub selection_gate_evaluations: u64,
     pub total_gate_evaluations: u64,
-    /// Four truth-table bits only upon acceptance; structural metadata excluded.
-    pub committed_table_bits: u64,
+    /// Logical table bits in an accepted proposal; not physical storage or a live commit.
+    pub accepted_logical_table_bits: u64,
 }
 
 /// Exact finite empirical-risk minimizer with fail-closed split/coverage checks.
@@ -68,20 +68,30 @@ pub fn fit_boolean_expert(
     if training.is_empty() || validation.is_empty() {
         return Err(FitError::EmptySplit);
     }
-    let total = training.len().checked_add(validation.len()).ok_or(FitError::Overflow)?;
+    let total = training
+        .len()
+        .checked_add(validation.len())
+        .ok_or(FitError::Overflow)?;
     if total > policy.max_samples {
         return Err(FitError::SampleBudget);
     }
     let train_count = u64::try_from(training.len()).map_err(|_| FitError::Overflow)?;
     let validation_count = u64::try_from(validation.len()).map_err(|_| FitError::Overflow)?;
     let selection_gate_evaluations = train_count.checked_mul(16).ok_or(FitError::Overflow)?;
-    let total_gate_evaluations = train_count.checked_mul(17)
-        .and_then(|n| validation_count.checked_mul(2).and_then(|v| n.checked_add(v)))
+    let total_gate_evaluations = train_count
+        .checked_mul(17)
+        .and_then(|n| {
+            validation_count
+                .checked_mul(2)
+                .and_then(|v| n.checked_add(v))
+        })
         .ok_or(FitError::Overflow)?;
     let mut ids = HashSet::new();
     ids.try_reserve(total).map_err(|_| FitError::Allocation)?;
     for sample in training.iter().chain(validation) {
-        if !ids.insert(sample.case_id) { return Err(FitError::DuplicateCaseId); }
+        if !ids.insert(sample.case_id) {
+            return Err(FitError::DuplicateCaseId);
+        }
     }
     if coverage(training) != 0b1111 || coverage(validation) != 0b1111 {
         return Err(FitError::IncompleteInputCoverage);
@@ -100,13 +110,18 @@ pub fn fit_boolean_expert(
     }
     let baseline_validation_errors = errors(incumbent, validation);
     let candidate_validation_errors = errors(selected, validation);
-    let train_ok = candidate_training_errors.checked_add(policy.min_train_error_reduction)
+    let train_ok = candidate_training_errors
+        .checked_add(policy.min_train_error_reduction)
         .is_some_and(|n| n <= baseline_training_errors);
     let accepted = train_ok
         && candidate_validation_errors <= baseline_validation_errors
         && candidate_validation_errors <= policy.max_validation_errors;
     Ok(FitReport {
-        outcome: if accepted { FitOutcome::Accepted(selected) } else { FitOutcome::Rejected },
+        outcome: if accepted {
+            FitOutcome::Accepted(selected)
+        } else {
+            FitOutcome::Rejected
+        },
         selected,
         training_samples: train_count,
         validation_samples: validation_count,
@@ -116,7 +131,7 @@ pub fn fit_boolean_expert(
         candidate_validation_errors,
         selection_gate_evaluations,
         total_gate_evaluations,
-        committed_table_bits: if accepted { 4 } else { 0 },
+        accepted_logical_table_bits: if accepted { 4 } else { 0 },
     })
 }
 
@@ -127,20 +142,26 @@ fn coverage(samples: &[LabeledDecision]) -> u8 {
 }
 
 fn errors(table: TruthTable2, samples: &[LabeledDecision]) -> u64 {
-    samples.iter().filter(|s| table.evaluate(s.left, s.right) != s.target).count() as u64
+    samples
+        .iter()
+        .filter(|s| table.evaluate(s.left, s.right) != s.target)
+        .count() as u64
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FitError {
-    EmptySplit, Overflow, SampleBudget, DuplicateCaseId, IncompleteInputCoverage,
-    InvalidTable, Allocation,
+    EmptySplit,
+    Overflow,
+    SampleBudget,
+    DuplicateCaseId,
+    IncompleteInputCoverage,
+    InvalidTable,
+    Allocation,
 }
 
 impl core::fmt::Display for FitError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{self:?}") }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 impl std::error::Error for FitError {}
-
-// Compile-time boundary: training consumes existing SML table types, not a text
-// decoder. There is deliberately no external action or authorization API here.
-const _: Option<DecisionError> = None;
