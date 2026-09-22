@@ -26,16 +26,20 @@ fn highest_feature_bit_remains_distinct_from_unknown_and_false() {
     .unwrap();
     let guard = 1_u64 << 62;
     let high = 1_u64 << 63;
-    let inputs: Vec<_> = [(guard | high, guard | high), (guard, guard | high), (guard, guard)]
-        .into_iter()
-        .enumerate()
-        .map(|(id, (values, known))| InputRecord {
-            record_id: id as u64,
-            schema_id: 1,
-            values,
-            known,
-        })
-        .collect();
+    let inputs: Vec<_> = [
+        (guard | high, guard | high),
+        (guard, guard | high),
+        (guard, guard),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(id, (values, known))| InputRecord {
+        record_id: id as u64,
+        schema_id: 1,
+        values,
+        known,
+    })
+    .collect();
     let result = program.evaluate(&inputs, BatchBudget::default()).unwrap();
     assert_eq!(
         result.decisions[0].outcome,
