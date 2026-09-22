@@ -130,7 +130,9 @@ impl<const BITS: usize> SemanticProjection<BITS> {
         }
         for (position, feature) in features.iter().enumerate() {
             if feature.coordinate() >= BITS {
-                return Err(SemanticDecisionError::InvalidCoordinate(feature.coordinate()));
+                return Err(SemanticDecisionError::InvalidCoordinate(
+                    feature.coordinate(),
+                ));
             }
             if features[..position].contains(feature) {
                 return Err(SemanticDecisionError::DuplicateFeature);
@@ -233,7 +235,9 @@ impl<const BITS: usize> SemanticProjection<BITS> {
                         SemanticFeature::Ambiguity(_) => {
                             (input.observed.ambiguity, &input.state.ambiguity)
                         }
-                        SemanticFeature::Routing(_) => (input.observed.routing, &input.state.routing),
+                        SemanticFeature::Routing(_) => {
+                            (input.observed.routing, &input.state.routing)
+                        }
                         SemanticFeature::ContextValue(_) => unreachable!(),
                     };
                     if observed.get(i)? {
@@ -265,7 +269,9 @@ impl<const BITS: usize> SemanticProjection<BITS> {
         budget: ProjectionBudget,
     ) -> Result<SemanticFitReport, SemanticDecisionError> {
         if feature_slots[0] == feature_slots[1]
-            || feature_slots.iter().any(|slot| *slot >= self.features.len())
+            || feature_slots
+                .iter()
+                .any(|slot| *slot >= self.features.len())
         {
             return Err(SemanticDecisionError::InvalidFeaturePair);
         }
@@ -292,7 +298,9 @@ impl<const BITS: usize> SemanticProjection<BITS> {
         for sample in training.iter().chain(validation) {
             let (record, work) = self.project(sample.input)?;
             if record.known & required != required {
-                return Err(SemanticDecisionError::UnknownTrainingFeature(record.record_id));
+                return Err(SemanticDecisionError::UnknownTrainingFeature(
+                    record.record_id,
+                ));
             }
             counters.add(work);
             projected.push(LabeledDecision {
@@ -340,7 +348,9 @@ impl<const BITS: usize> SemanticDecisionProgram<BITS> {
         projection: SemanticProjection<BITS>,
         decision: DecisionProgram,
     ) -> Result<Self, SemanticDecisionError> {
-        if projection.schema_id != decision.schema_id || projection.features.len() != decision.inputs {
+        if projection.schema_id != decision.schema_id
+            || projection.features.len() != decision.inputs
+        {
             return Err(SemanticDecisionError::BindingMismatch);
         }
         Ok(Self {
