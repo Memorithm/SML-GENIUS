@@ -84,6 +84,13 @@ name = "sml-core"
 version = "0.1.0"
 
 [[package]]
+name = "sml-decision"
+version = "0.1.0"
+dependencies = [
+ "sml-core",
+]
+
+[[package]]
 name = "sml-store"
 version = "0.1.0"
 dependencies = [

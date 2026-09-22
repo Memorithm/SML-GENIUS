@@ -36,6 +36,8 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked --workspace
+      - name: Native decision evidence
+        run: cargo test --locked -p sml-decision -- --nocapture
       - name: Mapped semantic store evidence
         run: cargo test --locked -p sml-store -- --nocapture
       - name: Lockfile reproducibility
