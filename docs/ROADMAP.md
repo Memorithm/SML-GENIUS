@@ -51,18 +51,23 @@ The following are integration milestones, not satisfaction of the SML-1 quality 
 - [x] compare that learned gate against a deliberately wrong XOR control and the hand-coded AND oracle;
 - [x] learn overwrite-state update semantics from task-answer loss with complete previous-state/incoming-value coverage;
 - [x] compare the learned state update against a deliberately wrong XOR control and the fixed RIGHT-projection overwrite oracle;
-- [ ] learn the remaining recall/copy control and other micro-operation semantics from task loss;
-- [ ] compare learned routing against fixed-routing, no-memory and memory-capacity ablations;
+- [x] SML-1.3 fixed-routing, disabled-keyed-memory and constrained-capacity reference ablations (PR #52);
+- [x] SML-1.4 unary recall/copy projections learned from task answers, compared with wrong NOT controls and fixed IDENTITY (PR #56);
+- [ ] learn marker activation, payload/control flow and other remaining fixed micro-operation semantics;
+- [ ] extend matched ablations beyond the current bounded reference panel;
 - [ ] demonstrate held-out improvement attributable to learned routing/memory rather than fixed task semantics.
+
+Current reference ablations do not establish a learned-routing advantage: learned and fixed routing recover the same task answers. Disabled keyed memory is not an ablation of every recurrent/payload state. SML-1.4 learns bit projections, not the entire copy-control algorithm. None of these fixtures is a 1-5M-parameter trained model.
 
 ## Immediate implementation sequence
 
-1. Extend task-loss training from conjunction and overwrite-state update into recall/copy control and remaining micro-operation semantics while preserving the same holdout boundary.
-2. Run fixed-routing, no-memory and memory-capacity ablations before claiming a learned mechanism advantage.
-3. Benchmark fixed recurrent depths against adaptive recurrent depth on the same panel.
-4. Build physical elastic-weight page materialization plus VERIFY/ROLLBACK behind the qualified ElasticXxx SML plan adapter; the validation/projection boundary is complete, physical actuation is not.
-5. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
-6. Evaluate learned wiring separately against fixed/Forge-selected topology, then promote stable reusable primitives to SciRust.
+1. Qualify SBG-0.13b Linux mapped storage on current CI; preserve immutable-artifact assumptions and freeze dependencies before merge.
+2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate.
+3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting, with common evidence and ablations.
+4. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
+5. Build native SML physical elastic-weight page materialization plus VERIFY/ROLLBACK. The ElasticXxx plan adapter is a qualification boundary, not a mandatory SML runtime dependency.
+6. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+7. Evaluate learned wiring separately against fixed/Forge-selected topology; assess reusable primitives for SciRust without coupling the final SML runtime to it.
 
 ## Stop conditions
 
@@ -74,7 +79,6 @@ Scaling stops if any of the following persists after a bounded research iteratio
 - routing degenerates into an all-history scan or all-pairs scoring mechanism;
 - metadata/index storage overwhelms the low-bit weight advantage;
 - the target memory hierarchy cannot hide storage traffic sufficiently for the SML-4 throughput gate.
-
 
 ## Semantic Boolean Geometry track
 
@@ -100,12 +104,15 @@ Current status:
   - [x] SBG-0.12a scalar-oracle versus safe packed-u64 POPCOUNT kernel qualification;
   - [x] SBG-0.12b reproducible wall-clock measurement on the ARM64 self-hosted runner;
   - [x] SBG-0.12c exact release code-generation audit under the safe-Rust boundary;
-- [ ] SBG-0.13 mmap semantic store;
-  - [ ] SBG-0.13a versioned checksummed mmap-friendly binary format;
-  - [ ] SBG-0.13b read-only mapped runtime with bounded per-record decoding;
+- [ ] SBG-0.13 mmap semantic store and resource qualification;
+  - [x] SBG-0.13a versioned checksummed mmap-friendly binary format (PR #57);
+  - [x] SBG-0.13b Linux read-only mapped reader, bounded per-record decoding, corruption/lock/reopen/replacement tests (PR #60; merge requires green CI);
+  - [ ] SBG-0.13c growing-store resource/latency evidence, immutable-artifact hardening and authenticated index/manifest evaluation;
 - [ ] SBG-0.14 integrated prototype.
 
-The SBG track is an experimental hypothesis. It does not yet establish language quality, optimal semantic width, or 25B-scale trainability.
+SBG-0.13b is Linux-specific and relies on an immutable mapped inode with cooperative locking. It rejects heap fallback and does not impose an OS page-cache/RSS ceiling. Other platforms, streaming writes, cryptographic authenticity and production deployment hardening remain unqualified. See `docs/SBG-0.13b-MAPPED-RUNTIME.md`.
+
+The SBG track is an experimental hypothesis. It does not yet establish language quality, optimal semantic width, or 25B-scale trainability. The SBG-0.12 ratio is relative to the independent bit-by-bit oracle, not a model throughput measurement or a comparison against every packed-word alternative.
 
 ## CSP — BANC v888 Connectomic Structural Prior track
 
