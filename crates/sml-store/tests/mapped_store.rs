@@ -1,13 +1,12 @@
 #![cfg(target_os = "linux")]
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File, OpenOptions, TryLockError},
     io,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use fs4::FileExt;
 use sml_core::semantic::{build_semantic_store, SemanticState, SemanticStoreError};
 use sml_store::{MappedSemanticStore, MappedStoreError, MappedStoreLimits};
 
@@ -216,30 +215,24 @@ fn shared_locks_live_until_the_last_reader_is_dropped() {
         .write(true)
         .open(&artifact.path)
         .unwrap();
-    assert!(matches!(
-        FileExt::try_lock_exclusive(&writer),
-        Err(fs4::TryLockError::WouldBlock)
-    ));
+    assert!(matches!(writer.try_lock(), Err(TryLockError::WouldBlock)));
     drop(first);
-    assert!(matches!(
-        FileExt::try_lock_exclusive(&writer),
-        Err(fs4::TryLockError::WouldBlock)
-    ));
+    assert!(matches!(writer.try_lock(), Err(TryLockError::WouldBlock)));
     drop(second);
-    FileExt::try_lock_exclusive(&writer).unwrap();
-    FileExt::unlock(&writer).unwrap();
+    writer.try_lock().unwrap();
+    writer.unlock().unwrap();
 }
 
 #[test]
 fn exclusive_writer_blocks_mapping() {
     let artifact = Artifact::new(&build_semantic_store(&[(1, state::<65>(1))]).unwrap());
     let writer = File::open(&artifact.path).unwrap();
-    FileExt::try_lock_exclusive(&writer).unwrap();
+    writer.try_lock().unwrap();
     match MappedSemanticStore::<65>::open(&artifact.path, limits()).unwrap_err() {
         MappedStoreError::Io(error) => assert_eq!(error.kind(), io::ErrorKind::WouldBlock),
         error => panic!("unexpected mapping error: {error}"),
     }
-    FileExt::unlock(&writer).unwrap();
+    writer.unlock().unwrap();
 }
 
 #[test]
