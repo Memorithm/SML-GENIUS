@@ -157,7 +157,7 @@ The durable protocol is in [`SML-RSI-BOOTSTRAP.md`](SML-RSI-BOOTSTRAP.md). It ad
 
 Governance invariant: `main` is the approved champion. The model may create/revise branches and PRs and gather CI/verifier evidence; it cannot merge an RSI PR. Human GitHub merge/reject is the terminal promotion decision.
 
-- [ ] RSI-0a versioned PR/candidate evidence manifest bound to parent main SHA and exact candidate head;
+- [ ] RSI-0a versioned PR/candidate evidence manifest bound to parent main SHA and exact candidate head (active slice);
 - [ ] RSI-0b promotion-eligibility verifier: evidence completeness, protected-eval separation, lineage and rollback; never merge authorization;
 - [ ] RSI-1 model-proposed exact-verifier curriculum with novelty/dedup and fixed-curriculum matched control;
 - [ ] RSI-2 frozen-champion -> candidate self-training -> protected comparison -> human-gated PR experiment;
