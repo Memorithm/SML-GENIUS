@@ -26,7 +26,13 @@ fn proposal(
 fn curriculum(difficulty: u16, count: u32) -> sml_rsi::curriculum::CurriculumReport {
     build_verified_curriculum(
         &[
-            proposal("recall", TaskKind::DelayedBitRecall, 1_000_000, count, difficulty),
+            proposal(
+                "recall",
+                TaskKind::DelayedBitRecall,
+                1_000_000,
+                count,
+                difficulty,
+            ),
             proposal(
                 "overwrite",
                 TaskKind::OverwriteBitRecall,
@@ -68,11 +74,7 @@ fn curriculum(difficulty: u16, count: u32) -> sml_rsi::curriculum::CurriculumRep
     .unwrap()
 }
 
-fn candidate(
-    id: &str,
-    source: CurriculumSource,
-    difficulty: u16,
-) -> CurriculumCandidate {
+fn candidate(id: &str, source: CurriculumSource, difficulty: u16) -> CurriculumCandidate {
     CurriculumCandidate {
         candidate_id: id.into(),
         source,
@@ -85,8 +87,7 @@ fn equal_quality_portfolio_selects_lower_training_event_curriculum() {
     let fixed = candidate("fixed-control", CurriculumSource::FixedControl, 7);
     let proposed = candidate("model-proposed", CurriculumSource::ModelProposed, 3);
 
-    let report =
-        run_curriculum_portfolio(&[fixed, proposed], PortfolioPolicy::default()).unwrap();
+    let report = run_curriculum_portfolio(&[fixed, proposed], PortfolioPolicy::default()).unwrap();
 
     assert_eq!(report.entries.len(), 2);
     assert_eq!(report.selected_id, "model-proposed");
