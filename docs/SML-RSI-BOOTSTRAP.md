@@ -271,7 +271,9 @@ RSI-1b matched curriculum training merged through PR #73.
 
 RSI-1c multi-operation curriculum training merged through PR #74.
 
-Active implementation slice: `research/sml-rsi-1d-curriculum-portfolio`.
+RSI-1d curriculum portfolio merged through PR #75.
+
+Active implementation slice: `research/sml-rsi-1e-post-selection-holdout`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -358,6 +360,18 @@ curriculum task identity. Candidate-owned development rows are not used for
 portfolio ranking. Ranking is: more exact shared-panel tasks, then fewer training
 events, then stable candidate ID. Protected/final holdout data is unavailable to
 this search.
+
+#### RSI-1e — post-selection holdout
+
+After RSI-1d freezes the selected candidate, a trusted evaluator supplies a
+caller-owned holdout that was unavailable during portfolio selection. Every
+holdout task is revalidated against the exact oracle, identities must be unique,
+the baseline policy requires all six task families, and overlap with any
+curriculum or the reconstructed shared development panel fails closed.
+
+The frozen selection is compared with the best fixed-control entry already in
+the portfolio. The holdout reports Better/Tie/Worse but cannot reselect the
+candidate.
 
 ### RSI-2 — first closed candidate-cycle state machine
 
