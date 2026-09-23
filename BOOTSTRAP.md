@@ -69,6 +69,8 @@ Current Delta-KV evidence: DKV-0a through DKV-2b are merged. DKV-2b merged throu
 
 DKV-2c observation: dynamic SBG re-keying is executable but is not promoted into DKV-3. The preregistered missing-successor control remained confidently non-ambiguous, and dynamic re-keying did not improve the final target state over the DKV-2b frozen-key arm on the frozen fixtures. DKV-3 must use DKV-2b until a separate miss/confidence mechanism qualifies dynamic re-keying. See `docs/SML-DKV-2C-OBSERVATION.md`.
 
+DKV-3a context integration is preregistered in `docs/SML-DKV-3A-CONTEXT-PREREGISTRATION.md` but execution is intentionally blocked on CONTEXT-0/1. Delta-KV reads are derived semantic evidence, never authoritative source provenance; exact/source-required tasks must independently verify immutable raw context segments.
+
 ## Versioning reconciliation
 
 The repository already uses `SML-0.7` for Elastic Weights and has merged later `SML-0.8.x` MOR / Boolean-integral work. The earlier conversational SBG roadmap used overlapping SML-0.x labels.
