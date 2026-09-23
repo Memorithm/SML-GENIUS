@@ -13,8 +13,8 @@ use crate::{
     delta_kv_semantic::DeltaKvSemanticKeyEvidence,
     semantic::{
         run_semantic_recurrent, SemanticBitFieldError, SemanticHaltReason,
-        SemanticRecurrentOutcome, SemanticRecurrentRunError, SemanticRewriteStep,
-        SemanticRewriter, SemanticState,
+        SemanticRecurrentOutcome, SemanticRecurrentRunError, SemanticRewriteStep, SemanticRewriter,
+        SemanticState,
     },
     HaltingPolicy,
 };
