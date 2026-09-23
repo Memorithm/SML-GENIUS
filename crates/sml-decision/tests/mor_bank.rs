@@ -342,7 +342,7 @@ fn constructor_rejects_incomplete_duplicate_and_mismatched_expert_banks() {
             | Err(SparseDecisionError::MissingExpert(PageId(1)))
     ));
 
-    assert_eq!(
+    assert!(matches!(
         mk(vec![
             DecisionExpert {
                 page_id: PageId(0),
@@ -354,7 +354,7 @@ fn constructor_rejects_incomplete_duplicate_and_mismatched_expert_banks() {
             },
         ]),
         Err(SparseDecisionError::ProgramBindingMismatch(PageId(1)))
-    );
+    ));
 
     assert!(matches!(
         MorDecisionExpertBank::new(
