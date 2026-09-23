@@ -159,6 +159,8 @@ A favorable DKV-2c result is still reference-mechanism evidence, not a long-cont
 
 ## DKV-3 — context and long-range evaluation
 
+DKV-3a is preregistered in [`SML-DKV-3A-CONTEXT-PREREGISTRATION.md`](SML-DKV-3A-CONTEXT-PREREGISTRATION.md). Execution is blocked until CONTEXT-0/1 merge their authoritative raw-segment/provenance contract and bounded streaming ingest. DKV-3a admits only DKV-2b frozen-key recurrence; DKV-2c dynamic re-keying is excluded.
+
 Integrate with SML-CONTEXT only after exact provenance boundaries exist.
 
 Measure separately:

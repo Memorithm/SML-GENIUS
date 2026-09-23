@@ -168,7 +168,7 @@ workspace.
 - [x] DKV-2a deterministic bounded SBG V/M/A/R + existing MOR-selection projection into Q12 key space; raw provenance remains separate (merged PR #81);
 - [x] DKV-2b frozen-query Delta-KV reads in bounded SBG recurrence with adaptive/fixed/no-DKV controls and direct memory retained independently (merged PR #83);
 - [x] DKV-2c dynamic SBG re-keying mechanism evaluated under frozen MOR selection (merged implementation PR #86; not promoted after missing-successor control remained confidently non-ambiguous);
-- [ ] DKV-3 SML-CONTEXT integration using qualified DKV-2b frozen-key recurrence; dynamic re-keying excluded pending a separately qualified miss/confidence mechanism with exact raw provenance and long-range task
+- [ ] DKV-3a context/provenance integration preregistered; execution blocked on CONTEXT-0/1, uses qualified DKV-2b frozen-key recurrence only and requires raw verification for source-exact tasks with exact raw provenance and long-range task
   evidence;
 - [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
   signals, compared against fixed-depth and simpler deterministic controls.
