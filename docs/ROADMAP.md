@@ -153,14 +153,14 @@ Do not report an N-token effective context because N tokens fit on disk or were 
 
 ## SML-RSI — human-gated recursive self-improvement
 
-The durable protocol is in [`SML-RSI-BOOTSTRAP.md`](SML-RSI-BOOTSTRAP.md). It adapts the mature loop-engineering work in `Memorithm/RSI` to SML-GENIUS while keeping SML inference independent.
+The durable protocol is in [`SML-RSI-BOOTSTRAP.md`](SML-RSI-BOOTSTRAP.md). It is implemented independently in SML-GENIUS, using `Memorithm/RSI` only as a source of design inspiration.
 
 Governance invariant: `main` is the approved champion. The model may create/revise branches and PRs and gather CI/verifier evidence; it cannot merge an RSI PR. Human GitHub merge/reject is the terminal promotion decision.
 
 - [x] RSI-0a versioned PR/candidate evidence manifest bound to parent main SHA and exact candidate head (merged PR #69);
 - [x] RSI-0b promotion-eligibility verifier: exact parent/head binding, evidence completeness, protected-eval separation and hard-regression gate; never merge authorization (merged PR #70);
-- [ ] RSI-1 model-proposed exact-verifier curriculum using native task oracles, reserved case IDs and deterministic train/development split; fixed-curriculum matched control still required (active slice);
-- [ ] RSI-2 frozen-champion -> candidate self-training -> protected comparison -> human-gated PR experiment;
+- [x] RSI-1 model-proposed exact-verifier curriculum using native task oracles, reserved case IDs and deterministic train/development split; fixed-curriculum matched control still required (merged PR #71);
+- [ ] RSI-2 bounded frozen-champion -> verified curriculum -> frozen candidate -> exact evidence -> review-eligibility state machine; real model-weight training remains the next extension (active slice);
 - [ ] RSI-3 proposer/solver/verifier co-evolution using learning progress rather than unsolved difficulty alone;
 - [ ] RSI-4 recursive improvement of SML-D, MOR, memory, SML-CONTEXT and recurrent policies;
 - [ ] RSI-5 bounded topology/runtime-policy self-optimization;
