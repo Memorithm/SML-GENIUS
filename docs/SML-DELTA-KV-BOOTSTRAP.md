@@ -32,7 +32,9 @@ DKV-1 merged through PR #80 at `c3bbca6241a6244afccc828a21faa870f6743a5b`.
 
 DKV-2a merged through PR #81 at `e20310763073c9767de1a6c45cc1a5fa15a4d894`.
 
-Active slice: **DKV-2b recurrent Delta-KV memory source** on `research/dkv-2b-recurrent-memory-v2`.
+DKV-2b merged through PR #83 at `6a26a65d0c953a7e83aedc9f6e785a7df8b88ea8`.
+
+Active slice: **DKV-2c dynamic re-keying qualification**. It will compare an unchanged DKV-2a projection recomputed from the evolving SBG state against the merged DKV-2b frozen-query path. The MOR selected-expert set, projector seed/policy, Delta-KV matrix, value-coordinate mapping and halting policy must be held fixed so only re-keying changes.
 
 ## DKV-0a — fixed-point normalized delta reference
 
@@ -144,6 +146,14 @@ Only after DKV-1:
 
 Delta-KV must not become the only store for identifiers, exact code, numbers or
 source evidence.
+
+### DKV-2c — dynamic re-keying qualification
+
+DKV-2b deliberately froze the projected query key across recurrent cycles. DKV-2c asks one narrower question: when the SBG state changes after a memory read, does deterministically re-projecting the key from that new state alter subsequent memory evidence in a useful and bounded way?
+
+The comparison must keep MOR selection fixed and must not invoke another router. Raw/source provenance remains outside the key mathematics. Required controls are frozen-key adaptive recurrence, dynamic-rekey adaptive recurrence, matched fixed-depth recurrence, and no-Delta-KV identity recurrence. Key projections, read MACs, recurrent depth, ambiguity and final semantic deltas must be reported separately.
+
+A favorable DKV-2c result is still reference-mechanism evidence, not a long-context, model-quality, latency or scaling claim.
 
 ## DKV-3 — context and long-range evaluation
 

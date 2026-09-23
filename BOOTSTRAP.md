@@ -58,11 +58,14 @@ counts and saturation, and preserves overlapping-key interference as evidence.
 No Transformer-semantic KV cache, attention dependency or performance claim is
 introduced.
 
-Required progression is DKV-0a fixed-point semantics -> DKV-0b frozen interference
-panel -> DKV-1 matched memory controls -> DKV-2 SBG/MOR/recurrent integration ->
+Current progression is DKV-0a fixed-point semantics -> DKV-0b frozen interference
+panel -> DKV-1 matched memory controls -> DKV-2a SBG/MOR key projection -> DKV-2b
+frozen-key recurrent memory integration -> DKV-2c dynamic re-keying qualification ->
 DKV-3 context evaluation -> DKV-4 adaptive-compute handoff. Forge may propose
 candidates and ElasticXxx may enforce resource budgets, but SML retains memory
 semantics and independent requalification.
+
+Current Delta-KV evidence: DKV-0a through DKV-2b are merged. DKV-2b merged through PR #83 as `6a26a65d0c953a7e83aedc9f6e785a7df8b88ea8`, providing a bounded Delta-KV read as one native SBG recurrent input with adaptive/fixed/no-Delta-KV controls. DKV-2c is the next active research slice; it must isolate dynamic re-keying from routing changes.
 
 ## Versioning reconciliation
 
@@ -242,7 +245,7 @@ Next implementation gates:
 
 - **RSI-0a/0b**: versioned candidate-PR evidence manifest and promotion-eligibility verifier. The verifier may say "eligible for human review" but cannot merge or mark itself promoted.
 - **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, using independently implemented DGM/AUTOPILOT/flywheel-style principles inspired by prior RSI work.
-- **DKV-0b**: freeze the interference/correction panel for the new fixed-point Delta-KV reference, then compare against the existing direct associative-memory controls before any runtime integration.
+- **DKV-2c**: preregister and qualify dynamic re-projection of the Delta-KV query key from evolving SBG state against the merged DKV-2b frozen-key, matched fixed-depth and no-Delta-KV controls. MOR selection remains frozen in this slice so re-keying is the only changed mechanism.
 - **CONTEXT-0/1**: exact raw/token/span accounting, immutable raw segment ledger, provenance-linked SBG index and bounded streaming ingest.
 - **SML-D2**: proper-scoring/calibration work on reserved data, including Brier/RPS-style fixed-point candidates, risk/coverage and false-acceptance metrics.
 - **SML-D3**: large-candidate SBG/MOR shortlisting, hot expert residency/prefetch and complete end-to-end throughput accounting.
