@@ -313,18 +313,10 @@ fn sparse_selected_outputs_match_dense_control_with_fewer_word_gate_calls() {
     let and_program = program::<8>(5, 10, 100, TruthTable2::AND);
     let xor_program = program::<8>(5, 11, 200, TruthTable2::XOR);
     let dense_and = and_program
-        .evaluate(
-            &inputs,
-            BatchBudget::default(),
-            ProjectionBudget::default(),
-        )
+        .evaluate(&inputs, BatchBudget::default(), ProjectionBudget::default())
         .unwrap();
     let dense_xor = xor_program
-        .evaluate(
-            &inputs,
-            BatchBudget::default(),
-            ProjectionBudget::default(),
-        )
+        .evaluate(&inputs, BatchBudget::default(), ProjectionBudget::default())
         .unwrap();
 
     for (index, routed) in sparse.decisions.iter().enumerate() {
