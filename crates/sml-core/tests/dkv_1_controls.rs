@@ -154,5 +154,7 @@ fn report_does_not_collapse_backends_into_a_single_winner_metric() {
         .map(|item| (item.backend, item.exact_reads, item.l1_error_q12))
         .collect::<Vec<_>>();
     assert_eq!(exact.len(), 4);
-    assert!(exact.iter().any(|(_, exact_reads, _)| *exact_reads < report.reads));
+    assert!(exact
+        .iter()
+        .any(|(_, exact_reads, _)| *exact_reads < report.reads));
 }
