@@ -42,7 +42,7 @@ This means an expert selected for 128 records can execute two 64-lane word-gate
 groups rather than 128 one-record gate calls. This is work accounting, not a
 wall-clock speedup claim.
 
-Unselected decision programs are not executed.
+Unselected decision programs are not executed. A matched test also evaluates both experts densely on the same 128-record fixture and checks that the sparse path returns the same route-selected outcomes while making two grouped word-gate calls instead of four. This is work accounting only, not elapsed-time evidence.
 
 ## Route history and refinement
 
