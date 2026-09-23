@@ -40,6 +40,8 @@ jobs:
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
         run: cargo test --locked -p sml-rsi -- --nocapture
+      - name: Delta-KV interference evidence
+        run: cargo test --locked -p sml-core --test dkv_0b_panel -- --nocapture
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
