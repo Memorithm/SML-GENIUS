@@ -140,8 +140,10 @@ The existing Forge `sml-topology/v1` contract was inspected for reuse; its singl
 
 The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md). SML context is not defined as one permanently resident token buffer. It uses a bounded active working state plus immutable raw segments, associative memory and mapped semantic/raw indexes with provenance.
 
-- [ ] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract (implementation candidate in current PR);
+- [x] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract (merged PR #89);
 - [ ] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
+  - [ ] CONTEXT-1a immutable SHA-256-verified raw segment artifact store (current PR);
+  - [ ] CONTEXT-1b bounded streaming ingest + separate semantic-index emission;
 - [ ] CONTEXT-2 bounded recurrent semantic working context with matched fixed/expanding controls;
 - [ ] CONTEXT-3 hierarchical SBG/MOR top-k context retrieval with exhaustive-scan controls;
 - [ ] CONTEXT-4 hot/warm/cold retention and optional lossy compaction with raw provenance preserved;
