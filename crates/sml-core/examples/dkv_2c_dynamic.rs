@@ -251,8 +251,10 @@ fn target_exact(
 ) -> Result<Option<bool>> {
     target
         .map(|target| {
-            Ok(outcome.state.value.get(0)? == target[0]
-                && outcome.state.value.get(1)? == target[1])
+            Ok(
+                outcome.state.value.get(0)? == target[0]
+                    && outcome.state.value.get(1)? == target[1],
+            )
         })
         .transpose()
 }
