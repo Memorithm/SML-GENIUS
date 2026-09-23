@@ -8,9 +8,7 @@ use sml_core::{
 
 use crate::{
     curriculum::CurriculumReport,
-    portfolio::{
-        entry_better, CurriculumCandidate, CurriculumPortfolioReport, CurriculumSource,
-    },
+    portfolio::{entry_better, CurriculumCandidate, CurriculumPortfolioReport, CurriculumSource},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
