@@ -79,11 +79,9 @@ path merely because GitHub stores its metadata.
 
 ## Direct design inheritance from Memorithm/RSI
 
-`Memorithm/RSI` is the primary internal reference for loop engineering. SML-RSI
-should port/reuse the mature contracts that already exist there instead of
-inventing a second incompatible improvement stack.
+`Memorithm/RSI` is an internal **source of inspiration and prior design evidence** for loop engineering. SML-RSI must remain an independent implementation inside SML-GENIUS. It may study mature contracts from RSI, but it must re-derive and implement the required mechanisms natively rather than depend on, call into, import, vendor or orchestrate the RSI repository.
 
-The following RSI mechanisms are directly relevant:
+The following RSI mechanisms are useful design inspirations to re-implement independently:
 
 - **AUTOPILOT outer loop**: one human objective -> frozen spec -> task DAG ->
   bounded implementation -> draft PR -> human review. Human review is the
@@ -118,29 +116,28 @@ SML-RSI should preserve these semantics while replacing RSI-specific
 model/task quality, decision calibration, context retrieval, active compute,
 RAM/VRAM/disk traffic, latency, reproducibility and protected-regression gates.
 
-For SML-GENIUS the intended hierarchy is:
+For SML-GENIUS the intended relationship is:
 
 ```text
-Memorithm/RSI design contracts
-        |
-        v
-SML-RSI native port/adaptation
-        |
-        +--> SBG / MOR / memory / recurrent-depth candidates
-        +--> SML-D decision candidates
-        +--> SML-CONTEXT retrieval/retention candidates
-        +--> Elastic/runtime candidates
-        |
-        v
+Memorithm/RSI
+   (ideas / lessons only)
+          |
+          v
+independent SML-RSI design inside SML-GENIUS
+          |
+          +--> SBG / MOR / memory / recurrent-depth candidates
+          +--> SML-D decision candidates
+          +--> SML-CONTEXT retrieval/retention candidates
+          +--> Elastic/runtime candidates
+          |
+          v
 GitHub PR + SML CI/evidence
-        |
-        v
+          |
+          v
 human merge/reject
 ```
 
-`Memorithm/RSI` may remain a research/orchestration partner, but SML inference
-must not depend on it. Promotion contracts needed to reproduce/serve SML should
-eventually live natively in SML-GENIUS.
+Hard boundary: no Cargo dependency, git dependency, submodule, vendored crate, MCP dependency, service call, shared runtime state, CI dependency or mandatory orchestration dependency on `Memorithm/RSI`. SML-RSI must be fully buildable, testable, reproducible and operable from SML-GENIUS alone.
 
 ## What can self-improve
 
