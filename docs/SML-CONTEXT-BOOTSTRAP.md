@@ -137,6 +137,8 @@ evaluated against a no-compaction control.
 
 ### CONTEXT-0 — accounting and immutable segment contract
 
+Executable contract: [`SML-CONTEXT-0-CONTRACT.md`](SML-CONTEXT-0-CONTRACT.md).
+
 - exact byte/token/span accounting;
 - stable stream/segment IDs;
 - immutable raw segment descriptors;
