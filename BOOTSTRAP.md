@@ -214,7 +214,7 @@ The 2026-09-23 source review of `NandhaKishorM/laya` is used as external researc
 
 SML-native implementations should use SBG/MOR/Boolean/low-bit/fixed-point mechanisms where evidence supports them. No Laya benchmark number is transferred as an SML performance claim.
 
-CONTEXT-0 is merged through PR #89. CONTEXT-1a raw persistence is the next active context slice: immutable segment artifacts with exact SHA-256 source identity, while semantic indexes remain separate derived data. DKV-3a remains blocked until CONTEXT-1b bounded streaming ingest is also merged.
+CONTEXT-0 is merged through PR #89. CONTEXT-1a raw persistence is the next active context slice: immutable segment artifacts with exact SHA-256 source identity, while semantic indexes remain separate derived data. DKV-3a remains blocked until CONTEXT-1b bounded streaming ingest is also merged. CONTEXT-1b is the stacked bounded-ingest slice; it retains only segment-local working payload and explicit cumulative counters, not the complete stream in RAM.
 
 ### Context-window architectural direction
 
