@@ -259,8 +259,13 @@ repairing PRs without removing the final promotion authority.
 
 ### RSI-0a — PR evidence manifest
 
-Define a versioned Rust/JSON-compatible manifest for one candidate PR:
-parent/head, change class, evidence set, budgets, regressions and rollback.
+Active implementation slice: `research/sml-rsi-0a-candidate-manifest`.
+
+The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
+parent main SHA, candidate head SHA, non-default branch, change class, objective,
+bounded candidate budget, typed evidence refs with SHA-256 digests, fixed-point
+metric comparisons, known regressions and rollback to the exact parent champion.
+The manifest contains no promotion flag. Promotion eligibility is RSI-0b.
 
 ### RSI-0b — promotion-state verifier
 
