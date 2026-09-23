@@ -21,6 +21,7 @@ pub mod boolean_search_bench;
 pub mod candidate;
 pub mod circuit;
 pub mod delta_kv;
+pub mod delta_kv_controls;
 pub mod delta_kv_panel;
 pub mod elastic_weights;
 pub mod forge_topology;

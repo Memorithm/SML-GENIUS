@@ -161,10 +161,10 @@ workspace.
 - [x] DKV-0a deterministic signed-Q12 normalized-delta reference semantics, exact
   semantic-bit accounting, overwrite/orthogonal/overlap controls and explicit
   saturation counters (merged PR #78);
-- [ ] DKV-0b preregistered 14-case interference/correction panel across overlap bands,
-  conflicting targets, partial learning rates, repeated overwrite, saturation and dimension scaling (active slice);
-- [ ] DKV-1 matched-storage comparison against RejectCollision/ReplaceExisting
-  direct associative memory and record-based controls;
+- [x] DKV-0b preregistered 14-case interference/correction panel across overlap bands,
+  conflicting targets, partial learning rates, repeated overwrite, saturation and dimension scaling (merged PR #79);
+- [ ] DKV-1 matched declared-storage comparison against RejectCollision/ReplaceExisting
+  direct associative memory plus bounded append-only record control; same frozen script, no composite winner metric (active stacked slice);
 - [ ] DKV-2 SBG/MOR keying plus recurrent integration with independent memory
   mechanisms retained;
 - [ ] DKV-3 SML-CONTEXT integration with exact raw provenance and long-range task
