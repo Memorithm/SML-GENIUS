@@ -163,10 +163,10 @@ workspace.
   saturation counters (merged PR #78);
 - [x] DKV-0b preregistered 14-case interference/correction panel across overlap bands,
   conflicting targets, partial learning rates, repeated overwrite, saturation and dimension scaling (merged PR #79);
-- [ ] DKV-1 matched declared-storage comparison against RejectCollision/ReplaceExisting
-  direct associative memory plus bounded append-only record control; same frozen script, no composite winner metric (active stacked slice);
-- [ ] DKV-2 SBG/MOR keying plus recurrent integration with independent memory
-  mechanisms retained;
+- [x] DKV-1 matched declared-storage comparison against RejectCollision/ReplaceExisting
+  direct associative memory plus bounded append-only record control; same frozen script, no composite winner metric (merged PR #80);
+- [ ] DKV-2a deterministic bounded SBG V/M/A/R + existing MOR-selection projection into Q12 key space; raw provenance remains separate (active slice);
+- [ ] DKV-2b recurrent Delta-KV read/write integration with direct memory retained as independent control;
 - [ ] DKV-3 SML-CONTEXT integration with exact raw provenance and long-range task
   evidence;
 - [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
