@@ -1,0 +1,278 @@
+# SML-RSI: human-gated recursive self-improvement
+
+SML-GENIUS may participate in its own improvement, but the repository owner
+remains the promotion authority. The current model may propose and implement
+changes, open GitHub pull requests, gather CI/evaluation evidence and revise a PR.
+It may not merge its own RSI PR or silently replace the current champion.
+
+## Governance invariant
+
+For RSI work:
+
+```text
+Champion_n = approved main
+      |
+      +--> SML proposes one bounded improvement
+      |
+      +--> branch + code/data/config/tests
+      |
+      +--> GitHub Pull Request
+      |
+      +--> CI / exact verifiers / benchmarks / protected evaluation
+      |
+      +--> model may repair the same PR from evidence
+      |
+      v
+   HUMAN GATE
+      |
+      +--> user rejects/closes  -> Champion_n remains
+      |
+      +--> user merges          -> Champion_{n+1}
+```
+
+A green PR is evidence that the candidate satisfied declared automated gates.
+It is not authorization to promote it. **The user's GitHub merge decision is the
+final promotion event.**
+
+This rule applies even if future SML versions become better than the current
+system at coding, evaluation, architecture search or research planning.
+
+## Repository mapping
+
+The RSI state machine maps directly onto GitHub:
+
+- `main`: currently approved champion lineage;
+- research branch: one candidate or bounded candidate family;
+- pull request: proposed promotion package;
+- commits: candidate revisions;
+- checks/CI: machine-verifiable evidence;
+- PR discussion/review: human/model critique and requested changes;
+- merge commit: explicit human-approved promotion;
+- closed/unmerged PR: rejected or archived candidate;
+- revert PR: explicit rollback path.
+
+The model may continue to produce ordinary development PRs, but any PR that
+changes the self-training, promotion, evaluator, mutation, autonomous-data or
+meta-improvement machinery must be classified as an **RSI PR** and must never be
+auto-merged.
+
+## Candidate package
+
+An RSI PR should eventually include a machine-readable evidence manifest with:
+
+- parent `main` SHA;
+- candidate head SHA;
+- improvement class;
+- affected model/runtime/training surfaces;
+- generated data/task identifiers;
+- verifier versions;
+- training/search configuration;
+- compute/time/storage budget;
+- development metrics;
+- protected-evaluation references;
+- resource regressions/improvements;
+- known failures;
+- rollback/revert target.
+
+Protected evaluation material must not be exposed to the candidate-generation
+path merely because GitHub stores its metadata.
+
+## What can self-improve
+
+### RSI-A — data and curriculum
+
+The champion may propose:
+- new exact-verifier algorithmic tasks;
+- adversarial distractors;
+- decision/calibration datasets;
+- long-context curricula;
+- counterexamples from prior failures.
+
+Synthetic data is never trusted because it is synthetic. It is admitted through
+independent validation, deduplication, provenance and held-out evaluation.
+
+### RSI-B — model parameters and experts
+
+The system may train candidate:
+- Boolean/low-bit decision experts;
+- SBG feature selectors;
+- routing experts;
+- recurrent update/halt policies;
+- calibration components.
+
+The deployed champion remains frozen until the user merges the resulting PR.
+
+### RSI-C — MOR, memory and context
+
+The system may propose:
+- router signatures and specialization;
+- memory write/read/retention policies;
+- SML-CONTEXT retrieval/retention changes;
+- candidate shortlisting policies.
+
+Exact-source provenance and fail-closed retrieval semantics remain hard gates.
+
+### RSI-D — topology and wiring
+
+SML may search bounded topology/wiring DSLs. Candidate topologies require
+independent destination-side requalification. Search-system scores alone are not
+promotion evidence.
+
+### RSI-E — runtime
+
+SML may tune:
+- hot/cold page policy;
+- prefetch;
+- batching;
+- scheduling;
+- precision/residency thresholds.
+
+Runtime candidates cannot weaken correctness, integrity, provenance or resource
+measurement merely to improve throughput.
+
+### RSI-F — evaluator and training-loop changes
+
+The system may propose modifications to:
+- reward/scoring rules;
+- candidate allocation;
+- verifier selection;
+- curriculum policy;
+- mutation operators;
+- promotion heuristics.
+
+These are the most sensitive RSI changes because they change how future changes
+are judged. They always remain human-gated GitHub PRs.
+
+## Verification hierarchy
+
+Prefer the strongest available evidence:
+
+1. formal/exact verifier;
+2. executable environment/compiler/simulator;
+3. frozen independent learned verifier;
+4. independently trained judge ensemble;
+5. current champion judging candidates;
+6. candidate self-judgment.
+
+Self-judgment may generate hypotheses or triage examples; it is not sufficient
+promotion evidence by itself.
+
+## Protected champion/candidate evaluation
+
+A candidate must be compared against its frozen parent champion on the same
+declared evaluation protocol.
+
+At minimum report:
+- quality delta;
+- per-capability regressions;
+- resource delta;
+- active-compute delta;
+- latency/throughput delta where applicable;
+- calibration/risk delta for decisions;
+- context retrieval delta for long-context changes;
+- candidate variance/repeated runs when stochastic training is involved.
+
+Promotion criteria should be Pareto-aware rather than one scalar reward. A large
+gain on one benchmark must not silently erase important capabilities.
+
+## Recursive levels
+
+The programme separates increasing levels of loop closure:
+
+- **RSI-0** — GitHub lineage/promotion contract;
+- **RSI-1** — self-generated tasks with exact verifiers;
+- **RSI-2** — candidate self-training from generated/curated tasks;
+- **RSI-3** — proposer/solver/verifier co-evolution;
+- **RSI-4** — self-improvement of SML-D, MOR, memory and SML-CONTEXT;
+- **RSI-5** — topology/runtime policy search;
+- **RSI-6** — candidate evaluator improvement against frozen anchors;
+- **RSI-7** — candidate changes to the improvement procedure itself;
+- **RSI-8** — multi-generation qualification under the persistent human GitHub
+  merge gate.
+
+The loop can become increasingly autonomous in proposing, coding, testing and
+repairing PRs without removing the final promotion authority.
+
+## First implementation sequence
+
+### RSI-0a — PR evidence manifest
+
+Define a versioned Rust/JSON-compatible manifest for one candidate PR:
+parent/head, change class, evidence set, budgets, regressions and rollback.
+
+### RSI-0b — promotion-state verifier
+
+Validate that:
+- parent SHA matches declared champion;
+- evidence references are immutable/versioned;
+- protected evaluation is separated from training selection;
+- required checks are present;
+- no candidate marks itself as promoted.
+
+This verifier reports eligibility for human review, never merge authorization.
+
+### RSI-1 — exact-verifier curriculum generator
+
+Start with the existing Boolean/algorithmic SML tasks, because exact oracles give
+stronger feedback than subjective self-judging. Compare a fixed human-authored
+curriculum against model-proposed tasks at matched training compute.
+
+### RSI-2 — first closed training experiment
+
+Freeze `Champion_n`, let it propose curriculum/counterexamples, train a separate
+candidate, run all gates, and open a GitHub PR containing the candidate evidence.
+The experiment ends at the human merge/reject decision.
+
+## Archive and branching
+
+Do not keep only a single winner lineage. Rejected and non-dominated candidate
+evidence can remain available as bounded research stepping stones. However only
+human-approved `main` is the canonical champion for the next recursive cycle.
+
+## Failure modes
+
+Track explicitly:
+- self-confirmation;
+- model/data collapse;
+- reward hacking;
+- benchmark contamination;
+- catastrophic forgetting;
+- evaluator drift;
+- compute runaway;
+- diversity collapse;
+- PR/evidence manipulation;
+- improvement-loop complexity growth.
+
+A candidate that weakens the audit/promotion boundary is not considered an
+improvement merely because downstream benchmark scores increase.
+
+## Research context
+
+Relevant external work motivates individual mechanisms rather than serving as
+SML capability evidence:
+
+- STaR (arXiv:2203.14465): iterative training on model-generated reasoning that
+  leads to correct answers;
+- Self-Rewarding Language Models (arXiv:2401.10020): model-generated judging and
+  iterative preference training;
+- Absolute Zero (arXiv:2505.03335): proposer/solver self-play grounded by a code
+  executor that validates tasks and answers;
+- Darwin Gödel Machine (arXiv:2505.22954): branching archive of empirically
+  evaluated self-modified coding agents;
+- Recursive Self-Improvement in AI survey (arXiv:2607.07663): taxonomy from
+  bounded self-refinement to closed research loops and emphasis on verifier
+  strength and human direction-setting.
+
+SML-RSI deliberately remains human-gated at the GitHub promotion boundary even
+while automation inside each candidate cycle increases.
+
+## Scientific boundary
+
+SML-GENIUS does not currently demonstrate open-ended recursive self-improvement.
+The first objective is a reproducible, bounded improvement loop in which the
+model can generate useful candidate PRs and training proposals that outperform a
+frozen champion under independent evidence.
+
+Multiple successful human-approved generations would demonstrate an engineered
+recursive improvement process. They would still not prove unlimited or
+self-sustaining intelligence growth.
