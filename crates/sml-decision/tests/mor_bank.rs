@@ -286,6 +286,72 @@ fn mixed_128_record_batch_groups_into_two_sparse_bit_sliced_batches() {
 }
 
 #[test]
+fn sparse_selected_outputs_match_dense_control_with_fewer_word_gate_calls() {
+    let left = state::<8>(0, true, true);
+    let right = state::<8>(1, true, false);
+    let observed = SemanticBitField::<8>::ones().unwrap();
+    let inputs: Vec<_> = (0..128)
+        .map(|record_id| {
+            if record_id % 2 == 0 {
+                input(record_id, &left, &observed)
+            } else {
+                input(record_id, &right, &observed)
+            }
+        })
+        .collect();
+
+    let sparse = bank()
+        .evaluate(
+            &inputs,
+            &[],
+            BatchBudget::default(),
+            ProjectionBudget::default(),
+            SparseDecisionBudget::default(),
+        )
+        .unwrap();
+
+    let and_program = program::<8>(5, 10, 100, TruthTable2::AND);
+    let xor_program = program::<8>(5, 11, 200, TruthTable2::XOR);
+    let dense_and = and_program
+        .evaluate(
+            &inputs,
+            BatchBudget::default(),
+            ProjectionBudget::default(),
+        )
+        .unwrap();
+    let dense_xor = xor_program
+        .evaluate(
+            &inputs,
+            BatchBudget::default(),
+            ProjectionBudget::default(),
+        )
+        .unwrap();
+
+    for (index, routed) in sparse.decisions.iter().enumerate() {
+        let dense = if routed.expert_page == PageId(0) {
+            dense_and.decisions.decisions[index]
+        } else {
+            dense_xor.decisions.decisions[index]
+        };
+        assert_eq!(routed.decision.outcome, dense.outcome);
+    }
+
+    let sparse_word_gates = sparse
+        .expert_batches
+        .iter()
+        .map(|batch| batch.word_gate_evaluations)
+        .sum::<u64>();
+    let dense_word_gates = dense_and.decisions.plan.word_gate_evaluations
+        + dense_xor.decisions.plan.word_gate_evaluations;
+
+    assert_eq!(sparse_word_gates, 2);
+    assert_eq!(dense_word_gates, 4);
+    assert_eq!(sparse.text_tokens_generated, 0);
+    assert_eq!(dense_and.decisions.text_tokens_generated, 0);
+    assert_eq!(dense_xor.decisions.text_tokens_generated, 0);
+}
+
+#[test]
 fn unobserved_routing_fails_before_sparse_expert_execution() {
     let state = state::<8>(0, true, true);
     let full = SemanticBitField::<8>::ones().unwrap();
