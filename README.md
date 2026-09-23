@@ -49,6 +49,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::gf2**: bit-packed GF(2) vectors and deterministic linear transforms.
 - **sml-core::anf**: canonical algebraic-normal-form / Zhegalkin relation evaluation.
 - **sml-core::memory**: bounded direct associative memory with explicit miss, collision and replacement outcomes.
+- **sml-core::delta_kv**: research-only bounded signed-Q12 rewritable associative matrix with normalized delta correction, exact bit accounting and explicit interference/saturation evidence.
 - **sml-core::routing_train**: budgeted latent-bit training that freezes into the existing O(1) direct page router.
 - **sml-core::elastic_weights**: transactional precision/residency/activation planning for elastic weight pages with exact RAM/VRAM and active-set accounting.
 - **sml-core::semantic**: Semantic Boolean Geometry (SBG) packed V/M/A/R state and integer-only Boolean semantic primitives.
@@ -74,6 +75,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/SML-1.1-TASK-LOSS-GATE.md**: first micro-operation learned from task answers with explicit semantic controls.
 - **docs/SML-1.2-STATE-UPDATE.md**: overwrite-state transition learned from task answers with complete state/input coverage.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
+- **docs/SML-DELTA-KV-BOOTSTRAP.md**: evidence-gated bounded rewritable-memory programme and matched controls.
 - **BOOTSTRAP.md**: durable project re-entry state, including the SBG roadmap and current implementation slice.
 - **docs/PRIOR_ART.md**: initial prior-art anchors; explicitly incomplete.
 
