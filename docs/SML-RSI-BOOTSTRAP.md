@@ -77,6 +77,71 @@ An RSI PR should eventually include a machine-readable evidence manifest with:
 Protected evaluation material must not be exposed to the candidate-generation
 path merely because GitHub stores its metadata.
 
+## Direct design inheritance from Memorithm/RSI
+
+`Memorithm/RSI` is the primary internal reference for loop engineering. SML-RSI
+should port/reuse the mature contracts that already exist there instead of
+inventing a second incompatible improvement stack.
+
+The following RSI mechanisms are directly relevant:
+
+- **AUTOPILOT outer loop**: one human objective -> frozen spec -> task DAG ->
+  bounded implementation -> draft PR -> human review. Human review is the
+  terminal fitness signal.
+- **No direct main mutation**: RSI's PR core exposes branch creation and pull
+  request planning, deliberately no default-branch write or merge action.
+- **DGM inner loop**: proposer -> isolated candidate snapshot -> build/test/bench
+  evaluator -> elite acceptance/archive; the model's self-assessment is never
+  authoritative.
+- **CandidateState**: complete materialized candidate trees with deterministic
+  SHA-256 identity, explicit parent identity and storage budgets.
+- **CumulativeArchive**: replayable branching lineages rather than one greedy
+  chain, with complete-state promotion evidence.
+- **EvaluationPipeline**: declarative host-defined evidence steps with explicit
+  evidence kinds (build, tests, numerical parity, provenance, determinism,
+  resource budget, policy, benchmark), bounded timeout and output.
+- **Loop Engineering L1-L9**: motivated stop reasons, plateau/divergence
+  detection, multi-scale schedules, circuit breakers, checkpoint/replay,
+  HITL veto, interactive control, swarm/portfolio execution and loop
+  benchmarking.
+- **Flywheel**: capture real candidate/verdict trajectories and use them to
+  improve prescreen/world-model/proposer quality. Training data comes from
+  measured outcomes, not model narration.
+- **Frozen-tests feature regime**: when the agent would otherwise write both the
+  feature and its tests, tests/specification are human-approved/frozen first to
+  break self-grading circularity.
+- **Chaos-tested safeguards**: a safeguard is not treated as real until an
+  adversarial test demonstrates that it blocks the relevant failure mode.
+
+SML-RSI should preserve these semantics while replacing RSI-specific
+`SI_global`/continuous agent-state scoring with SML-specific evidence vectors:
+model/task quality, decision calibration, context retrieval, active compute,
+RAM/VRAM/disk traffic, latency, reproducibility and protected-regression gates.
+
+For SML-GENIUS the intended hierarchy is:
+
+```text
+Memorithm/RSI design contracts
+        |
+        v
+SML-RSI native port/adaptation
+        |
+        +--> SBG / MOR / memory / recurrent-depth candidates
+        +--> SML-D decision candidates
+        +--> SML-CONTEXT retrieval/retention candidates
+        +--> Elastic/runtime candidates
+        |
+        v
+GitHub PR + SML CI/evidence
+        |
+        v
+human merge/reject
+```
+
+`Memorithm/RSI` may remain a research/orchestration partner, but SML inference
+must not depend on it. Promotion contracts needed to reproduce/serve SML should
+eventually live natively in SML-GENIUS.
+
 ## What can self-improve
 
 ### RSI-A — data and curriculum
