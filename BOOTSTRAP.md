@@ -8,6 +8,8 @@ SML is an independent, predominantly Boolean / low-bit autoregressive architectu
 
 Native decision capability is a first-class parallel objective. A substantial decision-expert family and dedicated training objectives must be evaluated before SML-2, not bolted onto a finished language model. Direct decisions and bounded recurrent refinement must work without a text decoder; language generation is optional. See `docs/SML-D-BOOTSTRAP.md`. Total decision capacity, active work per decision and direct-decision coverage are separate quantities; no arbitrary 25B percentage is frozen.
 
+Long context is also a first-class architecture programme. SML must not equate context capacity with a single dense token buffer. The target is a bounded active semantic/recurrent working set plus immutable raw context segments, associative memory and mapped SBG/raw indexes with explicit provenance. See `docs/SML-CONTEXT-BOOTSTRAP.md`. Raw tokens ingested, effective retrievable span, resident RAM, mapped/disk bytes and retrieval traffic are separate measurements.
+
 The new semantic representation programme is **Semantic Boolean Geometry (SBG)**.
 
 SBG treats meaning as a context-sensitive Boolean state rather than as a fixed real-valued embedding.
@@ -46,7 +48,7 @@ The repository already uses `SML-0.7` for Elastic Weights and has merged later `
 
 Do **not** reuse those occupied SML labels.
 
-Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content. Native decision work uses **SML-D**; connectomic structural priors use **CSP**.
+Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content. Native decision work uses **SML-D**; hierarchical context uses **SML-CONTEXT**; connectomic structural priors use **CSP**.
 
 ## Semantic Boolean Geometry implementation roadmap
 
@@ -151,49 +153,82 @@ Reference-semantic SBG-0.1 through SBG-0.11 slices are merged. SBG-0.12 ARM64 ke
 
 SML-1.3 controlled routing/keyed-memory ablations merged through PR #52. Learned routing does not beat fixed routing on that reference panel. SML-1.4 unary recall/copy projections merged through PR #56; marker activation and payload/control-flow semantics remain fixed and require separate learning experiments.
 
-SBG-0.13a byte format merged through PR #57 as `786c0d549c78aae550bff14157d95ed472af2e8d`.
+SBG-0.13a byte format merged through PR #57 as `786c0d549c78aae550bff14157d95ed472af2e8d`. SBG-0.13b Linux mapped reader merged through PR #60 as `d2ba5c9999379e5a8bd75838f98a8f7823ec2f89`; its qualification and limits are documented in `docs/SBG-0.13b-MAPPED-RUNTIME.md`.
 
-SBG-0.13b Linux mapped reader merged through PR #60 as `d2ba5c9999379e5a8bd75838f98a8f7823ec2f89`. Its qualification and limits are documented in `docs/SBG-0.13b-MAPPED-RUNTIME.md`.
+Native decision work has advanced through:
 
-Latest implementation slice: **SML-D0 / narrow D1a**, PR #61, branch `research/sml-d0-native-decision`. Read `docs/SML-D-BOOTSTRAP.md` and check live PR/CI state before continuing. Once merged, branch from current `main` rather than reviving this slice branch.
+- D0/D1a merged PR #61;
+- D1b observed-SBG bridge merged PR #62;
+- D1c bounded learned SBG feature-pair selection merged PR #63;
+- D1d MOR-gated sparse decision expert bank with matched dense work-count control merged PR #64;
+- D1e MOR-selected Elastic Weight PLAN/VALIDATE admission merged PR #65 as `ef4238fd877554f6671a57140e354a12248d9afb`.
 
-Implementation surfaces:
+Active physical-runtime slice at the time this bootstrap was updated: **D1f-a verified disk-to-RAM materialization**, PR #66, branch `research/sml-d1f-ram-materialize`. It must remain fail-closed for VRAM and precision conversion until real qualified backends exist.
+
+Parallel architecture bootstrap: **SML-CONTEXT**, branch `research/sml-context-0-bootstrap`, durable contract in `docs/SML-CONTEXT-BOOTSTRAP.md`.
+
+### Decision-engineering lessons retained from Laya review
+
+The 2026-09-23 source review of `NandhaKishorM/laya` is used as external research evidence, not as a runtime dependency or architecture template. Laya itself uses bidirectional encoder models and floating-point/PyTorch components that are not imported into SML. The transferable engineering ideas are:
+
+- typed `choice / ordinal-score / Boolean` decisions without text decoding;
+- many questions sharing one encoded state/pass;
+- strictly proper scoring objectives for decision distributions;
+- a separate ACT/refine signal using uncertainty/margin-style evidence;
+- capability routing before inference instead of trusting confidence from an incapable expert;
+- calibration stratified by question type/cardinality;
+- coarse-to-fine shortlisting for large candidate spaces;
+- hot/preloaded checkpoint residency and explicit cold/warm routing costs;
+- option-order/permutation robustness as a decision-quality metric.
+
+SML-native implementations should use SBG/MOR/Boolean/low-bit/fixed-point mechanisms where evidence supports them. No Laya benchmark number is transferred as an SML performance claim.
+
+### Context-window architectural direction
+
+SML context is treated as a **hierarchical context horizon**, not merely a maximum prompt length. Two representations are mandatory:
+
+1. immutable raw segments for exact copying, identifiers, numbers, code and source fidelity;
+2. SBG semantic records/indexes linked back to raw segment provenance for sparse retrieval/routing.
+
+The active working set must stay bounded while older context may live in associative memory and mapped stores. The context programme must separately account raw bytes/tokens ingested, recent resident raw span, active SBG bits, associative entries, mapped records, raw-segment storage, page faults/traffic, selected context pages, recurrent work and latency.
+
+The initial evaluation ladder is experimental, not a promise:
 
 ```text
-crates/sml-decision/src/lib.rs
-crates/sml-decision/src/training.rs
-crates/sml-decision/tests/decision.rs
-crates/sml-decision/tests/boundaries.rs
-docs/SML-D-BOOTSTRAP.md
+4k -> 16k -> 64k -> 256k -> 1M tokenizer-token dependency spans
 ```
 
-Definition of done for SML-D0:
+Advance only when the preceding span passes quality, memory, traffic and latency gates. Writing a million tokens to disk is not evidence of a million-token effective context.
 
-1. validated acyclic Boolean program with typed binary/choice/ordinal outputs;
-2. unknown-feature masks and explicit abstention rather than false defaults;
-3. many heads share one circuit evaluation and one feature packing pass;
-4. bit-sliced groups of at most 64 records match independent scalar semantics;
-5. budgets checked before internal execution/allocation and counters distinguish logical work from word-kernel calls;
-6. no text decoder, calibrated-probability claim or external action authorization;
-7. exhaustive tables/partial-input cases, boundary groups, highest feature bit, constraints, malformed inputs and reconvergent unknown soundness tests;
-8. complete locked workspace CI and decision evidence on the exact latest head before merge.
+Implementation surfaces now include:
 
-D1a adds only a finite two-input supervised-table fitting fixture with train-only selection and validation rejection. It is not a general decision model, not learned wiring and not a protected-final-holdout scaling result. Logical table bits are not physical Vec storage or a live persisted parameter commit.
+```text
+crates/sml-decision/
+crates/sml-runtime/
+crates/sml-store/
+crates/sml-core/src/semantic/
+docs/SML-D-BOOTSTRAP.md
+docs/SML-CONTEXT-BOOTSTRAP.md
+```
 
 The workspace retains `forbid(unsafe_code)` and the core retains no external dependencies. OS mapping uses pinned mmap-guard, which encapsulates unsafe code in its dependencies. This is not a safety proof against arbitrary external mutation: mapped inodes must never be modified/truncated while in use. Locks are cooperative; CRC32C is not authentication. Reader counters are logical payload/mapping counters, not RSS, page-cache or actual I/O measurements.
 
 Next implementation gates:
 
-- **SML-D1/D2**: substantial trained decision experts conditioned by SBG/state/questions, calibration and risk/coverage; no hand-authored feature schema may be presented as general language comprehension.
-- **SML-D3/D4/D5**: streaming/sparse batches, bounded recurrent refinement and end-to-end matched-quality qualification; grouped call counts are not throughput gains.
-- **SBG-0.13c**: cold/warm latency, RSS/page faults and traffic on growing stores; streamed publication and stronger immutable/index-integrity contracts. Do not mark the broad store/resource gate complete from small fixtures alone.
-- **SBG-0.14**: connect mapped lookup to native SBG/MOR/Elastic/expert/memory/recurrent execution and native decision outputs with end-to-end evidence.
+- **D1f-a**: verify real disk-to-RAM MATERIALIZE/VERIFY/COMMIT-or-ROLLBACK on unchanged-precision pages. Do not emulate VRAM or synthesize richer representations.
+- **SML-D2**: proper-scoring/calibration work on reserved data, including Brier/RPS-style fixed-point candidates, risk/coverage and false-acceptance metrics.
+- **SML-D3**: large-candidate SBG/MOR shortlisting, hot expert residency/prefetch and complete end-to-end throughput accounting.
+- **SML-D4**: DIRECT / REFINE / ABSTAIN gate using decision margin, SBG ambiguity, MOR disagreement, memory evidence and recurrent stability.
+- **CONTEXT-0/1**: exact raw/token/span accounting, immutable raw segment ledger, provenance-linked SBG index and bounded streaming ingest.
+- **CONTEXT-2..7**: recurrent working context, hierarchical retrieval, retention/compaction, long-range refinement, long-range learning and evidence-gated scale ladder. See `docs/SML-CONTEXT-BOOTSTRAP.md`.
+- **SBG-0.13c**: cold/warm latency, RSS/page faults and traffic on growing stores; streamed publication and stronger immutable/index-integrity contracts.
+- **SBG-0.14**: connect mapped lookup to native SBG/MOR/Elastic/expert/memory/recurrent execution, native decisions and optional generation with common evidence.
 - **SML-1 follow-up**: learned marker/control, wider matched ablations, fixed-versus-adaptive depth. Freeze SML-0/SML-1 protocols before SML-2.
-- **Elastic actuation**: native SML physical page materialization and VERIFY/ROLLBACK; other Memorithm repositories are research/qualification partners, not mandatory inference dependencies.
+- **Elastic actuation**: after RAM qualification, add only genuine physical backends for further residency tiers/precision conversions; other Memorithm repositories remain research/qualification partners, not mandatory inference dependencies.
 
 ## Scientific boundary
 
-SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above. SML-D0 adds a bounded structured-feature decision runtime, not evidence of Jev-level capabilities or a measured whole-system speedup.
+SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above. SML-D adds bounded native decision machinery but has not yet established Jev/Laya-level general decision quality or a whole-system speed advantage. SML-CONTEXT is likewise a target architecture: mapped storage, semantic indexing or isolated needle retrieval do not by themselves establish an effective long-context window.
 
 ## BANC v888 Connectomic Structural Prior track
 
