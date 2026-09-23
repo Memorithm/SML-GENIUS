@@ -166,7 +166,7 @@ workspace.
 - [ ] DKV-1 matched declared-storage comparison against RejectCollision/ReplaceExisting
   direct associative memory plus bounded append-only record control; same frozen script, no composite winner metric (active stacked slice);
 - [ ] DKV-2a deterministic bounded SBG V/M/A/R + existing MOR-selection projection into Q12 key space; raw provenance remains separate (active stacked slice);
-- [ ] DKV-2b recurrent Delta-KV read/write integration with direct memory retained as independent control;
+- [ ] DKV-2b frozen-query Delta-KV reads in bounded SBG recurrence with adaptive/fixed/no-DKV controls and direct memory retained independently (active stacked slice);
 - [ ] DKV-3 SML-CONTEXT integration with exact raw provenance and long-range task
   evidence;
 - [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
