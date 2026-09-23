@@ -285,8 +285,7 @@ fn elastic_active_parameter_budget_rejects_mor_union_before_expert_execution() {
     let right = state::<8>(1, true, false);
     let observed = SemanticBitField::<8>::ones().unwrap();
     let inputs = [input(0, &left, &observed), input(1, &right, &observed)];
-    let bank =
-        ElasticMorDecisionBank::new(decision_bank(), planner(8, 1, 4)).unwrap();
+    let bank = ElasticMorDecisionBank::new(decision_bank(), planner(8, 1, 4)).unwrap();
 
     assert_eq!(
         bank.evaluate(
@@ -312,8 +311,7 @@ fn elastic_active_parameter_budget_rejects_mor_union_before_expert_execution() {
 fn elastic_residency_budget_rejects_selected_page_before_expert_execution() {
     let state = state::<8>(1, true, false);
     let observed = SemanticBitField::<8>::ones().unwrap();
-    let bank =
-        ElasticMorDecisionBank::new(decision_bank(), planner(16, 0, 0)).unwrap();
+    let bank = ElasticMorDecisionBank::new(decision_bank(), planner(16, 0, 0)).unwrap();
 
     assert!(matches!(
         bank.evaluate(
