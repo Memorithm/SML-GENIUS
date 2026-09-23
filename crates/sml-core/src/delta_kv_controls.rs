@@ -191,7 +191,8 @@ fn run_delta_backend(
 ) -> Result<DkvControlBackendReport, DkvControlError> {
     let mut memory = DeltaKvMemory::new(DKV_CONTROL_KEY_DIM, DKV_CONTROL_VALUE_DIM)?;
     let mut counters = DeltaKvCounters::default();
-    let mut report = empty_backend_report(DkvControlBackend::DeltaKv, memory.semantic_bits(), budget)?;
+    let mut report =
+        empty_backend_report(DkvControlBackend::DeltaKv, memory.semantic_bits(), budget)?;
 
     for operation in script {
         match *operation {
@@ -276,7 +277,11 @@ fn run_append_backend(
     capacity: usize,
 ) -> Result<DkvControlBackendReport, DkvControlError> {
     let mut ledger = AppendLedger::new(capacity, DKV_CONTROL_VALUE_BITS)?;
-    let mut report = empty_backend_report(DkvControlBackend::AppendLedger, ledger.semantic_bits(), budget)?;
+    let mut report = empty_backend_report(
+        DkvControlBackend::AppendLedger,
+        ledger.semantic_bits(),
+        budget,
+    )?;
 
     for operation in script {
         match *operation {
@@ -292,17 +297,18 @@ fn run_append_backend(
                 report.reads = report.reads.saturating_add(1);
                 match ledger.read_latest(key) {
                     Some((value, comparisons, _epoch)) => {
-                        report.ledger_scan_comparisons = report
-                            .ledger_scan_comparisons
-                            .saturating_add(comparisons);
+                        report.ledger_scan_comparisons =
+                            report.ledger_scan_comparisons.saturating_add(comparisons);
                         let prediction = [i32::from(value[0]), i32::from(value[1])];
                         let error = l1_error_i32(&prediction, &expected_q12)?;
                         record_read_error(&mut report, error);
                     }
                     None => {
-                        report.ledger_scan_comparisons = report
-                            .ledger_scan_comparisons
-                            .saturating_add(u64::try_from(ledger.len()).map_err(|_| DkvControlError::Overflow)?);
+                        report.ledger_scan_comparisons =
+                            report.ledger_scan_comparisons.saturating_add(
+                                u64::try_from(ledger.len())
+                                    .map_err(|_| DkvControlError::Overflow)?,
+                            );
                         report.misses = report.misses.saturating_add(1);
                     }
                 }
@@ -370,7 +376,8 @@ fn maximum_direct_capacity(budget: u128, value_bits: usize) -> Result<usize, Dkv
     let mut capacity = 1_usize;
     loop {
         let next = capacity.checked_add(1).ok_or(DkvControlError::Overflow)?;
-        let memory = BoundedAssociativeMemory::new(next, value_bits, ReplacementPolicy::RejectCollision)?;
+        let memory =
+            BoundedAssociativeMemory::new(next, value_bits, ReplacementPolicy::RejectCollision)?;
         if memory.semantic_bits() > budget {
             break;
         }
