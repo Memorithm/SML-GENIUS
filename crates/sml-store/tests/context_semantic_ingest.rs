@@ -12,8 +12,8 @@ use sml_core::{
 use sml_store::{
     context_ingest::{ContextIngestError, SegmentTokenCounter, StreamingIngestPolicy},
     context_semantic_ingest::{
-        parse_provenance_artifact, ContextSemanticIngestError, SemanticIngestPolicy,
-        SemanticSegmentEmitter, SemanticStreamingContextIngestor, SegmentEmissionContext,
+        parse_provenance_artifact, ContextSemanticIngestError, SegmentEmissionContext,
+        SemanticIngestPolicy, SemanticSegmentEmitter, SemanticStreamingContextIngestor,
     },
     raw_context::{load_raw_segment, RawContextStoreLimits},
 };
@@ -27,10 +27,8 @@ struct TempDir {
 impl TempDir {
     fn new() -> Self {
         let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "sml-context-semantic-{}-{id}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sml-context-semantic-{}-{id}", std::process::id()));
         fs::create_dir(&path).unwrap();
         Self { path }
     }
@@ -60,10 +58,14 @@ impl SemanticSegmentEmitter<8> for DeterministicEmitter {
     ) -> Result<Vec<(u64, SemanticState<8>)>, ContextSemanticIngestError> {
         let mut state = SemanticState::<8>::zeroed().unwrap();
         state.value.set(0, raw_segment[0] & 1 != 0).unwrap();
-        state.value.set(1, raw_segment[raw_segment.len() - 1] & 1 != 0).unwrap();
+        state
+            .value
+            .set(1, raw_segment[raw_segment.len() - 1] & 1 != 0)
+            .unwrap();
         state.meaning_mask.set(0, true).unwrap();
         state.meaning_mask.set(1, true).unwrap();
-        state.routing
+        state
+            .routing
             .set((context.order_index as usize) % 8, true)
             .unwrap();
         Ok(vec![(1000 + context.segment_id, state)])
@@ -408,7 +410,6 @@ fn semantic_stats_report_segment_local_peaks_not_whole_stream_residency() {
     assert!(outcome.stats.peak_semantic_store_bytes > 0);
     assert!(outcome.stats.peak_provenance_bytes > 0);
     assert!(
-        outcome.stats.semantic_store_bytes_published
-            >= outcome.stats.peak_semantic_store_bytes * 3
+        outcome.stats.semantic_store_bytes_published >= outcome.stats.peak_semantic_store_bytes * 3
     );
 }
