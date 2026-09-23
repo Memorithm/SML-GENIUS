@@ -120,6 +120,21 @@ pub struct SemanticProjection<const BITS: usize> {
 }
 
 impl<const BITS: usize> SemanticProjection<BITS> {
+    #[must_use]
+    pub const fn schema_id(&self) -> u64 {
+        self.schema_id
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u64 {
+        self.version
+    }
+
+    #[must_use]
+    pub fn features(&self) -> &[SemanticFeature] {
+        &self.features
+    }
+
     pub fn new(
         schema_id: u64,
         version: u64,
