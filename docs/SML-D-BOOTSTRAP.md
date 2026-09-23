@@ -24,10 +24,11 @@ D0/D1a merged through PR #61 at 9749086c5ad9b77208d53539b179537dc844fc8c.
 The exact pre-merge head 4d2f17a41b0a64a2c83e92a4b7838d9fbccdb18d passed
 CI run 35785060702, including the four boundary tests previously held pending.
 
-Active slice: **D1b observed-SBG decision bridge** on
-`research/sml-d1b-observed-sbg`. Check its live PR and CI before resuming; once
-merged, use current main rather than appending commits to this slice branch.
-Detailed contract: [SML-D1b-SBG-BRIDGE.md](SML-D1b-SBG-BRIDGE.md).
+D1b merged through PR #62 at `6a640223015135e96c004bd836047a2ae7782f45`.
+
+Active slice: **D1c bounded learned SBG feature-pair selection** on
+`research/sml-d1c-learned-feature-pair`. Detailed contract:
+[SML-D1c-FEATURE-SELECTION.md](SML-D1c-FEATURE-SELECTION.md).
 
 D1b projects explicitly selected SBG coordinates into D0. Independent masks
 state whether V, M, A and R were observed. Relevance M and absence of ambiguity A
@@ -110,7 +111,8 @@ No throughput or Jev superiority claim is supported by these reference fixtures.
 |---|---|
 | D0 | Typed decision contract, abstention, bounded batches, scalar equivalence. Merged PR #61. |
 | D1a | Finite two-input fitting and validation rejection. Merged PR #61; reference fixture only. |
-| D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Active slice; requires green CI. |
+| D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Merged PR #62. |
+| D1c | Bounded training-only SBG feature-pair selection with fixed-coordinate control and validation veto. Active slice. |
 | D1 | Substantial trained experts; learned SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
 | D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probabilities only after validation. Open. |
 | D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation and storage; full encoding-to-result latency/throughput. Open. |
