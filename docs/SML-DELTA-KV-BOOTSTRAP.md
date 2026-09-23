@@ -30,7 +30,9 @@ DKV-0b is implemented in the preceding stacked PR #79.
 
 DKV-1 is implemented in the preceding stacked PR #80.
 
-Active slice: **DKV-2a SBG/MOR bounded key projection** on `research/dkv-2a-sbg-mor-keying`.
+DKV-2a is implemented in the preceding stacked PR #81.
+
+Active slice: **DKV-2b recurrent Delta-KV memory source** on `research/dkv-2b-recurrent-memory`.
 
 ## DKV-0a — fixed-point normalized delta reference
 
@@ -120,6 +122,15 @@ DKV-2a introduces a deterministic integer-only projection from the existing
 V/M/A/R SemanticState plus the already-produced MOR selected-expert set into a
 bounded Q12 key. It does not run another router. Optional raw/source provenance
 is copied into evidence but deliberately does not influence the compressed key.
+
+DKV-2b keeps the DKV-2a query projection frozen across recurrent cycles so the
+effect of memory reads is isolated from dynamic re-keying. A Delta-KV read may
+rewrite configured V coordinates and mark low-magnitude values ambiguous. Such
+ambiguity may block stability halting but never the hard max-depth bound.
+
+Every experiment carries three paths: adaptive Delta-KV recurrence, fixed-depth
+Delta-KV recurrence, and a no-Delta-KV identity control. Direct associative
+memory remains independent and may coexist in the same runtime.
 
 Only after DKV-1:
 
