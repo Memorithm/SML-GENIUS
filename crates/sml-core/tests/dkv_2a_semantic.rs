@@ -36,11 +36,8 @@ fn state8() -> SemanticState<8> {
 
 #[test]
 fn same_sbg_and_mor_state_projects_deterministically() {
-    let projector = DeltaKvSemanticProjector::<16>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        7,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<16>::new(DeltaKvSemanticProjectionPolicy::default(), 7).unwrap();
     let state = state8();
     let mor = decision(&[3]);
 
@@ -59,11 +56,9 @@ fn same_sbg_and_mor_state_projects_deterministically() {
 
 #[test]
 fn routing_field_change_changes_projected_semantic_key() {
-    let projector = DeltaKvSemanticProjector::<16>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        11,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<16>::new(DeltaKvSemanticProjectionPolicy::default(), 11)
+            .unwrap();
     let left = state8();
     let mut right = left.clone();
     right.routing.set(6, true).unwrap();
@@ -97,11 +92,9 @@ fn mor_selection_contributes_to_key_without_invoking_another_router() {
 
 #[test]
 fn provenance_is_carried_but_does_not_change_compressed_key() {
-    let projector = DeltaKvSemanticProjector::<16>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        23,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<16>::new(DeltaKvSemanticProjectionPolicy::default(), 23)
+            .unwrap();
     let state = state8();
     let mor = decision(&[4]);
     let first = DeltaKvSourceProvenance::new(10, vec![100, 101]).unwrap();
@@ -117,11 +110,9 @@ fn provenance_is_carried_but_does_not_change_compressed_key() {
 
 #[test]
 fn reference_semantic_width_has_exact_projection_accounting() {
-    let projector = DeltaKvSemanticProjector::<32>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        31,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<32>::new(DeltaKvSemanticProjectionPolicy::default(), 31)
+            .unwrap();
     let mut state = SemanticState::<16_384>::zeroed().unwrap();
     state.value.set(123, true).unwrap();
     state.meaning_mask.set(456, true).unwrap();
@@ -140,11 +131,8 @@ fn reference_semantic_width_has_exact_projection_accounting() {
 
 #[test]
 fn empty_or_duplicate_mor_selection_fails_closed() {
-    let projector = DeltaKvSemanticProjector::<8>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        1,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<8>::new(DeltaKvSemanticProjectionPolicy::default(), 1).unwrap();
     let state = state8();
 
     assert_eq!(
@@ -168,11 +156,8 @@ fn malformed_raw_provenance_fails_closed() {
         Err(DeltaKvSemanticError::DuplicateRawSegment)
     );
 
-    let projector = DeltaKvSemanticProjector::<8>::new(
-        DeltaKvSemanticProjectionPolicy::default(),
-        2,
-    )
-    .unwrap();
+    let projector =
+        DeltaKvSemanticProjector::<8>::new(DeltaKvSemanticProjectionPolicy::default(), 2).unwrap();
     let state = state8();
     let malformed = DeltaKvSourceProvenance {
         semantic_record_id: 5,
@@ -187,10 +172,7 @@ fn malformed_raw_provenance_fails_closed() {
 #[test]
 fn invalid_projector_geometry_and_policy_fail_before_projection() {
     assert_eq!(
-        DeltaKvSemanticProjector::<0>::new(
-            DeltaKvSemanticProjectionPolicy::default(),
-            0
-        ),
+        DeltaKvSemanticProjector::<0>::new(DeltaKvSemanticProjectionPolicy::default(), 0),
         Err(DeltaKvSemanticError::ZeroKeyDimension)
     );
     assert_eq!(
