@@ -243,11 +243,13 @@ fn extract_samples(
     counts.copy_bit_samples =
         u64::try_from(copy.len()).map_err(|_| MultiTaskTrainingError::Overflow)?;
 
+    let copy_tasks =
+        usize::try_from(counts.copy_tasks).map_err(|_| MultiTaskTrainingError::Overflow)?;
     for (operation, actual) in [
         (Operation::Conjunction, conjunction.len()),
         (Operation::Overwrite, overwrite.len()),
         (Operation::Recall, recall.len()),
-        (Operation::Copy, usize::try_from(counts.copy_tasks).unwrap_or(usize::MAX)),
+        (Operation::Copy, copy_tasks),
     ] {
         if actual < minimum {
             return Err(MultiTaskTrainingError::InsufficientSamples {
@@ -371,8 +373,8 @@ fn copy_samples(task: &TaskInstance) -> Result<Vec<GateSample1>, MultiTaskTraini
 }
 
 fn scalar_target(task: &TaskInstance) -> Result<bool, MultiTaskTrainingError> {
-    match task.expected {
-        TaskAnswer::Bit(value) => Ok(value),
+    match &task.expected {
+        TaskAnswer::Bit(value) => Ok(*value),
         TaskAnswer::Bits(_) => Err(MultiTaskTrainingError::MalformedTask(task.case_id)),
     }
 }
