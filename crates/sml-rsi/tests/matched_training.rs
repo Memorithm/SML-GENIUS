@@ -12,7 +12,11 @@ use sml_rsi::{
     },
 };
 
-fn proposed_curriculum(start: u64, count: u32, difficulty: u16) -> sml_rsi::curriculum::CurriculumReport {
+fn proposed_curriculum(
+    start: u64,
+    count: u32,
+    difficulty: u16,
+) -> sml_rsi::curriculum::CurriculumReport {
     build_verified_curriculum(
         &[CurriculumProposal {
             proposal_id: "self-proposed-conjunction".into(),
@@ -32,10 +36,7 @@ fn proposed_and_fixed_curricula_train_real_candidates_at_matched_task_count() {
     let report =
         run_matched_conjunction_training(&curriculum, MatchedTrainingPolicy::default()).unwrap();
 
-    assert_eq!(
-        report.proposed.training_tasks,
-        report.fixed.training_tasks
-    );
+    assert_eq!(report.proposed.training_tasks, report.fixed.training_tasks);
     assert_eq!(
         report.proposed.training_tasks,
         report.matched_training_tasks
@@ -44,8 +45,14 @@ fn proposed_and_fixed_curricula_train_real_candidates_at_matched_task_count() {
     assert_eq!(report.fixed.input_coverage, 0b1111);
     assert_eq!(report.proposed.table, TruthTable2::AND);
     assert_eq!(report.fixed.table, TruthTable2::AND);
-    assert_eq!(report.proposed.gate.hard_correct, report.proposed.gate.sample_count);
-    assert_eq!(report.fixed.gate.hard_correct, report.fixed.gate.sample_count);
+    assert_eq!(
+        report.proposed.gate.hard_correct,
+        report.proposed.gate.sample_count
+    );
+    assert_eq!(
+        report.fixed.gate.hard_correct,
+        report.fixed.gate.sample_count
+    );
     assert_eq!(report.holdout_tasks, 64);
 }
 
@@ -126,7 +133,10 @@ fn development_rows_are_evaluated_but_do_not_change_training_sample_count() {
 
     assert_eq!(report.proposed.training_tasks, expected_training);
     assert_eq!(report.proposed.development.tasks, expected_development);
-    assert_eq!(report.proposed.development.exact_tasks, expected_development);
+    assert_eq!(
+        report.proposed.development.exact_tasks,
+        expected_development
+    );
 }
 
 #[test]
