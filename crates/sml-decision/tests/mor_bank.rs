@@ -8,9 +8,7 @@ use sml_core::{
     PageId,
 };
 use sml_decision::{
-    mor_bank::{
-        DecisionExpert, MorDecisionExpertBank, SparseDecisionBudget, SparseDecisionError,
-    },
+    mor_bank::{DecisionExpert, MorDecisionExpertBank, SparseDecisionBudget, SparseDecisionError},
     semantic::{
         ObservedFields, ProjectionBudget, SemanticDecisionProgram, SemanticFeature, SemanticInput,
         SemanticProjection,
