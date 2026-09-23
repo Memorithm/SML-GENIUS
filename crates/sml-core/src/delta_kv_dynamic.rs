@@ -73,7 +73,10 @@ impl<const BITS: usize, const KEY_DIM: usize> DeltaKvDynamicRekeyKernel<BITS, KE
         if unique_coordinates.len() != value_coordinates.len() {
             return Err(DeltaKvDynamicRekeyError::DuplicateValueCoordinate);
         }
-        if value_coordinates.iter().any(|coordinate| *coordinate >= BITS) {
+        if value_coordinates
+            .iter()
+            .any(|coordinate| *coordinate >= BITS)
+        {
             return Err(DeltaKvDynamicRekeyError::ValueCoordinateOutOfRange);
         }
         if mor.selected_experts.is_empty() {
@@ -259,9 +262,7 @@ impl std::error::Error for DeltaKvDynamicRekeyError {}
 mod tests {
     use super::*;
     use crate::{
-        delta_kv_semantic::DeltaKvSemanticProjectionPolicy,
-        semantic::SemanticState,
-        PageId,
+        delta_kv_semantic::DeltaKvSemanticProjectionPolicy, semantic::SemanticState, PageId,
     };
 
     fn mor() -> MorDecision {
