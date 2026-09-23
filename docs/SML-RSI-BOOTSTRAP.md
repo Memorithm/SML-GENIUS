@@ -263,7 +263,9 @@ RSI-0a merged through PR #69.
 
 RSI-0b merged through PR #70.
 
-Active implementation slice: `research/sml-rsi-1-exact-curriculum`.
+RSI-1 exact-oracle curriculum merged through PR #71.
+
+Active implementation slice: `research/sml-rsi-2-cycle-package-v2`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -301,11 +303,24 @@ The next matched experiment must compare this model-proposed curriculum against 
 fixed human-authored curriculum at equal training compute; merely generating
 oracle-valid tasks is not evidence that the curriculum improves learning.
 
-### RSI-2 — first closed training experiment
+### RSI-2 — first closed candidate-cycle state machine
 
-Freeze `Champion_n`, let it propose curriculum/counterexamples, train a separate
-candidate, run all gates, and open a GitHub PR containing the candidate evidence.
-The experiment ends at the human merge/reject decision.
+The first native loop state machine freezes an exact champion SHA, requires an
+oracle-verified curriculum, freezes one distinct candidate head, binds the RSI-0a
+manifest to that exact parent/head pair, and finally runs RSI-0b eligibility
+against trusted current-main / PR-head observations.
+
+Legal phases are:
+
+`ChampionFrozen -> CurriculumVerified -> CandidateFrozen -> EvidenceBound -> ReviewedEligible|ReviewedIneligible`.
+
+Main moving after champion freeze or PR head moving after candidate freeze makes
+review fail closed. The cycle can render deterministic PR evidence, but
+`self_promotion_authorized() == false` and `human_merge_gate_required() == true`.
+
+This is a control-plane closed cycle. It does not yet train real model weights;
+the later training experiment must plug an actual candidate trainer between
+CurriculumVerified and CandidateFrozen while preserving these bindings.
 
 ## Archive and branching
 
