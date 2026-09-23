@@ -6,8 +6,7 @@
 use core::fmt;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
-    io,
+    fs, io,
     path::PathBuf,
 };
 
@@ -370,8 +369,7 @@ impl ElasticRamRuntime {
                 .checked_add(page.header.payload_bytes)
                 .ok_or(RamMaterializationError::ArithmeticOverflow)?;
         }
-        if payload_bytes != stage.plan.ram_bytes
-            || payload_bytes != stage.report.ram_payload_bytes
+        if payload_bytes != stage.plan.ram_bytes || payload_bytes != stage.report.ram_payload_bytes
         {
             return Err(RamMaterializationError::RamByteMismatch {
                 planned: stage.plan.ram_bytes,
@@ -405,9 +403,7 @@ impl ElasticRamRuntime {
     }
 }
 
-fn validate_supported_transitions(
-    plan: &ElasticWeightPlan,
-) -> Result<(), RamMaterializationError> {
+fn validate_supported_transitions(plan: &ElasticWeightPlan) -> Result<(), RamMaterializationError> {
     for transition in &plan.transitions {
         if transition.from_precision != transition.to_precision {
             return Err(RamMaterializationError::UnsupportedPrecisionTransition {
@@ -456,8 +452,8 @@ fn validate_ram_page(
             actual: actual_crc,
         });
     }
-    let actual_bytes =
-        u64::try_from(page.payload.len()).map_err(|_| RamMaterializationError::ArithmeticOverflow)?;
+    let actual_bytes = u64::try_from(page.payload.len())
+        .map_err(|_| RamMaterializationError::ArithmeticOverflow)?;
     if actual_bytes != page.header.payload_bytes {
         return Err(RamMaterializationError::RamByteMismatch {
             planned: page.header.payload_bytes,
