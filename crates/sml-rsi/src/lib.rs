@@ -9,6 +9,7 @@
 
 pub mod curriculum;
 pub mod cycle;
+pub mod flywheel;
 pub mod manifest;
 pub mod matched_training;
 pub mod multi_task_training;

@@ -273,7 +273,9 @@ RSI-1c multi-operation curriculum training merged through PR #74.
 
 RSI-1d curriculum portfolio merged through PR #75.
 
-Active implementation slice: `research/sml-rsi-1e-post-selection-holdout`.
+RSI-1e post-selection holdout merged through PR #76.
+
+Active implementation slice: `research/sml-rsi-2a-flywheel-record`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -372,6 +374,18 @@ curriculum or the reconstructed shared development panel fails closed.
 The frozen selection is compared with the best fixed-control entry already in
 the portfolio. The holdout reports Better/Tie/Worse but cannot reselect the
 candidate.
+
+### RSI-2a — measured flywheel record
+
+The post-selection result is reduced to an aggregate-only deterministic flywheel
+record containing selected/fixed IDs, source class, development and holdout exact
+counts, training-event counts, learned micro-operation table codes and a derived
+signal: quality improved, equivalent quality with lower training work,
+equivalent/no efficiency gain, or quality regressed.
+
+The signal is recomputed from measured counters. Holdout task contents, case IDs,
+raw events and expected answers are deliberately absent from the flywheel
+representation so later proposer training cannot learn protected examples.
 
 ### RSI-2 — first closed candidate-cycle state machine
 

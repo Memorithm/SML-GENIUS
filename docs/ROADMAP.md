@@ -163,7 +163,8 @@ Governance invariant: `main` is the approved champion. The model may create/revi
 - [x] RSI-1b matched proposed-vs-fixed conjunction curriculum training using the same candidate trainer and separate holdout (merged PR #73; reference result tie);
 - [x] RSI-1c train conjunction/overwrite/recall/copy jointly from one verified RSI curriculum, with keyed/distractor families evaluated but not claimed learned (merged PR #74);
 - [x] RSI-1d bounded fixed-vs-proposed curriculum portfolio selected on a shared disjoint development panel (merged PR #75);
-- [ ] RSI-1e trusted-evaluator post-selection holdout, exact-oracle validated and disjoint from training/development, compares frozen selection with best fixed control without reselection (active slice);
+- [x] RSI-1e trusted-evaluator post-selection holdout, exact-oracle validated and disjoint from training/development, compares frozen selection with best fixed control without reselection (merged PR #76);
+- [ ] RSI-2a aggregate-only measured flywheel records derived from frozen development and post-selection holdout evidence without leaking holdout task content (active slice);
 - [x] RSI-2 bounded frozen-champion -> verified curriculum -> frozen candidate -> exact evidence -> review-eligibility state machine (merged PR #72);
 - [ ] RSI-3 proposer/solver/verifier co-evolution using learning progress rather than unsolved difficulty alone;
 - [ ] RSI-4 recursive improvement of SML-D, MOR, memory, SML-CONTEXT and recurrent policies;
