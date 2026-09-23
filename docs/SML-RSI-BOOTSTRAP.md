@@ -267,7 +267,9 @@ RSI-1 exact-oracle curriculum merged through PR #71.
 
 RSI-2 control-plane cycle merged through PR #72.
 
-Active implementation slice: `research/sml-rsi-1b-matched-training`.
+RSI-1b matched curriculum training merged through PR #73.
+
+Active implementation slice: `research/sml-rsi-1c-multitask-training`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
