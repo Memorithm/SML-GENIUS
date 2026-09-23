@@ -28,9 +28,11 @@ D1b merged through PR #62 at `6a640223015135e96c004bd836047a2ae7782f45`.
 
 D1c merged through PR #63 at `020e932af18a7742d195da70cb9e71a0c02b5df8`.
 
-Active slice: **D1d MOR-gated sparse decision expert bank** on
-`research/sml-d1d-mor-sparse-bank`. Detailed contract:
-[SML-D1d-MOR-SPARSE-BANK.md](SML-D1d-MOR-SPARSE-BANK.md).
+D1d merged through PR #64 at `19b3b575b6a1c0aad0b4c41f81d249b6210c87cb`.
+
+Active slice: **D1e MOR-selected Elastic admission** on
+`research/sml-d1e-elastic-admission`. Detailed contract:
+[SML-D1e-ELASTIC-ADMISSION.md](SML-D1e-ELASTIC-ADMISSION.md).
 
 D1b projects explicitly selected SBG coordinates into D0. Independent masks
 state whether V, M, A and R were observed. Relevance M and absence of ambiguity A
@@ -115,7 +117,8 @@ No throughput or Jev superiority claim is supported by these reference fixtures.
 | D1a | Finite two-input fitting and validation rejection. Merged PR #61; reference fixture only. |
 | D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Merged PR #62. |
 | D1c | Bounded training-only SBG feature-pair selection with fixed-coordinate control and validation veto. Merged PR #63. |
-| D1d | MOR-gated sparse decision expert bank; direct Top-1 routing and grouped execution. Active slice. |
+| D1d | MOR-gated sparse decision expert bank; direct Top-1 routing, grouped execution and matched dense work-count control. Merged PR #64. |
+| D1e | MOR-selected Elastic Weight PLAN/VALIDATE admission before expert execution; no physical commit claim. Active slice. |
 | D1 | Substantial trained experts; learned SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
 | D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probabilities only after validation. Open. |
 | D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation and storage; full encoding-to-result latency/throughput. Open. |
