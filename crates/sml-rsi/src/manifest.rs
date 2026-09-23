@@ -358,8 +358,10 @@ fn validate_branch(value: &str) -> Result<(), CandidateManifestError> {
 }
 
 fn validate_text(field: &'static str, value: &str) -> Result<(), CandidateManifestError> {
-    if value.trim().is_empty() || value.contains(' ') || value.contains('
-') || value.contains('')
+    if value.trim().is_empty()
+        || value.contains('\0')
+        || value.contains('\n')
+        || value.contains('\r')
     {
         return Err(CandidateManifestError::InvalidText(field));
     }
