@@ -2,7 +2,7 @@ use sml_core::delta_kv_panel::{
     frozen_delta_kv_cases, run_frozen_delta_kv_panel, DeltaKvCaseReport, DeltaKvPanelClass,
 };
 
-fn case<'a>(reports: &'a [DeltaKvCaseReport], class: DeltaKvPanelClass) -> &'a DeltaKvCaseReport {
+fn case(reports: &[DeltaKvCaseReport], class: DeltaKvPanelClass) -> &DeltaKvCaseReport {
     reports
         .iter()
         .find(|report| report.class == class)
