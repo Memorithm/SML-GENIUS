@@ -259,7 +259,9 @@ repairing PRs without removing the final promotion authority.
 
 ### RSI-0a — PR evidence manifest
 
-Active implementation slice: `research/sml-rsi-0a-candidate-manifest`.
+RSI-0a merged through PR #69.
+
+Active implementation slice: `research/sml-rsi-0b-promotion-eligibility`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -269,14 +271,17 @@ The manifest contains no promotion flag. Promotion eligibility is RSI-0b.
 
 ### RSI-0b — promotion-state verifier
 
-Validate that:
-- parent SHA matches declared champion;
-- evidence references are immutable/versioned;
-- protected evaluation is separated from training selection;
-- required checks are present;
-- no candidate marks itself as promoted.
+The native verifier checks:
+- manifest parent SHA equals the trusted current-main SHA;
+- manifest candidate SHA equals the trusted exact PR head;
+- policy-required typed evidence is present;
+- selection evidence and protected evaluation evidence are declared separately and disjoint;
+- every referenced digest exists in the candidate manifest;
+- no hard-gate metric regresses;
+- critical known regressions are rejected under the baseline policy.
 
-This verifier reports eligibility for human review, never merge authorization.
+Its only positive state is `EligibleForHumanReview`. The API deliberately reports
+`is_merge_authorization() == false`; the future model still cannot promote itself.
 
 ### RSI-1 — exact-verifier curriculum generator
 
