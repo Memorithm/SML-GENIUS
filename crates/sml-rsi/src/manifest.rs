@@ -74,10 +74,7 @@ pub struct CandidateBudget {
 
 impl CandidateBudget {
     pub fn validate(self) -> Result<(), CandidateManifestError> {
-        if self.max_wall_seconds == 0
-            || self.max_candidates == 0
-            || self.max_storage_bytes == 0
-        {
+        if self.max_wall_seconds == 0 || self.max_candidates == 0 || self.max_storage_bytes == 0 {
             return Err(CandidateManifestError::InvalidBudget);
         }
         Ok(())
@@ -268,8 +265,7 @@ impl RsiCandidateManifest {
             .map_err(|_| CandidateManifestError::Format)?;
         writeln!(&mut out, "branch={}", escape(&self.branch))
             .map_err(|_| CandidateManifestError::Format)?;
-        writeln!(&mut out, "class={:?}", self.class)
-            .map_err(|_| CandidateManifestError::Format)?;
+        writeln!(&mut out, "class={:?}", self.class).map_err(|_| CandidateManifestError::Format)?;
         writeln!(&mut out, "objective={}", escape(&self.objective))
             .map_err(|_| CandidateManifestError::Format)?;
         writeln!(
