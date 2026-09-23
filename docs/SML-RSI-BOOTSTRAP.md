@@ -265,7 +265,9 @@ RSI-0b merged through PR #70.
 
 RSI-1 exact-oracle curriculum merged through PR #71.
 
-Active implementation slice: `research/sml-rsi-2-cycle-package-v2`.
+RSI-2 control-plane cycle merged through PR #72.
+
+Active implementation slice: `research/sml-rsi-1b-matched-training`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -302,6 +304,23 @@ and event/case/proposal budget overruns fail closed.
 The next matched experiment must compare this model-proposed curriculum against a
 fixed human-authored curriculum at equal training compute; merely generating
 oracle-valid tasks is not evidence that the curriculum improves learning.
+
+#### RSI-1b — matched curriculum training
+
+The native matched experiment trains the same conjunction micro-operation and the
+same `SmlTaskCandidate` path from two curricula:
+
+1. the model-proposed, oracle-verified RSI training partition;
+2. a deterministic fixed curriculum with exactly the same number of training tasks.
+
+Both candidates are then evaluated on the same separately constructed holdout
+range after training. Proposed, fixed and holdout case IDs must be disjoint.
+The complete incoming curriculum report is revalidated before training, so
+post-generation tampering with labels or counters fails closed.
+
+The reference conjunction fixture is expected to tie because both curricula expose
+the complete AND truth table. A tie is retained as evidence; RSI gain is not
+inferred from task generation alone.
 
 ### RSI-2 — first closed candidate-cycle state machine
 
