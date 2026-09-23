@@ -161,7 +161,11 @@ impl<const KEY_DIM: usize> DeltaKvSemanticProjector<KEY_DIM> {
             );
             let bucket = usize::try_from(hash % KEY_DIM as u64)
                 .map_err(|_| DeltaKvSemanticError::Overflow)?;
-            let sign = if hash & (1_u64 << 63) == 0 { 1_i64 } else { -1_i64 };
+            let sign = if hash & (1_u64 << 63) == 0 {
+                1_i64
+            } else {
+                -1_i64
+            };
             accumulators[bucket] = accumulators[bucket]
                 .checked_add(sign * i64::from(self.policy.mor_weight))
                 .ok_or(DeltaKvSemanticError::Overflow)?;
