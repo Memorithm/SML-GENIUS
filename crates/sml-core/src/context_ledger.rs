@@ -289,27 +289,30 @@ impl RawContextLedger {
 
         let link_count = u64::try_from(segment.semantic_record_ids.len())
             .map_err(|_| ContextLedgerError::AccountingOverflow)?;
-        self.stats.segments = self
-            .stats
-            .segments
-            .checked_add(1)
-            .ok_or(ContextLedgerError::AccountingOverflow)?;
-        self.stats.raw_bytes = self
-            .stats
-            .raw_bytes
-            .checked_add(segment.byte_len)
-            .ok_or(ContextLedgerError::AccountingOverflow)?;
-        self.stats.tokenizer_tokens = self
-            .stats
-            .tokenizer_tokens
-            .checked_add(segment.token_len)
-            .ok_or(ContextLedgerError::AccountingOverflow)?;
-        self.stats.semantic_record_links = self
-            .stats
-            .semantic_record_links
-            .checked_add(link_count)
-            .ok_or(ContextLedgerError::AccountingOverflow)?;
+        let next_stats = RawContextLedgerStats {
+            segments: self
+                .stats
+                .segments
+                .checked_add(1)
+                .ok_or(ContextLedgerError::AccountingOverflow)?,
+            raw_bytes: self
+                .stats
+                .raw_bytes
+                .checked_add(segment.byte_len)
+                .ok_or(ContextLedgerError::AccountingOverflow)?,
+            tokenizer_tokens: self
+                .stats
+                .tokenizer_tokens
+                .checked_add(segment.token_len)
+                .ok_or(ContextLedgerError::AccountingOverflow)?,
+            semantic_record_links: self
+                .stats
+                .semantic_record_links
+                .checked_add(link_count)
+                .ok_or(ContextLedgerError::AccountingOverflow)?,
+        };
         self.segments.push(segment);
+        self.stats = next_stats;
         Ok(())
     }
 
@@ -529,6 +532,21 @@ mod tests {
             ),
             Err(ContextLedgerError::DuplicateSemanticRecordId(3))
         );
+    }
+
+    #[test]
+    fn failed_append_leaves_ledger_unchanged() {
+        let stream = ContextStreamId::new(6).unwrap();
+        let mut ledger = RawContextLedger::new(stream);
+        ledger
+            .append(segment(stream, 1, 0, 3, 0, 1, 0, &[1]))
+            .unwrap();
+        let before = ledger.clone();
+
+        assert!(ledger
+            .append(segment(stream, 2, 4, 1, 1, 1, 1, &[2]))
+            .is_err());
+        assert_eq!(ledger, before);
     }
 
     #[test]
