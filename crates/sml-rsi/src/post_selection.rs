@@ -6,9 +6,8 @@ use sml_core::{
     tasks::{suite_from_case_id, TaskError, TaskInstance, TaskKind},
 };
 
-use crate::{
-    curriculum::CurriculumReport,
-    portfolio::{entry_better, CurriculumCandidate, CurriculumPortfolioReport, CurriculumSource},
+use crate::portfolio::{
+    entry_better, CurriculumCandidate, CurriculumPortfolioReport, CurriculumSource,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
