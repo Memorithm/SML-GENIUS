@@ -48,6 +48,14 @@ jobs:
         run: cargo test --locked -p sml-core --test dkv_2a_semantic -- --nocapture
       - name: Delta-KV recurrent integration evidence
         run: cargo test --locked -p sml-core --test dkv_2b_recurrent -- --nocapture
+      - name: Delta-KV dynamic re-keying evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p sml-core --example dkv_2c_dynamic > "$RUNNER_TEMP/dkv-2c-first.csv"
+          cargo run --locked -p sml-core --example dkv_2c_dynamic > "$RUNNER_TEMP/dkv-2c-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2c-first.csv" "$RUNNER_TEMP/dkv-2c-second.csv"
+          cat "$RUNNER_TEMP/dkv-2c-first.csv"
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
