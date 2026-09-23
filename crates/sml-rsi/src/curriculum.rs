@@ -124,11 +124,7 @@ pub fn build_verified_curriculum(
                 return Err(CurriculumError::EventBudget);
             }
 
-            let partition = partition_for(
-                proposal.family,
-                case_id,
-                policy.development_modulus,
-            );
+            let partition = partition_for(proposal.family, case_id, policy.development_modulus);
             match partition {
                 CurriculumPartition::Training => {
                     training_tasks = training_tasks.saturating_add(1);
@@ -206,11 +202,7 @@ const fn family_tag(family: TaskKind) -> u8 {
     }
 }
 
-fn partition_for(
-    family: TaskKind,
-    case_id: u64,
-    development_modulus: u64,
-) -> CurriculumPartition {
+fn partition_for(family: TaskKind, case_id: u64, development_modulus: u64) -> CurriculumPartition {
     let mixed = mix64(case_id ^ u64::from(family_tag(family)).wrapping_mul(0x9e37_79b9));
     if mixed % development_modulus == 0 {
         CurriculumPartition::Development
