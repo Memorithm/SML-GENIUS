@@ -152,11 +152,7 @@ fn selected_pair_runs_through_the_existing_sbg_decision_path() {
     let projection = SemanticProjection::new(
         9,
         4,
-        vec![
-            selected[0],
-            selected[1],
-            SemanticFeature::Meaning(256),
-        ],
+        vec![selected[0], selected[1], SemanticFeature::Meaning(256)],
     )
     .unwrap();
     let decision = DecisionProgram::compile(
@@ -312,8 +308,14 @@ fn selection_is_deterministic_and_validation_ids_do_not_change_it() {
     .unwrap();
 
     assert_eq!(left.selected, right.selected);
-    assert_eq!(left.selected_training_errors, right.selected_training_errors);
-    assert_eq!(left.selection_evaluations_executed, right.selection_evaluations_executed);
+    assert_eq!(
+        left.selected_training_errors,
+        right.selected_training_errors
+    );
+    assert_eq!(
+        left.selection_evaluations_executed,
+        right.selection_evaluations_executed
+    );
 }
 
 #[test]
@@ -346,11 +348,9 @@ fn candidate_pair_and_evaluation_budgets_fail_before_search() {
                 policy,
                 ProjectionBudget::default(),
             ),
-            Err(
-                FeatureSearchError::CandidateBudget
-                    | FeatureSearchError::PairBudget
-                    | FeatureSearchError::EvaluationBudget
-            )
+            Err(FeatureSearchError::CandidateBudget
+                | FeatureSearchError::PairBudget
+                | FeatureSearchError::EvaluationBudget)
         ));
     }
 }
