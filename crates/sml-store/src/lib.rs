@@ -14,6 +14,7 @@
 //! The unsafe OS boundary lives in mmap-guard/memmap2, not in sml-core. This
 //! dependency boundary is not a proof of safety against arbitrary file mutation.
 
+pub mod context_ingest;
 pub mod raw_context;
 
 use std::{fmt, fs::File, io, path::Path};
