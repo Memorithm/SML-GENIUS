@@ -4,7 +4,13 @@ use sml_rsi::curriculum::{
     CurriculumProposal,
 };
 
-fn proposal(id: &str, family: TaskKind, start: u64, count: u32, difficulty: u16) -> CurriculumProposal {
+fn proposal(
+    id: &str,
+    family: TaskKind,
+    start: u64,
+    count: u32,
+    difficulty: u16,
+) -> CurriculumProposal {
     CurriculumProposal {
         proposal_id: id.into(),
         family,
@@ -23,7 +29,13 @@ fn all_native_task_families_are_recomputed_by_exact_oracle() {
         proposal("keyed", TaskKind::KeyedFactRecall, base + 200, 5, 7),
         proposal("copy", TaskKind::CopyAfterMarker, base + 300, 5, 7),
         proposal("and", TaskKind::TwoFactConjunction, base + 400, 5, 7),
-        proposal("distractor", TaskKind::DistractorRejection, base + 500, 5, 7),
+        proposal(
+            "distractor",
+            TaskKind::DistractorRejection,
+            base + 500,
+            5,
+            7,
+        ),
     ];
     let report = build_verified_curriculum(&proposals, CurriculumPolicy::default()).unwrap();
 
@@ -31,7 +43,10 @@ fn all_native_task_families_are_recomputed_by_exact_oracle() {
     assert_eq!(report.verified_tasks, 30);
     assert_eq!(report.training_tasks + report.development_tasks, 30);
     assert!(report.total_events > 30);
-    assert!(report.tasks.iter().all(|item| item.task.oracle_matches().unwrap()));
+    assert!(report
+        .tasks
+        .iter()
+        .all(|item| item.task.oracle_matches().unwrap()));
 }
 
 #[test]
