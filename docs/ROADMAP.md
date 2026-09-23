@@ -122,7 +122,7 @@ The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md
 - [x] D1a finite two-input expert-fitting fixture: training-only selection, validation rejection, separate test fixtures. This is not the general D1 gate.
 - [x] D1b reference implementation: observed V/M/A/R coordinate projection, shared inference/finite-training path and separate projection budgets (merged PR #62). See `SML-D1b-SBG-BRIDGE.md`.
 - [x] D1c bounded learned SBG feature-pair selection against a fixed-coordinate control (merged PR #63). See `SML-D1c-FEATURE-SELECTION.md`.
-- [ ] D1d MOR-gated sparse decision expert bank with matched dense control still required. See `SML-D1d-MOR-SPARSE-BANK.md`.
+- [ ] D1d MOR-gated sparse decision expert bank with matched dense work-count control. See `SML-D1d-MOR-SPARSE-BANK.md`.
 - [ ] D1 substantial trained experts, learned SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
 - [ ] D2 reserved-set calibration, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
 - [ ] D3 streamed/columnar bounded batches, sparse expert scheduling and complete packing/I/O/output cost measurements.
