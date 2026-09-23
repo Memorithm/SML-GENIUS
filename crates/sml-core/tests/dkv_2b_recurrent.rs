@@ -87,7 +87,10 @@ fn seeded_delta_kv_changes_state_then_adaptive_recurrence_halts_on_stability() {
     assert_eq!(comparison.adaptive_cycles.len(), 2);
 
     assert_eq!(comparison.fixed_depth.depth, 3);
-    assert_eq!(comparison.fixed_depth.halt_reason, SemanticHaltReason::Stable);
+    assert_eq!(
+        comparison.fixed_depth.halt_reason,
+        SemanticHaltReason::Stable
+    );
     assert_eq!(comparison.fixed_cycles.len(), 3);
 
     assert_eq!(comparison.no_delta.depth, 1);
@@ -113,7 +116,10 @@ fn unresolved_zero_read_blocks_stability_but_not_hard_depth_cap() {
     .unwrap();
 
     assert_eq!(comparison.adaptive.depth, 3);
-    assert_eq!(comparison.adaptive.halt_reason, SemanticHaltReason::MaxDepth);
+    assert_eq!(
+        comparison.adaptive.halt_reason,
+        SemanticHaltReason::MaxDepth
+    );
     assert!(comparison
         .adaptive
         .trace
@@ -220,11 +226,10 @@ fn key_width_mismatch_and_negative_ambiguity_threshold_fail_closed() {
         })
     );
 
-    let good =
-        DeltaKvSemanticProjector::<8>::new(DeltaKvSemanticProjectionPolicy::default(), 1)
-            .unwrap()
-            .project(&state, &decision(1), None)
-            .unwrap();
+    let good = DeltaKvSemanticProjector::<8>::new(DeltaKvSemanticProjectionPolicy::default(), 1)
+        .unwrap()
+        .project(&state, &decision(1), None)
+        .unwrap();
     assert_eq!(
         DeltaKvRecurrentKernel::<8>::new(
             DeltaKvMemory::new(8, 2).unwrap(),
