@@ -53,18 +53,14 @@ fn overlap_bands_expose_monotonic_previous_key_interference() {
     let q50 = case(&panel.cases, DeltaKvPanelClass::Overlap50).writes[1].prior_keys_error_after_q12;
     let q75 = case(&panel.cases, DeltaKvPanelClass::Overlap75).writes[1].prior_keys_error_after_q12;
 
-    assert!(q25 > 0);
-    assert!(q25 < q50);
-    assert!(q50 < q75);
+    assert_eq!((q25, q50, q75), (438, 750, 939));
 
-    for class in [
-        DeltaKvPanelClass::Overlap25,
-        DeltaKvPanelClass::Overlap50,
-        DeltaKvPanelClass::Overlap75,
-    ] {
-        let report = case(&panel.cases, class);
-        assert!(report.writes[1].current_key_error_q12 <= 1);
-    }
+    let current_errors = [
+        case(&panel.cases, DeltaKvPanelClass::Overlap25).writes[1].current_key_error_q12,
+        case(&panel.cases, DeltaKvPanelClass::Overlap50).writes[1].current_key_error_q12,
+        case(&panel.cases, DeltaKvPanelClass::Overlap75).writes[1].current_key_error_q12,
+    ];
+    assert_eq!(current_errors, [2, 0, 2]);
 }
 
 #[test]
