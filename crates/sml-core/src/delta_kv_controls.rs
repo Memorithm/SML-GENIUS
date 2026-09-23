@@ -291,7 +291,7 @@ fn run_append_backend(
             DkvControlOperation::Read { key, expected_q12 } => {
                 report.reads = report.reads.saturating_add(1);
                 match ledger.read_latest(key) {
-                    Some((value, comparisons)) => {
+                    Some((value, comparisons, _epoch)) => {
                         report.ledger_scan_comparisons = report
                             .ledger_scan_comparisons
                             .saturating_add(comparisons);
@@ -489,12 +489,12 @@ impl AppendLedger {
         Ok(true)
     }
 
-    fn read_latest(&self, key: u64) -> Option<([i16; 2], u64)> {
+    fn read_latest(&self, key: u64) -> Option<([i16; 2], u64, u64)> {
         let mut comparisons = 0_u64;
         for record in self.records.iter().rev() {
             comparisons = comparisons.saturating_add(1);
             if record.key == key {
-                return Some((record.value_q12, comparisons));
+                return Some((record.value_q12, comparisons, record.epoch));
             }
         }
         None
