@@ -8,6 +8,7 @@
 //! repository.
 
 pub mod curriculum;
+pub mod flywheel;
 pub mod cycle;
 pub mod manifest;
 pub mod matched_training;
