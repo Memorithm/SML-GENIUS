@@ -92,6 +92,7 @@ pub fn run_matched_conjunction_training(
     policy: MatchedTrainingPolicy,
 ) -> Result<MatchedTrainingReport, MatchedTrainingError> {
     let policy = policy.validate()?;
+    validate_curriculum_report(curriculum)?;
 
     let proposed_training = curriculum
         .tasks
@@ -132,7 +133,12 @@ pub fn run_matched_conjunction_training(
         policy.holdout_difficulty,
     )?;
 
-    enforce_disjoint_case_ids(&proposed_training, &fixed_training, &holdout)?;
+    enforce_disjoint_case_ids(
+        &proposed_training,
+        &proposed_development,
+        &fixed_training,
+        &holdout,
+    )?;
 
     let proposed = train_candidate(
         &proposed_training,
@@ -288,13 +294,51 @@ fn build_conjunction_range(
     Ok(tasks)
 }
 
+fn validate_curriculum_report(curriculum: &CurriculumReport) -> Result<(), MatchedTrainingError> {
+    let expected = curriculum
+        .training_tasks
+        .checked_add(curriculum.development_tasks)
+        .ok_or(MatchedTrainingError::Overflow)?;
+    if curriculum.verified_tasks != expected
+        || curriculum.verified_tasks
+            != u64::try_from(curriculum.tasks.len()).map_err(|_| MatchedTrainingError::Overflow)?
+    {
+        return Err(MatchedTrainingError::InvalidCurriculumReport);
+    }
+    let mut events = 0_u64;
+    for item in &curriculum.tasks {
+        if !item
+            .task
+            .oracle_matches()
+            .map_err(MatchedTrainingError::Task)?
+        {
+            return Err(MatchedTrainingError::OracleMismatch(item.task.case_id));
+        }
+        events = events
+            .checked_add(
+                u64::try_from(item.task.events.len()).map_err(|_| MatchedTrainingError::Overflow)?,
+            )
+            .ok_or(MatchedTrainingError::Overflow)?;
+    }
+    if events != curriculum.total_events {
+        return Err(MatchedTrainingError::InvalidCurriculumReport);
+    }
+    Ok(())
+}
+
 fn enforce_disjoint_case_ids(
-    proposed: &[TaskInstance],
+    proposed_training: &[TaskInstance],
+    proposed_development: &[TaskInstance],
     fixed: &[TaskInstance],
     holdout: &[TaskInstance],
 ) -> Result<(), MatchedTrainingError> {
     let mut seen = BTreeSet::new();
-    for task in proposed.iter().chain(fixed).chain(holdout) {
+    for task in proposed_training
+        .iter()
+        .chain(proposed_development)
+        .chain(fixed)
+        .chain(holdout)
+    {
         if !seen.insert(task.case_id) {
             return Err(MatchedTrainingError::OverlappingCaseId(task.case_id));
         }
@@ -305,6 +349,7 @@ fn enforce_disjoint_case_ids(
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchedTrainingError {
     InvalidPolicy,
+    InvalidCurriculumReport,
     InsufficientProposedTraining { actual: usize, minimum: usize },
     WrongTaskKind(TaskKind),
     MalformedTask(u64),
