@@ -34,7 +34,9 @@ DKV-2a merged through PR #81 at `e20310763073c9767de1a6c45cc1a5fa15a4d894`.
 
 DKV-2b merged through PR #83 at `6a26a65d0c953a7e83aedc9f6e785a7df8b88ea8`.
 
-Active slice: **DKV-2c dynamic re-keying qualification**. The frozen protocol is [`SML-DKV-2C-PREREGISTRATION.md`](SML-DKV-2C-PREREGISTRATION.md). It compares an unchanged DKV-2a projection recomputed from the evolving SBG state against the merged DKV-2b frozen-query path. The MOR selected-expert set, projector seed/policy, Delta-KV matrix, value-coordinate mapping and halting policy are held fixed so only re-keying changes.
+DKV-2c was executed in PR #86 and is preserved in [`SML-DKV-2C-OBSERVATION.md`](SML-DKV-2C-OBSERVATION.md). Dynamic re-keying demonstrated deterministic state-dependent key changes but is **not promoted**: the missing-successor control remained confidently non-ambiguous and the dynamic arm showed no final-state advantage over merged DKV-2b on the frozen target fixtures.
+
+The next context-facing Delta-KV slice must therefore use the qualified DKV-2b frozen-key recurrence. Dynamic re-keying remains research-only until a separate miss/confidence mechanism is preregistered and qualified.
 
 ## DKV-0a — fixed-point normalized delta reference
 

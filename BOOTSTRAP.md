@@ -67,6 +67,8 @@ semantics and independent requalification.
 
 Current Delta-KV evidence: DKV-0a through DKV-2b are merged. DKV-2b merged through PR #83 as `6a26a65d0c953a7e83aedc9f6e785a7df8b88ea8`, providing a bounded Delta-KV read as one native SBG recurrent input with adaptive/fixed/no-Delta-KV controls. DKV-2c is the next active research slice; it must isolate dynamic re-keying from routing changes.
 
+DKV-2c observation: dynamic SBG re-keying is executable but is not promoted into DKV-3. The preregistered missing-successor control remained confidently non-ambiguous, and dynamic re-keying did not improve the final target state over the DKV-2b frozen-key arm on the frozen fixtures. DKV-3 must use DKV-2b until a separate miss/confidence mechanism qualifies dynamic re-keying. See `docs/SML-DKV-2C-OBSERVATION.md`.
+
 ## Versioning reconciliation
 
 The repository already uses `SML-0.7` for Elastic Weights and has merged later `SML-0.8.x` MOR / Boolean-integral work. The earlier conversational SBG roadmap used overlapping SML-0.x labels.
