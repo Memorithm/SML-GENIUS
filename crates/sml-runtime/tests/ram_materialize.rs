@@ -25,10 +25,8 @@ struct TempDir {
 impl TempDir {
     fn new() -> Self {
         let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "sml-runtime-ram-{}-{id}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sml-runtime-ram-{}-{id}", std::process::id()));
         fs::create_dir(&path).unwrap();
         Self { path }
     }
@@ -84,8 +82,7 @@ fn cold_planner(
 }
 
 fn write_artifact(path: &Path, page_id: PageId, payload: u8) {
-    let bytes =
-        build_weight_artifact(page_id, 0, WeightPrecision::Boolean, 8, &[payload]).unwrap();
+    let bytes = build_weight_artifact(page_id, 0, WeightPrecision::Boolean, 8, &[payload]).unwrap();
     fs::write(path, bytes).unwrap();
 }
 
@@ -248,7 +245,9 @@ fn artifact_header_must_match_the_exact_elastic_transition() {
 
     assert_eq!(
         runtime.stage(&plan, &catalog, RamMaterializationBudget::default()),
-        Err(RamMaterializationError::ArtifactTransitionMismatch(PageId(0)))
+        Err(RamMaterializationError::ArtifactTransitionMismatch(PageId(
+            0
+        )))
     );
 }
 
@@ -308,8 +307,7 @@ fn precision_promotion_is_rejected_instead_of_synthesizing_richer_weights() {
 fn vram_target_is_rejected_instead_of_being_emulated_with_host_memory() {
     let temp = TempDir::new();
     let catalog = catalog(&temp);
-    let runtime =
-        ElasticRamRuntime::new(cold_planner(500_000, 500_000, 0, 1, 16, 0)).unwrap();
+    let runtime = ElasticRamRuntime::new(cold_planner(500_000, 500_000, 0, 1, 16, 0)).unwrap();
     let plan = runtime.planner().plan_cycle(&[PageId(0)], 1).unwrap();
 
     assert_eq!(
