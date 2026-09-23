@@ -10,7 +10,7 @@ use sml_core::semantic::{SemanticBitField, SemanticBitFieldError, SemanticState}
 
 use crate::{
     training::{fit_boolean_expert, FitError, FitPolicy, FitReport, LabeledDecision},
-    BatchBudget, BatchResult, DecisionError, DecisionProgram, InputRecord, TruthTable2,
+    BatchBudget, BatchPlan, BatchResult, DecisionError, DecisionProgram, InputRecord, TruthTable2,
 };
 
 /// Fixed coordinate selectors. No whole-state similarity scan is performed.
@@ -352,6 +352,14 @@ pub struct SemanticBatchResult {
     pub working_payload_bytes_bound: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SemanticDecisionPlan {
+    pub decision: BatchPlan,
+    pub projection: ProjectionPlan,
+    /// Projected input + decision scratch + result element payload, not RSS.
+    pub working_payload_bytes_bound: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct SemanticDecisionProgram<const BITS: usize> {
     projection: SemanticProjection<BITS>,
@@ -359,6 +367,41 @@ pub struct SemanticDecisionProgram<const BITS: usize> {
 }
 
 impl<const BITS: usize> SemanticDecisionProgram<BITS> {
+    #[must_use]
+    pub const fn schema_id(&self) -> u64 {
+        self.projection.schema_id
+    }
+
+    #[must_use]
+    pub const fn projection_version(&self) -> u64 {
+        self.projection.version
+    }
+
+    #[must_use]
+    pub fn head_count(&self) -> usize {
+        self.decision.heads.len()
+    }
+
+    pub fn plan(
+        &self,
+        records: usize,
+        decision_budget: BatchBudget,
+        projection_budget: ProjectionBudget,
+    ) -> Result<SemanticDecisionPlan, SemanticDecisionError> {
+        let decision = self.decision.plan(records, decision_budget)?;
+        let projection = self.projection.plan(records, projection_budget)?;
+        let working_payload_bytes_bound = projection
+            .buffer_bytes
+            .checked_add(decision.scratch_bytes)
+            .and_then(|bytes| bytes.checked_add(decision.result_bytes))
+            .ok_or(SemanticDecisionError::Overflow)?;
+        Ok(SemanticDecisionPlan {
+            decision,
+            projection,
+            working_payload_bytes_bound,
+        })
+    }
+
     pub fn new(
         projection: SemanticProjection<BITS>,
         decision: DecisionProgram,
@@ -381,13 +424,7 @@ impl<const BITS: usize> SemanticDecisionProgram<BITS> {
         projection_budget: ProjectionBudget,
     ) -> Result<SemanticBatchResult, SemanticDecisionError> {
         // Both admission plans run before projection buffers or field reads.
-        let plan = self.decision.plan(inputs.len(), decision_budget)?;
-        let projection_plan = self.projection.plan(inputs.len(), projection_budget)?;
-        let working_payload_bytes_bound = projection_plan
-            .buffer_bytes
-            .checked_add(plan.scratch_bytes)
-            .and_then(|bytes| bytes.checked_add(plan.result_bytes))
-            .ok_or(SemanticDecisionError::Overflow)?;
+        let admission = self.plan(inputs.len(), decision_budget, projection_budget)?;
         for input in inputs {
             self.projection.validate_input(input)?;
         }
@@ -406,8 +443,8 @@ impl<const BITS: usize> SemanticDecisionProgram<BITS> {
             decisions,
             projection_version: self.projection.version,
             projection,
-            projection_plan,
-            working_payload_bytes_bound,
+            projection_plan: admission.projection,
+            working_payload_bytes_bound: admission.working_payload_bytes_bound,
         })
     }
 }
