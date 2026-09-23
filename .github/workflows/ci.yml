@@ -44,6 +44,8 @@ jobs:
         run: cargo test --locked -p sml-core --test dkv_0b_panel -- --nocapture
       - name: Delta-KV matched-control evidence
         run: cargo test --locked -p sml-core --test dkv_1_controls -- --nocapture
+      - name: Delta-KV SBG/MOR projection evidence
+        run: cargo test --locked -p sml-core --test dkv_2a_semantic -- --nocapture
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
