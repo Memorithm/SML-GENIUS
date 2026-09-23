@@ -24,6 +24,10 @@ The SML adaptation is deliberately native:
 - independent comparison against existing SML memory;
 - no Transformer-semantic KV-cache requirement.
 
+DKV-0a merged through PR #78 as `6807f978ecbc5b3d6c8f31c98dfd753ab5c208c8`.
+
+Active slice: **DKV-0b frozen interference/correction panel** on `research/dkv-0b-interference-panel`.
+
 ## DKV-0a — fixed-point normalized delta reference
 
 The first implementation is crates/sml-core/src/delta_kv.rs.
@@ -58,7 +62,7 @@ This is reference semantics, not a throughput result.
 
 ## DKV-0b — interference and correction panel
 
-Freeze a deterministic panel before comparative observation:
+The implementation freezes 14 deterministic cases in source before comparative observation. The panel includes:
 
 - orthogonal keys;
 - controlled cosine/overlap bands represented in fixed point;
