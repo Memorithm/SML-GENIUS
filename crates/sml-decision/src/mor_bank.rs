@@ -442,7 +442,6 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
             text_tokens_generated,
         })
     }
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
