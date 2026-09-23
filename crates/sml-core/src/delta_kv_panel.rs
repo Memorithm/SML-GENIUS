@@ -6,9 +6,7 @@
 use core::fmt;
 use std::collections::BTreeSet;
 
-use crate::delta_kv::{
-    DeltaKvCounters, DeltaKvError, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE,
-};
+use crate::delta_kv::{DeltaKvCounters, DeltaKvError, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DeltaKvPanelClass {
@@ -89,8 +87,9 @@ pub struct DeltaKvPanelReport {
 pub fn frozen_delta_kv_cases() -> Vec<FrozenDeltaKvCase> {
     let one = DELTA_KV_ONE;
     let q = |numerator: u16, denominator: u16| {
-        u16::try_from((u32::from(DELTA_KV_SCALE as u16) * u32::from(numerator))
-            / u32::from(denominator))
+        u16::try_from(
+            (u32::from(DELTA_KV_SCALE as u16) * u32::from(numerator)) / u32::from(denominator),
+        )
         .expect("bounded Q12 learning rate")
     };
 
@@ -193,10 +192,7 @@ pub fn frozen_delta_kv_cases() -> Vec<FrozenDeltaKvCase> {
             class: DeltaKvPanelClass::ConflictingTarget,
             key_dim: 4,
             value_dim: 1,
-            keys_q12: vec![
-                vec![one, one, 0, 0],
-                vec![one, one, 0, 0],
-            ],
+            keys_q12: vec![vec![one, one, 0, 0], vec![one, one, 0, 0]],
             writes: vec![
                 DeltaKvPanelWrite {
                     key_index: 0,
@@ -256,8 +252,7 @@ pub fn run_frozen_delta_kv_panel() -> Result<DeltaKvPanelReport, DeltaKvPanelErr
         total_updates = total_updates.saturating_add(report.counters.updates);
         total_reads = total_reads.saturating_add(report.counters.reads);
         total_read_macs = total_read_macs.saturating_add(report.counters.read_macs);
-        total_weight_updates =
-            total_weight_updates.saturating_add(report.counters.weight_updates);
+        total_weight_updates = total_weight_updates.saturating_add(report.counters.weight_updates);
         total_saturations = total_saturations.saturating_add(report.counters.saturations);
         reports.push(report);
     }
@@ -354,7 +349,10 @@ fn run_case(case: &FrozenDeltaKvCase) -> Result<DeltaKvCaseReport, DeltaKvPanelE
         writes,
         interference_matrix,
         counters,
-        final_active_keys: active_targets.iter().filter(|target| target.is_some()).count(),
+        final_active_keys: active_targets
+            .iter()
+            .filter(|target| target.is_some())
+            .count(),
     })
 }
 
