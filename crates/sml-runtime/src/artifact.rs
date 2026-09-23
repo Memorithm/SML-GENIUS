@@ -5,10 +5,7 @@
 
 use core::fmt;
 
-use sml_core::{
-    elastic_weights::WeightPrecision,
-    PageId,
-};
+use sml_core::{elastic_weights::WeightPrecision, PageId};
 
 pub const WEIGHT_ARTIFACT_MAGIC: [u8; 8] = *b"SMLWGT01";
 pub const WEIGHT_ARTIFACT_VERSION: u16 = 1;
@@ -79,7 +76,9 @@ pub fn build_weight_artifact(
     Ok(bytes)
 }
 
-pub fn parse_weight_artifact(bytes: &[u8]) -> Result<ParsedWeightArtifact<'_>, WeightArtifactError> {
+pub fn parse_weight_artifact(
+    bytes: &[u8],
+) -> Result<ParsedWeightArtifact<'_>, WeightArtifactError> {
     let header = bytes
         .get(..WEIGHT_ARTIFACT_HEADER_BYTES)
         .ok_or(WeightArtifactError::TruncatedHeader)?;
@@ -277,9 +276,8 @@ mod tests {
 
     #[test]
     fn boolean_artifact_round_trip_is_exact() {
-        let bytes =
-            build_weight_artifact(PageId(7), 3, WeightPrecision::Boolean, 9, &[0xaa, 0x01])
-                .unwrap();
+        let bytes = build_weight_artifact(PageId(7), 3, WeightPrecision::Boolean, 9, &[0xaa, 0x01])
+            .unwrap();
         let parsed = parse_weight_artifact(&bytes).unwrap();
         assert_eq!(parsed.header.page_id, PageId(7));
         assert_eq!(parsed.header.representation_version, 3);
