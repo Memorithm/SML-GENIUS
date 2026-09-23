@@ -147,7 +147,7 @@ Executable contract: [`SML-CONTEXT-0-CONTRACT.md`](SML-CONTEXT-0-CONTRACT.md).
 
 ### CONTEXT-1 — streaming ingest
 
-CONTEXT-1a immutable raw-segment persistence is documented in [`SML-CONTEXT-1A-RAW-STORE.md`](SML-CONTEXT-1A-RAW-STORE.md). It computes/verifies SHA-256 over exact source bytes and publishes immutable no-overwrite segment artifacts.
+CONTEXT-1a immutable raw-segment persistence merged through PR #90 at `d8c7edd0428a456fc0134c72a71705b65e577300` and is documented in [`SML-CONTEXT-1A-RAW-STORE.md`](SML-CONTEXT-1A-RAW-STORE.md). It computes/verifies SHA-256 over exact source bytes and publishes immutable no-overwrite segment artifacts.
 
 CONTEXT-1b adds a bounded streaming ingest path. The live state contains only one
 fixed-size raw segment buffer, the last published descriptor and cumulative
