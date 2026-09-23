@@ -26,9 +26,7 @@ use sml_core::{
 
 use crate::{
     context_ingest::{ContextIngestError, SegmentTokenCounter, StreamingIngestPolicy},
-    raw_context::{
-        build_raw_segment_artifact, sha256_raw_bytes, RawContextStoreError,
-    },
+    raw_context::{build_raw_segment_artifact, sha256_raw_bytes, RawContextStoreError},
 };
 
 pub const CONTEXT_PROVENANCE_MAGIC: [u8; 8] = *b"SMLPRV1C";
@@ -228,8 +226,7 @@ impl<const BITS: usize> SemanticStreamingContextIngestor<BITS> {
         if stats.segments_published >= self.raw_policy.max_segments {
             return Err(ContextSemanticIngestError::SegmentBudget);
         }
-        let raw_len =
-            u64::try_from(raw.len()).map_err(|_| ContextSemanticIngestError::Overflow)?;
+        let raw_len = u64::try_from(raw.len()).map_err(|_| ContextSemanticIngestError::Overflow)?;
         let total_raw = stats
             .raw_bytes_published
             .checked_add(raw_len)
@@ -341,8 +338,7 @@ impl<const BITS: usize> SemanticStreamingContextIngestor<BITS> {
             .checked_add(provenance_bytes)
             .ok_or(ContextSemanticIngestError::Overflow)?;
         stats.peak_raw_segment_bytes = stats.peak_raw_segment_bytes.max(raw_len);
-        stats.peak_semantic_store_bytes =
-            stats.peak_semantic_store_bytes.max(semantic_bytes);
+        stats.peak_semantic_store_bytes = stats.peak_semantic_store_bytes.max(semantic_bytes);
         stats.peak_provenance_bytes = stats.peak_provenance_bytes.max(provenance_bytes);
 
         *byte_start = reference.byte_end()?;
@@ -391,25 +387,25 @@ impl<const BITS: usize> SemanticStreamingContextIngestor<BITS> {
 
     #[must_use]
     pub fn raw_path(&self, segment_id: u64) -> PathBuf {
-        self.output_directory.join(base_name(self.stream_id, segment_id) + ".smlctx")
+        self.output_directory
+            .join(base_name(self.stream_id, segment_id) + ".smlctx")
     }
 
     #[must_use]
     pub fn semantic_path(&self, segment_id: u64) -> PathBuf {
-        self.output_directory.join(base_name(self.stream_id, segment_id) + ".smlsbg")
+        self.output_directory
+            .join(base_name(self.stream_id, segment_id) + ".smlsbg")
     }
 
     #[must_use]
     pub fn provenance_path(&self, segment_id: u64) -> PathBuf {
-        self.output_directory.join(base_name(self.stream_id, segment_id) + ".smlprov")
+        self.output_directory
+            .join(base_name(self.stream_id, segment_id) + ".smlprov")
     }
 }
 
 fn base_name(stream_id: ContextStreamId, segment_id: u64) -> String {
-    format!(
-        "stream-{:016x}-segment-{segment_id:016x}",
-        stream_id.get()
-    )
+    format!("stream-{:016x}-segment-{segment_id:016x}", stream_id.get())
 }
 
 fn validate_contiguity(
@@ -470,7 +466,11 @@ pub fn build_provenance_artifact(
     put_u16(&mut bytes, 8, CONTEXT_PROVENANCE_VERSION)?;
     put_u16(&mut bytes, 10, CONTEXT_PROVENANCE_HEADER_BYTES)?;
     put_u32(&mut bytes, PROVENANCE_COUNT_OFFSET, count)?;
-    put_u64(&mut bytes, PROVENANCE_STREAM_OFFSET, manifest.stream_id.get())?;
+    put_u64(
+        &mut bytes,
+        PROVENANCE_STREAM_OFFSET,
+        manifest.stream_id.get(),
+    )?;
     put_u64(&mut bytes, PROVENANCE_SEGMENT_OFFSET, manifest.segment_id)?;
     put_bytes(
         &mut bytes,
@@ -536,7 +536,8 @@ pub fn parse_provenance_artifact(
     let expected_len = u64::from(CONTEXT_PROVENANCE_HEADER_BYTES)
         .checked_add(payload_bytes)
         .ok_or(ContextSemanticIngestError::Overflow)?;
-    if u64::try_from(bytes.len()).map_err(|_| ContextSemanticIngestError::Overflow)? != expected_len {
+    if u64::try_from(bytes.len()).map_err(|_| ContextSemanticIngestError::Overflow)? != expected_len
+    {
         return Err(ContextSemanticIngestError::ProvenanceLayout);
     }
     let payload = &bytes[header_bytes..];
@@ -632,27 +633,15 @@ fn crc32c(bytes: &[u8]) -> u32 {
     !crc
 }
 
-fn put_u16(
-    bytes: &mut [u8],
-    offset: usize,
-    value: u16,
-) -> Result<(), ContextSemanticIngestError> {
+fn put_u16(bytes: &mut [u8], offset: usize, value: u16) -> Result<(), ContextSemanticIngestError> {
     put_bytes(bytes, offset, &value.to_le_bytes())
 }
 
-fn put_u32(
-    bytes: &mut [u8],
-    offset: usize,
-    value: u32,
-) -> Result<(), ContextSemanticIngestError> {
+fn put_u32(bytes: &mut [u8], offset: usize, value: u32) -> Result<(), ContextSemanticIngestError> {
     put_bytes(bytes, offset, &value.to_le_bytes())
 }
 
-fn put_u64(
-    bytes: &mut [u8],
-    offset: usize,
-    value: u64,
-) -> Result<(), ContextSemanticIngestError> {
+fn put_u64(bytes: &mut [u8], offset: usize, value: u64) -> Result<(), ContextSemanticIngestError> {
     put_bytes(bytes, offset, &value.to_le_bytes())
 }
 
