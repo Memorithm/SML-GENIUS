@@ -159,8 +159,9 @@ Governance invariant: `main` is the approved champion. The model may create/revi
 
 - [x] RSI-0a versioned PR/candidate evidence manifest bound to parent main SHA and exact candidate head (merged PR #69);
 - [x] RSI-0b promotion-eligibility verifier: exact parent/head binding, evidence completeness, protected-eval separation and hard-regression gate; never merge authorization (merged PR #70);
-- [x] RSI-1 model-proposed exact-verifier curriculum using native task oracles, reserved case IDs and deterministic train/development split; fixed-curriculum matched control still required (merged PR #71);
-- [ ] RSI-2 bounded frozen-champion -> verified curriculum -> frozen candidate -> exact evidence -> review-eligibility state machine; real model-weight training remains the next extension (active slice);
+- [x] RSI-1 model-proposed exact-verifier curriculum using native task oracles, reserved case IDs and deterministic train/development split (merged PR #71);
+- [ ] RSI-1b matched proposed-vs-fixed curriculum training using the same candidate trainer and separate holdout; report ties/regressions without promotion claims (active slice);
+- [x] RSI-2 bounded frozen-champion -> verified curriculum -> frozen candidate -> exact evidence -> review-eligibility state machine (merged PR #72);
 - [ ] RSI-3 proposer/solver/verifier co-evolution using learning progress rather than unsolved difficulty alone;
 - [ ] RSI-4 recursive improvement of SML-D, MOR, memory, SML-CONTEXT and recurrent policies;
 - [ ] RSI-5 bounded topology/runtime-policy self-optimization;
