@@ -89,6 +89,25 @@ pub struct SparseDecisionBatchResult {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct SparseRoutePlan {
+    routes: Vec<DirectMorRouteEvidence>,
+    groups: BTreeMap<u32, Vec<usize>>,
+    offsets: Vec<usize>,
+    total_results: usize,
+    total_working_payload_bytes_bound: usize,
+}
+
+impl SparseRoutePlan {
+    pub(crate) fn selected_pages(&self) -> Vec<PageId> {
+        self.groups.keys().copied().map(PageId).collect()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.routes.is_empty()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct MorDecisionExpertBank<const BITS: usize> {
     bridge: SemanticMorBridge<BITS>,
     registry: MorRouterRegistry,
@@ -177,17 +196,38 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
         projection_budget: ProjectionBudget,
         sparse_budget: SparseDecisionBudget,
     ) -> Result<SparseDecisionBatchResult, SparseDecisionError> {
+        let plan = self.plan_sparse(
+            inputs,
+            runtime_hints,
+            decision_budget,
+            projection_budget,
+            sparse_budget,
+        )?;
+        self.execute_sparse(inputs, &plan, decision_budget, projection_budget)
+    }
+
+    pub(crate) fn expert_pages(&self) -> Vec<PageId> {
+        self.experts.keys().copied().map(PageId).collect()
+    }
+
+    pub(crate) fn plan_sparse(
+        &self,
+        inputs: &[SemanticInput<'_, BITS>],
+        runtime_hints: &[ExpertRuntimeHint],
+        decision_budget: BatchBudget,
+        projection_budget: ProjectionBudget,
+        sparse_budget: SparseDecisionBudget,
+    ) -> Result<SparseRoutePlan, SparseDecisionError> {
         if inputs.len() > sparse_budget.max_records {
             return Err(SparseDecisionError::BatchBudget);
         }
         if inputs.is_empty() {
-            return Ok(SparseDecisionBatchResult {
-                decisions: Vec::new(),
+            return Ok(SparseRoutePlan {
                 routes: Vec::new(),
-                expert_batches: Vec::new(),
-                routing_calls: 0,
+                groups: BTreeMap::new(),
+                offsets: vec![0],
+                total_results: 0,
                 total_working_payload_bytes_bound: 0,
-                text_tokens_generated: 0,
             });
         }
 
@@ -290,24 +330,44 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
             return Err(SparseDecisionError::BatchBudget);
         }
 
-        let mut ordered = vec![None; total_results];
+        Ok(SparseRoutePlan {
+            routes,
+            groups,
+            offsets,
+            total_results,
+            total_working_payload_bytes_bound,
+        })
+    }
+
+    pub(crate) fn execute_sparse(
+        &self,
+        inputs: &[SemanticInput<'_, BITS>],
+        plan: &SparseRoutePlan,
+        decision_budget: BatchBudget,
+        projection_budget: ProjectionBudget,
+    ) -> Result<SparseDecisionBatchResult, SparseDecisionError> {
+        if inputs.len() != plan.routes.len() || plan.offsets.len() != inputs.len() + 1 {
+            return Err(SparseDecisionError::InternalInvariant);
+        }
+
+        let mut ordered = vec![None; plan.total_results];
         let mut expert_batches = Vec::new();
         expert_batches
-            .try_reserve_exact(groups.len())
+            .try_reserve_exact(plan.groups.len())
             .map_err(|_| SparseDecisionError::Allocation)?;
         let mut text_tokens_generated = 0_u64;
 
-        for (page, indexes) in groups {
-            let page_id = PageId(page);
+        for (page, indexes) in &plan.groups {
+            let page_id = PageId(*page);
             let program = self
                 .experts
-                .get(&page)
+                .get(page)
                 .ok_or(SparseDecisionError::MissingExpert(page_id))?;
             let mut batch_inputs = Vec::new();
             batch_inputs
                 .try_reserve_exact(indexes.len())
                 .map_err(|_| SparseDecisionError::Allocation)?;
-            for index in &indexes {
+            for index in indexes {
                 batch_inputs.push(inputs[*index]);
             }
 
@@ -333,7 +393,7 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
                         .get(start + head)
                         .copied()
                         .ok_or(SparseDecisionError::InternalInvariant)?;
-                    let destination = offsets[input_index]
+                    let destination = plan.offsets[input_index]
                         .checked_add(head)
                         .ok_or(SparseDecisionError::Overflow)?;
                     let slot = ordered
@@ -374,11 +434,11 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
 
         Ok(SparseDecisionBatchResult {
             decisions,
-            routes,
+            routes: plan.routes.clone(),
             expert_batches,
             routing_calls: u64::try_from(inputs.len())
                 .map_err(|_| SparseDecisionError::Overflow)?,
-            total_working_payload_bytes_bound,
+            total_working_payload_bytes_bound: plan.total_working_payload_bytes_bound,
             text_tokens_generated,
         })
     }
