@@ -7,8 +7,7 @@
 //! tokenizer.
 
 use std::{
-    fmt,
-    fs,
+    fmt, fs,
     io::{self, Read},
     path::{Path, PathBuf},
 };
