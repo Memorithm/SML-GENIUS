@@ -18,6 +18,30 @@ Long-term input: state + question + candidate definitions. Output: typed value,
 uncertainty/abstention, evidence references, model/schema/policy versions and
 resource evidence. Dynamic natural-language questions are NOT implemented by D0.
 
+### External decision-engineering lessons: Laya
+
+A 2026-09-23 source review of `NandhaKishorM/laya` identified several engineering patterns worth testing in SML-D. Laya is not a runtime dependency and its encoder/PyTorch architecture is not adopted.
+
+Retained research directions:
+
+- typed Boolean/choice/ordinal decisions without text generation;
+- one shared encoded state feeding many decision questions;
+- strictly proper scoring rules for learning useful decision distributions;
+- separate action/refinement evidence from answer selection;
+- capability routing before model execution when an expert/checkpoint may be incapable of the input;
+- calibration by decision type and option-count regime;
+- coarse-to-fine shortlisting for high-cardinality candidate sets;
+- hot/preloaded residency and explicit cold/warm cache measurements;
+- option-order/permutation robustness.
+
+SML-native realization should prefer integer/fixed-point/Boolean machinery where validated. In particular:
+
+- D2 should test Brier/RPS-style proper scoring and calibration on reserved data;
+- D3 should implement SBG/MOR candidate shortlisting and hot expert residency;
+- D4 should learn/qualify a DIRECT / REFINE / ABSTAIN gate using decision margin, SBG ambiguity, MOR disagreement, memory evidence and recurrent stability.
+
+No Laya latency, accuracy or calibration number is an SML result.
+
 ## Durable checkpoints and active slice
 
 D0/D1a merged through PR #61 at 9749086c5ad9b77208d53539b179537dc844fc8c.
@@ -30,9 +54,13 @@ D1c merged through PR #63 at `020e932af18a7742d195da70cb9e71a0c02b5df8`.
 
 D1d merged through PR #64 at `19b3b575b6a1c0aad0b4c41f81d249b6210c87cb`.
 
-Active slice: **D1e MOR-selected Elastic admission** on
-`research/sml-d1e-elastic-admission`. Detailed contract:
-[SML-D1e-ELASTIC-ADMISSION.md](SML-D1e-ELASTIC-ADMISSION.md).
+D1e merged through PR #65 at `ef4238fd877554f6671a57140e354a12248d9afb`.
+
+Active physical-runtime slice: **D1f-a verified disk-to-RAM materialization** in PR #66 on
+`research/sml-d1f-ram-materialize`. Detailed contract:
+[SML-D1f-RAM-MATERIALIZATION.md](SML-D1f-RAM-MATERIALIZATION.md).
+
+Parallel decision research after D1f-a must incorporate the calibration, large-candidate and direct/refine gates described below; do not append unrelated work to PR #66.
 
 D1b projects explicitly selected SBG coordinates into D0. Independent masks
 state whether V, M, A and R were observed. Relevance M and absence of ambiguity A
@@ -118,11 +146,12 @@ No throughput or Jev superiority claim is supported by these reference fixtures.
 | D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Merged PR #62. |
 | D1c | Bounded training-only SBG feature-pair selection with fixed-coordinate control and validation veto. Merged PR #63. |
 | D1d | MOR-gated sparse decision expert bank; direct Top-1 routing, grouped execution and matched dense work-count control. Merged PR #64. |
-| D1e | MOR-selected Elastic Weight PLAN/VALIDATE admission before expert execution; no physical commit claim. Active slice. |
+| D1e | MOR-selected Elastic Weight PLAN/VALIDATE admission before expert execution. Merged PR #65. |
+| D1f-a | Real disk-to-RAM artifact materialization with verify/commit-or-rollback for unchanged-precision pages; VRAM and precision conversion fail closed. Active PR #66. |
 | D1 | Substantial trained experts; learned SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
-| D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probabilities only after validation. Open. |
-| D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation and storage; full encoding-to-result latency/throughput. Open. |
-| D4 | Explicit escalation to bounded memory/recurrent refinement; fixed/adaptive depth and abstention at matched costs. Open. |
+| D2 | Proper-scoring/calibration on reserved data; risk/coverage, false-acceptance and shifted-distribution tests; fixed-point/int probabilities only after validation. Open. |
+| D3 | SBG/MOR coarse-to-fine candidate shortlisting, streaming/columnar batches, expert grouping, hot/warm/cold residency, prefetch and complete latency/traffic accounting. Open. |
+| D4 | Explicit DIRECT / REFINE / ABSTAIN gate with bounded memory/recurrent refinement; fixed/adaptive depth and abstention at matched costs. Open. |
 | D5 | Independent repeated evaluation against exact rules, small classifiers, constrained generative systems and external decision baselines. Open. |
 
 Report decisions/sec at matched error/coverage, p50/p95/p99, admission failures,
@@ -139,7 +168,10 @@ Elastic Weights or recurrent experts. Observation masks are external metadata;
 the existing store v1 does not supply or authenticate them.
 
 SML-D does not replace SBG-0.13c resource qualification, native Elastic actuation,
-learned marker/control, learned wiring, or the V888/CSP matched-control programme.
+learned marker/control, learned wiring, the SML-CONTEXT long-context programme,
+or the V888/CSP matched-control programme. Large-state decisions must use the
+context contract in `SML-CONTEXT-BOOTSTRAP.md` rather than claiming that an
+arbitrarily large caller payload is an effective model context window.
 Reuse candidates: SciRust Boolean conformance, Forge topology search, TDI matched
 panels, ElasticXxx admission and CCOS memory selection. Promote tested primitives
 only after inspecting destination contracts; no mandatory external Memorithm
