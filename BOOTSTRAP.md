@@ -10,6 +10,8 @@ Native decision capability is a first-class parallel objective. A substantial de
 
 Long context is also a first-class architecture programme. SML must not equate context capacity with a single dense token buffer. The target is a bounded active semantic/recurrent working set plus immutable raw context segments, associative memory and mapped SBG/raw indexes with explicit provenance. See `docs/SML-CONTEXT-BOOTSTRAP.md`. Raw tokens ingested, effective retrievable span, resident RAM, mapped/disk bytes and retrieval traffic are separate measurements.
 
+Recursive self-improvement is a separate human-gated programme. The current champion may propose training data, curricula, code, architecture/runtime changes, evaluation evidence and GitHub pull requests, but it may never silently promote itself. For RSI work, `main` is the approved champion and the repository owner's explicit GitHub merge decision is the promotion event. The primary internal design reference is `Memorithm/RSI`, especially its AUTOPILOT, DGM, cumulative archive, flywheel, candidate-state, evaluation-pipeline and loop-engineering contracts. See `docs/SML-RSI-BOOTSTRAP.md`.
+
 The new semantic representation programme is **Semantic Boolean Geometry (SBG)**.
 
 SBG treats meaning as a context-sensitive Boolean state rather than as a fixed real-valued embedding.
@@ -48,7 +50,7 @@ The repository already uses `SML-0.7` for Elastic Weights and has merged later `
 
 Do **not** reuse those occupied SML labels.
 
-Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content. Native decision work uses **SML-D**; hierarchical context uses **SML-CONTEXT**; connectomic structural priors use **CSP**.
+Implementation uses the independent **SBG-0.x** slice namespace while preserving the same roadmap content. Native decision work uses **SML-D**; hierarchical context uses **SML-CONTEXT**; recursive self-improvement uses **SML-RSI**; connectomic structural priors use **CSP**.
 
 ## Semantic Boolean Geometry implementation roadmap
 
@@ -165,7 +167,9 @@ Native decision work has advanced through:
 
 D1f-a verified disk-to-RAM materialization merged through PR #66 as `f30caf193ab575b7700a36d692d3f0081f61881c`. It remains deliberately fail-closed for VRAM and precision conversion until real qualified backends exist.
 
-Active parallel architecture bootstrap: **SML-CONTEXT**, branch `research/sml-context-0-bootstrap-v2`, durable contract in `docs/SML-CONTEXT-BOOTSTRAP.md`.
+SML-CONTEXT bootstrap merged through PR #67 as `91d05157d1f9c203a15aa163b7138c1d32440b1b`. Durable contract: `docs/SML-CONTEXT-BOOTSTRAP.md`.
+
+Active parallel programme bootstrap: **SML-RSI**, branch `research/sml-rsi-0-bootstrap`, durable contract in `docs/SML-RSI-BOOTSTRAP.md`. It adapts the mature `Memorithm/RSI` loop-engineering contracts to SBG/MOR/decision/context/runtime candidate promotion while preserving the human GitHub merge gate.
 
 ### Decision-engineering lessons retained from Laya review
 
@@ -209,12 +213,15 @@ crates/sml-store/
 crates/sml-core/src/semantic/
 docs/SML-D-BOOTSTRAP.md
 docs/SML-CONTEXT-BOOTSTRAP.md
+docs/SML-RSI-BOOTSTRAP.md
 ```
 
 The workspace retains `forbid(unsafe_code)` and the core retains no external dependencies. OS mapping uses pinned mmap-guard, which encapsulates unsafe code in its dependencies. This is not a safety proof against arbitrary external mutation: mapped inodes must never be modified/truncated while in use. Locks are cooperative; CRC32C is not authentication. Reader counters are logical payload/mapping counters, not RSS, page-cache or actual I/O measurements.
 
 Next implementation gates:
 
+- **RSI-0a/0b**: versioned candidate-PR evidence manifest and promotion-eligibility verifier. The verifier may say "eligible for human review" but cannot merge or mark itself promoted.
+- **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, reusing Memorithm/RSI DGM/AUTOPILOT/flywheel principles.
 - **CONTEXT-0/1**: exact raw/token/span accounting, immutable raw segment ledger, provenance-linked SBG index and bounded streaming ingest.
 - **SML-D2**: proper-scoring/calibration work on reserved data, including Brier/RPS-style fixed-point candidates, risk/coverage and false-acceptance metrics.
 - **SML-D3**: large-candidate SBG/MOR shortlisting, hot expert residency/prefetch and complete end-to-end throughput accounting.
@@ -227,7 +234,7 @@ Next implementation gates:
 
 ## Scientific boundary
 
-SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above. SML-D adds bounded native decision machinery but has not yet established Jev/Laya-level general decision quality or a whole-system speed advantage. SML-CONTEXT is likewise a target architecture: mapped storage, semantic indexing or isolated needle retrieval do not by themselves establish an effective long-context window.
+SBG is currently an architectural hypothesis plus executable reference semantics. No claim is made yet that it matches or exceeds continuous language embeddings, that 16,384 bits is optimal, that Boolean-only training scales to 25B, or that SBG improves language-model quality. Those are experimental questions gated by the roadmap above. SML-D adds bounded native decision machinery but has not yet established Jev/Laya-level general decision quality or a whole-system speed advantage. SML-CONTEXT is likewise a target architecture: mapped storage, semantic indexing or isolated needle retrieval do not by themselves establish an effective long-context window. SML-RSI currently defines a governed recursive-improvement process, not evidence of open-ended self-improvement; successful candidate PR generation is not promotion until the repository owner explicitly merges it.
 
 ## BANC v888 Connectomic Structural Prior track
 
