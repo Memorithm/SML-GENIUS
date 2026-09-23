@@ -5,7 +5,10 @@ use sml_core::{
     candidate::{SmlTaskCandidate, TaskCandidateConfig, TaskCandidateError},
     task_loss::{evaluate_task_panel, TaskLossError, TaskPanelEvaluation},
     tasks::{two_fact_conjunction, TaskAnswer, TaskError, TaskEvent, TaskInstance, TaskKind},
-    train::{GateSample2, GateSampleTrainingReport, GateTrainingConfig, LatentGate2, TrainError, TruthTable2},
+    train::{
+        GateSample2, GateSampleTrainingReport, GateTrainingConfig, LatentGate2, TrainError,
+        TruthTable2,
+    },
 };
 
 use crate::curriculum::{CurriculumPartition, CurriculumReport};
@@ -186,7 +189,9 @@ fn train_candidate(
 ) -> Result<TrainedCurriculumCandidate, MatchedTrainingError> {
     let (samples, input_coverage) = conjunction_samples(training)?;
     if input_coverage != 0b1111 {
-        return Err(MatchedTrainingError::IncompleteInputCoverage(input_coverage));
+        return Err(MatchedTrainingError::IncompleteInputCoverage(
+            input_coverage,
+        ));
     }
 
     let mut gate = LatentGate2::default();
@@ -204,14 +209,16 @@ fn train_candidate(
         .map_err(MatchedTrainingError::Candidate)?;
     let development =
         evaluate_task_panel(&candidate, development).map_err(MatchedTrainingError::TaskLoss)?;
-    let holdout = evaluate_task_panel(&candidate, holdout).map_err(MatchedTrainingError::TaskLoss)?;
+    let holdout =
+        evaluate_task_panel(&candidate, holdout).map_err(MatchedTrainingError::TaskLoss)?;
 
     Ok(TrainedCurriculumCandidate {
         candidate,
         table,
         gate: gate_report,
         input_coverage,
-        training_tasks: u64::try_from(training.len()).map_err(|_| MatchedTrainingError::Overflow)?,
+        training_tasks: u64::try_from(training.len())
+            .map_err(|_| MatchedTrainingError::Overflow)?,
         development,
         holdout,
     })
@@ -316,7 +323,8 @@ fn validate_curriculum_report(curriculum: &CurriculumReport) -> Result<(), Match
         }
         events = events
             .checked_add(
-                u64::try_from(item.task.events.len()).map_err(|_| MatchedTrainingError::Overflow)?,
+                u64::try_from(item.task.events.len())
+                    .map_err(|_| MatchedTrainingError::Overflow)?,
             )
             .ok_or(MatchedTrainingError::Overflow)?;
     }
