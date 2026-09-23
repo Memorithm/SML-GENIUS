@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod raw_context;
+
 //! Read-only, file-backed SBG storage for immutable Linux artifacts.
 //!
 //! The mapping and its cooperative shared lock stay alive together. No heap
