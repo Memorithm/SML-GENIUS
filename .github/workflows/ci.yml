@@ -60,6 +60,8 @@ jobs:
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
         run: cargo test --locked -p sml-store -- --nocapture
+      - name: Context streaming ingest evidence
+        run: cargo test --locked -p sml-store --test context_ingest -- --nocapture
       - name: Lockfile reproducibility
         run: bash scripts/check-lockfile.sh
       - name: SBG-0.12 packed semantic benchmark

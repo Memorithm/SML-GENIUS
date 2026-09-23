@@ -147,14 +147,31 @@ Executable contract: [`SML-CONTEXT-0-CONTRACT.md`](SML-CONTEXT-0-CONTRACT.md).
 
 ### CONTEXT-1 — streaming ingest
 
-CONTEXT-1a immutable raw-segment persistence is documented in [`SML-CONTEXT-1A-RAW-STORE.md`](SML-CONTEXT-1A-RAW-STORE.md). It computes/verifies SHA-256 over exact source bytes and publishes immutable no-overwrite segment artifacts. CONTEXT-1 is not complete until bounded streaming ingest and separate semantic-index emission are qualified.
+CONTEXT-1a immutable raw-segment persistence merged through PR #90 at `d8c7edd0428a456fc0134c72a71705b65e577300` and is documented in [`SML-CONTEXT-1A-RAW-STORE.md`](SML-CONTEXT-1A-RAW-STORE.md). It computes/verifies SHA-256 over exact source bytes and publishes immutable no-overwrite segment artifacts.
 
-- bounded C0 ingest buffer;
-- ingest arbitrarily long streams without retaining the complete raw input in
-  process RAM;
-- incrementally produce SBG context records;
-- persist raw segments and semantic index records independently;
-- exact order and boundary tests.
+CONTEXT-1b adds a bounded streaming ingest path. The live state contains only one
+fixed-size raw segment buffer, the last published descriptor and cumulative
+counters; it never retains an in-memory vector of the complete stream. The
+current publisher serializes one complete artifact in addition to the live raw
+segment, so the implementation reports a conservative payload bound of
+`2 * max_segment_bytes + header_bytes` rather than claiming a one-segment RSS
+ceiling.
+
+Token accounting is supplied by a frozen caller-owned segment-token counter.
+CONTEXT-1b does not claim that this is the future SML tokenizer and does not claim
+cross-segment tokenization equivalence unless the admitted tokenizer contract
+proves it.
+
+CONTEXT-1 remains incomplete until separate incremental semantic-index emission
+is qualified.
+
+- [x] bounded raw C0 ingest buffer;
+- [x] stream-to-immutable-segment publication without retaining complete raw input;
+- [x] exact contiguous byte/token/order spans and immutable no-overwrite names;
+- [x] explicit segment-count/raw-byte budgets with fail-closed partial publication;
+- [ ] incrementally produce SBG context records;
+- [ ] persist semantic index records independently from raw segments;
+- [ ] qualify semantic/raw provenance during streaming ingest.
 
 ### CONTEXT-2 — recurrent working context
 
