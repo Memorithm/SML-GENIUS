@@ -146,8 +146,8 @@ impl DeltaKvMemory {
         let prediction = self.predict(key_q12, counters)?;
         counters.updates = counters.updates.saturating_add(1);
 
-        for key_index in 0..self.key_dim {
-            let key_component = i128::from(key_q12[key_index]);
+        for (key_index, &key_component) in key_q12.iter().enumerate() {
+            let key_component = i128::from(key_component);
             for value_index in 0..self.value_dim {
                 counters.weight_updates = counters.weight_updates.saturating_add(1);
                 let error_q12 =
@@ -313,26 +313,13 @@ mod tests {
         let mut counters = DeltaKvCounters::default();
 
         memory
-            .update(
-                &[one(), 0],
-                &[1000],
-                DELTA_KV_SCALE as u16,
-                &mut counters,
-            )
+            .update(&[one(), 0], &[1000], DELTA_KV_SCALE as u16, &mut counters)
             .unwrap();
         memory
-            .update(
-                &[0, one()],
-                &[-1500],
-                DELTA_KV_SCALE as u16,
-                &mut counters,
-            )
+            .update(&[0, one()], &[-1500], DELTA_KV_SCALE as u16, &mut counters)
             .unwrap();
 
-        assert_eq!(
-            memory.read(&[one(), 0], &mut counters).unwrap(),
-            vec![1000]
-        );
+        assert_eq!(memory.read(&[one(), 0], &mut counters).unwrap(), vec![1000]);
         assert_eq!(
             memory.read(&[0, one()], &mut counters).unwrap(),
             vec![-1500]
@@ -345,12 +332,7 @@ mod tests {
         let mut counters = DeltaKvCounters::default();
 
         memory
-            .update(
-                &[one(), 0],
-                &[1000],
-                DELTA_KV_SCALE as u16,
-                &mut counters,
-            )
+            .update(&[one(), 0], &[1000], DELTA_KV_SCALE as u16, &mut counters)
             .unwrap();
         memory
             .update(
@@ -362,8 +344,7 @@ mod tests {
             .unwrap();
 
         let first_key_after_overlap = memory.read(&[one(), 0], &mut counters).unwrap()[0];
-        let overlapping_key_after_update =
-            memory.read(&[one(), one()], &mut counters).unwrap()[0];
+        let overlapping_key_after_update = memory.read(&[one(), one()], &mut counters).unwrap()[0];
 
         assert_ne!(first_key_after_overlap, 1000);
         assert!((overlapping_key_after_update - 2000).abs() <= 1);
