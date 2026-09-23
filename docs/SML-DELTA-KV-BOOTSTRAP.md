@@ -26,7 +26,9 @@ The SML adaptation is deliberately native:
 
 DKV-0a merged through PR #78 as `6807f978ecbc5b3d6c8f31c98dfd753ab5c208c8`.
 
-Active slice: **DKV-0b frozen interference/correction panel** on `research/dkv-0b-interference-panel`.
+DKV-0b is implemented in the preceding stacked PR #79.
+
+Active slice: **DKV-1 matched declared-storage controls** on `research/dkv-1-matched-controls`.
 
 ## DKV-0a — fixed-point normalized delta reference
 
@@ -85,6 +87,11 @@ Report:
 No favorable key family may be selected after seeing confirmatory outcomes.
 
 ## DKV-1 — matched memory controls
+
+The reference control uses a 704-bit declared ceiling: Delta-KV 16x2 and the
+bounded append ledger each consume exactly 704 semantic bits, while the direct
+associative memory fits three 32-bit value slots in 676 bits. The same frozen
+6-write / 8-read script is replayed against every backend.
 
 Compare Delta-KV at matched declared storage budgets against:
 
