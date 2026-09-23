@@ -261,7 +261,9 @@ repairing PRs without removing the final promotion authority.
 
 RSI-0a merged through PR #69.
 
-Active implementation slice: `research/sml-rsi-0b-promotion-eligibility`.
+RSI-0b merged through PR #70.
+
+Active implementation slice: `research/sml-rsi-1-exact-curriculum`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -285,9 +287,19 @@ Its only positive state is `EligibleForHumanReview`. The API deliberately report
 
 ### RSI-1 — exact-verifier curriculum generator
 
-Start with the existing Boolean/algorithmic SML tasks, because exact oracles give
-stronger feedback than subjective self-judging. Compare a fixed human-authored
-curriculum against model-proposed tasks at matched training compute.
+The model may propose only bounded task descriptors. Native `sml-core::tasks`
+constructors and their independent `solve_task` oracle recompute every answer;
+a proposal cannot supply its own truth label.
+
+RSI task case IDs start above a reserved floor to avoid the canonical low-ID
+development fixtures. Host code assigns only Training/Development partitions;
+there is deliberately no Protected variant in the proposal/curriculum API.
+Duplicate proposal IDs, duplicate family/case identities, invalid difficulties
+and event/case/proposal budget overruns fail closed.
+
+The next matched experiment must compare this model-proposed curriculum against a
+fixed human-authored curriculum at equal training compute; merely generating
+oracle-valid tasks is not evidence that the curriculum improves learning.
 
 ### RSI-2 — first closed training experiment
 

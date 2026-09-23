@@ -7,5 +7,6 @@
 //! similar ideas, but it has no build/runtime/orchestration dependency on that
 //! repository.
 
+pub mod curriculum;
 pub mod manifest;
 pub mod promotion;
