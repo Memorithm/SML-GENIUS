@@ -17,8 +17,7 @@ use sml_core::{
 
 use crate::{
     semantic::{
-        ProjectionBudget, ProjectionCounters, SemanticDecisionError, SemanticDecisionProgram,
-        SemanticInput,
+        ProjectionBudget, SemanticDecisionError, SemanticDecisionProgram, SemanticInput,
     },
     BatchBudget, DecisionRecord,
 };
@@ -427,6 +426,3 @@ impl fmt::Display for SparseDecisionError {
 }
 
 impl std::error::Error for SparseDecisionError {}
-
-#[allow(dead_code)]
-fn _assert_projection_counter_shape(_: ProjectionCounters) {}
