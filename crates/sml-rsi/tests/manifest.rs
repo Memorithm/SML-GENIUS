@@ -123,7 +123,14 @@ fn parent_and_head_must_be_distinct_valid_git_shas() {
 
 #[test]
 fn branch_cannot_target_default_branch_or_ambiguous_path() {
-    for bad in ["main", "master", "/candidate", "candidate/", "a..b", "has space"] {
+    for bad in [
+        "main",
+        "master",
+        "/candidate",
+        "candidate/",
+        "a..b",
+        "has space",
+    ] {
         let mut item = manifest();
         item.branch = bad.into();
         assert_eq!(item.validate(), Err(CandidateManifestError::InvalidBranch));
