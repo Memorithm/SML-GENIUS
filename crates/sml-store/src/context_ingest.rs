@@ -136,7 +136,6 @@ impl StreamingContextIngestor {
         let mut last_segment = None;
         let mut stats = StreamingIngestStats {
             artifact_payload_bytes_bound: self.policy.working_payload_bytes_bound()?,
-            max_live_descriptors: 1,
             ..StreamingIngestStats::default()
         };
 
@@ -258,6 +257,7 @@ impl StreamingContextIngestor {
             .checked_add(token_len)
             .ok_or(ContextIngestError::Overflow)?;
         stats.peak_segment_bytes = stats.peak_segment_bytes.max(raw_len);
+        stats.max_live_descriptors = 1;
 
         *byte_start = reference.byte_end()?;
         *token_start = reference.token_end()?;
