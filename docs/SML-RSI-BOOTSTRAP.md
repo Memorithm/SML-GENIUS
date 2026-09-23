@@ -269,7 +269,9 @@ RSI-2 control-plane cycle merged through PR #72.
 
 RSI-1b matched curriculum training merged through PR #73.
 
-Active implementation slice: `research/sml-rsi-1c-multitask-training`.
+RSI-1c multi-operation curriculum training merged through PR #74.
+
+Active implementation slice: `research/sml-rsi-1d-curriculum-portfolio`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -343,6 +345,19 @@ families are evaluated but are not mislabeled as learned micro-operations.
 This slice learns 12 hard Boolean table bits through 40 continuous reference
 latents. Marker activation, keyed-memory semantics and broader control flow remain
 outside the learned set.
+
+#### RSI-1d — development-only curriculum portfolio
+
+A bounded portfolio must contain at least one fixed-control curriculum and one
+model-proposed curriculum. Every alternative has the same Training-partition
+task-count shape across all six bounded task families and trains an independent
+RSI-1c candidate.
+
+Selection uses one common deterministic development panel, disjoint from every
+curriculum task identity. Candidate-owned development rows are not used for
+portfolio ranking. Ranking is: more exact shared-panel tasks, then fewer training
+events, then stable candidate ID. Protected/final holdout data is unavailable to
+this search.
 
 ### RSI-2 — first closed candidate-cycle state machine
 
