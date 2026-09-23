@@ -1,4 +1,6 @@
 use sml_core::{
+    candidate::TaskCandidateError,
+    task_loss::TaskLossError,
     tasks::{TaskAnswer, TaskKind},
     train::TruthTable2,
 };
@@ -77,7 +79,7 @@ fn current_exact_conjunction_fixture_reports_a_tie_not_a_false_rsi_gain() {
 #[test]
 fn proposal_difficulty_may_change_event_work_without_changing_exact_truth() {
     let easy = proposed_curriculum(1_000_000, 64, 1);
-    let hard = proposed_curriculum(1_100_000, 64, 127);
+    let hard = proposed_curriculum(1_100_000, 64, 13);
 
     let easy_report =
         run_matched_conjunction_training(&easy, MatchedTrainingPolicy::default()).unwrap();
@@ -89,6 +91,17 @@ fn proposal_difficulty_may_change_event_work_without_changing_exact_truth() {
     assert_eq!(easy_report.outcome, MatchedTrainingOutcome::Tie);
     assert_eq!(hard_report.outcome, MatchedTrainingOutcome::Tie);
     assert!(hard.total_events > easy.total_events);
+}
+
+#[test]
+fn excessive_distractor_pressure_preserves_fail_closed_memory_collisions() {
+    let curriculum = proposed_curriculum(1_100_000, 64, 127);
+    assert!(matches!(
+        run_matched_conjunction_training(&curriculum, MatchedTrainingPolicy::default()),
+        Err(MatchedTrainingError::TaskLoss(TaskLossError::Candidate(
+            TaskCandidateError::MemoryCollision { .. }
+        )))
+    ));
 }
 
 #[test]
