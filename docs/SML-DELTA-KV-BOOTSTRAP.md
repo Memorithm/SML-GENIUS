@@ -26,7 +26,7 @@ The SML adaptation is deliberately native:
 
 DKV-0a merged through PR #78 as `6807f978ecbc5b3d6c8f31c98dfd753ab5c208c8`.
 
-DKV-0b is implemented in the preceding stacked PR #79.
+DKV-0b merged through PR #79 at `2fa5ca2e2cacaa05056a1d60a79efbe1e8536f68`.
 
 Active slice: **DKV-1 matched declared-storage controls** on `research/dkv-1-matched-controls`.
 
