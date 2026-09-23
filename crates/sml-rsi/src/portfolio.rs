@@ -48,9 +48,7 @@ impl Default for PortfolioPolicy {
 
 impl PortfolioPolicy {
     pub fn validate(self) -> Result<Self, PortfolioError> {
-        self.training
-            .validate()
-            .map_err(PortfolioError::Training)?;
+        self.training.validate().map_err(PortfolioError::Training)?;
         if self.max_candidates < 2 || self.selection_cases_per_kind == 0 {
             return Err(PortfolioError::InvalidPolicy);
         }
@@ -157,9 +155,8 @@ pub fn run_curriculum_portfolio(
         .map_err(|_| PortfolioError::Allocation)?;
 
     for candidate in candidates {
-        let training =
-            train_multitask_candidate(&candidate.curriculum, policy.training)
-                .map_err(PortfolioError::Training)?;
+        let training = train_multitask_candidate(&candidate.curriculum, policy.training)
+            .map_err(PortfolioError::Training)?;
         let selection = evaluate_task_panel(&training.candidate, &selection_panel)
             .map_err(PortfolioError::TaskLoss)?;
         entries.push(PortfolioEntry {
@@ -182,7 +179,8 @@ pub fn run_curriculum_portfolio(
     Ok(CurriculumPortfolioReport {
         selected_id: entries[selected_index].candidate_id.clone(),
         selected_index,
-        selection_tasks: u64::try_from(selection_panel.len()).map_err(|_| PortfolioError::Overflow)?,
+        selection_tasks: u64::try_from(selection_panel.len())
+            .map_err(|_| PortfolioError::Overflow)?,
         entries,
     })
 }
@@ -211,7 +209,9 @@ fn training_shape(curriculum: &CurriculumReport) -> TrainingShape {
         .filter(|item| item.partition == CurriculumPartition::Training)
     {
         match item.task.kind {
-            TaskKind::DelayedBitRecall => shape.delayed_recall = shape.delayed_recall.saturating_add(1),
+            TaskKind::DelayedBitRecall => {
+                shape.delayed_recall = shape.delayed_recall.saturating_add(1)
+            }
             TaskKind::OverwriteBitRecall => shape.overwrite = shape.overwrite.saturating_add(1),
             TaskKind::KeyedFactRecall => shape.keyed_recall = shape.keyed_recall.saturating_add(1),
             TaskKind::CopyAfterMarker => shape.copy = shape.copy.saturating_add(1),
