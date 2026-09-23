@@ -30,9 +30,11 @@ D1c merged through PR #63 at `020e932af18a7742d195da70cb9e71a0c02b5df8`.
 
 D1d merged through PR #64 at `19b3b575b6a1c0aad0b4c41f81d249b6210c87cb`.
 
-Active slice: **D1e MOR-selected Elastic admission** on
-`research/sml-d1e-elastic-admission`. Detailed contract:
-[SML-D1e-ELASTIC-ADMISSION.md](SML-D1e-ELASTIC-ADMISSION.md).
+D1e merged through PR #65 at `ef4238fd877554f6671a57140e354a12248d9afb`.
+
+Active slice: **D1f-a verified disk-to-RAM materialization** on
+`research/sml-d1f-ram-materialize`. Detailed contract:
+[SML-D1f-RAM-MATERIALIZATION.md](SML-D1f-RAM-MATERIALIZATION.md).
 
 D1b projects explicitly selected SBG coordinates into D0. Independent masks
 state whether V, M, A and R were observed. Relevance M and absence of ambiguity A
@@ -118,7 +120,8 @@ No throughput or Jev superiority claim is supported by these reference fixtures.
 | D1b | Explicit observed-SBG coordinate projection, shared inference/training path. Merged PR #62. |
 | D1c | Bounded training-only SBG feature-pair selection with fixed-coordinate control and validation veto. Merged PR #63. |
 | D1d | MOR-gated sparse decision expert bank; direct Top-1 routing, grouped execution and matched dense work-count control. Merged PR #64. |
-| D1e | MOR-selected Elastic Weight PLAN/VALIDATE admission before expert execution; no physical commit claim. Active slice. |
+| D1e | MOR-selected Elastic Weight PLAN/VALIDATE admission before expert execution. Merged PR #65. |
+| D1f-a | Real disk-to-RAM artifact materialization, verify, commit/rollback for unchanged-precision pages; VRAM/precision transitions reject. Active slice. |
 | D1 | Substantial trained experts; learned SBG features; conditional questions/candidates; multi-task loss and active/total parameter accounting. Open. |
 | D2 | Calibration on reserved data; risk/coverage and false-acceptance metrics; shifted-distribution tests; integer probabilities only after validation. Open. |
 | D3 | Streaming/columnar batches, expert grouping, backpressure, sparse activation and storage; full encoding-to-result latency/throughput. Open. |

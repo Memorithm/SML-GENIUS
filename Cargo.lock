@@ -91,6 +91,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sml-runtime"
+version = "0.1.0"
+dependencies = [
+ "sml-core",
+]
+
+[[package]]
 name = "sml-store"
 version = "0.1.0"
 dependencies = [
