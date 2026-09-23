@@ -126,7 +126,9 @@ impl RsiCycle {
 
     pub fn bind_manifest(&mut self, manifest: RsiCandidateManifest) -> Result<(), CycleError> {
         self.require_phase(CyclePhase::CandidateFrozen)?;
-        manifest.validate().map_err(|_| CycleError::InvalidManifest)?;
+        manifest
+            .validate()
+            .map_err(|_| CycleError::InvalidManifest)?;
         let candidate = self
             .candidate_head_sha
             .as_deref()
