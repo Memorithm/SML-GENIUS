@@ -15,6 +15,7 @@
 //! dependency boundary is not a proof of safety against arbitrary file mutation.
 
 pub mod context_ingest;
+pub mod context_semantic_ingest;
 pub mod raw_context;
 
 use std::{fmt, fs::File, io, path::Path};
