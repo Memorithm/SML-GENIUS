@@ -1,9 +1,7 @@
 use sml_core::tasks::{suite_from_case_id, TaskAnswer, TaskKind};
 use sml_rsi::{
     curriculum::{build_verified_curriculum, CurriculumPolicy, CurriculumProposal},
-    portfolio::{
-        run_curriculum_portfolio, CurriculumCandidate, CurriculumSource, PortfolioPolicy,
-    },
+    portfolio::{run_curriculum_portfolio, CurriculumCandidate, CurriculumSource, PortfolioPolicy},
     post_selection::{
         evaluate_post_selection_holdout, PostSelectionError, PostSelectionOutcome,
         PostSelectionPolicy,
@@ -29,7 +27,13 @@ fn proposal(
 fn curriculum(difficulty: u16) -> sml_rsi::curriculum::CurriculumReport {
     build_verified_curriculum(
         &[
-            proposal("recall", TaskKind::DelayedBitRecall, 1_000_000, 32, difficulty),
+            proposal(
+                "recall",
+                TaskKind::DelayedBitRecall,
+                1_000_000,
+                32,
+                difficulty,
+            ),
             proposal(
                 "overwrite",
                 TaskKind::OverwriteBitRecall,
@@ -37,13 +41,7 @@ fn curriculum(difficulty: u16) -> sml_rsi::curriculum::CurriculumReport {
                 32,
                 difficulty,
             ),
-            proposal(
-                "copy",
-                TaskKind::CopyAfterMarker,
-                1_200_000,
-                32,
-                difficulty,
-            ),
+            proposal("copy", TaskKind::CopyAfterMarker, 1_200_000, 32, difficulty),
             proposal(
                 "and",
                 TaskKind::TwoFactConjunction,
