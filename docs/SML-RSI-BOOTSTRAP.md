@@ -322,6 +322,26 @@ The reference conjunction fixture is expected to tie because both curricula expo
 the complete AND truth table. A tie is retained as evidence; RSI gain is not
 inferred from task generation alone.
 
+#### RSI-1c — multi-operation curriculum training
+
+A single verified RSI curriculum can now train all four micro-operations currently
+supported by the SML task candidate:
+
+- two-input conjunction -> `AND`;
+- overwrite state update -> `RIGHT`;
+- delayed recall projection -> unary `IDENTITY`;
+- payload-copy projection -> unary `IDENTITY`.
+
+Training requires complete Boolean input coverage and a minimum count of task
+instances per operation. Copy bit samples are accounted separately from copy task
+instances. The resulting frozen candidate is evaluated over the complete training
+and development panels, including keyed recall and distractor tasks; those latter
+families are evaluated but are not mislabeled as learned micro-operations.
+
+This slice learns 12 hard Boolean table bits through 40 continuous reference
+latents. Marker activation, keyed-memory semantics and broader control flow remain
+outside the learned set.
+
 ### RSI-2 — first closed candidate-cycle state machine
 
 The first native loop state machine freezes an exact champion SHA, requires an
