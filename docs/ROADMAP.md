@@ -61,13 +61,14 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Advance SML-D from merged D0/D1a (PR #61), D1b (PR #62), D1c (PR #63) and D1d (PR #64) through D1e MOR-selected Elastic admission, then physical materialization, richer conditional experts, calibration and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each exact PR head before promotion. Fixed coordinates and finite truth-table fitting do not satisfy the substantial decision-capacity gate.
-2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
-3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
-4. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
-5. Build native SML physical elastic-weight page materialization plus VERIFY/ROLLBACK. The ElasticXxx plan adapter is a qualification boundary, not a mandatory SML runtime dependency.
-6. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
-7. Evaluate learned wiring separately against fixed/Forge-selected topology; assess reusable primitives for SciRust without coupling the final SML runtime to it.
+1. Complete D1f-a verified disk-to-RAM physical materialization in PR #66, preserving fail-closed VRAM/precision transitions. Then add only genuine physical backends.
+2. Start SML-CONTEXT CONTEXT-0/1: exact raw/token/span accounting, immutable raw-segment ledger, provenance-linked SBG index and bounded streaming ingest. Durable protocol: `SML-CONTEXT-BOOTSTRAP.md`.
+3. Advance SML-D2/D3/D4: proper-scoring calibration on reserved data, SBG/MOR coarse-to-fine candidate shortlisting, hot expert residency/prefetch, and DIRECT/REFINE/ABSTAIN gating.
+4. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
+5. Build SBG-0.14 native integration: mapped semantic/raw lookup -> SBG -> MOR -> Elastic Weight page selection/materialization -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
+6. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
+7. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
+8. Evaluate learned wiring separately against fixed/Forge-selected topology; assess reusable primitives for SciRust without coupling the final SML runtime to it.
 
 ## Stop conditions
 
@@ -123,16 +124,32 @@ The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md
 - [x] D1b reference implementation: observed V/M/A/R coordinate projection, shared inference/finite-training path and separate projection budgets (merged PR #62). See `SML-D1b-SBG-BRIDGE.md`.
 - [x] D1c bounded learned SBG feature-pair selection against a fixed-coordinate control (merged PR #63). See `SML-D1c-FEATURE-SELECTION.md`.
 - [x] D1d MOR-gated sparse decision expert bank with matched dense work-count control (merged PR #64). See `SML-D1d-MOR-SPARSE-BANK.md`.
-- [ ] D1e MOR-selected Elastic Weight PLAN/VALIDATE admission before sparse decision execution. See `SML-D1e-ELASTIC-ADMISSION.md`.
+- [x] D1e MOR-selected Elastic Weight PLAN/VALIDATE admission before sparse decision execution (merged PR #65). See `SML-D1e-ELASTIC-ADMISSION.md`.
+- [ ] D1f-a verified disk-to-RAM MATERIALIZE/VERIFY/COMMIT-or-ROLLBACK for unchanged-precision pages (active PR #66). See `SML-D1f-RAM-MATERIALIZATION.md`.
 - [ ] D1 substantial trained experts, learned SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
-- [ ] D2 reserved-set calibration, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
-- [ ] D3 streamed/columnar bounded batches, sparse expert scheduling and complete packing/I/O/output cost measurements.
-- [ ] D4 bounded memory/recurrent escalation with matched fixed/adaptive baselines.
+- [ ] D2 proper-scoring/calibration on reserved data, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
+- [ ] D3 SBG/MOR coarse-to-fine candidate shortlisting, streamed/columnar bounded batches, hot/warm/cold expert residency/prefetch and complete packing/I/O/output cost measurements.
+- [ ] D4 DIRECT / REFINE / ABSTAIN gate with bounded memory/recurrent escalation and matched fixed/adaptive baselines.
 - [ ] D5 independently reproducible comparisons at matched quality/coverage against exact rules, small classifiers, constrained generative models and declared decision baselines.
 
 D0 outputs are uncalibrated proposals, never action authorization. Numeric question IDs and caller-supplied features do not implement natural-language question understanding. Logical truth-table bits are not physical in-memory storage. A reduction in word-kernel call count is not a measured speedup; report decisions/sec and latency distributions only from actual end-to-end benchmarks. D0/D1a/D1b do not close the SML-1 or SML-2 model gates. D1b observation masks remain explicit caller metadata; M is relevance rather than availability, and clear A is not calibrated confidence. Store v1 does not supply those observation masks.
 
 The existing Forge `sml-topology/v1` contract was inspected for reuse; its single-output, at-most-eight-input search boundary differs from these typed multi-head batches. See `SML-D-REUSE.md` before integrating or modifying either repository.
+
+## SML-CONTEXT — hierarchical context horizon
+
+The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md). SML context is not defined as one permanently resident token buffer. It uses a bounded active working state plus immutable raw segments, associative memory and mapped semantic/raw indexes with provenance.
+
+- [ ] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract;
+- [ ] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
+- [ ] CONTEXT-2 bounded recurrent semantic working context with matched fixed/expanding controls;
+- [ ] CONTEXT-3 hierarchical SBG/MOR top-k context retrieval with exhaustive-scan controls;
+- [ ] CONTEXT-4 hot/warm/cold retention and optional lossy compaction with raw provenance preserved;
+- [ ] CONTEXT-5 recurrent historical refinement and adaptive halting;
+- [ ] CONTEXT-6 long-range learning curriculum with protected holdouts;
+- [ ] CONTEXT-7 evidence-gated span ladder: 4k -> 16k -> 64k -> 256k -> 1M tokenizer-token dependency spans.
+
+Do not report an N-token effective context because N tokens fit on disk or were ingested. Admission requires a frozen task whose dependency spans that distance plus quality, RAM, traffic and latency evidence.
 
 ## CSP — BANC v888 Connectomic Structural Prior track
 
