@@ -22,10 +22,8 @@ struct TempDir {
 impl TempDir {
     fn new() -> Self {
         let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "sml-context-ingest-{}-{id}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sml-context-ingest-{}-{id}", std::process::id()));
         fs::create_dir(&path).unwrap();
         Self { path }
     }
@@ -125,10 +123,22 @@ fn arbitrary_reader_chunking_produces_fixed_segment_boundaries() {
     assert_eq!(first.raw_bytes, b"abcd");
     assert_eq!(second.raw_bytes, b"efgh");
     assert_eq!(third.raw_bytes, b"ij");
-    assert_eq!((first.reference.byte_start, first.reference.byte_len), (0, 4));
-    assert_eq!((second.reference.byte_start, second.reference.byte_len), (4, 4));
-    assert_eq!((third.reference.byte_start, third.reference.byte_len), (8, 2));
-    assert_eq!((third.reference.token_start, third.reference.token_len), (8, 2));
+    assert_eq!(
+        (first.reference.byte_start, first.reference.byte_len),
+        (0, 4)
+    );
+    assert_eq!(
+        (second.reference.byte_start, second.reference.byte_len),
+        (4, 4)
+    );
+    assert_eq!(
+        (third.reference.byte_start, third.reference.byte_len),
+        (8, 2)
+    );
+    assert_eq!(
+        (third.reference.token_start, third.reference.token_len),
+        (8, 2)
+    );
     assert_eq!(third.reference.order_index, 2);
     assert_eq!(outcome.last_segment, Some(third.reference));
 }
