@@ -49,7 +49,7 @@ fn same_sbg_and_mor_state_projects_deterministically() {
     assert!(left
         .key_q12
         .iter()
-        .all(|value| matches!(*value, -DELTA_KV_ONE | 0 | DELTA_KV_ONE)));
+        .all(|value| *value == -DELTA_KV_ONE || *value == 0 || *value == DELTA_KV_ONE));
     assert!(left.key_q12.iter().any(|value| *value != 0));
     assert_eq!(left.transient_key_bits, 256);
 }
