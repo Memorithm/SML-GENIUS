@@ -10,7 +10,7 @@ Native decision capability is a first-class parallel objective. A substantial de
 
 Long context is also a first-class architecture programme. SML must not equate context capacity with a single dense token buffer. The target is a bounded active semantic/recurrent working set plus immutable raw context segments, associative memory and mapped SBG/raw indexes with explicit provenance. See `docs/SML-CONTEXT-BOOTSTRAP.md`. Raw tokens ingested, effective retrievable span, resident RAM, mapped/disk bytes and retrieval traffic are separate measurements.
 
-Recursive self-improvement is a separate human-gated programme. The current champion may propose training data, curricula, code, architecture/runtime changes, evaluation evidence and GitHub pull requests, but it may never silently promote itself. For RSI work, `main` is the approved champion and the repository owner's explicit GitHub merge decision is the promotion event. The primary internal design reference is `Memorithm/RSI`, especially its AUTOPILOT, DGM, cumulative archive, flywheel, candidate-state, evaluation-pipeline and loop-engineering contracts. See `docs/SML-RSI-BOOTSTRAP.md`.
+Recursive self-improvement is a separate human-gated programme. The current champion may propose training data, curricula, code, architecture/runtime changes, evaluation evidence and GitHub pull requests, but it may never silently promote itself. For RSI work, `main` is the approved champion and the repository owner's explicit GitHub merge decision is the promotion event. `Memorithm/RSI` is an internal source of inspiration for AUTOPILOT, DGM, cumulative archives, flywheels, candidate-state, evaluation-pipeline and loop-engineering ideas; SML-RSI must re-implement any adopted mechanism natively and must have no dependency on that repository. See `docs/SML-RSI-BOOTSTRAP.md`.
 
 The new semantic representation programme is **Semantic Boolean Geometry (SBG)**.
 
@@ -169,7 +169,7 @@ D1f-a verified disk-to-RAM materialization merged through PR #66 as `f30caf193ab
 
 SML-CONTEXT bootstrap merged through PR #67 as `91d05157d1f9c203a15aa163b7138c1d32440b1b`. Durable contract: `docs/SML-CONTEXT-BOOTSTRAP.md`.
 
-Active parallel programme bootstrap: **SML-RSI**, branch `research/sml-rsi-0-bootstrap`, durable contract in `docs/SML-RSI-BOOTSTRAP.md`. It adapts the mature `Memorithm/RSI` loop-engineering contracts to SBG/MOR/decision/context/runtime candidate promotion while preserving the human GitHub merge gate.
+Active parallel programme bootstrap: **SML-RSI**, branch `research/sml-rsi-0-bootstrap`, durable contract in `docs/SML-RSI-BOOTSTRAP.md`. It is inspired by mature `Memorithm/RSI` loop-engineering ideas but is implemented independently for SBG/MOR/decision/context/runtime candidate promotion, with no build/runtime/orchestration dependency and with the human GitHub merge gate preserved.
 
 ### Decision-engineering lessons retained from Laya review
 
@@ -221,7 +221,7 @@ The workspace retains `forbid(unsafe_code)` and the core retains no external dep
 Next implementation gates:
 
 - **RSI-0a/0b**: versioned candidate-PR evidence manifest and promotion-eligibility verifier. The verifier may say "eligible for human review" but cannot merge or mark itself promoted.
-- **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, reusing Memorithm/RSI DGM/AUTOPILOT/flywheel principles.
+- **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, using independently implemented DGM/AUTOPILOT/flywheel-style principles inspired by prior RSI work.
 - **CONTEXT-0/1**: exact raw/token/span accounting, immutable raw segment ledger, provenance-linked SBG index and bounded streaming ingest.
 - **SML-D2**: proper-scoring/calibration work on reserved data, including Brier/RPS-style fixed-point candidates, risk/coverage and false-acceptance metrics.
 - **SML-D3**: large-candidate SBG/MOR shortlisting, hot expert residency/prefetch and complete end-to-end throughput accounting.
