@@ -98,6 +98,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sml-rsi"
+version = "0.1.0"
+
+[[package]]
 name = "sml-store"
 version = "0.1.0"
 dependencies = [
