@@ -339,7 +339,7 @@ pub fn load_raw_segment(
     limits: RawContextStoreLimits,
 ) -> Result<RawContextSegment, RawContextStoreError> {
     let limits = limits.validate()?;
-    let mut file = File::open(path)?;
+    let file = File::open(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(RawContextStoreError::NotRegularFile);
