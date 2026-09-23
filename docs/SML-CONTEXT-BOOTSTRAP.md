@@ -169,9 +169,12 @@ is qualified.
 - [x] stream-to-immutable-segment publication without retaining complete raw input;
 - [x] exact contiguous byte/token/order spans and immutable no-overwrite names;
 - [x] explicit segment-count/raw-byte budgets with fail-closed partial publication;
-- [ ] incrementally produce SBG context records;
-- [ ] persist semantic index records independently from raw segments;
-- [ ] qualify semantic/raw provenance during streaming ingest.
+- [x] incrementally produce bounded SBG context records through a caller-owned emitter;
+- [x] persist semantic store records independently from raw bytes;
+- [x] bind raw SHA-256 and semantic IDs through immutable provenance manifests;
+- [ ] qualify crash-durable bundle journaling and mapped cross-artifact lookup.
+
+CONTEXT-1c adds synchronized semantic/provenance emission: each segment publishes separate immutable raw, SBG-store and provenance artifacts. The raw descriptor and provenance manifest carry the exact sorted semantic IDs. Process-level publication rolls back links created during the current bundle; crash-durable multi-file atomicity remains open.
 
 ### CONTEXT-2 — recurrent working context
 
