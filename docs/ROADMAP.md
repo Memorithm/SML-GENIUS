@@ -167,7 +167,7 @@ workspace.
   direct associative memory plus bounded append-only record control; same frozen script, no composite winner metric (merged PR #80);
 - [x] DKV-2a deterministic bounded SBG V/M/A/R + existing MOR-selection projection into Q12 key space; raw provenance remains separate (merged PR #81);
 - [x] DKV-2b frozen-query Delta-KV reads in bounded SBG recurrence with adaptive/fixed/no-DKV controls and direct memory retained independently (merged PR #83);
-- [ ] DKV-2c dynamic SBG re-keying with frozen MOR selection, compared against DKV-2b frozen-key and no-Delta-KV controls (next active slice);
+- [ ] DKV-2c dynamic SBG re-keying with frozen MOR selection, compared against DKV-2b frozen-key and no-Delta-KV controls (execution slice in current PR);
 - [ ] DKV-3 SML-CONTEXT integration with exact raw provenance and long-range task
   evidence;
 - [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
