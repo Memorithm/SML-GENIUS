@@ -151,6 +151,32 @@ The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md
 
 Do not report an N-token effective context because N tokens fit on disk or were ingested. Admission requires a frozen task whose dependency spans that distance plus quality, RAM, traffic and latency evidence.
 
+## SML-DELTA-KV — bounded rewritable associative memory
+
+The durable protocol is in [`SML-DELTA-KV-BOOTSTRAP.md`](SML-DELTA-KV-BOOTSTRAP.md).
+Delta-KV is a separate memory track: it does not replace the existing direct
+`BoundedAssociativeMemory`, immutable raw context, mapped SBG store or recurrent
+workspace.
+
+- [x] DKV-0a deterministic signed-Q12 normalized-delta reference semantics, exact
+  semantic-bit accounting, overwrite/orthogonal/overlap controls and explicit
+  saturation counters (current PR);
+- [ ] DKV-0b preregistered interference/correction panel across overlap bands,
+  conflicting targets, partial learning rates, repeated overwrite and saturation;
+- [ ] DKV-1 matched-storage comparison against RejectCollision/ReplaceExisting
+  direct associative memory and record-based controls;
+- [ ] DKV-2 SBG/MOR keying plus recurrent integration with independent memory
+  mechanisms retained;
+- [ ] DKV-3 SML-CONTEXT integration with exact raw provenance and long-range task
+  evidence;
+- [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
+  signals, compared against fixed-depth and simpler deterministic controls.
+
+The external Cadence work is only a hypothesis source for rewritable memory and
+repair-oriented computation. No external implementation or benchmark result is
+imported as SML evidence. Forge may propose candidates and ElasticXxx may bound
+resources, but SML owns the memory semantics and promotion gate.
+
 ## SML-RSI — human-gated recursive self-improvement
 
 The durable protocol is in [`SML-RSI-BOOTSTRAP.md`](SML-RSI-BOOTSTRAP.md). It is implemented independently in SML-GENIUS, using `Memorithm/RSI` only as a source of design inspiration.
