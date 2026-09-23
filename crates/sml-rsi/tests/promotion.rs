@@ -13,14 +13,10 @@ use sml_rsi::{
 
 const PARENT: &str = "1111111111111111111111111111111111111111";
 const HEAD: &str = "2222222222222222222222222222222222222222";
-const SHA_BUILD: &str =
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const SHA_TESTS: &str =
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-const SHA_DET: &str =
-    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-const SHA_QUALITY: &str =
-    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+const SHA_BUILD: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SHA_TESTS: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const SHA_DET: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const SHA_QUALITY: &str = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 
 fn evidence(kind: EvidenceKind, name: &str, digest: &str) -> EvidenceRef {
     EvidenceRef::new(kind, name, format!("evidence:{name}"), digest).unwrap()
@@ -105,9 +101,11 @@ fn required_evidence_kind_must_be_present() {
     let mut policy = PromotionPolicy::baseline();
     policy.required_evidence.insert(EvidenceKind::Policy);
     let report = evaluate_promotion_eligibility(&manifest(), &context(), &policy);
-    assert!(report.reasons.contains(
-        &PromotionIneligibility::MissingRequiredEvidence(EvidenceKind::Policy)
-    ));
+    assert!(report
+        .reasons
+        .contains(&PromotionIneligibility::MissingRequiredEvidence(
+            EvidenceKind::Policy
+        )));
 }
 
 #[test]
@@ -200,10 +198,8 @@ fn report_reasons_are_deterministically_sorted() {
     ctx.current_main_sha = "3333333333333333333333333333333333333333".into();
     ctx.protected_evidence_sha256 = BTreeSet::new();
 
-    let left =
-        evaluate_promotion_eligibility(&candidate, &ctx, &PromotionPolicy::baseline());
-    let right =
-        evaluate_promotion_eligibility(&candidate, &ctx, &PromotionPolicy::baseline());
+    let left = evaluate_promotion_eligibility(&candidate, &ctx, &PromotionPolicy::baseline());
+    let right = evaluate_promotion_eligibility(&candidate, &ctx, &PromotionPolicy::baseline());
     assert_eq!(left.reasons, right.reasons);
     assert_eq!(left.status, PromotionStatus::Ineligible);
 }
