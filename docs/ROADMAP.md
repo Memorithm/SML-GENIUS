@@ -61,7 +61,7 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Advance SML-D from merged D0/D1a (PR #61) and D1b (PR #62) through D1c bounded learned feature selection, then richer conditional experts, calibration, batched sparse execution and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each exact PR head before promotion. Fixed coordinates and finite truth-table fitting do not satisfy the substantial decision-capacity gate.
+1. Advance SML-D from merged D0/D1a (PR #61), D1b (PR #62) and D1c (PR #63) through D1d MOR-gated sparse expert execution, then matched dense controls, richer conditional experts, calibration and selective refinement. The durable protocol is `SML-D-BOOTSTRAP.md`; validate each exact PR head before promotion. Fixed coordinates and finite truth-table fitting do not satisfy the substantial decision-capacity gate.
 2. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
 3. Build SBG-0.14 native integration: mapped semantic lookup -> SBG -> MOR -> Elastic Weight page selection -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
 4. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
@@ -121,7 +121,8 @@ The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md
 - [x] D0 reference implementation: typed Boolean/choice/ordinal heads, explicit unknowns and abstention, shared circuit evaluation, 64-lane bit-sliced groups and admission budgets (merged PR #61).
 - [x] D1a finite two-input expert-fitting fixture: training-only selection, validation rejection, separate test fixtures. This is not the general D1 gate.
 - [x] D1b reference implementation: observed V/M/A/R coordinate projection, shared inference/finite-training path and separate projection budgets (merged PR #62). See `SML-D1b-SBG-BRIDGE.md`.
-- [ ] D1c bounded learned SBG feature-pair selection against a fixed-coordinate control. See `SML-D1c-FEATURE-SELECTION.md`.
+- [x] D1c bounded learned SBG feature-pair selection against a fixed-coordinate control (merged PR #63). See `SML-D1c-FEATURE-SELECTION.md`.
+- [ ] D1d MOR-gated sparse decision expert bank with matched dense work-count control. See `SML-D1d-MOR-SPARSE-BANK.md`.
 - [ ] D1 substantial trained experts, learned SBG-derived features and conditional questions/candidates; multi-task training and independent quality evidence.
 - [ ] D2 reserved-set calibration, cost-sensitive thresholds, risk/coverage and distribution-shift tests.
 - [ ] D3 streamed/columnar bounded batches, sparse expert scheduling and complete packing/I/O/output cost measurements.
