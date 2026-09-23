@@ -8,5 +8,6 @@
 //! repository.
 
 pub mod curriculum;
+pub mod cycle;
 pub mod manifest;
 pub mod promotion;
