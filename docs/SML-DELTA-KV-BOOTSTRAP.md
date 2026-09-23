@@ -30,9 +30,9 @@ DKV-0b merged through PR #79 at `2fa5ca2e2cacaa05056a1d60a79efbe1e8536f68`.
 
 DKV-1 merged through PR #80 at `c3bbca6241a6244afccc828a21faa870f6743a5b`.
 
-Active slice: **DKV-2a SBG/MOR bounded key projection** on `research/dkv-2a-sbg-mor-keying`.
+DKV-2a merged through PR #81 at `e20310763073c9767de1a6c45cc1a5fa15a4d894`.
 
-Active slice: **DKV-1 matched declared-storage controls** on `research/dkv-1-matched-controls`.
+Active slice: **DKV-2b recurrent Delta-KV memory source** on `research/dkv-2b-recurrent-memory-v2`.
 
 ## DKV-0a — fixed-point normalized delta reference
 
@@ -123,6 +123,15 @@ already-produced MOR selected-expert set into a bounded Q12 key. It does not run
 another router. Optional raw/source provenance is copied into evidence and is
 mathematically excluded from the key: changing only provenance must leave the
 projected key unchanged.
+
+DKV-2b keeps the DKV-2a query projection frozen across recurrent cycles so the
+effect of memory reads is isolated from dynamic re-keying. A Delta-KV read may
+rewrite configured V coordinates and mark low-magnitude values ambiguous. Such
+ambiguity may block stability halting but never the hard max-depth bound.
+
+Every DKV-2b comparison carries three paths: adaptive Delta-KV recurrence,
+matched fixed-depth Delta-KV recurrence, and a no-Delta-KV identity control.
+Direct associative memory remains a distinct coexisting mechanism.
 
 Only after DKV-1:
 
