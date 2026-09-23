@@ -13,4 +13,5 @@ pub mod manifest;
 pub mod matched_training;
 pub mod multi_task_training;
 pub mod portfolio;
+pub mod post_selection;
 pub mod promotion;
