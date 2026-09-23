@@ -7,7 +7,6 @@
 //! claimed by this reference slice.
 
 use std::{
-    collections::BTreeSet,
     fmt,
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
