@@ -49,12 +49,9 @@ fn orthogonal_writes_preserve_previous_key_exactly() {
 fn overlap_bands_expose_monotonic_previous_key_interference() {
     let panel = run_frozen_delta_kv_panel().unwrap();
 
-    let q25 = case(&panel.cases, DeltaKvPanelClass::Overlap25).writes[1]
-        .prior_keys_error_after_q12;
-    let q50 = case(&panel.cases, DeltaKvPanelClass::Overlap50).writes[1]
-        .prior_keys_error_after_q12;
-    let q75 = case(&panel.cases, DeltaKvPanelClass::Overlap75).writes[1]
-        .prior_keys_error_after_q12;
+    let q25 = case(&panel.cases, DeltaKvPanelClass::Overlap25).writes[1].prior_keys_error_after_q12;
+    let q50 = case(&panel.cases, DeltaKvPanelClass::Overlap50).writes[1].prior_keys_error_after_q12;
+    let q75 = case(&panel.cases, DeltaKvPanelClass::Overlap75).writes[1].prior_keys_error_after_q12;
 
     assert!(q25 > 0);
     assert!(q25 < q50);
@@ -97,14 +94,11 @@ fn conflicting_identical_keys_make_incompatibility_explicit() {
 #[test]
 fn partial_learning_rates_reduce_current_key_error_monotonically() {
     let panel = run_frozen_delta_kv_panel().unwrap();
-    let e25 = case(&panel.cases, DeltaKvPanelClass::PartialRate25).writes[0]
-        .current_key_error_q12;
-    let e50 = case(&panel.cases, DeltaKvPanelClass::PartialRate50).writes[0]
-        .current_key_error_q12;
-    let e75 = case(&panel.cases, DeltaKvPanelClass::PartialRate75).writes[0]
-        .current_key_error_q12;
-    let e100 = case(&panel.cases, DeltaKvPanelClass::PartialRate100).writes[0]
-        .current_key_error_q12;
+    let e25 = case(&panel.cases, DeltaKvPanelClass::PartialRate25).writes[0].current_key_error_q12;
+    let e50 = case(&panel.cases, DeltaKvPanelClass::PartialRate50).writes[0].current_key_error_q12;
+    let e75 = case(&panel.cases, DeltaKvPanelClass::PartialRate75).writes[0].current_key_error_q12;
+    let e100 =
+        case(&panel.cases, DeltaKvPanelClass::PartialRate100).writes[0].current_key_error_q12;
 
     assert_eq!((e25, e50, e75, e100), (1200, 800, 400, 0));
 }
