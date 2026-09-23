@@ -315,7 +315,9 @@ impl PartialEq for ContextIngestError {
             (E::TokenCounterRejected(a), E::TokenCounterRejected(b)) => a == b,
             (E::Io(a), E::Io(b)) => a == b,
             (E::Ledger(a), E::Ledger(b)) => a == b,
-            (E::Store(a), E::Store(b)) => a == b,
+            // RawContextStoreError carries std::io::Error and intentionally has
+            // no structural equality. Callers match the Store variant instead.
+            (E::Store(_), E::Store(_)) => false,
             _ => false,
         }
     }
