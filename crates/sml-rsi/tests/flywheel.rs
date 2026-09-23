@@ -2,12 +2,8 @@ use sml_core::tasks::{suite_from_case_id, TaskKind};
 use sml_rsi::{
     curriculum::{build_verified_curriculum, CurriculumPolicy, CurriculumProposal},
     flywheel::{FlywheelError, FlywheelSignal, RsiFlywheelRecord, RSI_FLYWHEEL_SCHEMA_V1},
-    portfolio::{
-        run_curriculum_portfolio, CurriculumCandidate, CurriculumSource, PortfolioPolicy,
-    },
-    post_selection::{
-        evaluate_post_selection_holdout, PostSelectionOutcome, PostSelectionPolicy,
-    },
+    portfolio::{run_curriculum_portfolio, CurriculumCandidate, CurriculumSource, PortfolioPolicy},
+    post_selection::{evaluate_post_selection_holdout, PostSelectionOutcome, PostSelectionPolicy},
 };
 
 fn proposal(
@@ -29,7 +25,13 @@ fn proposal(
 fn curriculum(difficulty: u16) -> sml_rsi::curriculum::CurriculumReport {
     build_verified_curriculum(
         &[
-            proposal("recall", TaskKind::DelayedBitRecall, 1_000_000, 32, difficulty),
+            proposal(
+                "recall",
+                TaskKind::DelayedBitRecall,
+                1_000_000,
+                32,
+                difficulty,
+            ),
             proposal(
                 "overwrite",
                 TaskKind::OverwriteBitRecall,
@@ -37,13 +39,7 @@ fn curriculum(difficulty: u16) -> sml_rsi::curriculum::CurriculumReport {
                 32,
                 difficulty,
             ),
-            proposal(
-                "copy",
-                TaskKind::CopyAfterMarker,
-                1_200_000,
-                32,
-                difficulty,
-            ),
+            proposal("copy", TaskKind::CopyAfterMarker, 1_200_000, 32, difficulty),
             proposal(
                 "and",
                 TaskKind::TwoFactConjunction,
@@ -141,7 +137,10 @@ fn flywheel_record_carries_learned_micro_op_codes_but_no_holdout_examples() {
 fn canonical_flywheel_record_is_deterministic() {
     let (portfolio, post) = reports();
     let record = RsiFlywheelRecord::from_reports(&portfolio, &post).unwrap();
-    assert_eq!(record.canonical_text().unwrap(), record.canonical_text().unwrap());
+    assert_eq!(
+        record.canonical_text().unwrap(),
+        record.canonical_text().unwrap()
+    );
 }
 
 #[test]
