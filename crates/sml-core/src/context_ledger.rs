@@ -414,19 +414,17 @@ mod tests {
     fn segment(
         stream: ContextStreamId,
         segment_id: u64,
-        byte_start: u64,
-        byte_len: u64,
-        token_start: u64,
-        token_len: u64,
+        byte_span: (u64, u64),
+        token_span: (u64, u64),
         order_index: u64,
         semantic_ids: &[u64],
     ) -> ContextSegmentRef {
         ContextSegmentRef::new(
             ContextSegmentId::new(stream, segment_id).unwrap(),
-            byte_start,
-            byte_len,
-            token_start,
-            token_len,
+            byte_span.0,
+            byte_span.1,
+            token_span.0,
+            token_span.1,
             order_index,
             digest(segment_id as u8),
             semantic_ids.to_vec(),
@@ -439,10 +437,10 @@ mod tests {
         let stream = ContextStreamId::new(9).unwrap();
         let mut ledger = RawContextLedger::new(stream);
         ledger
-            .append(segment(stream, 10, 0, 11, 0, 3, 0, &[7]))
+            .append(segment(stream, 10, (0, 11), (0, 3), 0, &[7]))
             .unwrap();
         ledger
-            .append(segment(stream, 20, 11, 5, 3, 2, 1, &[8, 9]))
+            .append(segment(stream, 20, (11, 5), (3, 2), 1, &[8, 9]))
             .unwrap();
 
         assert_eq!(
@@ -461,16 +459,16 @@ mod tests {
     #[test]
     fn gaps_overlaps_and_reordering_fail_closed() {
         let stream = ContextStreamId::new(1).unwrap();
-        let first = segment(stream, 10, 0, 4, 0, 2, 0, &[]);
+        let first = segment(stream, 10, (0, 4), (0, 2), 0, &[]);
         let mut ledger = RawContextLedger::new(stream);
         ledger.append(first).unwrap();
 
         assert!(matches!(
-            ledger.append(segment(stream, 11, 5, 2, 2, 1, 1, &[])),
+            ledger.append(segment(stream, 11, (5, 2), (2, 1), 1, &[])),
             Err(ContextLedgerError::NonContiguousSegment { .. })
         ));
         assert!(matches!(
-            ledger.append(segment(stream, 9, 4, 2, 2, 1, 1, &[])),
+            ledger.append(segment(stream, 9, (4, 2), (2, 1), 1, &[])),
             Err(ContextLedgerError::NonIncreasingSegmentId {
                 previous: 10,
                 current: 9
@@ -483,7 +481,7 @@ mod tests {
         let stream = ContextStreamId::new(2).unwrap();
         let mut ledger = RawContextLedger::new(stream);
         assert!(matches!(
-            ledger.append(segment(stream, 1, 1, 2, 0, 1, 0, &[])),
+            ledger.append(segment(stream, 1, (1, 2), (0, 1), 0, &[])),
             Err(ContextLedgerError::InvalidFirstSegmentOrigin { .. })
         ));
     }
@@ -495,10 +493,10 @@ mod tests {
         let first_id = ContextSegmentId::new(stream, 1).unwrap();
         let second_id = ContextSegmentId::new(stream, 2).unwrap();
         ledger
-            .append(segment(stream, 1, 0, 3, 0, 1, 0, &[77]))
+            .append(segment(stream, 1, (0, 3), (0, 1), 0, &[77]))
             .unwrap();
         ledger
-            .append(segment(stream, 2, 3, 3, 1, 1, 1, &[77, 88]))
+            .append(segment(stream, 2, (3, 3), (1, 1), 1, &[77, 88]))
             .unwrap();
 
         let correct = SemanticRecordProvenance::new(77, vec![first_id, second_id]).unwrap();
@@ -516,7 +514,7 @@ mod tests {
     #[test]
     fn segment_semantic_ids_are_canonical_and_duplicate_safe() {
         let stream = ContextStreamId::new(5).unwrap();
-        let reference = segment(stream, 1, 0, 1, 0, 0, 0, &[9, 3, 7]);
+        let reference = segment(stream, 1, (0, 1), (0, 0), 0, &[9, 3, 7]);
         assert_eq!(reference.semantic_record_ids(), &[3, 7, 9]);
 
         assert_eq!(
@@ -539,12 +537,12 @@ mod tests {
         let stream = ContextStreamId::new(6).unwrap();
         let mut ledger = RawContextLedger::new(stream);
         ledger
-            .append(segment(stream, 1, 0, 3, 0, 1, 0, &[1]))
+            .append(segment(stream, 1, (0, 3), (0, 1), 0, &[1]))
             .unwrap();
         let before = ledger.clone();
 
         assert!(ledger
-            .append(segment(stream, 2, 4, 1, 1, 1, 1, &[2]))
+            .append(segment(stream, 2, (4, 1), (1, 1), 1, &[2]))
             .is_err());
         assert_eq!(ledger, before);
     }
