@@ -478,11 +478,13 @@ fn mor_multi_expert_route_is_rejected_before_any_decision_program_runs() {
         SemanticMorTopK::One,
     )
     .unwrap();
-    let mut policy = MorPolicy::default();
-    policy.min_routers = 2;
-    policy.max_routers = 2;
-    policy.min_experts = 2;
-    policy.max_experts = 2;
+    let policy = MorPolicy {
+        min_routers: 2,
+        max_routers: 2,
+        min_experts: 2,
+        max_experts: 2,
+        ..MorPolicy::default()
+    };
     let bank = MorDecisionExpertBank::new(
         bridge,
         registry,
