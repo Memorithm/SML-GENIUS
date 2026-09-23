@@ -75,6 +75,65 @@ pub struct CurriculumReport {
     pub total_events: u64,
 }
 
+impl CurriculumReport {
+    pub fn validate(&self) -> Result<(), CurriculumError> {
+        if self.tasks.is_empty() || self.proposal_count == 0 {
+            return Err(CurriculumError::InvalidReport);
+        }
+        let expected_tasks = self
+            .training_tasks
+            .checked_add(self.development_tasks)
+            .ok_or(CurriculumError::Overflow)?;
+        if self.verified_tasks != expected_tasks
+            || self.verified_tasks
+                != u64::try_from(self.tasks.len()).map_err(|_| CurriculumError::Overflow)?
+        {
+            return Err(CurriculumError::InvalidReport);
+        }
+
+        let mut proposal_ids = BTreeSet::new();
+        let mut task_keys = BTreeSet::new();
+        let mut training = 0_u64;
+        let mut development = 0_u64;
+        let mut events = 0_u64;
+
+        for item in &self.tasks {
+            if item.proposal_id.trim().is_empty()
+                || item.proposal_id.contains('\n')
+                || item.proposal_id.contains('\r')
+                || item.proposal_id.contains('\0')
+            {
+                return Err(CurriculumError::InvalidReport);
+            }
+            proposal_ids.insert(item.proposal_id.as_str());
+            if !task_keys.insert((family_tag(item.task.kind), item.task.case_id)) {
+                return Err(CurriculumError::DuplicateTask);
+            }
+            if !item.task.oracle_matches()? {
+                return Err(CurriculumError::OracleMismatch);
+            }
+            events = events
+                .checked_add(
+                    u64::try_from(item.task.events.len()).map_err(|_| CurriculumError::Overflow)?,
+                )
+                .ok_or(CurriculumError::Overflow)?;
+            match item.partition {
+                CurriculumPartition::Training => training = training.saturating_add(1),
+                CurriculumPartition::Development => development = development.saturating_add(1),
+            }
+        }
+
+        if proposal_ids.len() != self.proposal_count
+            || training != self.training_tasks
+            || development != self.development_tasks
+            || events != self.total_events
+        {
+            return Err(CurriculumError::InvalidReport);
+        }
+        Ok(())
+    }
+}
+
 pub fn build_verified_curriculum(
     proposals: &[CurriculumProposal],
     policy: CurriculumPolicy,
@@ -222,6 +281,7 @@ fn mix64(mut value: u64) -> u64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurriculumError {
     InvalidPolicy,
+    InvalidReport,
     EmptyProposals,
     ProposalBudget,
     InvalidProposalId,

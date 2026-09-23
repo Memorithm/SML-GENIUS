@@ -267,7 +267,9 @@ RSI-1 exact-oracle curriculum merged through PR #71.
 
 RSI-2 control-plane cycle merged through PR #72.
 
-Active implementation slice: `research/sml-rsi-1b-matched-training`.
+RSI-1b matched curriculum training merged through PR #73.
+
+Active implementation slice: `research/sml-rsi-1c-multitask-training`.
 
 The dependency-free `sml-rsi` crate defines `sml.rsi-candidate@1.0.0` with:
 parent main SHA, candidate head SHA, non-default branch, change class, objective,
@@ -321,6 +323,26 @@ post-generation tampering with labels or counters fails closed.
 The reference conjunction fixture is expected to tie because both curricula expose
 the complete AND truth table. A tie is retained as evidence; RSI gain is not
 inferred from task generation alone.
+
+#### RSI-1c — multi-operation curriculum training
+
+A single verified RSI curriculum can now train all four micro-operations currently
+supported by the SML task candidate:
+
+- two-input conjunction -> `AND`;
+- overwrite state update -> `RIGHT`;
+- delayed recall projection -> unary `IDENTITY`;
+- payload-copy projection -> unary `IDENTITY`.
+
+Training requires complete Boolean input coverage and a minimum count of task
+instances per operation. Copy bit samples are accounted separately from copy task
+instances. The resulting frozen candidate is evaluated over the complete training
+and development panels, including keyed recall and distractor tasks; those latter
+families are evaluated but are not mislabeled as learned micro-operations.
+
+This slice learns 12 hard Boolean table bits through 40 continuous reference
+latents. Marker activation, keyed-memory semantics and broader control flow remain
+outside the learned set.
 
 ### RSI-2 — first closed candidate-cycle state machine
 
