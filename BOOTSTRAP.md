@@ -44,6 +44,26 @@ Core invariants:
 - meaning/routing masks may drive Elastic Weight page activation;
 - learning work must test discrete Boolean evidence/credit mechanisms rather than assume gradient descent is required.
 
+## Delta-KV rewritable associative-memory programme
+
+SML now has a separate **Delta-KV** research track for bounded rewritable associative
+memory. It complements, rather than replaces, the existing directly addressed
+`BoundedAssociativeMemory`, mapped SBG/raw stores and recurrent workspace.
+
+The durable protocol is [`docs/SML-DELTA-KV-BOOTSTRAP.md`](docs/SML-DELTA-KV-BOOTSTRAP.md).
+
+The first slice (**DKV-0a**) is a deterministic dependency-free Q12 reference matrix
+using a normalized delta correction. It reports exact semantic bits, operation
+counts and saturation, and preserves overlapping-key interference as evidence.
+No Transformer-semantic KV cache, attention dependency or performance claim is
+introduced.
+
+Required progression is DKV-0a fixed-point semantics -> DKV-0b frozen interference
+panel -> DKV-1 matched memory controls -> DKV-2 SBG/MOR/recurrent integration ->
+DKV-3 context evaluation -> DKV-4 adaptive-compute handoff. Forge may propose
+candidates and ElasticXxx may enforce resource budgets, but SML retains memory
+semantics and independent requalification.
+
 ## Versioning reconciliation
 
 The repository already uses `SML-0.7` for Elastic Weights and has merged later `SML-0.8.x` MOR / Boolean-integral work. The earlier conversational SBG roadmap used overlapping SML-0.x labels.
@@ -222,6 +242,7 @@ Next implementation gates:
 
 - **RSI-0a/0b**: versioned candidate-PR evidence manifest and promotion-eligibility verifier. The verifier may say "eligible for human review" but cannot merge or mark itself promoted.
 - **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, using independently implemented DGM/AUTOPILOT/flywheel-style principles inspired by prior RSI work.
+- **DKV-0b**: freeze the interference/correction panel for the new fixed-point Delta-KV reference, then compare against the existing direct associative-memory controls before any runtime integration.
 - **CONTEXT-0/1**: exact raw/token/span accounting, immutable raw segment ledger, provenance-linked SBG index and bounded streaming ingest.
 - **SML-D2**: proper-scoring/calibration work on reserved data, including Brier/RPS-style fixed-point candidates, risk/coverage and false-acceptance metrics.
 - **SML-D3**: large-candidate SBG/MOR shortlisting, hot expert residency/prefetch and complete end-to-end throughput accounting.

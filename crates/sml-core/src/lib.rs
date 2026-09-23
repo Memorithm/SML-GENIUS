@@ -20,6 +20,7 @@ pub mod boolean_page;
 pub mod boolean_search_bench;
 pub mod candidate;
 pub mod circuit;
+pub mod delta_kv;
 pub mod elastic_weights;
 pub mod forge_topology;
 pub mod gf2;
