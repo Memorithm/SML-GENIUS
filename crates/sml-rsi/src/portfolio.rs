@@ -82,6 +82,8 @@ pub struct CurriculumPortfolioReport {
     pub selected_index: usize,
     pub selected_id: String,
     pub selection_tasks: u64,
+    pub selection_start_case_id: u64,
+    pub selection_cases_per_kind: u32,
 }
 
 impl CurriculumPortfolioReport {
@@ -181,11 +183,13 @@ pub fn run_curriculum_portfolio(
         selected_index,
         selection_tasks: u64::try_from(selection_panel.len())
             .map_err(|_| PortfolioError::Overflow)?,
+        selection_start_case_id: policy.selection_start_case_id,
+        selection_cases_per_kind: policy.selection_cases_per_kind,
         entries,
     })
 }
 
-fn entry_better(left: &PortfolioEntry, right: &PortfolioEntry) -> bool {
+pub(crate) fn entry_better(left: &PortfolioEntry, right: &PortfolioEntry) -> bool {
     left.selection
         .exact_tasks
         .cmp(&right.selection.exact_tasks)
