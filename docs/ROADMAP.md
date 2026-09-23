@@ -142,6 +142,9 @@ The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md
 
 - [x] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract (merged PR #89);
 - [ ] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
+  - [ ] CONTEXT-1a immutable SHA-256 raw segment persistence (active PR #90);
+  - [ ] CONTEXT-1b bounded stream-to-segment ingest with constant-in-total-length working payload bound (active stacked slice);
+  - [ ] CONTEXT-1c independent streaming SBG semantic-index/provenance emission;
   - [ ] CONTEXT-1a immutable SHA-256-verified raw segment artifact store (current PR);
   - [ ] CONTEXT-1b bounded streaming ingest + separate semantic-index emission;
 - [ ] CONTEXT-2 bounded recurrent semantic working context with matched fixed/expanding controls;
