@@ -61,7 +61,7 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Bootstrap SML-RSI RSI-0a/0b from the mature Memorithm/RSI contracts: candidate PR evidence manifest, exact-head evidence binding, promotion eligibility, lineage/rollback and the invariant that only the repository owner's merge can promote.
+1. Bootstrap SML-RSI RSI-0a/0b as an independent SML-GENIUS implementation inspired by lessons from Memorithm/RSI: candidate PR evidence manifest, exact-head evidence binding, promotion eligibility, lineage/rollback and the invariant that only the repository owner's merge can promote.
 2. Start SML-CONTEXT CONTEXT-0/1: exact raw/token/span accounting, immutable raw-segment ledger, provenance-linked SBG index and bounded streaming ingest. Durable protocol: `SML-CONTEXT-BOOTSTRAP.md`.
 3. Advance SML-D2/D3/D4: proper-scoring calibration on reserved data, SBG/MOR coarse-to-fine candidate shortlisting, hot expert residency/prefetch, and DIRECT/REFINE/ABSTAIN gating.
 4. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
@@ -168,7 +168,7 @@ Governance invariant: `main` is the approved champion. The model may create/revi
 - [ ] RSI-7 candidate changes to the improvement procedure itself, still emitted as reviewable PRs;
 - [ ] RSI-8 multi-generation qualification with human merge gate retained.
 
-Reuse targets from `Memorithm/RSI`: AUTOPILOT frozen specs/task DAGs/PR emission, DGM isolated empirical gate, CandidateState deterministic complete-tree identities, CumulativeArchive lineages, EvaluationPipeline typed evidence, Loop Engineering stop/checkpoint/breaker/HITL controls, and flywheel trajectories from real outcomes. Port contracts natively where needed; do not add an inference-time dependency on the RSI repository.
+Inspiration targets from `Memorithm/RSI`, to be re-implemented independently: AUTOPILOT frozen specs/task DAGs/PR emission, DGM isolated empirical gate, CandidateState deterministic complete-tree identities, CumulativeArchive lineages, EvaluationPipeline typed evidence, Loop Engineering stop/checkpoint/breaker/HITL controls, and flywheel trajectories from real outcomes. Do not add any Cargo/git/submodule/MCP/service/CI/runtime/orchestration dependency on the RSI repository; any adopted mechanism must be implemented and qualified natively in SML-GENIUS.
 
 ## CSP — BANC v888 Connectomic Structural Prior track
 
