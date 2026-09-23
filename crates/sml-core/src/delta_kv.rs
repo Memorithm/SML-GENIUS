@@ -189,7 +189,7 @@ impl DeltaKvMemory {
         counters: &mut DeltaKvCounters,
     ) -> Result<Vec<i32>, DeltaKvError> {
         let mut output = vec![0_i32; self.value_dim];
-        for value_index in 0..self.value_dim {
+        for (value_index, output_value) in output.iter_mut().enumerate() {
             let mut accumulator = 0_i128;
             for (key_index, &key_component) in key_q12.iter().enumerate() {
                 counters.read_macs = counters.read_macs.saturating_add(1);
@@ -199,8 +199,7 @@ impl DeltaKvMemory {
                     .ok_or(DeltaKvError::ArithmeticOverflow)?;
             }
             let q12 = div_round_nearest(accumulator, i128::from(DELTA_KV_SCALE));
-            output[value_index] =
-                i32::try_from(q12).map_err(|_| DeltaKvError::PredictionOverflow)?;
+            *output_value = i32::try_from(q12).map_err(|_| DeltaKvError::PredictionOverflow)?;
         }
         Ok(output)
     }
