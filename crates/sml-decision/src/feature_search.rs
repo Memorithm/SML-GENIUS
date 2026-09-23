@@ -212,8 +212,7 @@ pub fn search_feature_pair_expert<const BITS: usize>(
             training_eligible_pairs = training_eligible_pairs.saturating_add(1);
 
             for code in 0..16 {
-                let table =
-                    TruthTable2::new(code).map_err(|_| FeatureSearchError::InvalidTable)?;
+                let table = TruthTable2::new(code).map_err(|_| FeatureSearchError::InvalidTable)?;
                 let errors = pair_errors_known(&train_rows, pair, table);
                 selection_evaluations_executed = selection_evaluations_executed
                     .checked_add(train_count)
@@ -252,11 +251,8 @@ pub fn search_feature_pair_expert<const BITS: usize>(
 
     let (baseline_validation_errors, _) =
         pair_errors(&validation_rows, baseline.feature_slots, baseline.table);
-    let (selected_validation_errors, selected_validation_missing) = pair_errors(
-        &validation_rows,
-        selected.feature_slots(),
-        selected.table,
-    );
+    let (selected_validation_errors, selected_validation_missing) =
+        pair_errors(&validation_rows, selected.feature_slots(), selected.table);
     let selected_validation_coverage =
         pair_coverage_allow_missing(&validation_rows, selected.feature_slots());
 
@@ -346,11 +342,7 @@ fn pair_errors_known(rows: &[ProjectedLabel], pair: [usize; 2], table: TruthTabl
         .count() as u64
 }
 
-fn pair_errors(
-    rows: &[ProjectedLabel],
-    pair: [usize; 2],
-    table: TruthTable2,
-) -> (u64, u64) {
+fn pair_errors(rows: &[ProjectedLabel], pair: [usize; 2], table: TruthTable2) -> (u64, u64) {
     let required = (1_u64 << pair[0]) | (1_u64 << pair[1]);
     let mut errors = 0_u64;
     let mut missing = 0_u64;
