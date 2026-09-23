@@ -38,6 +38,8 @@ jobs:
         run: cargo test --locked --workspace
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
+      - name: Native RSI governance evidence
+        run: cargo test --locked -p sml-rsi -- --nocapture
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
