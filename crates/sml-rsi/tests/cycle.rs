@@ -189,9 +189,7 @@ fn ineligible_review_is_recorded_without_mutating_champion() {
     let mut cycle = cycle_to_evidence_bound();
     let mut ctx = context();
     ctx.protected_evidence_sha256 = BTreeSet::new();
-    let report = cycle
-        .review(&ctx, &PromotionPolicy::baseline())
-        .unwrap();
+    let report = cycle.review(&ctx, &PromotionPolicy::baseline()).unwrap();
 
     assert_eq!(report.status, PromotionStatus::Ineligible);
     assert_eq!(cycle.phase(), CyclePhase::ReviewedIneligible);
