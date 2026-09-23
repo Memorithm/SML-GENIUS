@@ -28,7 +28,9 @@ DKV-0a merged through PR #78 as `6807f978ecbc5b3d6c8f31c98dfd753ab5c208c8`.
 
 DKV-0b is implemented in the preceding stacked PR #79.
 
-Active slice: **DKV-1 matched declared-storage controls** on `research/dkv-1-matched-controls`.
+DKV-1 is implemented in the preceding stacked PR #80.
+
+Active slice: **DKV-2a SBG/MOR bounded key projection** on `research/dkv-2a-sbg-mor-keying`.
 
 ## DKV-0a — fixed-point normalized delta reference
 
@@ -113,6 +115,11 @@ A matrix update is not automatically preferable to a discrete record update.
 Promotion requires task evidence.
 
 ## DKV-2 — SBG/MOR/recurrent integration
+
+DKV-2a introduces a deterministic integer-only projection from the existing
+V/M/A/R SemanticState plus the already-produced MOR selected-expert set into a
+bounded Q12 key. It does not run another router. Optional raw/source provenance
+is copied into evidence but deliberately does not influence the compressed key.
 
 Only after DKV-1:
 
