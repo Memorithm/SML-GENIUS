@@ -20,6 +20,7 @@ pub mod boolean_page;
 pub mod boolean_search_bench;
 pub mod candidate;
 pub mod circuit;
+pub mod context_ledger;
 pub mod delta_kv;
 pub mod delta_kv_controls;
 pub mod delta_kv_dynamic;
