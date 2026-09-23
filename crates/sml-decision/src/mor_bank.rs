@@ -16,9 +16,7 @@ use sml_core::{
 };
 
 use crate::{
-    semantic::{
-        ProjectionBudget, SemanticDecisionError, SemanticDecisionProgram, SemanticInput,
-    },
+    semantic::{ProjectionBudget, SemanticDecisionError, SemanticDecisionProgram, SemanticInput},
     BatchBudget, DecisionRecord,
 };
 
@@ -121,9 +119,7 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
             return Err(SparseDecisionError::BridgeCoverage);
         }
 
-        let first = experts
-            .first()
-            .ok_or(SparseDecisionError::ExpertCoverage)?;
+        let first = experts.first().ok_or(SparseDecisionError::ExpertCoverage)?;
         let schema_id = first.program.schema_id();
         let projection_version = first.program.projection_version();
 
@@ -380,7 +376,8 @@ impl<const BITS: usize> MorDecisionExpertBank<BITS> {
             decisions,
             routes,
             expert_batches,
-            routing_calls: u64::try_from(inputs.len()).map_err(|_| SparseDecisionError::Overflow)?,
+            routing_calls: u64::try_from(inputs.len())
+                .map_err(|_| SparseDecisionError::Overflow)?,
             total_working_payload_bytes_bound,
             text_tokens_generated,
         })
