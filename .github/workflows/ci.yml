@@ -21,6 +21,9 @@ env:
 jobs:
   rust:
     runs-on: [self-hosted]
+    env:
+      RUSTUP_HOME: ${{ runner.temp }}/rustup
+      CARGO_HOME: ${{ runner.temp }}/cargo
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install Rust 1.89
