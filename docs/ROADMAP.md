@@ -210,3 +210,27 @@ Inspiration targets from `Memorithm/RSI`, to be re-implemented independently: AU
 ## CSP — BANC v888 Connectomic Structural Prior track
 
 The V888-only structural-prior programme is defined in [`V888_CONNECTOME_BOOTSTRAP.md`](V888_CONNECTOME_BOOTSTRAP.md) and uses the independent `CSP-0.x` namespace. CSP is evidence-gated alongside SML/SBG: V888-derived topology receives no promotion privilege and must outperform the strongest declared edge-count/degree/reciprocity/modularity controls before entering larger SML experiments. Raw V888 data is never an inference-time dependency, and new execution work is Rust-first on CPU/WGPU portable paths.
+
+## SML-DS41 — efficient long-horizon principles (2026-09-24)
+
+This programme adapts systems principles from the reviewed DeepSeek-V4.1-Flash report without changing SML's non-attention candidate contract.
+
+### SML-DS41-0 — ingest/decode asymmetry
+Define separate budgets and counters for context ingestion, semantic-state construction, and recurrent decode. Demonstrate on frozen tasks that reduced ingest work does not silently move equivalent work into later cycles.
+
+### SML-DS41-1 — hierarchical SBG/MOR candidate pool
+Use an early broad routing stage to construct a bounded candidate pool, then restrict later refinement to that pool. Compare against exhaustive routing, current direct routing, and matched random pools. Report recall/task quality, active pages, metadata, traffic, and latency separately.
+
+### SML-DS41-2 — conditional memory comparison
+Add an explicit experiment comparing deterministic conditional lookup against existing bounded associative memory and Delta-KV controls. Any hash/gating mechanism remains SML-native and must preserve collision/interference evidence.
+
+### SML-DS41-3 — storage versus recomputation
+Define which recurrent or context-derived states may be dropped and reconstructed from immutable provenance. Pair full-state and replay continuations, then expose only qualified actions to ElasticXxx.
+
+### SML-DS41-4 — reasoning-effort scalar
+Introduce a deployment-visible effort scalar that maps to bounded recurrent depth/refinement/verification budgets. Train or calibrate only on Development data, preserve fixed-depth controls, and report quality/latency/active-work curves. No hidden chain-of-thought artifact is required; the control concerns compute allocation.
+
+### SML-DS41-5 — long-horizon comparison
+Run protected long-range tasks against SML-CONTEXT and declared attention-model baselines at matched task definitions. Separate quality, resident memory, mapped storage, traffic, active compute, and wall-clock time.
+
+CED/CSA2/SWA/Engram remain external comparison concepts. They are not native SML components unless a future separately preregistered architectural change explicitly overturns the current non-attention contract.
