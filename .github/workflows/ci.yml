@@ -21,11 +21,14 @@ env:
 jobs:
   rust:
     runs-on: [self-hosted]
-    env:
-      RUSTUP_HOME: ${{ runner.temp }}/rustup
-      CARGO_HOME: ${{ runner.temp }}/cargo
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Isolate Rust toolchain homes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RUSTUP_HOME=$RUNNER_TEMP/rustup" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$RUNNER_TEMP/cargo" >> "$GITHUB_ENV"
       - name: Install Rust 1.89
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
