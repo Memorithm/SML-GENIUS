@@ -271,3 +271,17 @@ SBG is currently an architectural hypothesis plus executable reference semantics
 The V888-only connectomic programme is now a parallel SML research track under the **CSP** namespace so it does not collide with SML or SBG milestones. Its durable execution plan is [`docs/V888_CONNECTOME_BOOTSTRAP.md`](docs/V888_CONNECTOME_BOOTSTRAP.md).
 
 CSP treats BANC v888 as an external source of structural priors, not as an inference-time dependency and not as a biological model to reproduce. The required progression is topology fingerprint -> matched structural controls -> low-bit sparse recurrence -> event-driven active compute -> bounded-memory/SBG/MOR integration -> trainable/Forge-selected topology -> independent TDI evaluation. No CSP result may enter SML-2 merely because it uses V888; it must beat the strongest declared matched controls under the evidence gate in the CSP roadmap.
+
+## DeepSeek-V4.1 principles track — adaptation without Transformer reintroduction
+
+Research input reviewed 2026-09-24: DeepSeek-AI, *DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression*.
+
+SML must not import CED, CSA2, SWA, Q/K/V attention, or Transformer KV caches into its native core merely because the source report is successful. The reusable principles to test are instead:
+
+- asymmetric **ingest versus recurrent-decode compute**, analogous in systems intent to cheaper prefill but implemented through SML-native state construction;
+- **hierarchical candidate narrowing**, using SBG/MOR/direct routing before expensive expert or memory work;
+- **conditional memory lookup**, compared against SML's existing direct associative memory and Delta-KV rather than relabeled as Engram;
+- **storage versus recomputation**, exposed through ElasticXxx only after SML defines exact state/replay semantics;
+- a scalar **reasoning-effort budget** controlling recurrent depth, refinement, verification, and optional tool work, with fixed-depth matched controls.
+
+The corresponding roadmap namespace is `SML-DS41`. External benchmark gains and DeepSeek architecture claims are not SML evidence.
