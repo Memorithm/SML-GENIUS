@@ -1,0 +1,25 @@
+schema_version: 1
+kind: sml_genius_ecosystem_roadmap
+status: active
+last_updated: "2026-09-27"
+repository: Memorithm/SML-GENIUS
+merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
+mission:
+  role: model_architecture_search_training_and_evaluation_task_consumer
+  boundary: SML_GENIUS_owns_SML_architecture_and_scientific_claims_not_shared_task_control
+ax_task_program:
+  external_reference: google_ax_architecture_only
+  objective: >-
+    Run architecture search, training and evaluation in exact task workspaces
+    with explicit RAM, VRAM, compute, token and wall-clock envelopes and
+    retained model/candidate provenance.
+  phases:
+    - AXSML1_pin_architecture_candidate_code_data_and_protocol_identity
+    - AXSML2_attach_RAM_VRAM_compute_token_and_time_budgets
+    - AXSML3_isolate_generated_or_mutated_candidate_evaluation
+    - AXSML4_integrate_ElasticXxx_recurrent_depth_and_resource_adaptation_within_declared_bounds
+    - AXSML5_bind_model_artifacts_and_task_trajectory_to_evidence
+  invariants:
+    - engineering_targets_are_not_results
+    - task_success_does_not_establish_architectural_superiority_or_novelty
+    - adaptive_resource_changes_remain_explicit_in_comparison_evidence
