@@ -71,7 +71,7 @@ Current Delta-KV evidence: DKV-0a through DKV-2b are merged. DKV-2b merged throu
 
 DKV-2c observation: dynamic SBG re-keying is executable but is not promoted into DKV-3. The preregistered missing-successor control remained confidently non-ambiguous, and dynamic re-keying did not improve the final target state over the DKV-2b frozen-key arm on the frozen fixtures. DKV-3 must use DKV-2b until a separate miss/confidence mechanism qualifies dynamic re-keying. See `docs/SML-DKV-2C-OBSERVATION.md`.
 
-DKV-3a context integration is preregistered in `docs/SML-DKV-3A-CONTEXT-PREREGISTRATION.md` but execution is intentionally blocked on CONTEXT-0/1. Delta-KV reads are derived semantic evidence, never authoritative source provenance; exact/source-required tasks must independently verify immutable raw context segments.
+DKV-3a context integration remains governed by `docs/SML-DKV-3A-CONTEXT-PREREGISTRATION.md`. The two supplied DKV-3a-0 patches are consolidated in the bounded source-evidence adapter `sml_store::delta_kv_context`; see `docs/SML-DKV-3A-0-HARDENING.md`. Software conformance is not context promotion. The projected-key SBG recurrence and MOR preregistration/integration remain a separate, deferred owner-supplied tranche. Raw-source authority stays outside the Q12 matrix.
 
 ## Versioning reconciliation
 
@@ -337,3 +337,17 @@ Next work is **SML-CLM-0** preregistration, followed by **SML-CLM-1** bounded sc
 Remote execution uses `Memorithm/RemoteOps` as the control plane with pinned task/code/data identities, declared budgets and retained evidence. A CLM-on-Thor baseline is optional and must first have a verified installation and compatible encoder/checkpoint; its full cost is separate from native SML inference.
 
 After destination-contract review and qualification, reusable Rust score/label-conformance primitives may benefit SciRust, hard-negative generation/search may benefit Forge, matched panels may benefit TDI, resource telemetry may benefit ElasticXxx, and provenance-aware memory controls may benefit CCOS-Enterprise. Reuse is conditional on tests and independent destination requalification, not a new mandatory SML dependency or a claim that these integrations already exist.
+
+## DKV-3a-0 correction handoff
+
+The owner-supplied cumulative patch versions are identified and their negative
+observations retained in `docs/SML-DKV-3A-0-LEGACY-OBSERVATIONS.md`.
+The corrected source-evidence adapter is `sml_store::delta_kv_context`; the
+numerical Delta-KV core is unchanged. Exact-key lookup, pinned ledger versions,
+nonempty private verification receipts, source/element budgets and typed raw
+fixture resolution replace the unchecked proof gate. See
+`docs/SML-DKV-3A-0-HARDENING.md` for limits and API migration.
+
+Next: receive and review the separate preregistration for Delta-KV as an SBG
+recurrent input using DKV-2a projected keys and actual MOR admission. Do not
+start that experiment or promote context from the conformance tests here.
