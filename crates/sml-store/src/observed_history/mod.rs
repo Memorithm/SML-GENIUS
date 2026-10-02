@@ -5,11 +5,13 @@
 
 mod journal;
 mod query;
+mod screen;
 mod verified;
 mod wire;
 
 pub use journal::{HistoryError, HistoryLimits, ObservationEvent, ObservationLog, SubjectKey};
 pub use query::{HistoryQuery, HistorySummary, ObservedState};
+pub use screen::{screen_candidate, ScreenedCandidate, ScreeningReason};
 pub use verified::{
     verify_history, HistoryVerificationError, HistoryVerificationLimits, VerifiedHistory,
 };
