@@ -81,7 +81,7 @@ H2 is supported for the declared alias-occurrence counters: 112 versus 288.
 H3 is supported for the exported mean squared correlation on the fixed far panel.
 H4 is NOT supported: old improves in aggregate, but near_old remains 36/72.
 H5's anticipated failure mode remains: contrast produces wrong-known outputs
-on all 72 conflicts and 68/72 missing cases. Its 128-scale ambiguity policy is
+on all 72 conflicts and 68/72 missing cases. Its ambiguity threshold of 128 Q12 units is
 not a calibrated abstention mechanism. Direct latest-only conflict blindness
 also remains; this is not a comparison against a provenance-aware direct store.
 
@@ -104,8 +104,10 @@ metadata, projector scratch, recurrent state and allocator costs are additional.
 The contrast key is passed to the unchanged DKV-2b evidence container for API
 compatibility; its first-call counters are not the aggregate projection cost.
 SETUP counters explicitly include both calls. With no zero projections in this
-grid, contrast-coordinate counts equal actual subtractions; rejection cases
-outside this grid would require separating attempted and executed arithmetic.
+grid, contrast-coordinate counts equal actual subtractions. The disclosed
+post-run engineering review moves this increment after operand admission so
+rejected projections do not charge unexecuted arithmetic; replay must remain
+byte-identical. See `SML-DKV-3A-R1-A2-REVIEW.md`.
 
 Next investigation should isolate two open questions instead of enlarging this
 panel until a favorable answer appears: (1) retaining old associations under

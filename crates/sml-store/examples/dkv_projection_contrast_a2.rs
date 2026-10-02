@@ -267,6 +267,10 @@ impl Router {
             route.decision.selected_experts.len() == 1,
             "actual MOR admission",
         )?;
+        require(
+            s.routing == signature(route.decision.selected_experts[0].0)?,
+            "selected MOR page must match the declared fixture R signature",
+        )?;
         work.mor_calls += 1;
         Ok(route.decision)
     }
@@ -310,10 +314,10 @@ impl Router {
         }
         // Execute both planned projections even if the first was rejected.
         let second = apply(&complement(s)?)?;
-        work.contrast_coordinates += K as u64;
         let (Some(mut p), Some(q)) = (first, second) else {
             return Ok(None);
         };
+        work.contrast_coordinates += K as u64;
         match contrast_key(&p.key_q12, &q.key_q12)? {
             Some(k) => {
                 p.key_q12 = k;
