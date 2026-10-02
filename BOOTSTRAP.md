@@ -8,6 +8,8 @@ SML is an independent, predominantly Boolean / low-bit autoregressive architectu
 
 Native decision capability is a first-class parallel objective. A substantial decision-expert family and dedicated training objectives must be evaluated before SML-2, not bolted onto a finished language model. Direct decisions and bounded recurrent refinement must work without a text decoder; language generation is optional. See `docs/SML-D-BOOTSTRAP.md`. Total decision capacity, active work per decision and direct-decision coverage are separate quantities; no arbitrary 25B percentage is frozen.
 
+The **SML-CLM** research track adds contrastive state-question-decision learning and SML-specific scaling experiments to this native decision programme. It must compare the current task objective, an explicitly separated InfoNCE research reference and a native integer-margin alternative; it does not import CLM's encoder, scaling coefficients or runtime. The durable contract is [below](#sml-clm--contrastive-decisions-and-measured-scaling); implementation gates are in [the roadmap](docs/ROADMAP.md#sml-clm--contrastive-decisions-and-measured-scaling). This is a research plan, not an implemented learner or a model-quality result.
+
 Long context is also a first-class architecture programme. SML must not equate context capacity with a single dense token buffer. The target is a bounded active semantic/recurrent working set plus immutable raw context segments, associative memory and mapped SBG/raw indexes with explicit provenance. See `docs/SML-CONTEXT-BOOTSTRAP.md`. Raw tokens ingested, effective retrievable span, resident RAM, mapped/disk bytes and retrieval traffic are separate measurements.
 
 Recursive self-improvement is a separate human-gated programme. The current champion may propose training data, curricula, code, architecture/runtime changes, evaluation evidence and GitHub pull requests, but it may never silently promote itself. For RSI work, `main` is the approved champion and the repository owner's explicit GitHub merge decision is the promotion event. `Memorithm/RSI` is an internal source of inspiration for AUTOPILOT, DGM, cumulative archives, flywheels, candidate-state, evaluation-pipeline and loop-engineering ideas; SML-RSI must re-implement any adopted mechanism natively and must have no dependency on that repository. See `docs/SML-RSI-BOOTSTRAP.md`.
@@ -249,6 +251,7 @@ The workspace retains `forbid(unsafe_code)` and the core retains no external dep
 
 Next implementation gates:
 
+- **SML-CLM-0/1**: freeze the contrastive decision protocol and implement independently checked, bounded native scoring before training comparisons. This feeds SML-D/SBG without replacing their gates; see the SML-CLM contract below.
 - **RSI-0a/0b**: versioned candidate-PR evidence manifest and promotion-eligibility verifier. The verifier may say "eligible for human review" but cannot merge or mark itself promoted.
 - **RSI-1**: model-proposed exact-verifier curriculum compared against a fixed human-authored curriculum at matched compute, using independently implemented DGM/AUTOPILOT/flywheel-style principles inspired by prior RSI work.
 - **DKV-2c**: preregister and qualify dynamic re-projection of the Delta-KV query key from evolving SBG state against the merged DKV-2b frozen-key, matched fixed-depth and no-Delta-KV controls. MOR selection remains frozen in this slice so re-keying is the only changed mechanism.
@@ -285,3 +288,52 @@ SML must not import CED, CSA2, SWA, Q/K/V attention, or Transformer KV caches in
 - a scalar **reasoning-effort budget** controlling recurrent depth, refinement, verification, and optional tool work, with fixed-depth matched controls.
 
 The corresponding roadmap namespace is `SML-DS41`. External benchmark gains and DeepSeek architecture claims are not SML evidence.
+
+## SML-CLM — contrastive decisions and measured scaling
+
+Research direction recorded 2026-10-02. Status: **design only**; SML-CLM-0 through SML-CLM-6 remain open. No contrastive SML training, CLM installation on Thor, scaling fit, calibration result or model promotion is established by this documentation change.
+
+### External evidence and transfer boundary
+
+Primary reference: Jacky Kwok et al. (2026), *Contrastive Language Models: A System One Model for Fast and Generalizable Decision-Making*. The reviewed [CLM README](https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/README.md#scaling-laws-for-verification) reports bidirectional InfoNCE, hard-negative refinement and empirical verification-loss scaling with compute, data, projection-head size and encoder size. It reports `N* proportional to D^1.02` and approximately 310 tokens per projection-head parameter on its Nemotron DQA experiments. These are source-reported results, not independently reproduced SML evidence.
+
+The published [CLM-v0.1-8B model](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B) and [head implementation](https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py) are external comparators. Their heads require the encoder/pooling they were trained with; they are not drop-in SBG heads.
+
+Transfer the experimental questions and contrastive principle, **not** the numerical exponents, optimum, token ratio, architecture or claimed speedups. In particular, do not multiply the 25B atlas size by 310 to prescribe a training corpus. SBG bit width, learned parameter count, packed storage and active compute are different quantities. Exact upstream parameter-count conventions, compute exclusions, fit ranges and uncertainties must be established before attempting a numerical reproduction; missing details remain unknown.
+
+### Learning contract
+
+- Learn compatibility between an **observed state + question + candidate definitions** and a verified decision/outcome. Preserve the current task-answer learner as a baseline; an auxiliary contrastive loss must not silently replace language or task objectives.
+- Compare three declared arms: current task objective; an InfoNCE research reference; and a native integer-margin/discrete-credit objective. Use Rust for new SML code. Any real-valued log/exp reference stays in a separately bounded research harness, outside the dependency-free Boolean core and production inference path. Exact InfoNCE and an integer surrogate are not interchangeable claims.
+- For Boolean vectors, `(2x-1)^T(2y-1) = d - 2*d_H(x,y)` is an exact score identity, not an equivalence of learned model quality. Native masked XOR/XNOR/POPCOUNT scoring must respect observation, relevance and ambiguity separately. Freeze normalization and eligible-coordinate rules, report their support, reject empty support, and prevent mask collapse from creating a spurious high score. Learning requires a separately specified discrete-credit or surrogate-gradient mechanism; POPCOUNT alone supplies no training algorithm.
+- Define all valid positives before assigning negatives. Repeated valid actions such as ABSTAIN must not become in-batch false negatives. Prefer state-question-to-decision learning first; allow a bidirectional arm only with explicit multi-positive/equivalence semantics. Duplicate candidates, permutations, ties and no-valid-candidate cases require declared behavior rather than forced argmax.
+- Build verified hard negatives for role reversal, negation, stale versus current facts, wrong memory associations and missing evidence. Compare easy-to-hard and from-start schedules at matched budgets rather than assuming one curriculum transfers. Mine training negatives only from the permitted training partition; preserve task/template/source separation and protected holdouts.
+- Use exact task oracles or independently verified outcomes for labels. An optional CLM teacher may propose training examples or rankings but cannot label the test set, authorize an action or act as sole ground truth. Record teacher/checkpoint identity, source rights, verification outcomes and rejected proposals.
+
+### Native integration and safeguards
+
+SBG should retain the distinctions needed for decisions; MOR should shortlist bounded experts/candidates; SML-D should decide without text decoding; recurrent refinement should spend extra work only when its measured task benefit warrants it. These are hypotheses to test independently, not guarantees from contrastive training.
+
+The training-only batch comparison is not permission to introduce Q/K/V attention, softmax token scoring, all-history Hamming ranking or an unbounded all-pairs inference scan. Bound and account training batches/negative pools separately; retain direct routing and bounded candidate work in native inference. No CLM, Qwen or Python/PyTorch runtime dependency is added to SML.
+
+A relative ranking score is neither calibrated correctness nor authenticated evidence. SML-D2 must separately qualify calibration/proper scoring, risk/coverage and false acceptance, including changed option counts and distribution shift. Unknown inputs remain unknown; absence of SBG ambiguity does not imply confidence. SML-D4 DIRECT / REFINE / ABSTAIN learning must use observable features and verified refinement outcomes, not hidden evaluator answers.
+
+The DKV-2c missing-successor observation motivates new development controls, not reuse of protected evaluation data or automatic promotion of dynamic re-keying. A scorer cannot detect missing evidence that its inputs do not expose. Qualified DKV-2b, CONTEXT prerequisites and immutable raw-source verification remain in force; contrastive similarity never substitutes for provenance.
+
+### SML-specific scaling and resource accounting
+
+Measure a joint response surface before fitting a law. Separate unique training pairs/tasks, text tokens where applicable, repeat exposures, negative counts and per-expert examples/updates. Report total learned capacity, decision-expert capacity, learned representation capacity, SBG width, packed bits, active parameters per cycle, cumulative touches per decision, recurrent depth and memory capacity. A larger semantic field is not automatically a larger learned encoder.
+
+At fixed declared budgets, compare representation versus expert versus data bottlenecks and expert under-exposure. Sweep data, representation width/capacity, decision capacity and recurrent depth first on small controlled tasks; freeze other dimensions and then examine interactions. Keep both fixed-budget quality curves and matched-quality cost curves. Do not infer useful scaling from isolated kernel timings, larger cold storage or better retrieval loss alone.
+
+Costs include state construction, negative mining, teacher/encoder work, training/search, routing, page materialization, verification and inference. Distinguish one-off embedding precomputation from amortized reuse. Record logical/word operations, wall-clock time, RAM/RSS/VRAM, cold/warm p50/p95/p99 latency, page faults, disk traffic and energy only when measured; FLOPs alone are not a common cost unit for dense and Boolean systems.
+
+Freeze candidate count, positive semantics, negative distribution, temperature protocol, task splits and evaluation identities when comparing InfoNCE losses. Report decision quality, ranking, abstention coverage and false acceptance separately. Retain null/negative findings; fit only supported measured ranges with repeated seeds, uncertainty, residual/bottleneck checks and an explicit loss-floor alternative. Do not extrapolate a fitted curve to 25B without new evidence at each existing SML scale gate.
+
+### Execution and reuse
+
+Next work is **SML-CLM-0** preregistration, followed by **SML-CLM-1** bounded score/label semantics; later gates are defined in [docs/ROADMAP.md](docs/ROADMAP.md#sml-clm--contrastive-decisions-and-measured-scaling). This bootstrap authorizes neither protected final evaluation nor large training runs. SML-RSI human promotion rules remain unchanged.
+
+Remote execution uses `Memorithm/RemoteOps` as the control plane with pinned task/code/data identities, declared budgets and retained evidence. A CLM-on-Thor baseline is optional and must first have a verified installation and compatible encoder/checkpoint; its full cost is separate from native SML inference.
+
+After destination-contract review and qualification, reusable Rust score/label-conformance primitives may benefit SciRust, hard-negative generation/search may benefit Forge, matched panels may benefit TDI, resource telemetry may benefit ElasticXxx, and provenance-aware memory controls may benefit CCOS-Enterprise. Reuse is conditional on tests and independent destination requalification, not a new mandatory SML dependency or a claim that these integrations already exist.
