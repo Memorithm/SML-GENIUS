@@ -336,3 +336,15 @@ deferred-tranche note is superseded for this named Development candidate only.
 
 These are engineering/development milestones, not trained-model or language results.
 Scientific promotion remains BLOCKED and no protected final evaluation is armed.
+
+## A2 complementary projection Development follow-up
+
+- [x] Freeze a separate protocol before implementation/execution: `SML-DKV-3A-R1-A2-PREREGISTRATION.md`.
+- [x] Add isolated standard/contrast/direct arms with actual MOR, frozen keys, cached DKV-2b recurrence and independent payload/seed crossing.
+- [x] Retain complete deterministic Development output and exact identities in `research/dkv-r1a2/`.
+- [ ] Independently confront the owner's counterpart and qualify any mechanism beyond the synthetic Development panel.
+- [ ] Qualify source-safe context, physical resource costs and representative tasks before context promotion.
+
+These checkboxes describe an implemented/executed diagnostic, not model
+quality or architectural promotion. Candidate A is not overwritten;
+higher accuracy at greater projection work is not an equal-cost win.
