@@ -63,7 +63,7 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 1. Bootstrap SML-RSI RSI-0a/0b as an independent SML-GENIUS implementation inspired by lessons from Memorithm/RSI: candidate PR evidence manifest, exact-head evidence binding, promotion eligibility, lineage/rollback and the invariant that only the repository owner's merge can promote.
 2. Start SML-CONTEXT CONTEXT-0/1: exact raw/token/span accounting, immutable raw-segment ledger, provenance-linked SBG index and bounded streaming ingest. Durable protocol: `SML-CONTEXT-BOOTSTRAP.md`.
-3. Advance SML-D2/D3/D4: proper-scoring calibration on reserved data, SBG/MOR coarse-to-fine candidate shortlisting, hot expert residency/prefetch, and DIRECT/REFINE/ABSTAIN gating.
+3. Advance SML-D2/D3/D4: proper-scoring calibration on reserved data, SBG/MOR coarse-to-fine candidate shortlisting, hot expert residency/prefetch, and DIRECT/REFINE/ABSTAIN gating. Include the SML-CLM-0/1 preregistration and bounded score/label foundation below as the contrastive research input; calibration and action authorization remain separate gates.
 4. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
 5. Build SBG-0.14 native integration: mapped semantic/raw lookup -> SBG -> MOR -> Elastic Weight page selection/materialization -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
 6. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
@@ -88,7 +88,7 @@ SBG is a parallel evidence-gated semantic-representation track. It does not reus
 Current status:
 
 - [x] SBG-0.1 packed const-generic Semantic BitField reference implementation;
-- [x] SBG-0.1 native V/M/A/R SemanticState payload accounting;
+- [x] SBG-0.1 native V/M/A/R `SemanticState` payload accounting;
 - [x] SBG-0.2 masked Boolean semantic metric;
 - [x] SBG-0.3 binding/bundling/permutation;
 - [x] SBG-0.4 context meaning mask;
@@ -119,6 +119,8 @@ The SBG track is an experimental hypothesis. It does not yet establish language 
 
 The full protocol and D0..D5 implementation sequence are in [`SML-D-BOOTSTRAP.md`](SML-D-BOOTSTRAP.md). A substantial decision capacity is part of the target architecture, with separate total/active parameter accounting and dedicated training objectives. No fixed fraction of the 25B atlas is justified yet. Native direct and recurrent decisions must not require the text decoder.
 
+The [SML-CLM track](#sml-clm--contrastive-decisions-and-measured-scaling) supplies a proposed learning comparison for D1, separate ranking/calibration evidence for D2, bounded shortlisting experiments for D3 and verified refinement outcomes for D4. It does not close any D gate or replace D5's independent evaluation.
+
 - [x] D0 reference implementation: typed Boolean/choice/ordinal heads, explicit unknowns and abstention, shared circuit evaluation, 64-lane bit-sliced groups and admission budgets (merged PR #61).
 - [x] D1a finite two-input expert-fitting fixture: training-only selection, validation rejection, separate test fixtures. This is not the general D1 gate.
 - [x] D1b reference implementation: observed V/M/A/R coordinate projection, shared inference/finite-training path and separate projection budgets (merged PR #62). See `SML-D1b-SBG-BRIDGE.md`.
@@ -138,7 +140,7 @@ The existing Forge `sml-topology/v1` contract was inspected for reuse; its singl
 
 ## SML-CONTEXT — hierarchical context horizon
 
-The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md). SML context is not defined as one permanently resident token buffer. It uses a bounded active working state plus immutable raw segments, associative memory and mapped semantic/raw indexes with provenance.
+The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md). SML context is not defined as one permanently resident token buffer. It uses a bounded active working state plus immutable raw segments, associative memory and mapped SBG/raw indexes with provenance.
 
 - [x] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract (merged PR #89);
 - [ ] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
@@ -234,3 +236,69 @@ Introduce a deployment-visible effort scalar that maps to bounded recurrent dept
 Run protected long-range tasks against SML-CONTEXT and declared attention-model baselines at matched task definitions. Separate quality, resident memory, mapped storage, traffic, active compute, and wall-clock time.
 
 CED/CSA2/SWA/Engram remain external comparison concepts. They are not native SML components unless a future separately preregistered architectural change explicitly overturns the current non-attention contract.
+
+## SML-CLM — contrastive decisions and measured scaling
+
+Added 2026-10-02. **All implementation/evaluation gates below are open.** The design and source boundaries are in [BOOTSTRAP.md](../BOOTSTRAP.md#sml-clm--contrastive-decisions-and-measured-scaling). This independent namespace does not renumber SML, SBG, SML-D, DKV or CONTEXT stages.
+
+Source: Jacky Kwok et al. (2026), [Contrastive Language Models](https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/README.md#scaling-laws-for-verification), reviewed 2026-10-02. CLM supplies an external contrastive-learning and scaling hypothesis, not SML benchmark evidence. Its head/data ratio and fitted exponents must not be transferred to the 25B Boolean atlas. Numerical upstream reproduction requires resolving its exact counting conventions, compute boundaries and fit uncertainty first.
+
+### SML-CLM-0 — preregistration and evidence contract
+
+- [ ] Freeze versioned state/question/candidate/outcome schemas, explicit observation masks, all-valid-positive/equivalence sets, unknown/abstention semantics and source/verifier identities. Question/candidate semantics must not be reduced to arbitrary IDs.
+- [ ] Declare tasks, task/template/source-disjoint train/development/calibration/evaluation partitions, candidate counts, negative-generation/mining policy, easy-to-hard versus from-start curricula, objective weights, stopping rules, seeds and RAM/VRAM/time/work budgets. Protected final populations remain untouched unless separately authorized.
+- [ ] Pin the unmodified task-learning baseline and specify independent label oracles, false-negative checks, duplicate/permutation tests, acceptance thresholds and retained failure artifacts. Freeze a paired comparison plan before learning or inspecting evaluation outcomes.
+
+Definition of done: a reviewable protocol and executable split/label/budget validation, not merely this roadmap entry. No new language-quality, scale or model-promotion claim.
+
+### SML-CLM-1 — bounded native score and objective semantics
+
+- [ ] Implement Rust-native masked XOR/XNOR/POPCOUNT compatibility with explicit observed/relevant/unambiguous support, fixed normalization rules, empty-support rejection and mask-collapse controls. Qualify against an independent scalar oracle, including padding, overflow and budget failures.
+- [ ] Specify multi-positive state-question-to-decision learning first; test repeated valid actions and no-valid-candidate cases. Bidirectional training is an optional separately controlled arm, not an assumed one-to-one mapping.
+- [ ] Define a bounded research-only InfoNCE reference and a distinct native integer-margin/discrete-credit objective. Test stable numerical behavior and degeneracies of the reference, and exact deterministic semantics of the integer arm. Declare how latent/discrete updates are learned; a Hamming identity is not a trainability result.
+
+Definition of done: deterministic conformance tests, independent reference agreement and explicit batch/negative-pool/working-memory bounds. Research log/exp or batch matrices must not enter the Boolean core or become all-history inference scoring; native candidate work stays bounded and directly routed.
+
+### SML-CLM-2 — matched decision-learning comparison
+
+- [ ] Compare current task-answer training, the declared InfoNCE arm and the integer-margin arm with the same accessible information, declared capacity and matched training budgets. Keep task/language objectives explicit and compare auxiliary-loss weights only on permitted development data.
+- [ ] Use verified hard negatives for negation, role reversal, stale information, incorrect associations and missing evidence. Compare curriculum schedules; audit multi-positive masking and reject ambiguous/unverified negative labels. Optional teacher proposals must be independently checked and teacher-free controls retained.
+- [ ] Report held-out decision accuracy, ranking quality, abstentions, per-expert exposure/update counts and task regressions with repeated seeds and the preregistered uncertainty procedure. Retain ties, negative results and failed hypotheses.
+
+Definition of done: attributable learning evidence against the unchanged task baseline at declared costs. Adoption requires the predeclared benefit and regression gates, not just a lower contrastive loss. This does not by itself satisfy SML-1, broad D1 or SML-2.
+
+### SML-CLM-3 — calibration and selective decisions
+
+- [ ] Feed qualified decision scores into SML-D2; fit proper-scoring/calibration and thresholds on reserved non-test data, then freeze them. Report Brier/proper-score evidence where applicable, risk/coverage and false acceptance with uncertainty.
+- [ ] Test option-count changes, reordered/duplicate candidates, absent correct candidates, unknown inputs and distribution shift. A relative candidate softmax or absence of SBG ambiguity is not a calibrated correctness probability.
+
+Definition of done: preregistered error/coverage requirements on untouched evaluation data; typed abstention remains available and decision proposals still require separate action authorization. Ranking success cannot waive D2 or D5.
+
+### SML-CLM-4 — SBG/MOR, memory and recurrent integration
+
+- [ ] **4a / D3:** evaluate contrastively learned bounded shortlists against current direct routing, fixed/random controls and a separately budgeted exhaustive research baseline. Separate shortlist recall from final decision correctness; include expert exposure imbalance, selected pages and cold/warm costs.
+- [ ] **4b / memory:** evaluate relevant-versus-stale/wrong/missing-evidence retrieval on new development fixtures inspired by the DKV-2c observation. Keep qualified DKV-2b and immutable raw verification; do not promote dynamic re-keying or bypass CONTEXT prerequisites. Expose observable miss evidence rather than asking scores to infer unavailable information.
+- [ ] **4c / D4:** learn DIRECT / REFINE / ABSTAIN from observable state features and verified outcome changes under a fixed budget. Compare fixed and adaptive recurrent depth; measure useful corrections, harmful changes, coverage, cumulative active work and latency. Evaluator truth must not enter the controller's inputs.
+
+Definition of done: separately ablated integrations, each preserving SBG observation semantics, non-attention audits, Elastic admission and resource gates. Do not bundle all three changes into one unidentifiable improvement claim or add a CLM runtime dependency.
+
+### SML-CLM-5 — SML-specific scaling surfaces
+
+- [ ] On qualified small tasks, vary unique data, decision-expert capacity, learned representation capacity/SBG width and recurrent depth, first with other factors controlled and then in joint bottleneck experiments. Distinguish tokens from pairs, repeats from unique data, field width from learned parameters, and total atlas capacity from active capacity and touches.
+- [ ] Report quality at matched budgets and cost at matched quality. Include per-expert exposure/starvation, packed bits/metadata, RAM/RSS/VRAM, logical/word operations, training/search/state-construction costs, routing, page materialization, verification, wall-clock time, cold/warm p50/p95/p99 and traffic. Teacher/encoder work and one-off precomputation are separately included, never hidden by caching.
+- [ ] Compare InfoNCE only under a frozen candidate/positive/negative/temperature/evaluation protocol. Fit empirical curves only over measured ranges, report repeated-seed uncertainty and residuals, check bottlenecks and loss-floor alternatives, and retain unsuccessful fits. Rank-loss, task-quality and cost curves remain separate evidence.
+
+Definition of done: reproducible measured surfaces and a justified next scale experiment, not a universal power law. No 310-tokens-per-parameter prescription, invented exponent or extrapolated 25B quality/throughput claim; existing SML-0 through SML-8 gates remain controlling.
+
+### SML-CLM-6 — optional external comparison and ecosystem transfer
+
+- [ ] After verifying the actual CLM installation on Thor, pin checkpoint/encoder/pooling and evaluate it only as an external comparator or bounded training-data proposer. Match tasks/information and distinguish native typed fixtures from any text serialization. Include full cold/warm encoder, head, cache and verification costs; do not attach the published head directly to SBG.
+- [ ] Inspect destination contracts before sharing qualified Rust score/label tests with SciRust, candidate/negative-search ideas with Forge, matched panels with TDI, resource telemetry with ElasticXxx or provenance-aware memory controls with CCOS-Enterprise. Require independent destination validation; do not add mandatory inference dependencies.
+
+Definition of done: traceable optional comparisons or independently requalified reuse. External CLM availability is not a prerequisite for native SML-CLM-0 through SML-CLM-5, and no external baseline result is a native SML result.
+
+### Admission and execution rules
+
+The immediate next slice is SML-CLM-0, then SML-CLM-1; later runs require the preceding semantic and evidence contracts plus the relevant SML-D/CONTEXT/DKV gates. Source verification, labels and bounded training semantics precede large runs. New SML implementation is Rust-native, preserves `forbid(unsafe_code)` and the dependency-free core, and leaves language decoding optional for decisions.
+
+Use Memorithm/RemoteOps for remote execution with exact task/code/data identities and explicit resource envelopes. Store immutable configurations and complete evidence, not only best scores. Do not alter protected evaluation populations, execute external actions or promote an RSI candidate through this track; the existing human RSI merge gate remains unchanged. This documentation change launches no training, installs no model and completes none of the gates above.
