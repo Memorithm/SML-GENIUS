@@ -136,7 +136,9 @@ mod tests {
         let key = [4096; 3];
         let mut memory = DeltaKvMemory::new(3, 2).unwrap();
         let mut setup = DeltaKvCounters::default();
-        memory.update(&key, &[4096, -4096], 4096, &mut setup).unwrap();
+        memory
+            .update(&key, &[4096, -4096], 4096, &mut setup)
+            .unwrap();
         let mut cache = FrozenDeltaKvRead::new(&memory, &key, 8).unwrap();
         assert_eq!(cache.cached_value_bytes(), 0);
         let mut fresh = DeltaKvCounters::default();
@@ -199,7 +201,9 @@ mod tests {
         let mut memory = DeltaKvMemory::new(2, 1).unwrap();
         let mut setup = DeltaKvCounters::default();
         memory.update(&key, &[4096], 4096, &mut setup).unwrap();
-        memory.update(&[4096, 2048], &[-4096], 4096, &mut setup).unwrap();
+        memory
+            .update(&[4096, 2048], &[-4096], 4096, &mut setup)
+            .unwrap();
         let expected = memory.read(&key, &mut DeltaKvCounters::default()).unwrap();
         assert!(expected[0] < 0);
         let mut cache = FrozenDeltaKvRead::new(&memory, &key, 4).unwrap();
