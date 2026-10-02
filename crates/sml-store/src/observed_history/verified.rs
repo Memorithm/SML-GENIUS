@@ -117,12 +117,13 @@ where
         if hash != segment.content_hash {
             return Err(HistoryVerificationError::SourceBinding);
         }
-        let event = parse_event(&raw, limits.max_record_bytes)
-            .map_err(HistoryVerificationError::Wire)?;
+        let event =
+            parse_event(&raw, limits.max_record_bytes).map_err(HistoryVerificationError::Wire)?;
         if segment.semantic_record_ids() != [event.id()] {
             return Err(HistoryVerificationError::SourceBinding);
         }
-        log.append(event).map_err(HistoryVerificationError::History)?;
+        log.append(event)
+            .map_err(HistoryVerificationError::History)?;
     }
     Ok(VerifiedHistory {
         ledger,
@@ -260,7 +261,10 @@ mod tests {
                 }
                 Ok(raw)
             });
-            assert!(matches!(result, Err(HistoryVerificationError::SourceBinding)));
+            assert!(matches!(
+                result,
+                Err(HistoryVerificationError::SourceBinding)
+            ));
         }
     }
 
@@ -294,7 +298,10 @@ mod tests {
         let result = verify_history(&other, history_limits(), verification_limits(), |_| {
             Ok(bytes[0].clone())
         });
-        assert!(matches!(result, Err(HistoryVerificationError::SourceBinding)));
+        assert!(matches!(
+            result,
+            Err(HistoryVerificationError::SourceBinding)
+        ));
     }
 
     #[test]
