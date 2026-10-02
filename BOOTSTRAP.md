@@ -351,3 +351,15 @@ fixture resolution replace the unchecked proof gate. See
 Next: receive and review the separate preregistration for Delta-KV as an SBG
 recurrent input using DKV-2a projected keys and actual MOR admission. Do not
 start that experiment or promote context from the conformance tests here.
+
+## Independent DKV projected-recurrence candidate A
+
+The owner subsequently requested an independent implementation of the previously
+deferred tranche. Candidate A is defined by
+`docs/SML-DKV-3A-R1-A-PREREGISTRATION.md` and the Rust example
+`crates/sml-store/examples/dkv_projected_recurrence_a.rs`.
+Its retained development evidence is `research/dkv-r1a/`; the manifest binds
+protocol/code/output identities. It uses actual MOR routing, DKV-2a projection,
+DKV-2b fixed-key recurrence, direct/no-memory and fixed/cached-read controls.
+This is a bounded Development pilot, not full DKV-3a/context promotion.
+The owner's separate implementation remains an independent comparison target.
