@@ -17,6 +17,7 @@
 pub mod context_ingest;
 pub mod context_semantic_ingest;
 pub mod delta_kv_context;
+pub mod observed_history;
 pub mod raw_context;
 
 use std::{fmt, fs::File, io, path::Path};
@@ -224,8 +225,8 @@ pub enum MappedStoreError {
     Io(io::Error),
     Format(SemanticStoreError),
     InvalidLimits,
-    NotRegularFile,
     MappingRequired,
+    NotRegularFile,
     UnsupportedPlatform,
     NonCanonicalLayout,
     FileLengthChanged,
