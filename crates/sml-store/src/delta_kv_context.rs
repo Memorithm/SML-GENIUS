@@ -402,6 +402,19 @@ impl<'a> QueryEvidence<'a> {
                 }
             }
         }
+        // An unrelated later write may have admitted new sources for an
+        // older semantic record. A receipt must not omit those new links.
+        for segment in ledger.segments() {
+            let relevant = self.records().any(|record| {
+                segment
+                    .semantic_record_ids()
+                    .binary_search(&record.semantic_record_id)
+                    .is_ok()
+            });
+            if relevant && ids.binary_search(&segment.identity).is_err() {
+                return Err(ContextError::InvalidProvenance);
+            }
+        }
         if ids.is_empty() {
             return Err(ContextError::InvalidProvenance);
         }

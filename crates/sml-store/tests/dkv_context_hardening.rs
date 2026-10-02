@@ -401,17 +401,23 @@ fn parse(raw: &[u8]) -> Result<Parsed<'_>, ResolveError> {
 /// Resolves only verified bytes using the declared fixture grammar. No FACTS or
 /// expected-answer table is visible to this path; this is not an NLP parser.
 fn resolve(receipt: &VerifiedContext<'_>, topic: &str) -> Result<Answer, ResolveError> {
+    resolve_sources(
+        receipt.sources().iter().map(|s| (s.reference(), s.bytes())),
+        topic,
+    )
+}
+fn resolve_sources<'a>(
+    sources: impl IntoIterator<Item = (&'a ContextSegmentRef, &'a [u8])>,
+    topic: &str,
+) -> Result<Answer, ResolveError> {
     let mut active = BTreeMap::new();
     let mut seen = BTreeMap::new();
-    for source in receipt.sources() {
-        let record = parse(source.bytes())?;
+    for (reference, bytes) in sources {
+        let record = parse(bytes)?;
         if record.topic != topic {
             return Err(ResolveError::WrongQuestion);
         }
-        if !source
-            .reference()
-            .semantic_record_ids()
-            .contains(&record.id)
+        if !reference.semantic_record_ids().contains(&record.id)
             || seen.insert(record.id, ()).is_some()
         {
             return Err(ResolveError::Malformed);
@@ -560,4 +566,122 @@ fn newest_sign_correct_does_not_imply_exact_q12() {
     assert!(value > 0);
     // Separate error criterion is required; do not assert a general exactness law.
     assert!((value - i32::from(DELTA_KV_ONE)).abs() <= 1);
+}
+
+#[test]
+fn newly_admitted_forward_sources_cannot_be_silently_omitted() {
+    let mut world = World::new();
+    let a = world.append("1\tcalm\t10\tcalm\t-", &[1]);
+    let mut memory = world.memory();
+    memory
+        .write(&world.ledger, 1, &KEY, &VALUE, RATE, &[a])
+        .unwrap();
+    let b = world.append("1\tcalm\t10\tother-source\t-", &[1]);
+    let c = world.append("2\tother\t01\tother\t-", &[2]);
+    let other_key = [0, 4096, 0, 0];
+    memory
+        .write(&world.ledger, 2, &other_key, &VALUE, RATE, &[c])
+        .unwrap();
+    assert!(matches!(
+        world.verify(&memory, &KEY),
+        Err(ContextError::InvalidProvenance)
+    ));
+    memory
+        .write(&world.ledger, 1, &KEY, &VALUE, RATE, &[a, b])
+        .unwrap();
+    assert_eq!(world.verify(&memory, &KEY).unwrap().sources().len(), 2);
+}
+
+#[test]
+fn verification_source_budget_rejects_before_any_reader_call() {
+    let mut world = World::new();
+    let a = world.append("1\tcalm\t10\tcalm\t-", &[1]);
+    let b = world.append("1\tcalm\t10\tcalm\t-", &[1]);
+    let mut memory = world.memory();
+    memory
+        .write(&world.ledger, 1, &KEY, &VALUE, RATE, &[a, b])
+        .unwrap();
+    let mut calls = 0;
+    let result = memory.query(&KEY).unwrap().verify(
+        &world.ledger,
+        VerificationLimits {
+            max_sources: 1,
+            max_raw_bytes: 4096,
+        },
+        |_| {
+            calls += 1;
+            Ok(vec![])
+        },
+    );
+    assert!(matches!(result, Err(ContextError::BudgetExceeded)));
+    assert_eq!(calls, 0);
+}
+
+#[test]
+fn exact_key_index_separates_interleaved_histories() {
+    let mut world = World::new();
+    let a = world.append("1\ta\t10\ta\t-", &[1]);
+    let b = world.append("2\tb\t01\tb\t-", &[2]);
+    let mut memory = world.memory();
+    let key_b = [-4096, 0, 0, 0];
+    for (record, key, source) in [(1, &KEY, a), (2, &key_b, b), (1, &KEY, a), (2, &key_b, b)] {
+        memory
+            .write(&world.ledger, record, key, &VALUE, RATE, &[source])
+            .unwrap();
+    }
+    for (record, key) in [(1, &KEY), (2, &key_b)] {
+        let query = memory.query(key).unwrap();
+        assert_eq!(query.records().count(), 2);
+        assert!(query.records().all(|r| r.semantic_record_id() == record));
+        let receipt = world.verify(&memory, key).unwrap();
+        assert_eq!(receipt.sources().len(), 1);
+        assert_eq!(receipt.key(), key);
+    }
+}
+
+#[test]
+fn raw_only_control_and_verified_adapter_share_information_not_matrix_answers() {
+    let mut world = World::new();
+    let inputs = [
+        (1, "1\towner\t10\tAlice\t-"),
+        (2, "2\towner\t01\tJonas\t1"),
+        (3, "3\tinvoice\t11\t7731\t-"),
+        (4, "4\tlimit\t10\t10\t-"),
+        (5, "5\tlimit\t01\t20\t-"),
+    ];
+    let mut memory = world.memory();
+    let invoice = [0, 4096, 0, 0];
+    let limit = [0, 0, 4096, 0];
+    for (id, text) in inputs {
+        let source = world.append(text, &[id]);
+        let key = match parse(text.as_bytes()).unwrap().topic {
+            "owner" => &KEY,
+            "invoice" => &invoice,
+            _ => &limit,
+        };
+        // Deliberately unrelated matrix target: the source resolver must
+        // not copy or trust these numeric bits as a raw answer.
+        memory
+            .write(&world.ledger, id, key, &[-4096, -4096], RATE, &[source])
+            .unwrap();
+    }
+    for (topic, key) in [("owner", &KEY), ("invoice", &invoice), ("limit", &limit)] {
+        let receipt = world.verify(&memory, key).unwrap();
+        let direct_sources: Vec<_> = world
+            .ledger
+            .segments()
+            .iter()
+            .filter_map(|r| {
+                let bytes = world.bytes[&r.identity].as_slice();
+                assert_eq!(sha256_raw_bytes(bytes).unwrap(), r.content_hash);
+                (parse(bytes).unwrap().topic == topic).then_some((r, bytes))
+            })
+            .collect();
+        let expected_bytes: u64 = direct_sources.iter().map(|(_, b)| b.len() as u64).sum();
+        assert_eq!(
+            resolve(&receipt, topic),
+            resolve_sources(direct_sources, topic)
+        );
+        assert_eq!(receipt.raw_bytes(), expected_bytes);
+    }
 }
