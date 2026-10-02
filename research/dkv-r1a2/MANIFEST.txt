@@ -1,0 +1,16 @@
+schema=sml.dkv-r1a2.development-evidence.v1
+base=ffb34484d9c95848e016aa34a3348666a92e7dca
+protocol_commit=473b3f48bccd594dd2b39a8903f315f0ec9d5ff5
+executed_code=37aed3c34e014fe0cda78e7264440b592ef58e78
+host=tarek
+architecture=aarch64
+cargo 1.89.0 (c24e10642 2025-06-23)
+rustc 1.89.0 (29483883e 2025-08-04)
+identical_reruns=2
+rows=1728
+scientific_promotion=BLOCKED
+raw_source_verification=NOT_EXECUTED_IN_A2
+5d6a2c39377ac441e97ceec4d00fe8bb42b0c5c756d00f7967278293b7003acd  docs/SML-DKV-3A-R1-A2-PREREGISTRATION.md
+2ebdbcf578b83540ebffbbbc9dd19fd40a87d4b3929f94f7615651b1fec65b50  crates/sml-store/examples/dkv_projection_contrast_a2.rs
+c18eb6c32328618faa973896e4f845e26de793527de0cd95e13c5cb7e64a0ae3  crates/sml-store/tests/dkv_projection_contrast_a2.rs
+084b3de117f5ad1859528e1dce237618fa1bdd1e8bea9fec875783a042e04448  research/dkv-r1a2/development.csv

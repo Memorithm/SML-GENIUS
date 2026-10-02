@@ -363,3 +363,14 @@ protocol/code/output identities. It uses actual MOR routing, DKV-2a projection,
 DKV-2b fixed-key recurrence, direct/no-memory and fixed/cached-read controls.
 This is a bounded Development pilot, not full DKV-3a/context promotion.
 The owner's separate implementation remains an independent comparison target.
+
+## Independent A2 projection ablation
+
+The continuation to candidate A is an isolated Development experiment in
+`docs/SML-DKV-3A-R1-A2-PREREGISTRATION.md` and
+`crates/sml-store/examples/dkv_projection_contrast_a2.rs`.
+It compares unchanged DKV-2a, a two-call complementary projection and
+exact direct memory, crossing source payloads independently of seeds.
+Retained evidence: `research/dkv-r1a2/`. The original A evidence remains
+unchanged. Latent decisions are not source-verified or authorized actions;
+context promotion remains BLOCKED. No counterpart code was consulted.
