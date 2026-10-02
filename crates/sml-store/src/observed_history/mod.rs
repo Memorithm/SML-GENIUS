@@ -4,5 +4,7 @@
 //! Counts and element budgets are not allocator or process RAM measurements.
 
 mod journal;
+mod query;
 
 pub use journal::{HistoryError, HistoryLimits, ObservationEvent, ObservationLog, SubjectKey};
+pub use query::{HistoryQuery, HistorySummary, ObservedState};
