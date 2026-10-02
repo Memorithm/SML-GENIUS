@@ -185,8 +185,8 @@ fn validate_canonical_layout<const BITS: usize>(
     let records_offset = align_up(index_end, alignment)?;
     let stride = align_up(u64::from(header.payload_bytes), alignment)?;
     if header.index_offset != alignment
-        || header.records_offset != records_offset
         || header.record_stride != stride
+        || header.records_offset != records_offset
         || stride == 0
     {
         return Err(MappedStoreError::NonCanonicalLayout);
@@ -225,8 +225,8 @@ pub enum MappedStoreError {
     Io(io::Error),
     Format(SemanticStoreError),
     InvalidLimits,
-    MappingRequired,
     NotRegularFile,
+    MappingRequired,
     UnsupportedPlatform,
     NonCanonicalLayout,
     FileLengthChanged,
