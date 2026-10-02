@@ -5,6 +5,8 @@
 
 mod journal;
 mod query;
+mod wire;
 
 pub use journal::{HistoryError, HistoryLimits, ObservationEvent, ObservationLog, SubjectKey};
 pub use query::{HistoryQuery, HistorySummary, ObservedState};
+pub use wire::{encode_event, parse_event, WireError, MAX_EVENT_BYTES};
