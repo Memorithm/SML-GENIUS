@@ -16,6 +16,7 @@
 
 pub mod context_ingest;
 pub mod context_semantic_ingest;
+pub mod delta_kv_context;
 pub mod raw_context;
 
 use std::{fmt, fs::File, io, path::Path};

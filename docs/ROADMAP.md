@@ -302,3 +302,20 @@ Definition of done: traceable optional comparisons or independently requalified 
 The immediate next slice is SML-CLM-0, then SML-CLM-1; later runs require the preceding semantic and evidence contracts plus the relevant SML-D/CONTEXT/DKV gates. Source verification, labels and bounded training semantics precede large runs. New SML implementation is Rust-native, preserves `forbid(unsafe_code)` and the dependency-free core, and leaves language decoding optional for decisions.
 
 Use Memorithm/RemoteOps for remote execution with exact task/code/data identities and explicit resource envelopes. Store immutable configurations and complete evidence, not only best scores. Do not alter protected evaluation populations, execute external actions or promote an RSI candidate through this track; the existing human RSI merge gate remains unchanged. This documentation change launches no training, installs no model and completes none of the gates above.
+
+## DKV-3a-0 patch hardening (owner-requested correction)
+
+Contract: [SML-DKV-3A-0-HARDENING.md](SML-DKV-3A-0-HARDENING.md).
+Historical negative observations are preserved separately; the two cumulative
+patches must not be applied on top of one another.
+
+- [x] Implement bounded exact-key source-evidence adapter in sml-store, retaining the unchanged numeric core.
+- [x] Add private query/context-bound SHA-256 verification receipts, typed failures, ordinary-error rollback and source/write/element admission.
+- [x] Add independent raw-fixture resolution, exact extracted fields, complete conflict/supersession history, artifact corruption and geometry conformance tests.
+- [x] Separate software conformance from machine-readable promotion eligibility; missing projected-recurrence evidence remains blocking.
+- [ ] Independently preregister projected-key DKV-2a plus MOR/SBG recurrent integration (reserved for the next owner-supplied tranche).
+- [ ] Qualify matched task/information/resource controls, persisted sidecar recovery and end-to-end cost on that separate programme.
+
+Implementation checkboxes do not assert scientific qualification or completed
+CI; exact-head CI evidence belongs to the correction PR. Existing DKV-3a,
+SML-CONTEXT, SML-D, SML-CLM and RSI promotion boundaries remain unchanged.
