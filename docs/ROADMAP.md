@@ -319,3 +319,20 @@ patches must not be applied on top of one another.
 Implementation checkboxes do not assert scientific qualification or completed
 CI; exact-head CI evidence belongs to the correction PR. Existing DKV-3a,
 SML-CONTEXT, SML-D, SML-CLM and RSI promotion boundaries remain unchanged.
+
+## DKV-3a-R1-A — independent projected recurrence candidate
+
+Protocol: [SML-DKV-3A-R1-A-PREREGISTRATION.md](SML-DKV-3A-R1-A-PREREGISTRATION.md).
+The owner authorized this independent implementation after PR #99; the earlier
+deferred-tranche note is superseded for this named Development candidate only.
+
+- [x] Freeze an independently identifiable protocol before execution.
+- [x] Exercise actual MOR -> DKV-2a -> frozen-key DKV-2b -> SBG recurrence.
+- [x] Include direct/no-memory, fixed-depth and one-read cache controls.
+- [x] Retain 864 paired Development rows, per-cycle traces and exact projected geometry.
+- [x] Keep latent correctness separate from independently verified source resolution.
+- [ ] Compare interfaces, information access and controls with the owner's implementation.
+- [ ] Independently qualify full context integration, physical resources and crash recovery.
+
+These are engineering/development milestones, not trained-model or language results.
+Scientific promotion remains BLOCKED and no protected final evaluation is armed.

@@ -1,0 +1,15 @@
+schema=sml.dkv-r1a.development-evidence.v1
+base=9a8828ba3f009822f040b01d6e1dca05cc85489e
+protocol_commit=d7bf16fb879dc9f822522a2c1d7173fb2f8d42e4
+executed_code=7c00952e4ab49141ab45f7d91b13d61363382fa2
+host=tarek
+architecture=aarch64
+cargo 1.89.0 (c24e10642 2025-06-23)
+rustc 1.89.0 (29483883e 2025-08-04)
+identical_reruns=2
+rows=864
+scientific_promotion=BLOCKED
+67007989b4f2894dad83b062f20530562d9163430e8e13fc1c1841e54f55fc1a  docs/SML-DKV-3A-R1-A-PREREGISTRATION.md
+b0f768559ba8081b139f972c743c032f3b2972eea575947a24702ca26eb22844  crates/sml-store/examples/dkv_projected_recurrence_a.rs
+826c9ec6cda09748878a791180e80904a794130d8147f9083173236210d14099  crates/sml-store/tests/dkv_projected_recurrence_a.rs
+f2fbbf61edaadb2ed5f110f9e8e0dbeaac5081dfe1a4617d684298b3508cabff  research/dkv-r1a/development.csv
