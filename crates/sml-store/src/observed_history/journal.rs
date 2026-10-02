@@ -221,8 +221,13 @@ mod tests {
     }
 
     fn event(id: u64, subject: u64, prior: Option<u64>) -> ObservationEvent {
-        ObservationEvent::new(id, SubjectKey::new(subject, 0).unwrap(), [true, false], prior)
-            .unwrap()
+        ObservationEvent::new(
+            id,
+            SubjectKey::new(subject, 0).unwrap(),
+            [true, false],
+            prior,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -246,7 +251,10 @@ mod tests {
         assert_eq!(history.index, [1, 0, 2]);
         assert!(!history.records[0].active);
         assert!(history.records[1].active && history.records[2].active);
-        assert_eq!(history.events().map(|e| e.id()).collect::<Vec<_>>(), [1, 3, 5]);
+        assert_eq!(
+            history.events().map(|e| e.id()).collect::<Vec<_>>(),
+            [1, 3, 5]
+        );
     }
 
     #[test]
@@ -254,7 +262,11 @@ mod tests {
         let mut history = log(10, 10);
         history.append(event(1, 1, None)).unwrap();
         history.append(event(2, 1, Some(1))).unwrap();
-        for e in [event(2, 1, None), event(3, 2, Some(2)), event(3, 1, Some(1))] {
+        for e in [
+            event(2, 1, None),
+            event(3, 2, Some(2)),
+            event(3, 1, Some(1)),
+        ] {
             let before = history.clone();
             assert!(history.append(e).is_err());
             assert_eq!(history, before);
@@ -269,7 +281,10 @@ mod tests {
         let mut history = log(2, 1);
         history.append(event(1, 1, None)).unwrap();
         let before = history.clone();
-        assert_eq!(history.append(event(2, 2, None)), Err(HistoryError::BudgetExceeded));
+        assert_eq!(
+            history.append(event(2, 2, None)),
+            Err(HistoryError::BudgetExceeded)
+        );
         assert_eq!(history, before);
         history.append(event(2, 1, Some(1))).unwrap();
         let before = history.clone();
