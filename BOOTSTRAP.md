@@ -387,3 +387,8 @@ when binding projected candidates to an independently observed SubjectKey.
 It excludes other subjects, rejects missing versions and forked snapshots, and
 never replaces or authenticates a latent answer. Existing A/A2/A3 evidence and
 the numeric DKV rule are unchanged. Context promotion remains BLOCKED.
+
+Counterpart B follow-up: after `bind_projected_subject`, prefer
+`BoundProjectedSubject::screen(candidate)` to retain the same subject/snapshot
+without a second identity argument. See `docs/SML-DKV-B-BOUND-SCREENING.md`.
+Screening still only preserves or suppresses; it never repairs a latent answer.

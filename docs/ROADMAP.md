@@ -363,3 +363,8 @@ higher accuracy at greater projection work is not an equal-cost win.
 
 See `SML-DKV-B-COMPARISON-OBSERVATION.md`. Checked engineering boxes do not
 qualify a trained model or promote context. No old experiment is overwritten.
+
+Counterpart B composition: verified binding now offers consuming subject-bound
+screening and regression tests for projected aliases/conflicts/unknowns.
+The ten-PR input-integration audit is `research/dkv-b/BATCH10-AUDIT.json`.
+This is software conformance only; no new scientific promotion.
