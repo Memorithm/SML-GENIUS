@@ -585,3 +585,6 @@ impl fmt::Display for ContextError {
     }
 }
 impl std::error::Error for ContextError {}
+
+mod record;
+pub use record::{RecordBindingError, RecordBindingLimits, RecordRequest, VerifiedRecordContext};
