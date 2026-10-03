@@ -1,0 +1,14 @@
+{
+  "schema": "sml.dkv-c.adapted.v1",
+  "input_patch_sha256": "bb08213f7ca4f573d519b089b99da2164623dba8b55153b88cdeb6939f075c9e",
+  "protocol": "a86fd5483cf6b90b135247df5f255247a43fd485",
+  "executed_code": "02671403353da82d63a817f7de665be6f4105344",
+  "host": "debian",
+  "arch": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "identical_reruns": 2,
+  "rows": 3072,
+  "output_sha256": "8ea73ff48f1f9b1206d54225de261c530a175562c616812a227e5c54819dd900",
+  "original_rust_replay": false,
+  "scientific_promotion": "BLOCKED"
+}
