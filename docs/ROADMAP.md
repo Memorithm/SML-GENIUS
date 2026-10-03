@@ -368,3 +368,14 @@ Counterpart B composition: verified binding now offers consuming subject-bound
 screening and regression tests for projected aliases/conflicts/unknowns.
 The ten-PR input-integration audit is `research/dkv-b/BATCH10-AUDIT.json`.
 This is software conformance only; no new scientific promotion.
+
+## Counterpart C integration
+
+- [x] Freeze input and adapted diagnostic before execution.
+- [x] Port exact-distance states and distinguish full-state identity from FNV.
+- [x] Add bounded, borrowed record-source views without answer acceptance.
+- [x] Test stream/record/source limits and complete subject-version separation.
+- [x] Retain and replay all 3072 adapted rows under Rust1.89.
+- [ ] Independently qualify learned/representative tasks and physical costs.
+
+See `SML-DKV-C-OBSERVATION.md`; engineering completion does not promote context.
