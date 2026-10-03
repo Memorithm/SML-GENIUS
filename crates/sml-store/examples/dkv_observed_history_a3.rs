@@ -23,7 +23,14 @@ const A2_HASH: &str = "084b3de117f5ad1859528e1dce237618fa1bdd1e8bea9fec875783a04
 const RETAINED: &str = include_str!("../../../research/dkv-r1a2/development.csv");
 const ARMS: [&str; 3] = ["standard", "contrast", "direct"];
 const FAMILIES: [&str; 8] = [
-    "isolated", "old", "recent", "overwrite", "conflict", "missing", "near_old", "near_recent",
+    "isolated",
+    "old",
+    "recent",
+    "overwrite",
+    "conflict",
+    "missing",
+    "near_old",
+    "near_recent",
 ];
 
 fn require(ok: bool, message: &str) -> R<()> {
@@ -72,7 +79,12 @@ pub fn source_events(family: &str, payload: u8, group: u32) -> R<Vec<Observation
         .enumerate()
         .map(|(index, (subject, bits, predecessor))| {
             let key = SubjectKey::new(subject, group)?;
-            Ok(ObservationEvent::new(index as u64 + 1, key, bits, predecessor)?)
+            Ok(ObservationEvent::new(
+                index as u64 + 1,
+                key,
+                bits,
+                predecessor,
+            )?)
         })
         .collect()
 }
@@ -186,7 +198,10 @@ pub struct Diagnostic {
 pub fn diagnose(a2_text: &str) -> R<Diagnostic> {
     require(a2_text.len() <= 16 * 1024 * 1024, "input report limit")?;
     require(a2_text == RETAINED, "A2 frozen bytes changed")?;
-    require(sha256_raw_bytes(a2_text.as_bytes())?.hex() == A2_HASH, "A2 hash")?;
+    require(
+        sha256_raw_bytes(a2_text.as_bytes())?.hex() == A2_HASH,
+        "A2 hash",
+    )?;
     let mut csv = format!(
         "SCHEMA,sml.dkv-a3.observed-screen.v1\nPROTOCOL,{PROTOCOL}\nA2_OUTPUT_SHA256,{A2_HASH}\nSTATUS,DEVELOPMENT_ONLY\n"
     );
@@ -204,8 +219,14 @@ pub fn diagnose(a2_text: &str) -> R<Diagnostic> {
         let payload: u8 = fields[4].parse()?;
         let family = fields[5];
         let arm = fields[6];
-        require([32, 64, 128].contains(&dimension) && seed < 3, "grid bounds")?;
-        require(ARMS.contains(&arm) && FAMILIES.contains(&family), "grid identity")?;
+        require(
+            [32, 64, 128].contains(&dimension) && seed < 3,
+            "grid bounds",
+        )?;
+        require(
+            ARMS.contains(&arm) && FAMILIES.contains(&family),
+            "grid identity",
+        )?;
         let identity = fields[1..7].join(",");
         require(identities.insert(identity.clone()), "duplicate paired row")?;
         // Only the latent column becomes the model candidate.
@@ -232,9 +253,15 @@ pub fn diagnose(a2_text: &str) -> R<Diagnostic> {
         let screened = result.value();
         require(result.original() == candidate, "original candidate changed")?;
         if state == ObservedState::Agreement {
-            require(screened == candidate, "agreement must not repair a candidate")?;
+            require(
+                screened == candidate,
+                "agreement must not repair a candidate",
+            )?;
         } else {
-            require(screened.is_none(), "missing/conflicting history must suppress")?;
+            require(
+                screened.is_none(),
+                "missing/conflicting history must suppress",
+            )?;
         }
         // Evaluator gold is consulted only AFTER screening completes.
         let gold = bits(fields[7])?;
@@ -252,34 +279,49 @@ pub fn diagnose(a2_text: &str) -> R<Diagnostic> {
             None => 'x',
             Some(v) => char::from(b'0' + u8::from(v[0]) + 2 * u8::from(v[1])),
         });
-        totals.entry(arm.to_string()).or_default().observe(
-            candidate, screened, gold, segments, bytes,
-        );
+        totals
+            .entry(arm.to_string())
+            .or_default()
+            .observe(candidate, screened, gold, segments, bytes);
         families
             .entry((arm.to_string(), family.to_string()))
             .or_default()
             .observe(candidate, screened, gold, segments, bytes);
         require(csv.len() <= 2 * 1024 * 1024, "A3 report limit")?;
     }
-    require(identities.len() == 1728 && packet.len() == 1728, "complete paired panel")?;
+    require(
+        identities.len() == 1728 && packet.len() == 1728,
+        "complete paired panel",
+    )?;
     let mut summary = String::new();
     for arm in ARMS {
         let counts = totals.get(arm).ok_or("missing arm")?;
         require(counts.rows == 576, "arm row count")?;
-        require(counts.partitions.iter().sum::<u64>() == counts.rows, "outcome partition")?;
+        require(
+            counts.partitions.iter().sum::<u64>() == counts.rows,
+            "outcome partition",
+        )?;
         writeln!(summary, "{}", counts.line(&format!("A3_SUMMARY,{arm}")))?;
         for family in FAMILIES {
             let counts = families
                 .get(&(arm.to_string(), family.to_string()))
                 .ok_or("missing family")?;
             require(counts.rows == 72, "family row count")?;
-            writeln!(summary, "{}", counts.line(&format!("A3_FAMILY,{arm},{family}")))?;
+            writeln!(
+                summary,
+                "{}",
+                counts.line(&format!("A3_FAMILY,{arm},{family}"))
+            )?;
         }
     }
     csv.push_str(&summary);
     csv.push_str("SOURCE_COST,complete_observed_history_is_additional_information_and_work\n");
     csv.push_str("PROMOTION,BLOCKED,source_screen_is_not_latent_or_full_context_qualification\n");
-    Ok(Diagnostic { csv, summary, packet })
+    Ok(Diagnostic {
+        csv,
+        summary,
+        packet,
+    })
 }
 
 pub fn run() -> R<Diagnostic> {
