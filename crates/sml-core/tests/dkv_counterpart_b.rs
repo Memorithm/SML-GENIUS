@@ -353,3 +353,25 @@ fn dkv_3a_1_projected_experiment() {
     }
     println!("{}", render(&results));
 }
+
+// Added after the supplied run: exact regression, not new confirmation.
+#[test]
+fn reproduced_table_stays_identical_to_retained_rust_189_evidence() {
+    let numeric = |s: &str| -> String {
+        s.lines()
+            .filter(|line| {
+                let fields: Vec<_> = line.split_whitespace().collect();
+                fields.first() == Some(&"HYP")
+                    || (matches!(
+                        fields.first(),
+                        Some(&"GEOM") | Some(&"PROBE") | Some(&"CAL")
+                    ) && fields.get(1).is_some_and(|s| s.parse::<u32>().is_ok()))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(
+        numeric(&render(&run())),
+        numeric(include_str!("../../../research/dkv-b/reproduced-1.89.txt"))
+    );
+}
