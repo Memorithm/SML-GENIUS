@@ -27,6 +27,7 @@ pub mod delta_kv_diagnostics;
 pub mod delta_kv_dynamic;
 pub mod delta_kv_panel;
 pub mod delta_kv_recurrent;
+pub mod delta_kv_resolution;
 pub mod delta_kv_semantic;
 pub mod elastic_weights;
 pub mod forge_topology;
