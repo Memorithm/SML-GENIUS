@@ -38,6 +38,9 @@ pub struct VerifiedHistory<'a> {
 }
 
 impl VerifiedHistory<'_> {
+    pub(crate) fn ledger(&self) -> &RawContextLedger {
+        self.ledger
+    }
     pub fn query(&self, key: SubjectKey) -> HistoryQuery<'_> {
         self.log.query(key)
     }

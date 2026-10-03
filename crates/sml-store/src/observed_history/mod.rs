@@ -5,7 +5,11 @@
 
 mod cache;
 mod journal;
+mod projected;
 mod query;
+pub use projected::{
+    bind_projected_subject, BoundProjectedSubject, SubjectBindingError, SubjectBindingLimits,
+};
 mod screen;
 mod verified;
 mod wire;
