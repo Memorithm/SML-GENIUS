@@ -1,0 +1,9 @@
+{
+  "patch_sha256": "d5ca8ee375d426e8059835b96d8230a6e5ff93308214db3ec42904d8136d2e80",
+  "patch_bytes": 99281,
+  "patch_lines": 2462,
+  "probe_sha256": "dec5147d7e3ae080d8fee8ab2d3f9b297fc8011f7fa5b87c98725b60553b8c12",
+  "source_file": "crates/sml-core/tests/dkv_3a_1_projected.rs",
+  "reported_toolchain": "1.97.0",
+  "chronology": "supplied declaration, not independently verified"
+}

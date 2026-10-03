@@ -1,0 +1,10 @@
+{
+  "executed_code": "5241c2f46bdcfe1ed2b478b1a75e3d8b446f58e3",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "host": "debian",
+  "architecture": "x86_64",
+  "output_sha256": "e3cc718c5847d6dea1985a7a6be179c4d61e210d856ff22804384f0d49f1d042",
+  "identical_reruns": 2,
+  "known_supplied_results": true,
+  "scientific_promotion": "BLOCKED"
+}
