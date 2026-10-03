@@ -348,3 +348,18 @@ Scientific promotion remains BLOCKED and no protected final evaluation is armed.
 These checkboxes describe an implemented/executed diagnostic, not model
 quality or architectural promotion. Candidate A is not overwritten;
 higher accuracy at greater projection work is not an equal-cost win.
+
+
+## Counterpart B integration (ten engineering slices)
+
+- [x] Preserve input identity and freeze comparison scope before new executions.
+- [x] Reproduce supplied fixed-route probe on pinned Rust1.89.
+- [x] Add exact signed Gram diagnostics and partial/complete resolution separation.
+- [x] Exercise actual MOR with controlled Hamming fixtures.
+- [x] Bind projected candidates to exact SubjectKey and the same complete verified snapshot.
+- [x] Regress real aliases, absent subjects, omitted versions, forks and conflicts.
+- [x] Retain/replay the separate 1728-row differential diagnostic without tuning it.
+- [ ] Qualify learned/representative tasks, source-safe deployment, durable sidecars and physical costs.
+
+See `SML-DKV-B-COMPARISON-OBSERVATION.md`. Checked engineering boxes do not
+qualify a trained model or promote context. No old experiment is overwritten.

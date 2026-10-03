@@ -374,3 +374,16 @@ exact direct memory, crossing source payloads independently of seeds.
 Retained evidence: `research/dkv-r1a2/`. The original A evidence remains
 unchanged. Latent decisions are not source-verified or authorized actions;
 context promotion remains BLOCKED. No counterpart code was consulted.
+
+
+## Counterpart B comparison and subject binding
+
+The owner supplied the independent DKV-3a-1 probe after A/A2/A3 development.
+`docs/SML-DKV-B-COMPARISON-OBSERVATION.md` records reproduction on Rust1.89,
+method differences, the prospective native-MOR comparison and retained evidence.
+An exact compressed key identifies candidates, not an exact subject. Use
+`observed_history::bind_projected_subject` with the complete verified history
+when binding projected candidates to an independently observed SubjectKey.
+It excludes other subjects, rejects missing versions and forked snapshots, and
+never replaces or authenticates a latent answer. Existing A/A2/A3 evidence and
+the numeric DKV rule are unchanged. Context promotion remains BLOCKED.
