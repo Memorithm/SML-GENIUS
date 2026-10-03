@@ -485,6 +485,9 @@ pub struct VerifiedContext<'a> {
     raw_bytes: u64,
 }
 impl VerifiedContext<'_> {
+    pub(crate) fn ledger(&self) -> &[ContextSegmentRef] {
+        &self.query.owner.ledger
+    }
     pub fn key(&self) -> &[i16] {
         self.query.key()
     }
