@@ -8,7 +8,14 @@ use sml_store::raw_context::sha256_raw_bytes;
 mod experiment;
 
 const FAMILIES: [&str; 8] = [
-    "isolated", "old", "recent", "overwrite", "conflict", "missing", "near_old", "near_recent",
+    "isolated",
+    "old",
+    "recent",
+    "overwrite",
+    "conflict",
+    "missing",
+    "near_old",
+    "near_recent",
 ];
 
 #[test]
@@ -84,10 +91,19 @@ fn full_a3_grid_reruns_identically_and_retains_all_outcomes() {
     assert!(first.csv.contains("PROMOTION,BLOCKED,"));
     // Existing store-evidence CI emits all rows. No test pushes code or dispatches work.
     println!("A3_FULL_BEGIN\n{}A3_FULL_END", first.csv);
-    println!("A3_OUTPUT_SHA256={}", sha256_raw_bytes(first.csv.as_bytes()).unwrap().hex());
-    println!("A3_PACKET_SHA256={}", sha256_raw_bytes(first.packet.as_bytes()).unwrap().hex());
+    println!(
+        "A3_OUTPUT_SHA256={}",
+        sha256_raw_bytes(first.csv.as_bytes()).unwrap().hex()
+    );
+    println!(
+        "A3_PACKET_SHA256={}",
+        sha256_raw_bytes(first.packet.as_bytes()).unwrap().hex()
+    );
     for (i, chunk) in first.packet.as_bytes().chunks(144).enumerate() {
-        println!("A3_PACKET_CHUNK,{i},{}", std::str::from_utf8(chunk).unwrap());
+        println!(
+            "A3_PACKET_CHUNK,{i},{}",
+            std::str::from_utf8(chunk).unwrap()
+        );
     }
     println!(
         "A3_CODE_SHA256={}",
@@ -97,12 +113,16 @@ fn full_a3_grid_reruns_identically_and_retains_all_outcomes() {
     );
     println!(
         "A3_TEST_SHA256={}",
-        sha256_raw_bytes(include_str!("dkv_observed_history_a3.rs").as_bytes()).unwrap().hex()
+        sha256_raw_bytes(include_str!("dkv_observed_history_a3.rs").as_bytes())
+            .unwrap()
+            .hex()
     );
     println!(
         "A3_PROTOCOL_SHA256={}",
-        sha256_raw_bytes(include_str!("../../../docs/SML-DKV-A3-BATCH10-PREREGISTRATION.md").as_bytes())
-            .unwrap()
-            .hex()
+        sha256_raw_bytes(
+            include_str!("../../../docs/SML-DKV-A3-BATCH10-PREREGISTRATION.md").as_bytes()
+        )
+        .unwrap()
+        .hex()
     );
 }
