@@ -1,0 +1,83 @@
+{
+  "schema": "sml.dkv-c.reviewed-prefix.v1",
+  "note": "Prior nine PRs only; final PR cannot contain its own merge identity.",
+  "prs": [
+    {
+      "pr": 122,
+      "head": "a86fd5483cf6b90b135247df5f255247a43fd485",
+      "merge": "f4e7321e4e3a2a5d78a08b9f44d585154b06dbdb",
+      "ci": 412,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37148640135"
+    },
+    {
+      "pr": 123,
+      "head": "2d2da3a9cd81fab6b0a35b7080420f229ac77276",
+      "merge": "7ccc96ec6a3ce34d01f147b97ac8bee4d14f488c",
+      "ci": 414,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37149111774"
+    },
+    {
+      "pr": 124,
+      "head": "bb20943c8f566e262b191fcf78589aa23539a1b3",
+      "merge": "bd43185a0608b2fd8349c0aaef5564a0b5a1a613",
+      "ci": 416,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37149295921"
+    },
+    {
+      "pr": 125,
+      "head": "ed7c46aea0fd62abd87854f23d07934ddab73019",
+      "merge": "662a62e631ad4fa771698deecff1aa6e98fb4b01",
+      "ci": 418,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37149510838"
+    },
+    {
+      "pr": 126,
+      "head": "a393871f9e6600a46677397b1bad39db1085dcb0",
+      "merge": "eb46bc667f36fb13a9a726c2e8598a1e1be27062",
+      "ci": 420,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37149695002"
+    },
+    {
+      "pr": 127,
+      "head": "ec2f4110414190599d1f4eded72426fea2afb554",
+      "merge": "02671403353da82d63a817f7de665be6f4105344",
+      "ci": 422,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37149884906"
+    },
+    {
+      "pr": 128,
+      "head": "95803aaebdc627373aa886cd45fd76e35cecff91",
+      "merge": "f401caf2862ac69fd521aa977db0c3fa65e3f155",
+      "ci": 424,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37150101107"
+    },
+    {
+      "pr": 129,
+      "head": "d0639e2204728e37aace3f30d45daf44f75f9417",
+      "merge": "c1e150b62390adbeb7169d1fa65038f4eadc0472",
+      "ci": 426,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37150310602"
+    },
+    {
+      "pr": 130,
+      "head": "d0465d4d47331899ffd8c5297ab5464b4a3c2ea1",
+      "merge": "7cbc355c4b87eaccfa7ce420bd257fba6d609d1e",
+      "ci": 428,
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37150527398"
+    }
+  ],
+  "manifest": {
+    "schema": "sml.dkv-c.adapted.v1",
+    "input_patch_sha256": "bb08213f7ca4f573d519b089b99da2164623dba8b55153b88cdeb6939f075c9e",
+    "protocol": "a86fd5483cf6b90b135247df5f255247a43fd485",
+    "executed_code": "02671403353da82d63a817f7de665be6f4105344",
+    "host": "debian",
+    "arch": "x86_64",
+    "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+    "identical_reruns": 2,
+    "rows": 3072,
+    "output_sha256": "8ea73ff48f1f9b1206d54225de261c530a175562c616812a227e5c54819dd900",
+    "original_rust_replay": false,
+    "scientific_promotion": "BLOCKED"
+  }
+}

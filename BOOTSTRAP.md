@@ -392,3 +392,12 @@ Counterpart B follow-up: after `bind_projected_subject`, prefer
 `BoundProjectedSubject::screen(candidate)` to retain the same subject/snapshot
 without a second identity argument. See `docs/SML-DKV-B-BOUND-SCREENING.md`.
 Screening still only preserves or suppresses; it never repairs a latent answer.
+
+## Counterpart C: record versions and subjects
+
+The latest aliasing patch is integrated as an adapted diagnostic and a bounded
+`VerifiedContext::bind_record` view; see `docs/SML-DKV-C-OBSERVATION.md`.
+A record-version proof must never replace complete subject history. Use
+`BoundProjectedSubject::screen` for subject screening; no compressed key or
+FNV state surrogate is an authority token. A/A2/B evidence remains unchanged.
+Context/model promotion remains BLOCKED.
