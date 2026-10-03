@@ -52,7 +52,15 @@ pub fn screen_candidate<'a>(
     key: SubjectKey,
     candidate: Option<[bool; 2]>,
 ) -> ScreenedCandidate<'a> {
-    let query = history.query(key);
+    screen_verified_query(history.query(key), candidate)
+}
+
+// Internal only: callers must have established the complete verified snapshot.
+// Both public paths preserve this precondition; no public summary-based gate.
+pub(super) fn screen_verified_query(
+    query: HistoryQuery<'_>,
+    candidate: Option<[bool; 2]>,
+) -> ScreenedCandidate<'_> {
     let (screened, reason) = match query.summary().state {
         ObservedState::Missing => (None, ScreeningReason::MissingObservation),
         ObservedState::Conflict => (None, ScreeningReason::ConflictingObservations),

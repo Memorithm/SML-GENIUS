@@ -278,3 +278,90 @@ fn explicit_supersession_retains_all_subject_versions() {
     assert_eq!(b.generation(), 2);
     assert_eq!(b.observed_state(), ObservedState::Agreement);
 }
+
+#[test]
+fn bound_screen_preserves_subject_and_every_original_candidate() {
+    let key = alias();
+    let w = make(
+        &[event(1, 1, [true; 2], None), event(2, 2, [false; 2], None)],
+        &[key.clone(), key.clone()],
+    );
+    let h = history(&w);
+    let r = receipt(&w, &key);
+    for candidate in [
+        None,
+        Some([false; 2]),
+        Some([false, true]),
+        Some([true, false]),
+        Some([true; 2]),
+    ] {
+        let bound = bind_projected_subject(&r, &h, subject(1), limits()).unwrap();
+        assert_eq!(bound.excluded_sources(), 1);
+        let screened = bound.screen(candidate);
+        assert_eq!(screened.key(), subject(1));
+        assert_eq!(screened.generation(), h.generation());
+        assert_eq!(screened.original(), candidate);
+        assert_eq!(screened.value(), candidate);
+        assert_eq!(
+            screened.reason(),
+            screen_candidate(&h, subject(1), candidate).reason()
+        );
+    }
+}
+
+#[test]
+fn bound_screen_cannot_use_an_agreeing_alias_to_hide_subject_conflict() {
+    let key = alias();
+    let w = make(
+        &[
+            event(1, 1, [false; 2], None),
+            event(2, 1, [true; 2], None),
+            event(3, 2, [true; 2], None),
+        ],
+        &[key.clone(), key.clone(), key.clone()],
+    );
+    let h = history(&w);
+    let r = receipt(&w, &key);
+    for candidate in [
+        None,
+        Some([false; 2]),
+        Some([false, true]),
+        Some([true, false]),
+        Some([true; 2]),
+    ] {
+        let bound = bind_projected_subject(&r, &h, subject(1), limits()).unwrap();
+        let screened = bound.screen(candidate);
+        assert_eq!(screened.key(), subject(1));
+        assert_eq!(screened.value(), None);
+        assert_eq!(screened.original(), candidate);
+        assert_eq!(screened.reason(), ScreeningReason::ConflictingObservations);
+    }
+    let other = bind_projected_subject(&r, &h, subject(2), limits())
+        .unwrap()
+        .screen(Some([false; 2]));
+    assert_eq!(other.key(), subject(2));
+    assert_eq!(other.value(), Some([false; 2]));
+}
+
+#[test]
+fn bound_screen_retains_supersession_and_does_not_fill_unknown() {
+    let key = alias();
+    let w = make(
+        &[
+            event(1, 1, [false; 2], None),
+            event(2, 1, [true; 2], Some(1)),
+        ],
+        &[key.clone(), key.clone()],
+    );
+    let h = history(&w);
+    let r = receipt(&w, &key);
+    let bound = bind_projected_subject(&r, &h, subject(1), limits()).unwrap();
+    assert_eq!(bound.matched_sources(), 2);
+    let screened = bound.screen(None);
+    assert_eq!(screened.value(), None);
+    assert_eq!(screened.reason(), ScreeningReason::CandidateUnknown);
+    let bound = bind_projected_subject(&r, &h, subject(1), limits()).unwrap();
+    let screened = bound.screen(Some([false; 2]));
+    assert_eq!(screened.value(), Some([false; 2]));
+    assert_eq!(screened.reason(), ScreeningReason::ObservedAgreement);
+}

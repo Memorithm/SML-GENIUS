@@ -1,0 +1,108 @@
+{
+  "schema": "sml.dkv-b.batch10-audit.v1",
+  "audited_base": "23552de1d76bcd87642c8c3c4e423cc2a342f57b",
+  "patch_sha256": "d5ca8ee375d426e8059835b96d8230a6e5ff93308214db3ec42904d8136d2e80",
+  "prs": [
+    {
+      "pr": 111,
+      "title": "docs(dkv): freeze counterpart B comparison before integration [1/10]",
+      "merged": true,
+      "head": "472d2f6805873ef8078f0fbe1f566a06b53a09ac",
+      "merge": "b44858f286517cbe922060d36b481b6a14c8c4bc",
+      "ci": 389,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37143895833"
+    },
+    {
+      "pr": 112,
+      "title": "test(dkv): reproduce supplied projected probe on Rust 1.89 [2/10]",
+      "merged": true,
+      "head": "71bbe6bf099bf344863393a2ac905e6770dad768",
+      "merge": "f218366c996730461aff156385414b616ac49cf8",
+      "ci": 391,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37144486235"
+    },
+    {
+      "pr": 113,
+      "title": "feat(dkv): expose checked exact projection geometry diagnostics [3/10]",
+      "merged": true,
+      "head": "5c4cef4a91149988b20c608464cac078839be6a1",
+      "merge": "a9a507ac78d0d01f2a033801e89715f5c1f690a9",
+      "ci": 393,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37144723595"
+    },
+    {
+      "pr": 114,
+      "title": "feat(dkv): distinguish partial resolution from exact pair answers [4/10]",
+      "merged": true,
+      "head": "f6c02cb98ae5395094cc02f609ef16237e242a46",
+      "merge": "9d622491e1efe251a898f4ef517a1249152da169",
+      "ci": 395,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37144958719"
+    },
+    {
+      "pr": 115,
+      "title": "test(dkv): add controlled Hamming states and actual MOR baselines [5/10]",
+      "merged": true,
+      "head": "0b3bea9ce609f04bd0d939b7130b052472a48613",
+      "merge": "a47846270db32fb25d78df437db1c5840c586998",
+      "ci": 397,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37145353599"
+    },
+    {
+      "pr": 116,
+      "title": "fix(dkv): bind projected source candidates to exact observed subjects [6/10]",
+      "merged": true,
+      "head": "64ea32fe4b6c317b0f112d97d5bb93fb5941e517",
+      "merge": "fb2272ab300efc9ee6c1b8667ab1f498bb91a34e",
+      "ci": 399,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37145554062"
+    },
+    {
+      "pr": 117,
+      "title": "test(dkv): reject wrong-subject proofs from real projected aliases [7/10]",
+      "merged": true,
+      "head": "e17eb1160787e0646e99d1cb30978d5cec606e87",
+      "merge": "c9fd7e9591bebc11b1ad82fcdefc16908c365519",
+      "ci": 401,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37145736514"
+    },
+    {
+      "pr": 118,
+      "title": "research(dkv): confront B geometry with native MOR and complementary keys [8/10]",
+      "merged": true,
+      "head": "e3f8060ff836960bd0395d76147619f9506d10ca",
+      "merge": "f6ea7fbade3c10ed6fc6150fbf54010d2c58ad5f",
+      "ci": 403,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37145926813"
+    },
+    {
+      "pr": 119,
+      "title": "test(dkv): bind counterpart replay to immutable retained evidence [9/10]",
+      "merged": true,
+      "head": "aec459c4f9106e4963b8eca8a0f243f79b034cfe",
+      "merge": "c2d57df380534ba911428fd4c67af5d5fcb7361c",
+      "ci": 405,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37146192060"
+    },
+    {
+      "pr": 120,
+      "title": "docs(dkv): reconcile counterpart findings and subject-safe integration handoff [10/10]",
+      "merged": true,
+      "head": "dd10b56637b6b369464820370558231d4740a039",
+      "merge": "23552de1d76bcd87642c8c3c4e423cc2a342f57b",
+      "ci": 408,
+      "ci_conclusion": "success",
+      "ci_url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/37146460011"
+    }
+  ],
+  "scientific_promotion": "BLOCKED"
+}

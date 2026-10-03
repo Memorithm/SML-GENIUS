@@ -32,7 +32,7 @@ pub struct BoundProjectedSubject<'a> {
     matched: usize,
     excluded: usize,
 }
-impl BoundProjectedSubject<'_> {
+impl<'a> BoundProjectedSubject<'a> {
     pub fn subject(&self) -> SubjectKey {
         self.query.key()
     }
@@ -50,6 +50,21 @@ impl BoundProjectedSubject<'_> {
     }
     pub fn generation(&self) -> usize {
         self.query.summary().generation
+    }
+
+    /// Screen only the already-bound subject in the same verified snapshot.
+    /// There is no second key argument to accidentally substitute. Consumes
+    /// the binding and preserves the original candidate for separate scoring.
+    /// Agreement never repairs a wrong candidate or grants answer authority.
+    ///
+    /// ```compile_fail
+    /// use sml_store::observed_history::{BoundProjectedSubject, SubjectKey};
+    /// fn cannot_rebind(bound: BoundProjectedSubject<'_>, other: SubjectKey) {
+    ///     let _ = bound.screen(other, Some([true, true]));
+    /// }
+    /// ```
+    pub fn screen(self, candidate: Option<[bool; 2]>) -> super::screen::ScreenedCandidate<'a> {
+        super::screen::screen_verified_query(self.query, candidate)
     }
 }
 
