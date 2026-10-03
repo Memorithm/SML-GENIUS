@@ -1,0 +1,55 @@
+GEOM 16 1 996 32
+GEOM 16 2 984 25
+GEOM 16 4 953 11
+GEOM 16 8 895 5
+GEOM 16 16 733 1
+GEOM 16 32 606 0
+GEOM 64 1 992 17
+GEOM 64 2 985 8
+GEOM 64 4 967 0
+GEOM 64 8 920 0
+GEOM 64 16 837 0
+GEOM 64 32 681 0
+PROBE K h order correct_of_8
+PROBE 16 1 before 8
+PROBE 16 1 after 0
+PROBE 16 2 before 8
+PROBE 16 2 after 0
+PROBE 16 4 before 8
+PROBE 16 4 after 0
+PROBE 16 8 before 8
+PROBE 16 8 after 0
+PROBE 16 16 before 8
+PROBE 16 16 after 0
+PROBE 16 32 before 8
+PROBE 16 32 after 0
+PROBE 64 1 before 8
+PROBE 64 1 after 0
+PROBE 64 2 before 8
+PROBE 64 2 after 0
+PROBE 64 4 before 8
+PROBE 64 4 after 0
+PROBE 64 8 before 8
+PROBE 64 8 after 0
+PROBE 64 16 before 8
+PROBE 64 16 after 0
+PROBE 64 32 before 8
+PROBE 64 32 after 0
+CAL K h written_abstain written_correct written_wrong missing_abstain missing_fabricated
+CAL 16 1 0 0 8 0 8
+CAL 16 2 0 0 8 0 8
+CAL 16 4 0 0 8 0 8
+CAL 16 8 0 0 8 0 8
+CAL 16 16 0 0 8 0 8
+CAL 16 32 0 0 8 0 8
+CAL 64 1 0 0 8 0 8
+CAL 64 2 0 0 8 0 8
+CAL 64 4 0 0 8 0 8
+CAL 64 8 0 0 8 0 8
+CAL 64 16 0 0 8 0 8
+CAL 64 32 0 0 8 0 8
+HYP H1 holds=false
+HYP H2 holds=true
+HYP H3 holds=false
+HYP H4 holds=true
+HYP H5 holds=true
