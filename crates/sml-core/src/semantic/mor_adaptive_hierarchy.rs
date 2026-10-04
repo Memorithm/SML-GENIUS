@@ -425,7 +425,10 @@ mod tests {
         SemanticMorWidenReason,
     };
     use crate::{
-        mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId, MOR_SCALE_PPM},
+        mor::{
+            MixtureOfRouters, MorPolicy, PreviousRoute, RouterId, MOR_SCALE_PPM,
+            MOR_SCORE_CEILING_PPM,
+        },
         mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
         semantic::{
             SemanticBitField, SemanticHierarchicalMorBridge, SemanticMorClusterSignature,
