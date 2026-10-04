@@ -146,27 +146,18 @@ fn mor_decision(fixture: MorFixture) -> R<MorDecision> {
         },
     )?;
     let engine = MixtureOfRouters::new(MorPolicy::default())?;
-    Ok(registry.route(
-        &engine,
-        &inputs,
-        &[],
-        &PreviousRoute::default(),
-    )?)
+    Ok(registry.route(&engine, &inputs, &[], &PreviousRoute::default())?)
 }
 
 fn validate_fixture(fixture: MorFixture, decision: &MorDecision) -> R<()> {
     match fixture {
         MorFixture::Consensus => {
-            if decision.structural_disagreement_ppm != 0
-                || decision.request_precision_escalation
-            {
+            if decision.structural_disagreement_ppm != 0 || decision.request_precision_escalation {
                 return Err("CONSENSUS MOR signal contract not observed".into());
             }
         }
         MorFixture::MarginEscalation => {
-            if decision.structural_disagreement_ppm != 0
-                || !decision.request_precision_escalation
-            {
+            if decision.structural_disagreement_ppm != 0 || !decision.request_precision_escalation {
                 return Err("MARGIN_ESCALATION MOR signal contract not observed".into());
             }
         }
@@ -190,12 +181,8 @@ fn kernel() -> R<DeltaKvRecurrentKernel<BITS>> {
         counters: DeltaKvSemanticProjectionCounters::default(),
         transient_key_bits: 16,
     };
-    let mut kernel = DeltaKvRecurrentKernel::new(
-        memory,
-        key,
-        vec![0],
-        DeltaKvRecurrentPolicy::default(),
-    )?;
+    let mut kernel =
+        DeltaKvRecurrentKernel::new(memory, key, vec![0], DeltaKvRecurrentPolicy::default())?;
     kernel.seed_target(&[DELTA_KV_ONE], 4096)?;
     Ok(kernel)
 }
@@ -239,8 +226,7 @@ pub fn report() -> R<String> {
                 max_depth: 4,
                 stable_hamming_threshold: 0,
             };
-            let stability =
-                compare_delta_kv_recurrent(initial.clone(), base.clone(), halting, 4)?;
+            let stability = compare_delta_kv_recurrent(initial.clone(), base.clone(), halting, 4)?;
 
             let mut semantic_kernel = base.clone();
             let semantic = run_dkv4_semantic_recurrent(
