@@ -59,8 +59,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-first.csv"
-          cargo run --locked -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-second.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n1-first.csv" "$RUNNER_TEMP/dkv-2a-n1-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n1-first.csv"
       - name: Delta-KV dynamic re-keying evidence
