@@ -387,6 +387,7 @@ STATUS,DEVELOPMENT_NOT_MODEL_QUALIFICATION
     Ok(text)
 }
 
+#[allow(dead_code)]
 fn main() -> R<()> {
     print!("{}", report()?);
     Ok(())
