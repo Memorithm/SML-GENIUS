@@ -7,7 +7,10 @@ fn semantic_impact_panel_is_complete_and_deterministic() {
     let second = experiment::report().unwrap();
     assert_eq!(first, second);
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("ROW,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("ROW,"))
+            .count(),
         2048
     );
     assert_eq!(
