@@ -217,6 +217,58 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         )
     }
 
+    #[must_use]
+    pub fn cluster_signatures(&self) -> &[SemanticMorClusterSignature<BITS>] {
+        &self.clusters
+    }
+
+    pub fn with_cluster_prototypes(
+        &self,
+        prototypes: Vec<SemanticMorClusterSignature<BITS>>,
+    ) -> Result<Self, SemanticMorHierarchyError> {
+        if prototypes.len() != self.clusters.len() {
+            return Err(SemanticMorHierarchyError::ClusterPrototypeCountMismatch {
+                expected: self.clusters.len(),
+                actual: prototypes.len(),
+            });
+        }
+
+        let mut by_id = BTreeMap::new();
+        for prototype in prototypes {
+            let cluster_id = prototype.cluster_id;
+            if by_id.insert(cluster_id, prototype).is_some() {
+                return Err(SemanticMorHierarchyError::DuplicateClusterPrototype(
+                    cluster_id,
+                ));
+            }
+        }
+
+        let mut clusters = Vec::with_capacity(self.clusters.len());
+        for seed in &self.clusters {
+            let prototype = by_id
+                .remove(&seed.cluster_id)
+                .ok_or(SemanticMorHierarchyError::MissingClusterPrototype(
+                    seed.cluster_id,
+                ))?;
+            if prototype.experts != seed.experts {
+                return Err(SemanticMorHierarchyError::ClusterMembershipChanged(
+                    seed.cluster_id,
+                ));
+            }
+            clusters.push(prototype);
+        }
+
+        if let Some(cluster_id) = by_id.keys().next().copied() {
+            return Err(SemanticMorHierarchyError::UnknownClusterPrototype(
+                cluster_id,
+            ));
+        }
+
+        let mut next = self.clone();
+        next.clusters = clusters;
+        Ok(next)
+    }
+
     pub fn route(
         &self,
         state: &SemanticState<BITS>,
@@ -604,6 +656,11 @@ pub enum SemanticMorHierarchyError {
     ExpertInMultipleClusters(PageId),
     InsufficientClusters { required: usize, actual: usize },
     InvalidExactClusterCount { requested: usize, available: usize },
+    ClusterPrototypeCountMismatch { expected: usize, actual: usize },
+    DuplicateClusterPrototype(u32),
+    MissingClusterPrototype(u32),
+    UnknownClusterPrototype(u32),
+    ClusterMembershipChanged(u32),
     MissingRouterSignature(RouterId),
     UnknownRouterSignature(RouterId),
     MissingExpertSignature(PageId),
