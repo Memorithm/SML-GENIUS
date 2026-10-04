@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    mor_hierarchy_train::SemanticMorHierarchyTrainingExample, SemanticBitField,
-    SemanticBitFieldError, SemanticHierarchicalMorBridge, SemanticMorHierarchyError, SemanticState,
+    mor_hierarchy_train::SemanticMorHierarchyTrainingExample, SemanticBitFieldError,
+    SemanticHierarchicalMorBridge, SemanticMorHierarchyError, SemanticState,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
