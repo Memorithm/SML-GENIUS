@@ -77,9 +77,7 @@ impl SemanticMorAdaptiveHierarchyPolicy {
             ));
         }
         if self.max_cumulative_expert_similarity_evaluations == 0 {
-            return Err(
-                SemanticMorAdaptiveHierarchyError::ZeroCumulativeExpertSimilarityBudget,
-            );
+            return Err(SemanticMorAdaptiveHierarchyError::ZeroCumulativeExpertSimilarityBudget);
         }
         if self.max_cumulative_candidate_edges == 0 {
             return Err(SemanticMorAdaptiveHierarchyError::ZeroCumulativeEdgeBudget);
@@ -378,9 +376,7 @@ fn widening_reasons(
     policy: SemanticMorAdaptiveHierarchyPolicy,
 ) -> Vec<SemanticMorWidenReason> {
     let mut reasons = Vec::with_capacity(4);
-    if has_unselected_clusters
-        && frontier_cluster_margin_ppm <= policy.cluster_margin_widen_ppm
-    {
+    if has_unselected_clusters && frontier_cluster_margin_ppm <= policy.cluster_margin_widen_ppm {
         reasons.push(SemanticMorWidenReason::CoarseClusterMargin);
     }
     if route_margin_ppm <= policy.route_margin_widen_ppm {
@@ -701,7 +697,10 @@ mod tests {
         assert!(control.primary_matches_exhaustive);
         assert_eq!(control.adaptive.cumulative_expert_similarity_evaluations, 1);
         assert_eq!(
-            control.exhaustive_route.accounting.expert_similarity_evaluations,
+            control
+                .exhaustive_route
+                .accounting
+                .expert_similarity_evaluations,
             4
         );
     }
