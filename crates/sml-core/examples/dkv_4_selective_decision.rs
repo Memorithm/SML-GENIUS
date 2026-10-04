@@ -218,7 +218,6 @@ fn routed_answer(state: &SemanticState<BITS>, page: PageId) -> R<bool> {
 struct DynamicCycle {
     depth: u32,
     mor: MorDecision,
-    decision: Dkv4Decision,
 }
 
 #[derive(Debug, Clone)]
@@ -285,7 +284,6 @@ fn run_dynamic(
         cycles.push(DynamicCycle {
             depth,
             mor: mor.clone(),
-            decision,
         });
         state = step.state;
 
@@ -574,6 +572,7 @@ fn format_answer(answer: Option<bool>) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 fn main() -> R<()> {
     print!("{}", report()?);
     Ok(())
