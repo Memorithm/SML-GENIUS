@@ -17,6 +17,7 @@ use crate::{
         RouterInput, MOR_SCALE_PPM,
     },
     mor_registry::{MorRegistryError, MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
+    mor_specialization::{MorClusterId, MorSpecializationCluster, MorSpecializationError, MorSpecializationRegistry},
     PageId,
 };
 
