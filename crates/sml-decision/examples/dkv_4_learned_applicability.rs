@@ -171,7 +171,6 @@ fn baseline() -> FixedFeatureControl {
 
 #[derive(Debug, Clone)]
 struct FrozenGate {
-    page: PageId,
     proposal: FeatureExpertProposal,
     projection: SemanticProjection<BITS>,
 }
@@ -179,7 +178,6 @@ struct FrozenGate {
 impl FrozenGate {
     fn from_proposal(page: PageId, proposal: FeatureExpertProposal) -> R<Self> {
         Ok(Self {
-            page,
             proposal,
             projection: SemanticProjection::new(
                 SCHEMA_ID,
@@ -732,8 +730,7 @@ pub fn report() -> R<String> {
     emit_summary(&mut out, "LEARNED_MISALIGNED", learned_misaligned)?;
 
     let mut missing_count = 0_u32;
-    for metadata_index in 0..16 {
-        let metadata = &test_states[metadata_index];
+    for (metadata_index, metadata) in test_states.iter().enumerate().take(16) {
         let bits = latent(metadata_index);
         let expected = expected_page(bits);
         let favored = if bits.c {
