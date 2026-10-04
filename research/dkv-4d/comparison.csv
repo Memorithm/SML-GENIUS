@@ -1,0 +1,15 @@
+PROTOCOL,SML-DKV-4D-MOR-ACTIONABILITY-PREREGISTRATION
+STATUS,DEVELOPMENT_NOT_MODEL_QUALIFICATION
+MOR,CONSENSUS,4,1,1,0,false
+ROW,CONSENSUS,STABLE,disagreement=0,precision=false,stability_depth=1,semantic_depth=1,semantic_decision=StopCandidate(Stable),fixed_mor_depth=1,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=1,dynamic_mor_decision=StopCandidate(Stable),final_correct=true
+ROW,CONSENSUS,CORRECT_ONCE,disagreement=0,precision=false,stability_depth=2,semantic_depth=2,semantic_decision=StopCandidate(Stable),fixed_mor_depth=2,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=2,dynamic_mor_decision=StopCandidate(Stable),final_correct=true
+SAFETY,CONSENSUS,missing_reads=0,missing_decision=Abstain(MissingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+MOR,MARGIN_ESCALATION,2,2,2,0,true
+ROW,MARGIN_ESCALATION,STABLE,disagreement=0,precision=true,stability_depth=1,semantic_depth=4,semantic_decision=Abstain(BudgetExhausted),fixed_mor_depth=1,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=4,dynamic_mor_decision=Abstain(BudgetExhausted),final_correct=true
+ROW,MARGIN_ESCALATION,CORRECT_ONCE,disagreement=0,precision=true,stability_depth=2,semantic_depth=4,semantic_decision=Abstain(BudgetExhausted),fixed_mor_depth=2,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=4,dynamic_mor_decision=Abstain(BudgetExhausted),final_correct=true
+SAFETY,MARGIN_ESCALATION,missing_reads=0,missing_decision=Abstain(MissingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+MOR,STRUCTURAL_DISAGREEMENT,4,2,2,500000,true
+ROW,STRUCTURAL_DISAGREEMENT,STABLE,disagreement=500000,precision=true,stability_depth=1,semantic_depth=4,semantic_decision=Abstain(BudgetExhausted),fixed_mor_depth=1,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=4,dynamic_mor_decision=Abstain(BudgetExhausted),final_correct=true
+ROW,STRUCTURAL_DISAGREEMENT,CORRECT_ONCE,disagreement=500000,precision=true,stability_depth=2,semantic_depth=4,semantic_decision=Abstain(BudgetExhausted),fixed_mor_depth=2,fixed_mor_decision=StopCandidate(Stable),dynamic_mor_depth=4,dynamic_mor_decision=Abstain(BudgetExhausted),final_correct=true
+SAFETY,STRUCTURAL_DISAGREEMENT,missing_reads=0,missing_decision=Abstain(MissingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+PROMOTION,BLOCKED,mor_actionability_development_panel
