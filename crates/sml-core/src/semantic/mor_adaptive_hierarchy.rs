@@ -23,7 +23,7 @@ use crate::{
 use super::{
     mor_hierarchical::{
         SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
-        SemanticMorHierarchyAccounting, SemanticMorHierarchyError,
+        SemanticMorHierarchyAccounting, SemanticMorHierarchyError, SemanticMorRouteContext,
     },
     SemanticState,
 };
@@ -166,10 +166,12 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
             let route = self
                 .route_ranked_prefix(
                     state,
-                    registry,
-                    engine,
-                    runtime_hints,
-                    previous,
+                    SemanticMorRouteContext {
+                        registry,
+                        engine,
+                        runtime_hints,
+                        previous,
+                    },
                     &ranked_clusters,
                     cluster_count,
                     cluster_similarity_evaluations,
@@ -283,10 +285,12 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         let exhaustive_route = self
             .route_ranked_prefix(
                 state,
-                registry,
-                engine,
-                runtime_hints,
-                previous,
+                SemanticMorRouteContext {
+                    registry,
+                    engine,
+                    runtime_hints,
+                    previous,
+                },
                 &ranked_clusters,
                 ranked_clusters.len(),
                 ranked_clusters.len(),
