@@ -920,6 +920,31 @@ mod tests {
     }
 
     #[test]
+    fn learned_prototypes_may_change_signatures_but_not_membership() {
+        let bridge = hierarchy(SemanticMorHierarchyPolicy {
+            min_clusters: 1,
+            max_clusters: 2,
+            cluster_mass_threshold_ppm: MOR_SCALE_PPM,
+            max_candidate_experts: 4,
+            max_candidate_edges: 4,
+            proposal_top_k: SemanticMorTopK::Two,
+        });
+
+        let mut prototypes = bridge.cluster_signatures().to_vec();
+        prototypes[0].signature = bits(&[7]);
+        let updated = bridge
+            .with_cluster_prototypes(prototypes.clone())
+            .expect("prototype update");
+        assert_eq!(updated.cluster_signatures()[0].signature, bits(&[7]));
+
+        prototypes[0].experts = vec![PageId(3)];
+        assert_eq!(
+            bridge.with_cluster_prototypes(prototypes),
+            Err(SemanticMorHierarchyError::ClusterMembershipChanged(10))
+        );
+    }
+
+    #[test]
     fn every_reachable_expert_must_be_clustered() {
         let bridge = SemanticHierarchicalMorBridge::new(
             vec![
