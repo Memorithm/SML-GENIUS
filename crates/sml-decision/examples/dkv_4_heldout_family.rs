@@ -175,10 +175,7 @@ fn light_operational_label(
     ))
 }
 
-fn gate_samples(
-    full: &SmlTaskCandidate,
-    tasks: &[TaskInstance],
-) -> R<Vec<LabeledDecision>> {
+fn gate_samples(full: &SmlTaskCandidate, tasks: &[TaskInstance]) -> R<Vec<LabeledDecision>> {
     tasks
         .iter()
         .map(|task| {
@@ -194,11 +191,7 @@ fn gate_samples(
         .collect()
 }
 
-fn light_gate(
-    report: &FitReport,
-    task: &TaskInstance,
-    has_fact: Option<bool>,
-) -> Option<bool> {
+fn light_gate(report: &FitReport, task: &TaskInstance, has_fact: Option<bool>) -> Option<bool> {
     let left = has_fact?;
     let right = task.case_id & 1 != 0;
     Some(report.selected.evaluate(left, right))
@@ -226,15 +219,11 @@ fn same_route_trace(
     light: &sml_core::candidate::TaskExecutionEvidence,
 ) -> bool {
     full.trace.len() == light.trace.len()
-        && full
-            .trace
-            .iter()
-            .zip(&light.trace)
-            .all(|(left, right)| {
-                left.route_address == right.route_address
-                    && left.selected_page == right.selected_page
-                    && left.event == right.event
-            })
+        && full.trace.iter().zip(&light.trace).all(|(left, right)| {
+            left.route_address == right.route_address
+                && left.selected_page == right.selected_page
+                && left.event == right.event
+        })
 }
 
 fn router(router_id: u32, page_id: PageId, score_ppm: u32) -> RouterInput {
@@ -279,10 +268,7 @@ fn mor_decision(favored: PageId, previous: &PreviousRoute) -> R<MorDecision> {
     })?;
     Ok(registry.route(
         &engine,
-        &[
-            router(0, favored, MOR_SCALE_PPM),
-            router(1, other, 920_000),
-        ],
+        &[router(0, favored, MOR_SCALE_PPM), router(1, other, 920_000)],
         &[],
         previous,
     )?)
@@ -374,12 +360,12 @@ fn run_dynamic(
         Dkv4Provenance::Missing | Dkv4Provenance::Conflict
     ) {
         let decision = match provenance {
-            Dkv4Provenance::Missing => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence,
-            ),
-            Dkv4Provenance::Conflict => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence,
-            ),
+            Dkv4Provenance::Missing => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence)
+            }
+            Dkv4Provenance::Conflict => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence)
+            }
             _ => unreachable!(),
         };
         return Ok(DynamicOutcome {
@@ -411,8 +397,7 @@ fn run_dynamic(
             .ok_or("missing dynamic DKV evidence")?;
         let mor = mor_decision(favored, &previous)?;
         let signals = Dkv4Signals::from_dkv2b(&trace, dkv, &mor, provenance)?;
-        let decision =
-            controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
+        let decision = controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
         state = step.state;
         let next = next_previous(&mor);
 
@@ -615,12 +600,7 @@ pub fn report() -> R<String> {
                 },
                 4,
             )?;
-            let dynamic = run_dynamic(
-                initial,
-                base,
-                favored,
-                Dkv4Provenance::VerifiedPresent,
-            )?;
+            let dynamic = run_dynamic(initial, base, favored, Dkv4Provenance::VerifiedPresent)?;
             if !matches!(dynamic.decision, Dkv4Decision::StopCandidate(_)) {
                 return Err("held-out dynamic route did not stop candidate".into());
             }
@@ -805,9 +785,7 @@ fn format_option(value: Option<bool>) -> &'static str {
     }
 }
 
-fn format_execution(
-    evidence: Option<&sml_core::candidate::TaskExecutionEvidence>,
-) -> &'static str {
+fn format_execution(evidence: Option<&sml_core::candidate::TaskExecutionEvidence>) -> &'static str {
     match evidence {
         Some(e) if e.exact => "exact",
         Some(_) => "wrong",
