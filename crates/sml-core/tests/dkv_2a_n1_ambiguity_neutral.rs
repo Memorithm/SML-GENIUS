@@ -70,10 +70,15 @@ fn active_only_zero_ambiguity_reads_but_does_not_accumulate_false_a_bits() {
         DeltaKvAmbiguityProjection::ActiveOnly,
     )
     .unwrap();
-    let evidence = projector.project(&state(), &decision(PageId(5)), None).unwrap();
+    let evidence = projector
+        .project(&state(), &decision(PageId(5)), None)
+        .unwrap();
 
     assert_eq!(evidence.counters.semantic_fields_read, 4);
-    assert_eq!(evidence.counters.semantic_coordinates_read, (4 * BITS) as u64);
+    assert_eq!(
+        evidence.counters.semantic_coordinates_read,
+        (4 * BITS) as u64
+    );
     assert_eq!(evidence.counters.mor_selected_experts_read, 1);
     assert_eq!(
         evidence.counters.bucket_accumulations,
@@ -94,8 +99,13 @@ fn active_ambiguity_bits_add_exactly_one_accumulation_each() {
     state.ambiguity.set(4, true).unwrap();
     state.ambiguity.set(37, true).unwrap();
 
-    let evidence = projector.project(&state, &decision(PageId(5)), None).unwrap();
-    assert_eq!(evidence.counters.semantic_coordinates_read, (4 * BITS) as u64);
+    let evidence = projector
+        .project(&state, &decision(PageId(5)), None)
+        .unwrap();
+    assert_eq!(
+        evidence.counters.semantic_coordinates_read,
+        (4 * BITS) as u64
+    );
     assert_eq!(
         evidence.counters.bucket_accumulations,
         (3 * BITS + 2 + 1) as u64
@@ -124,11 +134,7 @@ fn candidate_preserves_fail_closed_mor_and_provenance_validation() {
         raw_segment_ids: vec![3, 3],
     };
     assert_eq!(
-        projector.project(
-            &state,
-            &decision(PageId(5)),
-            Some(&invalid_provenance)
-        ),
+        projector.project(&state, &decision(PageId(5)), Some(&invalid_provenance)),
         Err(DeltaKvSemanticError::DuplicateRawSegment)
     );
 }
