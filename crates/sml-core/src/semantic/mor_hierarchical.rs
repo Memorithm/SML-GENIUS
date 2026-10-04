@@ -105,6 +105,14 @@ pub struct SemanticHierarchicalMorRoute {
     pub accounting: SemanticMorHierarchyAccounting,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct SemanticMorRouteContext<'a> {
+    pub registry: &'a MorRouterRegistry,
+    pub engine: &'a MixtureOfRouters,
+    pub runtime_hints: &'a [ExpertRuntimeHint],
+    pub previous: &'a PreviousRoute,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticHierarchicalMorBridge<const BITS: usize> {
     router_signatures: BTreeMap<RouterId, SemanticBitField<BITS>>,
@@ -206,10 +214,12 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         let selected_clusters = self.select_clusters_from_ranked(&ranked_clusters)?;
         self.route_selected_clusters(
             state,
-            registry,
-            engine,
-            runtime_hints,
-            previous,
+            SemanticMorRouteContext {
+                registry,
+                engine,
+                runtime_hints,
+                previous,
+            },
             selected_clusters,
             ranked_clusters.len(),
         )
@@ -251,15 +261,12 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
     pub(crate) fn route_ranked_prefix(
         &self,
         state: &SemanticState<BITS>,
-        registry: &MorRouterRegistry,
-        engine: &MixtureOfRouters,
-        runtime_hints: &[ExpertRuntimeHint],
-        previous: &PreviousRoute,
+        context: SemanticMorRouteContext<'_>,
         ranked_clusters: &[SemanticMorClusterEvidence],
         cluster_count: usize,
         cluster_similarity_evaluations: usize,
     ) -> Result<SemanticHierarchicalMorRoute, SemanticMorHierarchyError> {
-        self.validate_against_registry(registry)?;
+        self.validate_against_registry(context.registry)?;
         if cluster_count == 0 || cluster_count > ranked_clusters.len() {
             return Err(SemanticMorHierarchyError::InvalidExactClusterCount {
                 requested: cluster_count,
@@ -268,10 +275,7 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         }
         self.route_selected_clusters(
             state,
-            registry,
-            engine,
-            runtime_hints,
-            previous,
+            context,
             ranked_clusters[..cluster_count].to_vec(),
             cluster_similarity_evaluations,
         )
@@ -280,10 +284,7 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
     fn route_selected_clusters(
         &self,
         state: &SemanticState<BITS>,
-        registry: &MorRouterRegistry,
-        engine: &MixtureOfRouters,
-        runtime_hints: &[ExpertRuntimeHint],
-        previous: &PreviousRoute,
+        context: SemanticMorRouteContext<'_>,
         selected_clusters: Vec<SemanticMorClusterEvidence>,
         cluster_similarity_evaluations: usize,
     ) -> Result<SemanticHierarchicalMorRoute, SemanticMorHierarchyError> {
@@ -308,7 +309,7 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         let mut filtered = Vec::new();
         let mut candidate_edges = 0_usize;
         let mut max_fanout = 0_usize;
-        for specialization in registry.specializations() {
+        for specialization in context.registry.specializations() {
             let experts = specialization
                 .experts
                 .iter()
@@ -341,8 +342,8 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         let filtered_registry = MorRouterRegistry::new(
             filtered,
             MorRegistryPolicy {
-                expert_count: registry.policy().expert_count,
-                max_routers: registry.specializations().len(),
+                expert_count: context.registry.policy().expert_count,
+                max_routers: context.registry.specializations().len(),
                 max_edges: candidate_edges,
                 max_fanout,
                 require_full_coverage: false,
@@ -352,7 +353,12 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
 
         let router_inputs = self.build_filtered_inputs(state, &filtered_registry)?;
         let decision = filtered_registry
-            .route(engine, &router_inputs, runtime_hints, previous)
+            .route(
+                context.engine,
+                &router_inputs,
+                context.runtime_hints,
+                context.previous,
+            )
             .map_err(SemanticMorHierarchyError::Registry)?;
 
         let candidate_experts = candidate_set
@@ -360,8 +366,8 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
             .copied()
             .map(PageId)
             .collect::<Vec<_>>();
-        let exhaustive_edges = registry.accounting().edge_count;
-        let reachable_experts = registry.accounting().covered_experts as usize;
+        let exhaustive_edges = context.registry.accounting().edge_count;
+        let reachable_experts = context.registry.accounting().covered_experts as usize;
 
         Ok(SemanticHierarchicalMorRoute {
             selected_clusters,
