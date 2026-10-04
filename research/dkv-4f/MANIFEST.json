@@ -1,0 +1,15 @@
+{
+  "schema": "sml.dkv4.selective-decision.v1",
+  "protocol": "84d8bc4e3ee5eb09472fb21e045c9df0eb542e0a",
+  "executed_code": "0f54127886a9963cf090c2265c215c9bf6e06bdb",
+  "host": "debian",
+  "architecture": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "rows": 8,
+  "mor_rows": 4,
+  "safety_rows": 4,
+  "summary_rows": 6,
+  "identical_reruns": 2,
+  "output_sha256": "e368fd9e8a14da6c569624596b3585d07b3ae87c384e8315f7b74f6a0a84b119",
+  "scientific_promotion": "BLOCKED"
+}
