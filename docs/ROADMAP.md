@@ -223,6 +223,10 @@ Define separate budgets and counters for context ingestion, semantic-state const
 ### SML-DS41-1 — hierarchical SBG/MOR candidate pool
 Use an early broad routing stage to construct a bounded candidate pool, then restrict later refinement to that pool. Compare against exhaustive routing, current direct routing, and matched random pools. Report recall/task quality, active pages, metadata, traffic, and latency separately.
 
+- [x] MOR-H1 reference coarse-to-fine candidate narrowing with exact cluster/expert work accounting and hard candidate/edge budgets.
+- [ ] Preregister and run matched exhaustive/current-direct/random-pool comparisons on disjoint development tasks.
+- [ ] Qualify shortlist recall, final task quality, physical latency/traffic and expert-starvation behavior before runtime promotion.
+
 ### SML-DS41-2 — conditional memory comparison
 Add an explicit experiment comparing deterministic conditional lookup against existing bounded associative memory and Delta-KV controls. Any hash/gating mechanism remains SML-native and must preserve collision/interference evidence.
 
