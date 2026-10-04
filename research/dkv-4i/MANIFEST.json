@@ -1,0 +1,17 @@
+{
+  "schema": "sml.dkv4.heldout-family-applicability.v1",
+  "protocol": "8c6d8be0e1f0008873a887dd8057bb4215cd6a30",
+  "executed_code": "c5c3eaecf06cfc1fe715cd542b9a5d20fa267db1",
+  "host": "debian",
+  "architecture": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "base_curriculum_tasks": 384,
+  "applicability_training_rows": 256,
+  "applicability_development_rows": 256,
+  "heldout_task_instances": 128,
+  "scored_rows": 256,
+  "missing_feature_rows": 16,
+  "identical_reruns": 2,
+  "output_sha256": "fc0717ce4ebdeeb7b784fc66196b0a96a6920c1e9b61cea4f37fcc983870ba71",
+  "scientific_promotion": "BLOCKED"
+}

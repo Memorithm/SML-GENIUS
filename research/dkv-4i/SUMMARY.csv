@@ -1,0 +1,15 @@
+BASE,verified_tasks=384,training_tasks=300,development_tasks=84,conjunction_code=8,overwrite_code=12,recall_code=2,copy_code=2,training_exact=300/300,development_exact=84/84
+FIT,outcome=Accepted(TruthTable2(5)),selected_code=5,training_samples=256,validation_samples=256,baseline_train_errors=128,candidate_train_errors=0,baseline_validation_errors=128,candidate_validation_errors=0,selection_evals=4096
+GATE_DATA,training_rows=256,development_rows=256,training_light_applicable=128,development_light_applicable=128,training_families=DelayedBitRecall|OverwriteBitRecall|KeyedFactRecall|TwoFactConjunction,heldout_families=CopyAfterMarker|DistractorRejection
+HOLDOUT,task_instances=128,scored_rows=256,copy_instances=64,distractor_instances=64,full_reference_exact_instances=128,operational_light_instances=64,route_trace_mismatches=0
+SUMMARY,DYNAMIC_UNGUARDED,rows=256,answered=256,coverage_ppm=1000000,exact_answered=216,errors=40,risk_defined=true,risk_ppm=156250,light_exec=128,full_exec=128,dkv_cycles=512,dkv_reads=512,task_memory_reads=64,task_memory_writes=640
+SUMMARY,DYNAMIC_LEARNED,rows=256,answered=192,coverage_ppm=750000,exact_answered=192,errors=0,risk_defined=true,risk_ppm=0,light_exec=64,full_exec=128,dkv_cycles=512,dkv_reads=512,task_memory_reads=64,task_memory_writes=640
+SUMMARY,FIRST_PRIMARY_LEARNED,rows=256,answered=192,coverage_ppm=750000,exact_answered=192,errors=0,risk_defined=true,risk_ppm=0,light_exec=64,full_exec=128,dkv_cycles=384,dkv_reads=384,task_memory_reads=64,task_memory_writes=640
+SUMMARY,FULL_REFERENCE,rows=256,answered=256,coverage_ppm=1000000,exact_answered=256,errors=0,risk_defined=true,risk_ppm=0,light_exec=0,full_exec=256,dkv_cycles=0,dkv_reads=0,task_memory_reads=128,task_memory_writes=1216
+SUMMARY,UNIVERSAL_ABSTAIN,rows=256,answered=0,coverage_ppm=0,exact_answered=0,errors=0,risk_defined=false,risk_ppm=0,light_exec=0,full_exec=0,dkv_cycles=0,dkv_reads=0,task_memory_reads=0,task_memory_writes=0
+SUMMARY,COPY_LEARNED,rows=128,answered=128,coverage_ppm=1000000,exact_answered=128,errors=0,risk_defined=true,risk_ppm=0,light_exec=64,full_exec=64,dkv_cycles=256,dkv_reads=256,task_memory_reads=0,task_memory_writes=0
+SUMMARY,DISTRACTOR_LEARNED,rows=128,answered=64,coverage_ppm=500000,exact_answered=64,errors=0,risk_defined=true,risk_ppm=0,light_exec=0,full_exec=64,dkv_cycles=256,dkv_reads=256,task_memory_reads=64,task_memory_writes=640
+MISSING_FEATURE_SUMMARY,rows=16,abstained=16
+SAFETY,favored=0,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+SAFETY,favored=1,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+PROMOTION,BLOCKED,heldout_family_applicability_development_panel
