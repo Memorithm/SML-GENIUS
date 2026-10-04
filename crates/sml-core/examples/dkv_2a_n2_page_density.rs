@@ -373,8 +373,8 @@ fn experiments<const K: usize>(results: &mut Results) {
                     }
 
                     let entry = results.e3.entry((arm, density)).or_default();
-                    for ((state, code), key) in facts.iter().zip(&keys) {
-                        let values = memory.read(key, &mut counters).unwrap();
+                    for ((state, code), stored_key) in facts.iter().zip(&keys) {
+                        let values = memory.read(stored_key, &mut counters).unwrap();
                         entry.facts += 1;
                         entry.strict += u64::from(strict_recall(&values, *code));
                         let (_, read_counters) = key(&projector, state, 5);
