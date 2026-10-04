@@ -416,11 +416,13 @@ Protocol: [SML-DKV-2A-N1-AMBIGUITY-NEUTRAL-PREREGISTRATION.md](SML-DKV-2A-N1-AMB
 - [x] Isolate the current bipolar zero-ambiguity common-vector mechanism in the DKV-2a projector.
 - [x] Freeze an active-only ambiguity candidate while keeping the qualified projector unchanged by default.
 - [x] Implement explicit bipolar/active-only ambiguity modes with exact compatibility and work-counter tests.
-- [ ] Execute the Rust1.89 ZERO/SPARSE/DENSE_CONTROL load and key-geometry panel.
-- [ ] Re-run alias/near-miss and exact record/subject controls before any projector promotion.
+- [x] Execute the Rust1.89 ZERO/SPARSE/DENSE_CONTROL load and key-geometry panel; retain byte-identical evidence in `research/dkv-2a-n1/`.
+- [x] Re-run the frozen key-level ZERO near-miss panel; ActiveOnly does not increase exact-key aliases in any cell.
+- [ ] Re-run exact semantic-record/subject-bound alias controls with ActiveOnly before any projector promotion.
+- [ ] Measure representative SBG ambiguity density before deciding the dense-ambiguity tradeoff.
 - [ ] Compare physical cost and false-acceptance behavior before combining with projection agreement or DKV-4.
 
-The supplied Rust1.97 recall/cosine numbers are retained as external input observations, not current-stack qualification.
+The supplied Rust1.97 recall/cosine numbers are retained as external input observations. Current Rust1.89 observation: [SML-DKV-2A-N1-CURRENT-PANEL-OBSERVATION.md](SML-DKV-2A-N1-CURRENT-PANEL-OBSERVATION.md). ActiveOnly remains non-default because DENSE_CONTROL regresses.
 
 ## DKV projection-agreement follow-up
 

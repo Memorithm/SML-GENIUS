@@ -54,6 +54,15 @@ jobs:
         run: cargo test --locked -p sml-core --test dkv_2a_semantic -- --nocapture
       - name: Delta-KV recurrent integration evidence
         run: cargo test --locked -p sml-core --test dkv_2b_recurrent -- --nocapture
+      - name: DKV-2a-N1 ambiguity projection evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n1')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n1_ambiguity_panel > "$RUNNER_TEMP/dkv-2a-n1-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n1-first.csv" "$RUNNER_TEMP/dkv-2a-n1-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n1-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
