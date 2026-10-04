@@ -11,9 +11,7 @@ use crate::{
         DeltaKvRecurrentCycleEvidence, DeltaKvRecurrentError, DeltaKvRecurrentKernel,
     },
     mor::{MorDecision, MOR_SCALE_PPM},
-    semantic::{
-        SemanticRewriteTrace, SemanticRewriter, SemanticState, SemanticStateDelta,
-    },
+    semantic::{SemanticRewriteTrace, SemanticRewriter, SemanticState, SemanticStateDelta},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,9 +223,7 @@ pub fn run_dkv4_recurrent<const BITS: usize>(
 ) -> Result<Dkv4RunOutcome<BITS>, Dkv4RunError> {
     let preflight = match provenance {
         Dkv4Provenance::Missing => Some(Dkv4Decision::Abstain(Dkv4Reason::MissingEvidence)),
-        Dkv4Provenance::Conflict => {
-            Some(Dkv4Decision::Abstain(Dkv4Reason::ConflictingEvidence))
-        }
+        Dkv4Provenance::Conflict => Some(Dkv4Decision::Abstain(Dkv4Reason::ConflictingEvidence)),
         Dkv4Provenance::VerifiedPresent | Dkv4Provenance::Unverified => None,
     };
     if let Some(decision) = preflight {
@@ -320,9 +316,7 @@ mod tests {
     use crate::{
         delta_kv::{DeltaKvMemory, DELTA_KV_ONE},
         delta_kv_recurrent::DeltaKvRecurrentPolicy,
-        delta_kv_semantic::{
-            DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionCounters,
-        },
+        delta_kv_semantic::{DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionCounters},
         PageId,
     };
 
@@ -348,13 +342,9 @@ mod tests {
             counters: DeltaKvSemanticProjectionCounters::default(),
             transient_key_bits: 16,
         };
-        let mut kernel = DeltaKvRecurrentKernel::new(
-            memory,
-            key,
-            vec![0],
-            DeltaKvRecurrentPolicy::default(),
-        )
-        .unwrap();
+        let mut kernel =
+            DeltaKvRecurrentKernel::new(memory, key, vec![0], DeltaKvRecurrentPolicy::default())
+                .unwrap();
         kernel.seed_target(&[DELTA_KV_ONE], 4096).unwrap();
         kernel
     }
