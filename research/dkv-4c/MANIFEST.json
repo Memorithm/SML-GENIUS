@@ -1,0 +1,12 @@
+{
+  "schema": "sml.dkv4.semantic-impact.v1",
+  "protocol": "286b4b9d847cc08bc1a445a0dcb7b3e623437fce",
+  "executed_code": "0efd2287965c6a8039b07dfe2b8603f5e5c3d879",
+  "host": "debian",
+  "architecture": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "rows": 2048,
+  "identical_reruns": 2,
+  "output_sha256": "a57076feb598c6923981d3e79c871278093ea5ce4eea4ba506224e476e27cf5f",
+  "scientific_promotion": "BLOCKED"
+}
