@@ -18,10 +18,11 @@ The first nine DKV-4 slices were merged through:
 6. PR #138 — immutable retained K64/K256 evidence;
 7. PR #139 — dimension observation without retuning;
 8. PR #143 — preregistered DKV-4c semantic-impact controller;
-9. PR #144 — retained DKV-4c comparison and observation.
+9. PR #144 — retained DKV-4c comparison and observation;
+10. PR #149 — final report plus bootstrap/roadmap synchronization.
 
-This document and the associated bootstrap/roadmap synchronization form the
-tenth slice.
+PR #149 is the tenth slice. Its merge identity is intentionally not embedded in
+the document before the required exact-head CI and merge occur.
 
 ## Stable software contract
 
