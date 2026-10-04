@@ -1,0 +1,17 @@
+name: Organization runner access probe
+on:
+  push:
+    branches: [probe/org-runner-access-20261004]
+    paths: ['.github/workflows/org-runner-access-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 3
+    steps:
+      - name: Report runner identity only
+        run: |
+          printf 'ORG_RUNNER_PROBE name=%s os=%s arch=%s host=%s\n' "${{ runner.name }}" "${{ runner.os }}" "${{ runner.arch }}" "$(hostname)"
+          test "${{ runner.os }}" = Linux
+          test "${{ runner.arch }}" = ARM64
