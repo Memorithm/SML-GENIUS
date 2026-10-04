@@ -13,6 +13,7 @@ pub mod elastic_regions;
 pub mod evidence_learning;
 pub mod linguistic_bench;
 pub mod metric;
+pub mod mor_hierarchical;
 pub mod mor_routing;
 pub mod recurrent;
 pub mod simd;
@@ -53,6 +54,11 @@ pub use linguistic_bench::{
 pub use metric::{
     hamming_distance, masked_hamming_distance, masked_score, masked_xnor_similarity,
     xnor_similarity, MaskedSemanticScore, SemanticMetricError,
+};
+pub use mor_hierarchical::{
+    SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
+    SemanticMorClusterSignature, SemanticMorHierarchyAccounting, SemanticMorHierarchyError,
+    SemanticMorHierarchyPolicy,
 };
 pub use mor_routing::{
     SemanticExpertSignature, SemanticMorBridge, SemanticMorError, SemanticMorRoute,

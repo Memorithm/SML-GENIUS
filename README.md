@@ -53,6 +53,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::routing_train**: budgeted latent-bit training that freezes into the existing O(1) direct page router.
 - **sml-core::elastic_weights**: transactional precision/residency/activation planning for elastic weight pages with exact RAM/VRAM and active-set accounting.
 - **sml-core::semantic**: Semantic Boolean Geometry (SBG) packed V/M/A/R state and integer-only Boolean semantic primitives.
+- **sml-core::semantic::mor_hierarchical**: bounded coarse-to-fine SBG/MOR candidate narrowing with exact candidate-work accounting; experimental, not a quality/latency claim.
 - **sml-core::task_loss**: task-answer training for hard Boolean conjunction and overwrite-state micro-operations plus held-out panel evaluation.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
