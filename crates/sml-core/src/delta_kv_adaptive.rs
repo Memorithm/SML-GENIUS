@@ -1293,10 +1293,7 @@ mod tests {
             caps,
         )
         .unwrap();
-        assert!(!matches!(
-            outcome.decision,
-            Dkv4Decision::StopCandidate(_)
-        ));
+        assert!(!matches!(outcome.decision, Dkv4Decision::StopCandidate(_)));
     }
 
     #[test]
