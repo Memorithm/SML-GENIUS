@@ -271,9 +271,15 @@ SBG is currently an architectural hypothesis plus executable reference semantics
 
 ## BANC v888 Connectomic Structural Prior track
 
-The V888-only connectomic programme is now a parallel SML research track under the **CSP** namespace so it does not collide with SML or SBG milestones. Its durable execution plan is [`docs/V888_CONNECTOME_BOOTSTRAP.md`](docs/V888_CONNECTOME_BOOTSTRAP.md).
+The V888-only connectomic programme is a parallel SML research track under the **CSP** namespace so it does not collide with SML or SBG milestones. Its durable execution plan is [`docs/V888_CONNECTOME_BOOTSTRAP.md`](docs/V888_CONNECTOME_BOOTSTRAP.md); cross-project coordination with ITD V888-BOOL is frozen in [`docs/V888_BOOL_COORDINATION.md`](docs/V888_BOOL_COORDINATION.md).
 
-CSP treats BANC v888 as an external source of structural priors, not as an inference-time dependency and not as a biological model to reproduce. The required progression is topology fingerprint -> matched structural controls -> low-bit sparse recurrence -> event-driven active compute -> bounded-memory/SBG/MOR integration -> trainable/Forge-selected topology -> independent TDI evaluation. No CSP result may enter SML-2 merely because it uses V888; it must beat the strongest declared matched controls under the evidence gate in the CSP roadmap.
+Canonical coordination is ITD strategy revision `2026-09-22.1` at commit `7f8f08e764dd5f36688533e9f7e7fb2f290f6e17`. SML retains its existing CSP numbering and quality gates. Source counts must remain typed by selected audited scope: metadata nodes, directed pairs, contacts and raw records are distinct quantities. The old Codex display counts are not SML evidence.
+
+The first functional campaign is delayed XOR with exact sequential-logic, no-reservoir and topology-matched controls; fixed recurrence and a bounded readout precede recurrent learning or topology search. Simplified LIF, bounded integer-event and genuinely Boolean recurrent dynamics remain separate rails. The Rust admission surface is `sml_core::v888_handoff`.
+
+The future consumer stage is `V888-BOOL-4.0`. It remains blocked on executable graph qualification in `Memorithm/scirust#1520` (a focused downstream gate of the V888-GROWTH/source umbrella #1500), exact Rust/source identities, graph-only/router-only/hybrid ablations, bounded resources, no hidden history, no raw-V888 inference dependency and independent SML quality/resource validation.
+
+CSP treats BANC v888 as an external source of structural priors, not as an inference-time dependency and not as a biological model to reproduce. The required progression is topology fingerprint -> matched structural controls -> low-bit sparse recurrence -> event-driven active compute -> bounded-memory/SBG/MOR integration -> trainable/Forge-selected topology -> independent TDI evaluation. No CSP result may enter SML-2 merely because it uses V888; it must beat the strongest declared matched controls under CSP-0.11. Coordination completion is not model promotion.
 
 ## DeepSeek-V4.1 principles track — adaptation without Transformer reintroduction
 
