@@ -7,9 +7,11 @@
 use core::fmt;
 
 use crate::{
-    delta_kv_recurrent::DeltaKvRecurrentCycleEvidence,
+    delta_kv_recurrent::{
+        DeltaKvRecurrentCycleEvidence, DeltaKvRecurrentError, DeltaKvRecurrentKernel,
+    },
     mor::{MorDecision, MOR_SCALE_PPM},
-    semantic::{SemanticRewriteTrace, SemanticStateDelta},
+    semantic::{SemanticRewriteTrace, SemanticRewriter, SemanticState, SemanticStateDelta},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,6 +203,97 @@ impl Dkv4Controller {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Dkv4RunOutcome<const BITS: usize> {
+    pub state: SemanticState<BITS>,
+    pub depth: u32,
+    pub decision: Dkv4Decision,
+    pub trace: Vec<SemanticRewriteTrace>,
+    pub cycles: Vec<DeltaKvRecurrentCycleEvidence>,
+}
+
+/// Executes DKV-2b under DKV-4 compute control. Missing/conflicting provenance
+/// abstains before the first matrix read. StopCandidate remains non-authoritative.
+pub fn run_dkv4_recurrent<const BITS: usize>(
+    initial: SemanticState<BITS>,
+    kernel: &mut DeltaKvRecurrentKernel<BITS>,
+    mor: &MorDecision,
+    provenance: Dkv4Provenance,
+    controller: Dkv4Controller,
+) -> Result<Dkv4RunOutcome<BITS>, Dkv4RunError> {
+    let preflight = match provenance {
+        Dkv4Provenance::Missing => Some(Dkv4Decision::Abstain(Dkv4Reason::MissingEvidence)),
+        Dkv4Provenance::Conflict => Some(Dkv4Decision::Abstain(Dkv4Reason::ConflictingEvidence)),
+        Dkv4Provenance::VerifiedPresent | Dkv4Provenance::Unverified => None,
+    };
+    if let Some(decision) = preflight {
+        return Ok(Dkv4RunOutcome {
+            state: initial,
+            depth: 0,
+            decision,
+            trace: Vec::new(),
+            cycles: Vec::new(),
+        });
+    }
+
+    let mut state = initial;
+    let mut trace = Vec::with_capacity(controller.policy().max_depth as usize);
+    let cycle_start = kernel.cycle_evidence().len();
+
+    for depth in 1..=controller.policy().max_depth {
+        let before = kernel.cycle_evidence().len();
+        let step = kernel
+            .rewrite(&state, depth)
+            .map_err(Dkv4RunError::Kernel)?;
+        if kernel.cycle_evidence().len() != before.saturating_add(1) {
+            return Err(Dkv4RunError::InternalInvariant);
+        }
+        let entry = SemanticRewriteTrace {
+            depth,
+            delta: SemanticStateDelta::between(&state, &step.state),
+            stability_blocked: step.stability_blocked,
+        };
+        let cycle = kernel
+            .cycle_evidence()
+            .last()
+            .ok_or(Dkv4RunError::InternalInvariant)?;
+        let signals = Dkv4Signals::from_dkv2b(&entry, cycle, mor, provenance)
+            .map_err(Dkv4RunError::Controller)?;
+        let decision = controller
+            .decide(signals)
+            .map_err(Dkv4RunError::Controller)?;
+        trace.push(entry);
+        state = step.state;
+
+        if !matches!(decision, Dkv4Decision::Refine(_)) {
+            return Ok(Dkv4RunOutcome {
+                state,
+                depth,
+                decision,
+                trace,
+                cycles: kernel.cycle_evidence()[cycle_start..].to_vec(),
+            });
+        }
+    }
+
+    Err(Dkv4RunError::InternalInvariant)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Dkv4RunError {
+    Controller(Dkv4Error),
+    Kernel(DeltaKvRecurrentError),
+    InternalInvariant,
+}
+
+impl fmt::Display for Dkv4RunError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for Dkv4RunError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dkv4Error {
     InvalidDepthRange { min: u32, max: u32 },
@@ -220,6 +313,41 @@ impl std::error::Error for Dkv4Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        delta_kv::{DeltaKvMemory, DELTA_KV_ONE},
+        delta_kv_recurrent::DeltaKvRecurrentPolicy,
+        delta_kv_semantic::{DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionCounters},
+        PageId,
+    };
+
+    fn mor() -> MorDecision {
+        MorDecision {
+            active_routers: Vec::new(),
+            ranked_experts: Vec::new(),
+            selected_experts: vec![PageId(1)],
+            noise_ppm: 0,
+            structural_disagreement_ppm: 0,
+            expert_mass_threshold_ppm: 0,
+            request_precision_escalation: false,
+            hysteresis_retained_previous_primary: false,
+        }
+    }
+
+    fn kernel() -> DeltaKvRecurrentKernel<8> {
+        let memory = DeltaKvMemory::new(1, 1).unwrap();
+        let key = DeltaKvSemanticKeyEvidence {
+            key_q12: vec![DELTA_KV_ONE],
+            selected_experts: vec![PageId(1)],
+            provenance: None,
+            counters: DeltaKvSemanticProjectionCounters::default(),
+            transient_key_bits: 16,
+        };
+        let mut kernel =
+            DeltaKvRecurrentKernel::new(memory, key, vec![0], DeltaKvRecurrentPolicy::default())
+                .unwrap();
+        kernel.seed_target(&[DELTA_KV_ONE], 4096).unwrap();
+        kernel
+    }
 
     fn stable(depth: u32, provenance: Dkv4Provenance) -> Dkv4Signals {
         Dkv4Signals {
@@ -412,6 +540,99 @@ mod tests {
             Dkv4Signals::from_dkv2b(&trace, &cycle, &mor, Dkv4Provenance::VerifiedPresent),
             Err(Dkv4Error::EvidenceDepthMismatch { trace: 1, cycle: 2 })
         ));
+    }
+
+    #[test]
+    fn missing_provenance_abstains_before_any_recurrent_read() {
+        let mut k = kernel();
+        let before = k.cycle_evidence().len();
+        let outcome = run_dkv4_recurrent(
+            SemanticState::<8>::zeroed().unwrap(),
+            &mut k,
+            &mor(),
+            Dkv4Provenance::Missing,
+            Dkv4Controller::new(Dkv4Policy::default()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(outcome.depth, 0);
+        assert_eq!(
+            outcome.decision,
+            Dkv4Decision::Abstain(Dkv4Reason::MissingEvidence)
+        );
+        assert!(outcome.trace.is_empty());
+        assert!(outcome.cycles.is_empty());
+        assert_eq!(k.cycle_evidence().len(), before);
+    }
+
+    #[test]
+    fn verified_memory_correction_refines_once_then_stops() {
+        let mut k = kernel();
+        let initial = SemanticState::<8>::zeroed().unwrap();
+        let outcome = run_dkv4_recurrent(
+            initial,
+            &mut k,
+            &mor(),
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4Controller::new(Dkv4Policy::default()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(outcome.depth, 2);
+        assert_eq!(
+            outcome.decision,
+            Dkv4Decision::StopCandidate(Dkv4Reason::Stable)
+        );
+        assert_eq!(outcome.trace.len(), 2);
+        assert_eq!(outcome.trace[0].delta.value, 1);
+        assert!(outcome.trace[1].delta.is_zero());
+        assert_eq!(outcome.cycles[0].correction_abs_max_q12, 8192);
+        assert_eq!(outcome.cycles[1].correction_abs_max_q12, 0);
+        assert!(outcome.state.value.get(0).unwrap());
+    }
+
+    #[test]
+    fn verified_already_matching_state_stops_after_one_cycle() {
+        let mut k = kernel();
+        let mut initial = SemanticState::<8>::zeroed().unwrap();
+        initial.value.set(0, true).unwrap();
+        let outcome = run_dkv4_recurrent(
+            initial,
+            &mut k,
+            &mor(),
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4Controller::new(Dkv4Policy::default()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(outcome.depth, 1);
+        assert_eq!(
+            outcome.decision,
+            Dkv4Decision::StopCandidate(Dkv4Reason::Stable)
+        );
+        assert_eq!(outcome.cycles[0].correction_abs_max_q12, 0);
+    }
+
+    #[test]
+    fn unverified_path_exhausts_budget_without_stopping_candidate() {
+        let mut k = kernel();
+        let mut initial = SemanticState::<8>::zeroed().unwrap();
+        initial.value.set(0, true).unwrap();
+        let policy = Dkv4Policy {
+            max_depth: 3,
+            ..Dkv4Policy::default()
+        };
+        let outcome = run_dkv4_recurrent(
+            initial,
+            &mut k,
+            &mor(),
+            Dkv4Provenance::Unverified,
+            Dkv4Controller::new(policy).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(outcome.depth, 3);
+        assert_eq!(
+            outcome.decision,
+            Dkv4Decision::Abstain(Dkv4Reason::UnverifiedEvidence)
+        );
+        assert_eq!(outcome.cycles.len(), 3);
     }
 
     #[test]
