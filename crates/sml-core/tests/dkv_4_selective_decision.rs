@@ -77,9 +77,9 @@ fn first_route_selective_arms_abstain_and_first_primary_matches_dynamic_risk() {
 
     assert!(stability.contains("answered=0"), "{stability}");
     assert!(frozen.contains("answered=0"), "{frozen}");
-    assert_eq!(field(&dynamic, "errors="), field(&aggressive, "errors="));
+    assert_eq!(field(dynamic, "errors="), field(aggressive, "errors="));
     assert!(
-        field_u32(&aggressive, "cycles=") <= field_u32(&dynamic, "cycles="),
+        field_u32(aggressive, "cycles=") <= field_u32(dynamic, "cycles="),
         "aggressive={aggressive} dynamic={dynamic}"
     );
 }
