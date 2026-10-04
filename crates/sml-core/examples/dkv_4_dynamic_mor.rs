@@ -108,10 +108,7 @@ fn mor_decision(fixture: MorFixture, previous: &PreviousRoute) -> R<MorDecision>
                     experts: vec![PageId(1)],
                 },
             ],
-            vec![
-                router(0, 0, MOR_SCALE_PPM),
-                router(1, 1, 920_000),
-            ],
+            vec![router(0, 0, MOR_SCALE_PPM), router(1, 1, 920_000)],
         ),
         MorFixture::PersistentMargin => (
             vec![
@@ -124,10 +121,7 @@ fn mor_decision(fixture: MorFixture, previous: &PreviousRoute) -> R<MorDecision>
                     experts: vec![PageId(1)],
                 },
             ],
-            vec![
-                router(0, 0, MOR_SCALE_PPM),
-                router(1, 1, MOR_SCALE_PPM),
-            ],
+            vec![router(0, 0, MOR_SCALE_PPM), router(1, 1, MOR_SCALE_PPM)],
         ),
         MorFixture::StructuralDisagreement => (
             vec![
@@ -415,8 +409,7 @@ pub fn report() -> R<String> {
                 max_depth: 4,
                 stable_hamming_threshold: 0,
             };
-            let stability =
-                compare_delta_kv_recurrent(initial.clone(), base.clone(), halting, 4)?;
+            let stability = compare_delta_kv_recurrent(initial.clone(), base.clone(), halting, 4)?;
 
             let first = mor_decision(fixture, &PreviousRoute::default())?;
 
@@ -439,8 +432,7 @@ pub fn report() -> R<String> {
                 Dkv4SemanticController::new(Dkv4SemanticPolicy::default())?,
             )?;
 
-            let dynamic =
-                run_dynamic(initial, base, fixture, Dkv4Provenance::VerifiedPresent)?;
+            let dynamic = run_dynamic(initial, base, fixture, Dkv4Provenance::VerifiedPresent)?;
 
             if !correct(&stability.adaptive.state)?
                 || !correct(&fixed.state)?
