@@ -374,13 +374,8 @@ mod tests {
             request_precision_escalation: true,
             hysteresis_retained_previous_primary: false,
         };
-        let signals = Dkv4Signals::from_dkv2b(
-            &trace,
-            &cycle,
-            &mor,
-            Dkv4Provenance::VerifiedPresent,
-        )
-        .unwrap();
+        let signals =
+            Dkv4Signals::from_dkv2b(&trace, &cycle, &mor, Dkv4Provenance::VerifiedPresent).unwrap();
         assert_eq!(signals.depth, 2);
         assert_eq!(signals.state_delta.total(), 10);
         assert_eq!(signals.ambiguous_values, 1);
