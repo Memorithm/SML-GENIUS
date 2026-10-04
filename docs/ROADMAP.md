@@ -238,7 +238,8 @@ Use an early broad routing stage to construct a bounded candidate pool, then res
 - [x] MOR-H2 adaptive 1 -> 2 -> 4 widening from coarse margin, MOR margin/disagreement and SBG ambiguity, with cumulative fail-closed work budgets and a separate exhaustive-primary recall control.
 - [x] MOR-H3 specialization-preserving balance: exposure-conditioned EMAs, neutral first exposure, shared H1/H2 cluster partition, and separate bounded inter/intra-cluster adjustments.
 - [x] MOR-H4a bounded learned cluster prototypes from training-only SBG routing states, with frozen memberships and a separate development holdout gate.
-- [ ] MOR-H4b learned expert-to-cluster membership only after H4a matched fixed/random/centroid controls and repeated-seed qualification.
+- [x] MOR-H4a matched qualification harness for fixed, learned-medoid, training-majority and deterministic random-medoid prototype arms with explicit gain gates.
+- [ ] MOR-H4b learned expert-to-cluster membership only after a frozen representative-task H4a campaign uses the matched harness with repeated seeds and retains quality/resource evidence.
 - [ ] Preregister and run matched exhaustive/fixed-1/fixed-2/fixed-4/adaptive/random-pool plus legacy/no-balance/H3 balance comparisons on disjoint development tasks.
 - [ ] Qualify shortlist recall, final task quality, physical latency/traffic and expert-starvation behavior before runtime promotion.
 
