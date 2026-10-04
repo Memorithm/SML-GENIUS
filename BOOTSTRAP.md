@@ -408,3 +408,33 @@ A record-version proof must never replace complete subject history. Use
 `BoundProjectedSubject::screen` for subject screening; no compressed key or
 FNV state surrogate is an authority token. A/A2/B evidence remains unchanged.
 Context/model promotion remains BLOCKED.
+
+
+## DKV-4 adaptive-compute development result
+
+The owner-requested ten-slice DKV-4 engineering programme is summarized in
+`docs/SML-DKV-4-FINAL-REPORT.md`. DKV-4 controls recurrent compute only:
+`Refine`, `StopCandidate` or `Abstain`; it has no answer-acceptance action.
+
+Use provenance before numeric memory signals. `Missing` and `Conflict`
+abstain before any Delta-KV matrix read; `Unverified` may consume only its
+bounded research/refinement budget and never reaches `StopCandidate`.
+A projected key, low ambiguity or stable numeric output is not presence proof.
+
+DKV-4a is retained as a negative reference: its absolute Q12 correction
+threshold caused roughly 1.95x the recurrent cycles of the simpler SBG
+stability control without improving correctness on the paired K64/K256
+Development panel. Do not restore that residual-magnitude rule as a default.
+
+DKV-4c is the preferred Development controller reference. Correction magnitude
+is telemetry only; refinement is driven by actual V/M/A/R change, memory
+ambiguity and explicit MOR escalation/disagreement under the same hard depth
+bound. It preserves DKV-4a written correctness while removing about 49% of its
+measured recurrent cycles. On the current fixed one-page MOR panel, however,
+DKV-4c exactly matches the simpler stability-only arm in aggregate correctness
+and cycle count. This is not evidence of adaptive-compute superiority.
+
+Retained evidence is in `research/dkv-4b/` and `research/dkv-4c/`. Any next
+claim requires a separately frozen non-trivial MOR panel, learned/representative
+states and physical resource measurements. Context/model promotion remains
+BLOCKED.
