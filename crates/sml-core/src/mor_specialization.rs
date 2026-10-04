@@ -35,9 +35,7 @@ pub struct MorSpecializationRegistry {
 }
 
 impl MorSpecializationRegistry {
-    pub fn new(
-        clusters: Vec<MorSpecializationCluster>,
-    ) -> Result<Self, MorSpecializationError> {
+    pub fn new(clusters: Vec<MorSpecializationCluster>) -> Result<Self, MorSpecializationError> {
         if clusters.is_empty() {
             return Err(MorSpecializationError::EmptyRegistry);
         }
@@ -46,9 +44,7 @@ impl MorSpecializationRegistry {
         let mut expert_to_cluster = BTreeMap::new();
         for cluster in &clusters {
             if !cluster_ids.insert(cluster.cluster_id) {
-                return Err(MorSpecializationError::DuplicateCluster(
-                    cluster.cluster_id,
-                ));
+                return Err(MorSpecializationError::DuplicateCluster(cluster.cluster_id));
             }
             if cluster.experts.is_empty() {
                 return Err(MorSpecializationError::EmptyCluster(cluster.cluster_id));
@@ -252,8 +248,7 @@ impl MorSpecializationBalancer {
         }
 
         let candidate_pages = candidate_pages(routers);
-        let candidate_clusters =
-            candidate_clusters(&self.registry, &candidate_pages)?;
+        let candidate_clusters = candidate_clusters(&self.registry, &candidate_pages)?;
         let hint_map = runtime_hint_map(&self.registry, runtime_hints)?;
 
         let mut cluster_loads = self.cluster_load_ppm.clone();
@@ -261,11 +256,8 @@ impl MorSpecializationBalancer {
 
         let newly_initialized_clusters =
             initialize_cluster_loads(&mut cluster_loads, &candidate_clusters);
-        let newly_initialized_experts = initialize_expert_loads(
-            &self.registry,
-            &mut expert_loads,
-            &candidate_pages,
-        )?;
+        let newly_initialized_experts =
+            initialize_expert_loads(&self.registry, &mut expert_loads, &candidate_pages)?;
 
         let cluster_mean = mean_cluster_load(&cluster_loads, &candidate_clusters);
         let mut cluster_adjustments = BTreeMap::new();
@@ -282,8 +274,7 @@ impl MorSpecializationBalancer {
             );
         }
 
-        let cluster_candidate_pages =
-            pages_by_cluster(&self.registry, &candidate_pages)?;
+        let cluster_candidate_pages = pages_by_cluster(&self.registry, &candidate_pages)?;
         let mut intra_means = BTreeMap::new();
         for (cluster_id, pages) in &cluster_candidate_pages {
             intra_means.insert(*cluster_id, mean_expert_load(&expert_loads, pages));
@@ -299,21 +290,17 @@ impl MorSpecializationBalancer {
                 .ok_or(MorSpecializationError::UnregisteredExpert(page_id))?;
             let historical = expert_loads.get(page).copied().unwrap_or(0);
             let intra_mean = intra_means.get(&cluster_id).copied().unwrap_or(0);
-            let inter_adjustment = cluster_adjustments
-                .get(&cluster_id)
-                .copied()
-                .unwrap_or(0);
+            let inter_adjustment = cluster_adjustments.get(&cluster_id).copied().unwrap_or(0);
             let intra_adjustment = adaptive_adjustment(
                 intra_mean,
                 historical,
                 self.policy.intra_cluster_balance_gain_ppm,
                 self.policy.max_intra_cluster_adjustment_ppm,
             );
-            let combined_adjustment = (inter_adjustment as i64 + intra_adjustment as i64)
-                .clamp(
-                    -(self.policy.max_total_adjustment_ppm as i64),
-                    self.policy.max_total_adjustment_ppm as i64,
-                ) as i32;
+            let combined_adjustment = (inter_adjustment as i64 + intra_adjustment as i64).clamp(
+                -(self.policy.max_total_adjustment_ppm as i64),
+                self.policy.max_total_adjustment_ppm as i64,
+            ) as i32;
             let base = hint_map.get(page).copied().unwrap_or(ExpertRuntimeHint {
                 page_id,
                 balance_bias_ppm: 0,
@@ -413,12 +400,7 @@ impl MorSpecializationBalancer {
             cluster_load_spread_ppm: load_spread(
                 &candidate_clusters
                     .iter()
-                    .map(|cluster_id| {
-                        self.cluster_load_ppm
-                            .get(cluster_id)
-                            .copied()
-                            .unwrap_or(0)
-                    })
+                    .map(|cluster_id| self.cluster_load_ppm.get(cluster_id).copied().unwrap_or(0))
                     .collect::<Vec<_>>(),
             ),
             max_intra_cluster_load_spread_ppm: max_intra_cluster_spread(
@@ -498,9 +480,7 @@ fn runtime_hint_map(
             ));
         }
         if map.insert(hint.page_id.0, *hint).is_some() {
-            return Err(MorSpecializationError::DuplicateRuntimeHint(
-                hint.page_id,
-            ));
+            return Err(MorSpecializationError::DuplicateRuntimeHint(hint.page_id));
         }
     }
     Ok(map)
@@ -594,8 +574,7 @@ fn adaptive_adjustment(mean: u32, load: u32, gain_ppm: u32, cap_ppm: u32) -> i32
 }
 
 fn bounded_bias_add(base: i32, adjustment: i32) -> i32 {
-    (base as i64 + adjustment as i64)
-        .clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
+    (base as i64 + adjustment as i64).clamp(-(MOR_SCALE_PPM as i64), MOR_SCALE_PPM as i64) as i32
 }
 
 fn update_cluster_loads(
@@ -701,9 +680,7 @@ mod tests {
         MorSpecializationCluster, MorSpecializationError, MorSpecializationRegistry,
     };
     use crate::{
-        mor::{
-            ExpertProposal, MixtureOfRouters, MorPolicy, RouterId, RouterInput, MOR_SCALE_PPM,
-        },
+        mor::{ExpertProposal, MixtureOfRouters, MorPolicy, RouterId, RouterInput, MOR_SCALE_PPM},
         mor_controller::{MorController, MorControllerPolicy},
         PageId,
     };
@@ -961,10 +938,7 @@ mod tests {
         let error = balancer
             .route_cycle(&engine(), &[router(9, 9, 500_000)], &[])
             .expect_err("unknown page");
-        assert_eq!(
-            error,
-            MorSpecializationError::UnregisteredExpert(PageId(9))
-        );
+        assert_eq!(error, MorSpecializationError::UnregisteredExpert(PageId(9)));
         assert_eq!(balancer.cycle(), 0);
     }
 }
