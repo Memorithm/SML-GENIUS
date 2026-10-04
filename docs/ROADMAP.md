@@ -211,7 +211,18 @@ Inspiration targets from `Memorithm/RSI`, to be re-implemented independently: AU
 
 ## CSP — BANC v888 Connectomic Structural Prior track
 
-The V888-only structural-prior programme is defined in [`V888_CONNECTOME_BOOTSTRAP.md`](V888_CONNECTOME_BOOTSTRAP.md) and uses the independent `CSP-0.x` namespace. CSP is evidence-gated alongside SML/SBG: V888-derived topology receives no promotion privilege and must outperform the strongest declared edge-count/degree/reciprocity/modularity controls before entering larger SML experiments. Raw V888 data is never an inference-time dependency, and new execution work is Rust-first on CPU/WGPU portable paths.
+The V888-only structural-prior programme is defined in [`V888_CONNECTOME_BOOTSTRAP.md`](V888_CONNECTOME_BOOTSTRAP.md), coordinated with ITD in [`V888_BOOL_COORDINATION.md`](V888_BOOL_COORDINATION.md), and uses the independent `CSP-0.x` namespace. CSP is evidence-gated alongside SML/SBG: V888-derived topology receives no promotion privilege and must outperform the strongest declared edge-count/degree/reciprocity/modularity controls before entering larger SML experiments. Raw V888 data is never an inference-time dependency, and new execution work is Rust-first on CPU/WGPU portable paths.
+
+- [x] Freeze ITD strategy revision `2026-09-22.1` / commit `7f8f08e764dd5f36688533e9f7e7fb2f290f6e17` without renumbering CSP.
+- [x] Retire unscoped Codex display totals from SML evidence accounting; require typed audited source scopes and exact artifact identities.
+- [x] Encode delayed-XOR admission requirements and the V888-BOOL-4.0 fail-closed consumer contract in `sml_core::v888_handoff`.
+- [x] Require graph-only, existing-router-only and hybrid ablations plus reuse of existing GF(2)/ANF, bounded-memory and routing contracts.
+- [x] Make hidden input history, raw-V888 inference dependency, protected-final access, direct model promotion and default runtime-policy changes fail closed in the coordination contract.
+- [ ] Complete SciRust executable graph qualification in `Memorithm/scirust#1520`; #1500 remains its V888-GROWTH/source parent.
+- [ ] Run the separately frozen delayed-XOR campaign on a selected audited source scope with exact sequential-logic, no-reservoir and topology-matched controls.
+- [ ] Qualify any V888-BOOL-4.0 consumer candidate with independent SML quality/resource evidence before CSP-0.11 can consider promotion.
+
+The checked items close the durable coordination work of SML-GENIUS #59 only. They do not close the ITD/SciRust research umbrellas and do not satisfy CSP-0.11.
 
 ## SML-DS41 — efficient long-horizon principles (2026-09-24)
 
