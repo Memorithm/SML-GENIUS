@@ -15,10 +15,10 @@ use crate::{
 };
 
 use super::{
-    SemanticBitField, SemanticBitFieldError, SemanticHierarchicalMorBridge,
-    SemanticMorHierarchyError, SemanticMorHierarchyTrainer, SemanticMorHierarchyTrainingArtifact,
-    SemanticMorHierarchyTrainingConfig, SemanticMorHierarchyTrainingError,
-    SemanticMorHierarchyTrainingExample, SemanticMorHierarchyTrainingReport, SemanticState,
+    SemanticBitFieldError, SemanticHierarchicalMorBridge, SemanticMorHierarchyError,
+    SemanticMorHierarchyTrainer, SemanticMorHierarchyTrainingConfig,
+    SemanticMorHierarchyTrainingError, SemanticMorHierarchyTrainingExample,
+    SemanticMorHierarchyTrainingReport, SemanticState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
