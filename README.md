@@ -55,6 +55,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::semantic**: Semantic Boolean Geometry (SBG) packed V/M/A/R state and integer-only Boolean semantic primitives.
 - **sml-core::semantic::mor_hierarchical**: bounded coarse-to-fine SBG/MOR candidate narrowing with exact candidate-work accounting; experimental, not a quality/latency claim.
 - **sml-core::semantic::mor_adaptive_hierarchy**: adaptive 1 -> 2 -> 4 MOR-H2 widening from observable routing/ambiguity signals with cumulative work budgets and an exhaustive research control.
+- **sml-core::mor_specialization**: MOR-H3 exposure-conditioned inter/intra-cluster balancing with neutral first exposure and bounded specialization-preserving adjustments.
 - **sml-core::task_loss**: task-answer training for hard Boolean conjunction and overwrite-state micro-operations plus held-out panel evaluation.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
