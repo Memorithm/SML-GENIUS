@@ -202,7 +202,91 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
     ) -> Result<SemanticHierarchicalMorRoute, SemanticMorHierarchyError> {
         self.validate_against_registry(registry)?;
 
-        let selected_clusters = self.select_clusters(state)?;
+        let ranked_clusters = self.rank_clusters(state)?;
+        let selected_clusters = self.select_clusters_from_ranked(&ranked_clusters)?;
+        self.route_selected_clusters(
+            state,
+            registry,
+            engine,
+            runtime_hints,
+            previous,
+            selected_clusters,
+            ranked_clusters.len(),
+        )
+    }
+
+    pub(crate) fn cluster_count(&self) -> usize {
+        self.clusters.len()
+    }
+
+    pub(crate) fn rank_clusters(
+        &self,
+        state: &SemanticState<BITS>,
+    ) -> Result<Vec<SemanticMorClusterEvidence>, SemanticMorHierarchyError> {
+        let mut ranked = self
+            .clusters
+            .iter()
+            .map(|cluster| {
+                Ok(SemanticMorClusterEvidence {
+                    cluster_id: cluster.cluster_id,
+                    score_ppm: semantic_similarity_ppm(&state.routing, &cluster.signature)?,
+                    expert_count: cluster.experts.len(),
+                })
+            })
+            .collect::<Result<Vec<_>, SemanticMorHierarchyError>>()?;
+
+        ranked.sort_by(|left, right| {
+            right
+                .score_ppm
+                .cmp(&left.score_ppm)
+                .then_with(|| left.cluster_id.cmp(&right.cluster_id))
+        });
+
+        if ranked.iter().all(|cluster| cluster.score_ppm == 0) {
+            return Err(SemanticMorHierarchyError::ZeroClusterMass);
+        }
+        Ok(ranked)
+    }
+
+    pub(crate) fn route_ranked_prefix(
+        &self,
+        state: &SemanticState<BITS>,
+        registry: &MorRouterRegistry,
+        engine: &MixtureOfRouters,
+        runtime_hints: &[ExpertRuntimeHint],
+        previous: &PreviousRoute,
+        ranked_clusters: &[SemanticMorClusterEvidence],
+        cluster_count: usize,
+        cluster_similarity_evaluations: usize,
+    ) -> Result<SemanticHierarchicalMorRoute, SemanticMorHierarchyError> {
+        self.validate_against_registry(registry)?;
+        if cluster_count == 0 || cluster_count > ranked_clusters.len() {
+            return Err(SemanticMorHierarchyError::InvalidExactClusterCount {
+                requested: cluster_count,
+                available: ranked_clusters.len(),
+            });
+        }
+        self.route_selected_clusters(
+            state,
+            registry,
+            engine,
+            runtime_hints,
+            previous,
+            ranked_clusters[..cluster_count].to_vec(),
+            cluster_similarity_evaluations,
+        )
+    }
+
+    fn route_selected_clusters(
+        &self,
+        state: &SemanticState<BITS>,
+        registry: &MorRouterRegistry,
+        engine: &MixtureOfRouters,
+        runtime_hints: &[ExpertRuntimeHint],
+        previous: &PreviousRoute,
+        selected_clusters: Vec<SemanticMorClusterEvidence>,
+        cluster_similarity_evaluations: usize,
+    ) -> Result<SemanticHierarchicalMorRoute, SemanticMorHierarchyError> {
         let selected_cluster_ids = selected_clusters
             .iter()
             .map(|cluster| cluster.cluster_id)
@@ -283,7 +367,7 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
             selected_clusters,
             candidate_experts,
             accounting: SemanticMorHierarchyAccounting {
-                cluster_similarity_evaluations: self.clusters.len(),
+                cluster_similarity_evaluations,
                 router_similarity_evaluations: router_inputs.len(),
                 expert_similarity_evaluations: candidate_edges,
                 exhaustive_expert_similarity_evaluations: exhaustive_edges,
@@ -299,29 +383,10 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         })
     }
 
-    fn select_clusters(
+    fn select_clusters_from_ranked(
         &self,
-        state: &SemanticState<BITS>,
+        ranked: &[SemanticMorClusterEvidence],
     ) -> Result<Vec<SemanticMorClusterEvidence>, SemanticMorHierarchyError> {
-        let mut ranked = self
-            .clusters
-            .iter()
-            .map(|cluster| {
-                Ok(SemanticMorClusterEvidence {
-                    cluster_id: cluster.cluster_id,
-                    score_ppm: semantic_similarity_ppm(&state.routing, &cluster.signature)?,
-                    expert_count: cluster.experts.len(),
-                })
-            })
-            .collect::<Result<Vec<_>, SemanticMorHierarchyError>>()?;
-
-        ranked.sort_by(|left, right| {
-            right
-                .score_ppm
-                .cmp(&left.score_ppm)
-                .then_with(|| left.cluster_id.cmp(&right.cluster_id))
-        });
-
         let total = ranked
             .iter()
             .map(|cluster| cluster.score_ppm as u128)
@@ -333,7 +398,7 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         let target = mass_target(total, self.policy.cluster_mass_threshold_ppm)?;
         let mut cumulative = 0_u128;
         let mut selected = Vec::new();
-        for cluster in ranked {
+        for cluster in ranked.iter().cloned() {
             if selected.len() >= self.policy.max_clusters {
                 break;
             }
@@ -515,6 +580,7 @@ pub enum SemanticMorHierarchyError {
     DuplicateClusterExpert { cluster_id: u32, page_id: PageId },
     ExpertInMultipleClusters(PageId),
     InsufficientClusters { required: usize, actual: usize },
+    InvalidExactClusterCount { requested: usize, available: usize },
     MissingRouterSignature(RouterId),
     UnknownRouterSignature(RouterId),
     MissingExpertSignature(PageId),
