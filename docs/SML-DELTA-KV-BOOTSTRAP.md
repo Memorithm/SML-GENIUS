@@ -178,20 +178,76 @@ long context unless tasks requiring the distant information succeed.
 
 ## DKV-4 — adaptive compute handoff
 
-A future SML repair controller may use:
+DKV-4 has completed its bounded Development implementation sequence. The full
+decision and evidence summary is in
+[`SML-DKV-4-FINAL-REPORT.md`](SML-DKV-4-FINAL-REPORT.md).
 
-- Delta-KV correction magnitude;
-- SBG state change;
-- MOR disagreement;
-- decision margin/ambiguity;
-- recurrent stability.
+The controller is a compute-control plane, not an answer verifier. Its actions
+are `Refine`, `StopCandidate` and `Abstain`; there is no `Accept` action.
+Provenance is evaluated before numeric memory signals: Missing/Conflict abstain
+before a matrix read, while Unverified evidence can never StopCandidate.
 
-These signals may request another recurrent refinement cycle. They must be
-compared against fixed-depth and simpler deterministic controls.
+### DKV-4a reference
 
-Forge may search candidate key projections, dimensions, learning rates and
-topologies, but SML independently requalifies every candidate. ElasticXxx may
-enforce resource budgets without owning memory semantics.
+The first controller combined:
+
+- Delta-KV absolute Q12 correction magnitude;
+- exact SBG V/M/A/R state change;
+- memory-output ambiguity;
+- MOR structural disagreement and precision escalation;
+- recurrent depth;
+- external provenance state.
+
+On the frozen K64/K256 Development panel it preserved the same written-state
+correctness as fixed-depth and stability controls but used 490/491 total cycles,
+versus 251/250 for stability-only. The absolute correction signal could remain
+large after the Boolean semantic state stopped changing. That rule is therefore
+retained as negative evidence and rejected as the default adaptive policy.
+
+### DKV-4c semantic-impact reference
+
+DKV-4c keeps correction magnitude as telemetry but removes it as an independent
+reason to continue. Refinement depends on actual semantic change, ambiguity or
+MOR escalation/disagreement, all under the same hard maximum depth.
+
+On the unchanged paired panel:
+
+- K64: correctness 125/128, 251 cycles, 32,128 read MACs;
+- K256: correctness 128/128, 250 cycles, 128,000 read MACs;
+- every DKV-4a written-query correctness result is preserved;
+- no retained written row is deeper than DKV-4a;
+- recurrent work falls 48.78% at K64 and 49.08% at K256 versus DKV-4a.
+
+However, DKV-4c exactly matches SBG stability-only in aggregate correctness and
+cycle count on this fixed one-page, zero-disagreement MOR panel. The additional
+MOR signals therefore remain unqualified as a source of task benefit.
+
+### Dimension and unknown-state boundary
+
+The same panel showed 128/128 written correctness at K256 versus 125/128 at K64,
+while K256 requires four times as many key-coordinate MAC terms per read/update.
+This synthetic difference does not identify an optimal K.
+
+Unknown handling is provenance-driven. Missing provenance produced zero matrix
+reads and zero StopCandidate decisions. In the separate Unverified latent
+diagnostic, the matrix frequently produced resolved coordinates for unknown
+states; numeric resolution is therefore not presence proof or calibrated
+confidence.
+
+### Remaining qualification
+
+DKV-4 Development engineering is complete, but scientific/model promotion is
+blocked pending:
+
+- a separately preregistered non-trivial MOR disagreement/escalation panel;
+- learned or representative semantic states;
+- measured wall-clock/RSS/traffic/energy evidence;
+- controlling CONTEXT/provenance prerequisites for end-to-end context use;
+- independent reruns for any model-level claim.
+
+Forge may later propose controller/key candidates and ElasticXxx may enforce
+declared resource budgets, but SML independently requalifies them and retains
+memory/control semantics.
 
 ## Relationship to FLAT-ATTENTION
 
