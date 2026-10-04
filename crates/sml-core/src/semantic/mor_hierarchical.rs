@@ -217,6 +217,53 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         )
     }
 
+    pub(crate) fn cluster_specs(&self) -> &[SemanticMorClusterSignature<BITS>] {
+        &self.clusters
+    }
+
+    pub(crate) fn rebuild_with_cluster_signatures(
+        &self,
+        signatures: &BTreeMap<u32, SemanticBitField<BITS>>,
+    ) -> Result<Self, SemanticMorHierarchyError> {
+        if signatures.len() != self.clusters.len() {
+            return Err(SemanticMorHierarchyError::ClusterSignatureSetMismatch {
+                expected: self.clusters.len(),
+                actual: signatures.len(),
+            });
+        }
+
+        let clusters = self
+            .clusters
+            .iter()
+            .map(|cluster| {
+                let signature = signatures
+                    .get(&cluster.cluster_id)
+                    .ok_or(SemanticMorHierarchyError::MissingClusterSignature(
+                        cluster.cluster_id,
+                    ))?
+                    .clone();
+                Ok(SemanticMorClusterSignature {
+                    cluster_id: cluster.cluster_id,
+                    signature,
+                    experts: cluster.experts.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, SemanticMorHierarchyError>>()?;
+
+        Self::new(
+            self.router_signatures
+                .iter()
+                .map(|(router_id, signature)| (*router_id, signature.clone()))
+                .collect(),
+            self.expert_signatures
+                .iter()
+                .map(|(page, signature)| (PageId(*page), signature.clone()))
+                .collect(),
+            clusters,
+            self.policy,
+        )
+    }
+
     pub fn route(
         &self,
         state: &SemanticState<BITS>,
@@ -604,6 +651,8 @@ pub enum SemanticMorHierarchyError {
     ExpertInMultipleClusters(PageId),
     InsufficientClusters { required: usize, actual: usize },
     InvalidExactClusterCount { requested: usize, available: usize },
+    ClusterSignatureSetMismatch { expected: usize, actual: usize },
+    MissingClusterSignature(u32),
     MissingRouterSignature(RouterId),
     UnknownRouterSignature(RouterId),
     MissingExpertSignature(PageId),
