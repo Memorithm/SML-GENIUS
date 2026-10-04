@@ -424,6 +424,20 @@ Protocol: [SML-DKV-2A-N1-AMBIGUITY-NEUTRAL-PREREGISTRATION.md](SML-DKV-2A-N1-AMB
 
 The supplied Rust1.97 recall/cosine numbers are retained as external input observations. Current Rust1.89 observation: [SML-DKV-2A-N1-CURRENT-PANEL-OBSERVATION.md](SML-DKV-2A-N1-CURRENT-PANEL-OBSERVATION.md). ActiveOnly remains non-default because DENSE_CONTROL regresses.
 
+
+## DKV-2a-N2 page/distribution requalification
+
+Protocol: [SML-DKV-2A-N2-PAGE-DENSITY-REPLAY.md](SML-DKV-2A-N2-PAGE-DENSITY-REPLAY.md).
+
+- [x] Triage the supplied DKV-4e patch against the merged ActiveOnly implementation.
+- [x] Reject the duplicate SparseA constructor/core change; current ActiveOnly already supplies the mechanism.
+- [x] Freeze a Rust1.89 replay for page diversity, page conflicts and exact A-density crossover.
+- [ ] Execute the current library through both Bipolar and ActiveOnly with byte-identical retained output.
+- [ ] Decide whether MOR PageId weight 8 is an adequate discriminator before any page-sensitive DKV use.
+- [ ] Use representative SBG A-density measurements, not synthetic density alone, for projector promotion.
+
+The source patch already contains Rust1.97 outcomes, so N2 hypotheses are imported replay targets, not blind preregistration.
+
 ## DKV projection-agreement follow-up
 
 Input review: [SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md](SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md).
