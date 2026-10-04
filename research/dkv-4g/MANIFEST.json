@@ -1,0 +1,14 @@
+{
+  "schema": "sml.dkv4.applicability.v1",
+  "protocol": "9e93c37fc81415e2de1ebb780cce59a9f522ff86",
+  "stack_protocol": "844dc880423e244431c0a683a7c110bef3024afc",
+  "executed_code": "7dc897a896cca57965c4a4a707ae8b3a864fab6e",
+  "host": "debian",
+  "architecture": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "rows": 8,
+  "summary_rows": 4,
+  "identical_reruns": 2,
+  "output_sha256": "f3befcec45d793f78b0ce6efbf936b1572ace6edf083562ad84cd449008fc3cd",
+  "scientific_promotion": "BLOCKED"
+}
