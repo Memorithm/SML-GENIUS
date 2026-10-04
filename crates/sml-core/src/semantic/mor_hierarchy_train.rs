@@ -56,21 +56,15 @@ impl SemanticMorHierarchyTrainingConfig {
         if self.min_examples_per_cluster == 0 {
             return Err(SemanticMorHierarchyTrainingError::ZeroExamplesPerCluster);
         }
-        if self.min_prototype_margin_ppm == 0
-            || self.min_prototype_margin_ppm > MOR_SCALE_PPM
-        {
-            return Err(
-                SemanticMorHierarchyTrainingError::InvalidPrototypeMargin(
-                    self.min_prototype_margin_ppm,
-                ),
-            );
+        if self.min_prototype_margin_ppm == 0 || self.min_prototype_margin_ppm > MOR_SCALE_PPM {
+            return Err(SemanticMorHierarchyTrainingError::InvalidPrototypeMargin(
+                self.min_prototype_margin_ppm,
+            ));
         }
         if self.min_development_gain_ppm > MOR_SCALE_PPM {
-            return Err(
-                SemanticMorHierarchyTrainingError::InvalidDevelopmentGain(
-                    self.min_development_gain_ppm,
-                ),
-            );
+            return Err(SemanticMorHierarchyTrainingError::InvalidDevelopmentGain(
+                self.min_development_gain_ppm,
+            ));
         }
         Ok(self)
     }
@@ -200,10 +194,9 @@ impl SemanticMorHierarchyTrainer {
                 }
             }
 
-            let (prototype, positive_mean_ppm, negative_mean_ppm, margin_ppm) =
-                best.ok_or(SemanticMorHierarchyTrainingError::NoPrototypeCandidates(
-                    cluster_id,
-                ))?;
+            let (prototype, positive_mean_ppm, negative_mean_ppm, margin_ppm) = best.ok_or(
+                SemanticMorHierarchyTrainingError::NoPrototypeCandidates(cluster_id),
+            )?;
             if margin_ppm < config.min_prototype_margin_ppm {
                 return Err(
                     SemanticMorHierarchyTrainingError::InsufficientPrototypeSeparation {
@@ -231,8 +224,7 @@ impl SemanticMorHierarchyTrainer {
             .rebuild_with_cluster_signatures(&learned_signatures)
             .map_err(SemanticMorHierarchyTrainingError::Hierarchy)?;
 
-        let baseline_training_accuracy_ppm =
-            evaluate_accuracy_ppm(baseline, &registry, training)?;
+        let baseline_training_accuracy_ppm = evaluate_accuracy_ppm(baseline, &registry, training)?;
         let candidate_training_accuracy_ppm =
             evaluate_accuracy_ppm(&candidate, &registry, training)?;
         let baseline_development_accuracy_ppm =
@@ -241,8 +233,7 @@ impl SemanticMorHierarchyTrainer {
             evaluate_accuracy_ppm(&candidate, &registry, development)?;
         let development_gain_ppm =
             candidate_development_accuracy_ppm as i32 - baseline_development_accuracy_ppm as i32;
-        let promotion_eligible = candidate_training_accuracy_ppm
-            >= baseline_training_accuracy_ppm
+        let promotion_eligible = candidate_training_accuracy_ppm >= baseline_training_accuracy_ppm
             && candidate_development_accuracy_ppm as u64
                 >= baseline_development_accuracy_ppm as u64
                     + config.min_development_gain_ppm as u64;
@@ -282,7 +273,9 @@ fn target_cluster(
 ) -> Result<MorClusterId, SemanticMorHierarchyTrainingError> {
     registry
         .cluster_of(page_id)
-        .ok_or(SemanticMorHierarchyTrainingError::UnknownTargetExpert(page_id))
+        .ok_or(SemanticMorHierarchyTrainingError::UnknownTargetExpert(
+            page_id,
+        ))
 }
 
 fn mean_similarity_ppm<const BITS: usize>(
@@ -421,14 +414,8 @@ mod tests {
         };
 
         SemanticHierarchicalMorBridge::new(
-            vec![
-                (RouterId(0), low.clone()),
-                (RouterId(1), high.clone()),
-            ],
-            vec![
-                (PageId(0), low),
-                (PageId(1), high),
-            ],
+            vec![(RouterId(0), low.clone()), (RouterId(1), high.clone())],
+            vec![(PageId(0), low), (PageId(1), high)],
             vec![
                 SemanticMorClusterSignature {
                     cluster_id: 10,
@@ -507,16 +494,15 @@ mod tests {
     #[test]
     fn learned_prototypes_recover_swapped_cluster_geometry() {
         let baseline = bridge(true);
-        let artifact = SemanticMorHierarchyTrainer::train(
-            &baseline,
-            &examples(),
-            &development(),
-            config(),
-        )
-        .expect("train");
+        let artifact =
+            SemanticMorHierarchyTrainer::train(&baseline, &examples(), &development(), config())
+                .expect("train");
 
         assert_eq!(artifact.report.baseline_training_accuracy_ppm, 0);
-        assert_eq!(artifact.report.candidate_training_accuracy_ppm, MOR_SCALE_PPM);
+        assert_eq!(
+            artifact.report.candidate_training_accuracy_ppm,
+            MOR_SCALE_PPM
+        );
         assert_eq!(artifact.report.baseline_development_accuracy_ppm, 0);
         assert_eq!(
             artifact.report.candidate_development_accuracy_ppm,
@@ -571,12 +557,7 @@ mod tests {
         training[0].target_expert = PageId(99);
 
         assert_eq!(
-            SemanticMorHierarchyTrainer::train(
-                &baseline,
-                &training,
-                &development(),
-                config()
-            ),
+            SemanticMorHierarchyTrainer::train(&baseline, &training, &development(), config()),
             Err(SemanticMorHierarchyTrainingError::UnknownTargetExpert(
                 PageId(99)
             ))
@@ -598,12 +579,7 @@ mod tests {
         ];
 
         assert!(matches!(
-            SemanticMorHierarchyTrainer::train(
-                &baseline,
-                &training,
-                &development(),
-                config()
-            ),
+            SemanticMorHierarchyTrainer::train(&baseline, &training, &development(), config()),
             Err(
                 SemanticMorHierarchyTrainingError::InsufficientPositiveExamples {
                     actual: 1,
@@ -630,11 +606,9 @@ mod tests {
                 ..SemanticMorHierarchyTrainingConfig::default()
             }
             .validate(),
-            Err(
-                SemanticMorHierarchyTrainingError::InvalidPrototypeMargin(
-                    MOR_SCALE_PPM + 1
-                )
-            )
+            Err(SemanticMorHierarchyTrainingError::InvalidPrototypeMargin(
+                MOR_SCALE_PPM + 1
+            ))
         );
     }
 }
