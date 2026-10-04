@@ -201,6 +201,20 @@ impl<const BITS: usize> SemanticHierarchicalMorBridge<BITS> {
         self.policy
     }
 
+    pub fn specialization_registry(
+        &self,
+    ) -> Result<MorSpecializationRegistry, MorSpecializationError> {
+        MorSpecializationRegistry::new(
+            self.clusters
+                .iter()
+                .map(|cluster| MorSpecializationCluster {
+                    cluster_id: MorClusterId(cluster.cluster_id),
+                    experts: cluster.experts.clone(),
+                })
+                .collect(),
+        )
+    }
+
     pub fn route(
         &self,
         state: &SemanticState<BITS>,
