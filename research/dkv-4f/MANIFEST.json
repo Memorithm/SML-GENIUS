@@ -1,9 +1,9 @@
 {
   "schema": "sml.dkv4.selective-decision.v1",
   "protocol": "84d8bc4e3ee5eb09472fb21e045c9df0eb542e0a",
-  "executed_code": "0f54127886a9963cf090c2265c215c9bf6e06bdb",
-  "host": "debian",
-  "architecture": "x86_64",
+  "executed_code": "056405709f1310c45c2a3c82c8357bcaf640e5bb",
+  "host": "tarek",
+  "architecture": "aarch64",
   "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
   "rows": 8,
   "mor_rows": 4,
