@@ -6,13 +6,25 @@ Status: active research bootstrap. This track does not alter the non-attention c
 
 SML-GENIUS will use only FlyWire BANC v888 for connectome-derived research. FAFB v783 and every other connectome are excluded from this programme unless a later explicit protocol revision authorizes them.
 
-Codex currently identifies BANC v888 as Female Adult Fly Brain and Nerve Cord, snapshot 2026-05-20, with 158,262 neurons and 3,037,361 aggregated connections. The external dataset is not vendored into this repository.
+The external dataset is not vendored into this repository. SML source accounting follows the canonical ITD V888-BOOL strategy revision `2026-09-22.1` at commit `7f8f08e764dd5f36688533e9f7e7fb2f290f6e17`, not earlier Codex display totals.
 
-Sources:
-- https://codex.flywire.ai/?dataset=banc
-- https://codex.flywire.ai/faq
+At that pinned strategy revision, the audited reference scopes are explicitly distinct:
 
-All ingestion is delegated to a versioned SciRust contract once available. Until then, only tiny synthetic fixtures may be committed.
+- 188,508 metadata nodes in the audited induced graph;
+- 13,620,865 directed pairs in the audited induced graph;
+- 42,309,621 contacts in the audited induced graph;
+- 198,816,365 records in the retained raw table;
+- 19,733,123,829 measured bytes for that raw table.
+
+These numbers are coordination references, not a substitute for the exact artifact selected by an experiment. A handoff must bind its selected source-scope ID and SHA-256. Node-total reconciliation does not prove pairwise equality; directed pairs, contacts and raw records must never be collapsed into one generic edge count.
+
+Sources and coordination:
+- canonical ITD programme: `Memorithm/itd-simulator#58`;
+- executable SciRust graph gate: `Memorithm/scirust#1520`;
+- V888-GROWTH/source parent: `Memorithm/scirust#1500`;
+- SML coordination contract: [`V888_BOOL_COORDINATION.md`](V888_BOOL_COORDINATION.md).
+
+All ingestion is delegated to qualified, versioned SciRust contracts. Until the executable graph gate is satisfied, only tiny synthetic fixtures may be used for SML graph execution.
 
 ## Research hypothesis
 
@@ -23,6 +35,14 @@ The V888 hypothesis is narrower:
 Can structural statistics extracted from a biological sparse recurrent graph improve SML routing, state evolution, robustness or sample efficiency compared with topology controls at the same edge/parameter/active-compute budget?
 
 The target is not to reproduce a fly brain and not to make V888 a runtime dependency. The desired product is a learned or synthesized SML topology that can survive without the external dataset.
+
+## V888-BOOL coordination
+
+The first functional target is delayed XOR, `y[t] = a[t-d] XOR b[t]`. Required controls are exact sequential logic/shift register, no-reservoir readout and topology-matched graphs. Fixed recurrence and a bounded readout precede recurrent learning or topology search. Simplified LIF, bounded integer-event and genuinely Boolean recurrent dynamics are separate rails; binary spikes alone are not Boolean-only internal arithmetic.
+
+The future consumer handoff is exactly `V888-BOOL-4.0`. It requires exact Rust interface/source identities, graph-only / existing-router-only / hybrid ablations, bounded memory and readout, no hidden input-history bypass, no raw V888 inference dependency and independent SML quality/resource validation. Existing GF(2)/ANF, bounded-memory and routing contracts must be reused rather than reimplemented as another Boolean stack.
+
+These rules are executable in `sml_core::v888_handoff`. The full cross-project contract and current blockers are in [`V888_BOOL_COORDINATION.md`](V888_BOOL_COORDINATION.md).
 
 ## Track namespace
 
@@ -187,7 +207,7 @@ This is compatible with the existing SML objective of separating total learned c
 
 ## Dependencies
 
-- SciRust: graph, sparse, event and spiking/reference primitives.
+- SciRust: graph, sparse, event and spiking/reference primitives; executable graph qualification is tracked by `Memorithm/scirust#1520`, downstream of the V888-GROWTH/source umbrella #1500.
 - TDI: falsifiable matched-budget evaluation.
 - Forge: discrete topology search after the domain contract is frozen.
 - ElasticXxx: runtime resource policy only after static baselines exist.
