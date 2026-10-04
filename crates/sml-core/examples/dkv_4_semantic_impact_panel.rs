@@ -8,8 +8,8 @@ use std::{collections::BTreeMap, error::Error, fmt::Write as _};
 use sml_core::{
     delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE},
     delta_kv_adaptive::{
-        run_dkv4_recurrent, run_dkv4_semantic_recurrent, Dkv4Controller, Dkv4Decision,
-        Dkv4Policy, Dkv4Provenance, Dkv4SemanticController, Dkv4SemanticPolicy,
+        run_dkv4_recurrent, run_dkv4_semantic_recurrent, Dkv4Controller, Dkv4Decision, Dkv4Policy,
+        Dkv4Provenance, Dkv4SemanticController, Dkv4SemanticPolicy,
     },
     delta_kv_recurrent::{
         compare_delta_kv_recurrent, DeltaKvRecurrentKernel, DeltaKvRecurrentPolicy,
@@ -260,8 +260,10 @@ fn run_k<const K: usize>(
                     agg.written_macs_dkv4 += dkv4_macs;
 
                     agg.written_correct_semantic += u64::from(semantic_correct);
-                    agg.written_stop_semantic +=
-                        u64::from(matches!(semantic_out.decision, Dkv4Decision::StopCandidate(_)));
+                    agg.written_stop_semantic += u64::from(matches!(
+                        semantic_out.decision,
+                        Dkv4Decision::StopCandidate(_)
+                    ));
                     agg.written_abstain_semantic +=
                         u64::from(matches!(semantic_out.decision, Dkv4Decision::Abstain(_)));
                     agg.written_cycles_semantic += u64::from(semantic_out.depth);
@@ -317,10 +319,11 @@ fn run_k<const K: usize>(
                     let safe_after = safe_kernel.counters();
                     let safe_reads = safe_after.reads.saturating_sub(safe_before.reads);
                     if safe.depth != 0 || !safe.cycles.is_empty() {
-                        return Err("semantic missing-provenance path executed recurrent memory".into());
+                        return Err(
+                            "semantic missing-provenance path executed recurrent memory".into()
+                        );
                     }
-                    let safe_stop =
-                        matches!(safe.decision, Dkv4Decision::StopCandidate(_));
+                    let safe_stop = matches!(safe.decision, Dkv4Decision::StopCandidate(_));
                     agg.unknown_safe_reads_semantic += safe_reads;
                     agg.unknown_safe_stop_semantic += u64::from(safe_stop);
 
