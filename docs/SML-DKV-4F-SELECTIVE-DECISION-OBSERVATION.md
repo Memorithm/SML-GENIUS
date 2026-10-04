@@ -4,11 +4,11 @@ Status: Development observation under the frozen protocol in
 `SML-DKV-4F-SELECTIVE-DECISION-PREREGISTRATION.md`.
 
 Protocol commit: `84d8bc4e3ee5eb09472fb21e045c9df0eb542e0a`.
-Executed code: `0f54127886a9963cf090c2265c215c9bf6e06bdb`.
+Executed code: `056405709f1310c45c2a3c82c8357bcaf640e5bb`.
 Retained-evidence head before this observation:
-`fbea9355116185fc6d07a27bb14dff493db0e1a8`.
-RemoteOps retained-evidence run: `37219242501`.
-Host: `debian`, x86_64. Rust: 1.89.0.
+`e42f41f060fe682d74f58cf5cb69524111718114`.
+RemoteOps retained-evidence run: `37219410385`.
+Host: `tarek`, aarch64. Rust: 1.89.0.
 Rows: 8 scored task/state rows, plus 4 MOR geometry rows and 4 safety rows.
 Two explicit executions were byte-identical.
 Output SHA-256:
