@@ -229,8 +229,7 @@ fn contracts<const K: usize>(results: &mut Results) {
             assert_eq!(first.counters, second.counters, "C2 deterministic counters");
 
             assert_eq!(
-                bipolar_evidence.counters.semantic_coordinates_read,
-                256,
+                bipolar_evidence.counters.semantic_coordinates_read, 256,
                 "C4 bipolar coordinates"
             );
             assert_eq!(
@@ -323,8 +322,8 @@ fn experiments<const K: usize>(results: &mut Results) {
                 for _ in 0..load {
                     let state = random_state(&mut stream, 0);
                     let first_page = 1 + stream.below(PAGES) as u32;
-                    let second_page = 1
-                        + ((first_page as usize - 1) + 1 + stream.below(PAGES - 1)) % PAGES;
+                    let second_page =
+                        1 + ((first_page as usize - 1) + 1 + stream.below(PAGES - 1)) % PAGES;
                     writes.push((state.clone(), stream.next(), first_page));
                     writes.push((state, stream.next(), second_page as u32));
                 }
@@ -487,9 +486,9 @@ fn build_report() -> String {
     };
 
     let h1 = WIDTHS.iter().all(|&k| {
-        E1_LOADS
-            .iter()
-            .all(|&load| e1_ppm(k, 1, load, false).saturating_add(20_000) >= e1_ppm(k, 0, load, false))
+        E1_LOADS.iter().all(|&load| {
+            e1_ppm(k, 1, load, false).saturating_add(20_000) >= e1_ppm(k, 0, load, false)
+        })
     });
     let h2 = (0..2).all(|arm| {
         e1_ppm(1024, arm, 8, true).saturating_mul(10)
