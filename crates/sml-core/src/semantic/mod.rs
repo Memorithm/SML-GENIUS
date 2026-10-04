@@ -16,6 +16,7 @@ pub mod metric;
 pub mod mor_adaptive_hierarchy;
 pub mod mor_hierarchical;
 pub mod mor_hierarchy_train;
+pub mod mor_h4a_qualification;
 pub mod mor_routing;
 pub mod recurrent;
 pub mod simd;
@@ -72,6 +73,11 @@ pub use mor_hierarchy_train::{
     SemanticMorHierarchyTrainingArtifact, SemanticMorHierarchyTrainingConfig,
     SemanticMorHierarchyTrainingError, SemanticMorHierarchyTrainingExample,
     SemanticMorHierarchyTrainingReport,
+};
+pub use mor_h4a_qualification::{
+    SemanticMorH4aQualificationArtifact, SemanticMorH4aQualificationConfig,
+    SemanticMorH4aQualificationError, SemanticMorH4aQualificationReport,
+    SemanticMorH4aQualifier, SemanticMorH4aRandomControl,
 };
 pub use mor_routing::{
     SemanticExpertSignature, SemanticMorBridge, SemanticMorError, SemanticMorRoute,
