@@ -15,6 +15,7 @@ pub mod linguistic_bench;
 pub mod metric;
 pub mod mor_adaptive_hierarchy;
 pub mod mor_hierarchical;
+pub mod mor_hierarchy_majority;
 pub mod mor_hierarchy_train;
 pub mod mor_routing;
 pub mod recurrent;
@@ -66,6 +67,11 @@ pub use mor_hierarchical::{
     SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
     SemanticMorClusterSignature, SemanticMorHierarchyAccounting, SemanticMorHierarchyError,
     SemanticMorHierarchyPolicy,
+};
+pub use mor_hierarchy_majority::{
+    SemanticMorMajorityClusterReport, SemanticMorMajorityPrototypeTrainer,
+    SemanticMorMajorityTrainingArtifact, SemanticMorMajorityTrainingConfig,
+    SemanticMorMajorityTrainingError, SemanticMorMajorityTrainingReport,
 };
 pub use mor_hierarchy_train::{
     SemanticMorClusterPrototypeReport, SemanticMorHierarchyTrainer,
