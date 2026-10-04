@@ -1,0 +1,15 @@
+{
+  "schema": "sml.dkv4.learned-applicability.v1",
+  "protocol": "ae67b3ab11b4951b535b83011211deaa67971be5",
+  "executed_code": "6d6f3037c2e05e236bf2dcfa488eb1133b729078",
+  "host": "debian",
+  "architecture": "x86_64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "training_records_per_page": 64,
+  "validation_records_per_page": 64,
+  "test_rows": 128,
+  "missing_metadata_rows": 16,
+  "identical_reruns": 2,
+  "output_sha256": "d23c1d9ecd7918a0c750aad3b008642ebdc4387da48eed985e6674117794d264",
+  "scientific_promotion": "BLOCKED"
+}

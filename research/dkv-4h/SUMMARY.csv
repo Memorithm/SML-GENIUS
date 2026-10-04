@@ -1,0 +1,13 @@
+SPLIT,train_records=64,validation_records=64,test_metadata_records=64,train_id_ranges=10000-10063|30000-30063,validation_id_ranges=20000-20063|40000-40063,test_id_range=50000-50127
+FIT,page=0,outcome=Accepted,left_slot=3,right_slot=5,left_feature=ContextValue(7),right_feature=ContextValue(13),table_code=9,train_samples=64,validation_samples=64,candidate_features=8,candidate_pairs=28,selection_bound=28672,selection_executed=28672,baseline_train_errors=32,selected_train_errors=0,baseline_validation_errors=32,selected_validation_errors=0,validation_missing=0,validation_coverage=15
+FIT,page=1,outcome=Accepted,left_slot=3,right_slot=5,left_feature=ContextValue(7),right_feature=ContextValue(13),table_code=6,train_samples=64,validation_samples=64,candidate_features=8,candidate_pairs=28,selection_bound=28672,selection_executed=28672,baseline_train_errors=32,selected_train_errors=0,baseline_validation_errors=32,selected_validation_errors=0,validation_missing=0,validation_coverage=15
+SUMMARY,DYNAMIC_UNGUARDED,rows=128,answered=128,coverage_ppm=1000000,correct_answered=64,errors=64,risk_defined=true,risk_ppm=500000,cycles=256,reads=256
+SUMMARY,DYNAMIC_LEARNED,rows=128,answered=64,coverage_ppm=500000,correct_answered=64,errors=0,risk_defined=true,risk_ppm=0,cycles=256,reads=256
+SUMMARY,FIRST_PRIMARY_LEARNED,rows=128,answered=64,coverage_ppm=500000,correct_answered=64,errors=0,risk_defined=true,risk_ppm=0,cycles=192,reads=192
+SUMMARY,UNIVERSAL_ABSTAIN,rows=128,answered=0,coverage_ppm=0,correct_answered=0,errors=0,risk_defined=false,risk_ppm=0,cycles=0,reads=0
+SUMMARY,LEARNED_ALIGNED,rows=64,answered=64,coverage_ppm=1000000,correct_answered=64,errors=0,risk_defined=true,risk_ppm=0,cycles=128,reads=128
+SUMMARY,LEARNED_MISALIGNED,rows=64,answered=0,coverage_ppm=0,correct_answered=0,errors=0,risk_defined=false,risk_ppm=0,cycles=128,reads=128
+MISSING_METADATA_SUMMARY,rows=16,abstained=16
+SAFETY,favored_page=0,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+SAFETY,favored_page=1,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+PROMOTION,BLOCKED,learned_applicability_development_panel
