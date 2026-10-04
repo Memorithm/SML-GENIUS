@@ -333,6 +333,7 @@ pub fn report() -> R<String> {
     Ok(out)
 }
 
+#[allow(dead_code)]
 fn main() -> R<()> {
     print!("{}", report()?);
     Ok(())
