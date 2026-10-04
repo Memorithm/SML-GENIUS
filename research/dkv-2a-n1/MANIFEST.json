@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "input_patch": {
+    "name": "sml-dkv-0004-dkv-4d.patch",
+    "bytes": 33038,
+    "lines": 593,
+    "sha256": "4d3e2b2fd6db9a884c72e0d20f8a8597e8a9b5f495250c421bdb362fd2cf002a"
+  },
+  "protocol": "docs/SML-DKV-2A-N1-CURRENT-PANEL-PROTOCOL.md",
+  "executed_code_head": "f4721a6c2a8ce1eaef553506a5a3af585656d065",
+  "github_actions_run": 37234176336,
+  "job": 111529948744,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 142,
+  "promotion": "BLOCKED"
+}
