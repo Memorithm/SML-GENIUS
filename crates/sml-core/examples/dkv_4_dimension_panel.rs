@@ -169,12 +169,7 @@ fn run_k<const K: usize>(
         let mut memory = DeltaKvMemory::new(K, 2)?;
         let mut ingest = DeltaKvCounters::default();
         for (fact, evidence) in evidences.iter().enumerate() {
-            memory.update(
-                &evidence.key_q12,
-                &target_q12(fact),
-                FULL_RATE,
-                &mut ingest,
-            )?;
+            memory.update(&evidence.key_q12, &target_q12(fact), FULL_RATE, &mut ingest)?;
         }
 
         for fact in 0..FACTS {
@@ -241,8 +236,10 @@ fn run_k<const K: usize>(
                     let fixed4_correct = answer(&fixed4.fixed_depth.state) == expected;
                     let stability_correct = answer(&fixed1.adaptive.state) == expected;
                     agg.written_correct_dkv4 += u64::from(dkv4_correct);
-                    agg.written_stop_dkv4 +=
-                        u64::from(matches!(controlled_out.decision, Dkv4Decision::StopCandidate(_)));
+                    agg.written_stop_dkv4 += u64::from(matches!(
+                        controlled_out.decision,
+                        Dkv4Decision::StopCandidate(_)
+                    ));
                     agg.written_abstain_dkv4 +=
                         u64::from(matches!(controlled_out.decision, Dkv4Decision::Abstain(_)));
                     agg.written_cycles_dkv4 += u64::from(controlled_out.depth);
@@ -261,10 +258,16 @@ fn run_k<const K: usize>(
                         .last()
                         .map(|c| c.correction_abs_max_q12)
                         .unwrap_or(0);
-                    let dkv4_macs: u64 =
-                        controlled_out.cycles.iter().map(|c| c.read_macs_delta).sum();
-                    let stability_macs: u64 =
-                        fixed1.adaptive_cycles.iter().map(|c| c.read_macs_delta).sum();
+                    let dkv4_macs: u64 = controlled_out
+                        .cycles
+                        .iter()
+                        .map(|c| c.read_macs_delta)
+                        .sum();
+                    let stability_macs: u64 = fixed1
+                        .adaptive_cycles
+                        .iter()
+                        .map(|c| c.read_macs_delta)
+                        .sum();
                     writeln!(
                         text,
                         "ROW,{K},{seed},{fact},{kind},written,{},dkv4_correct={},dkv4_stop={},dkv4_depth={},dkv4_macs={dkv4_macs},first_correction={first_correction},final_correction={final_correction},fixed1_correct={fixed1_correct},fixed4_correct={fixed4_correct},stability_correct={stability_correct},stability_depth={},stability_macs={stability_macs},projection_coordinates={projected_coords},key_bits={key_bits}",
@@ -311,8 +314,7 @@ fn run_k<const K: usize>(
                     let resolved = 2_usize.saturating_sub(first.ambiguous_values);
                     agg.unknown_latent_any += u64::from(resolved != 0);
                     agg.unknown_latent_complete += u64::from(resolved == 2);
-                    let latent_macs: u64 =
-                        latent.cycles.iter().map(|c| c.read_macs_delta).sum();
+                    let latent_macs: u64 = latent.cycles.iter().map(|c| c.read_macs_delta).sum();
                     agg.unknown_latent_read_macs += latent_macs;
                     writeln!(
                         text,
@@ -378,8 +380,10 @@ STATUS,DEVELOPMENT_NOT_MODEL_QUALIFICATION
     if rows != (2 * SEEDS as usize * FACTS * (2 + HAMMING.len())) as u64 {
         return Err("incomplete paired dimension grid".into());
     }
-    text.push_str("PROMOTION,BLOCKED,synthetic_development_panel
-");
+    text.push_str(
+        "PROMOTION,BLOCKED,synthetic_development_panel
+",
+    );
     Ok(text)
 }
 
