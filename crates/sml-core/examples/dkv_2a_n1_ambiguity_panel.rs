@@ -162,9 +162,7 @@ impl ProjectionWork {
         self.mor_experts = self
             .mor_experts
             .saturating_add(counters.mor_selected_experts_read);
-        self.buckets = self
-            .buckets
-            .saturating_add(counters.bucket_accumulations);
+        self.buckets = self.buckets.saturating_add(counters.bucket_accumulations);
         self.quantized = self
             .quantized
             .saturating_add(counters.quantized_key_coordinates);
@@ -310,8 +308,7 @@ fn run_width<const K: usize>(results: &mut Results) {
                             }
                         }
                         local.facts += 1;
-                        local.wrong_coordinates =
-                            local.wrong_coordinates.saturating_add(wrong);
+                        local.wrong_coordinates = local.wrong_coordinates.saturating_add(wrong);
                         if wrong == 0 {
                             local.sign += 1;
                             if clear {
@@ -467,27 +464,25 @@ fn build_report() -> String {
     let h1 = results.compatibility_checked == results.compatibility_equal;
     let projections = SEEDS * PAIRS as u64 * 2;
     let h2 = WIDTHS.iter().all(|&k| {
-        results.geometry[&(k, 0, 0)].projection.buckets
-            == projections * (4 * BITS as u64 + 1)
+        results.geometry[&(k, 0, 0)].projection.buckets == projections * (4 * BITS as u64 + 1)
             && results.geometry[&(k, 1, 0)].projection.buckets
                 == projections * (3 * BITS as u64 + 1)
     });
     let h3 = WIDTHS
         .iter()
         .all(|&k| mean_cosine(&results, k, 1, 0) < mean_cosine(&results, k, 0, 0));
-    let h4 = [256, 1024].iter().all(|&k| {
-        strict_ppm(&results, k, 1, 0, 16) > strict_ppm(&results, k, 0, 0, 16)
-    });
-    let h5 = [32, 64].iter().all(|&load| {
-        strict_ppm(&results, 64, 1, 0, load) < strict_ppm(&results, 64, 1, 0, 16)
-    });
+    let h4 = [256, 1024]
+        .iter()
+        .all(|&k| strict_ppm(&results, k, 1, 0, 16) > strict_ppm(&results, k, 0, 0, 16));
+    let h5 = [32, 64]
+        .iter()
+        .all(|&load| strict_ppm(&results, 64, 1, 0, load) < strict_ppm(&results, 64, 1, 0, 16));
     let h6 = WIDTHS
         .iter()
         .all(|&k| results.recall.contains_key(&(k, 1, 1, 16)));
     let h8 = WIDTHS.iter().all(|&k| {
         NEAR_H.iter().all(|&h| {
-            alias_ppm(&results, k, 1, h)
-                <= alias_ppm(&results, k, 0, h).saturating_add(20_000)
+            alias_ppm(&results, k, 1, h) <= alias_ppm(&results, k, 0, h).saturating_add(20_000)
         })
     });
 
