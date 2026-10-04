@@ -407,6 +407,21 @@ See `SML-DKV-C-OBSERVATION.md`; engineering completion does not promote context.
 
 
 
+
+## DKV-2a-N1 ambiguity-neutral projection candidate
+
+Protocol: [SML-DKV-2A-N1-AMBIGUITY-NEUTRAL-PREREGISTRATION.md](SML-DKV-2A-N1-AMBIGUITY-NEUTRAL-PREREGISTRATION.md).
+
+- [x] Triage the supplied DKV-4b/4c patch without reusing its now-conflicting DKV-4 labels.
+- [x] Isolate the current bipolar zero-ambiguity common-vector mechanism in the DKV-2a projector.
+- [x] Freeze an active-only ambiguity candidate while keeping the qualified projector unchanged by default.
+- [ ] Implement explicit bipolar/active-only ambiguity modes with exact compatibility and work-counter tests.
+- [ ] Execute the Rust1.89 ZERO/SPARSE/DENSE_CONTROL load and key-geometry panel.
+- [ ] Re-run alias/near-miss and exact record/subject controls before any projector promotion.
+- [ ] Compare physical cost and false-acceptance behavior before combining with projection agreement or DKV-4.
+
+The supplied Rust1.97 recall/cosine numbers are retained as external input observations, not current-stack qualification.
+
 ## DKV projection-agreement follow-up
 
 Input review: [SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md](SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md).
