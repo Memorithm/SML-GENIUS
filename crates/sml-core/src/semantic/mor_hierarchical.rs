@@ -634,6 +634,7 @@ mod tests {
     use crate::{
         mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId, MOR_SCALE_PPM},
         mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
+        mor_specialization::MorClusterId,
         semantic::{
             SemanticBitField, SemanticExpertSignature, SemanticMorBridge, SemanticMorTopK,
             SemanticRouterSignature, SemanticState,
@@ -837,6 +838,26 @@ mod tests {
                 maximum: 1
             }
         ));
+    }
+
+    #[test]
+    fn specialization_registry_reuses_exact_hierarchy_partition() {
+        let registry = hierarchy(SemanticMorHierarchyPolicy {
+            min_clusters: 1,
+            max_clusters: 2,
+            cluster_mass_threshold_ppm: MOR_SCALE_PPM,
+            max_candidate_experts: 4,
+            max_candidate_edges: 4,
+            proposal_top_k: SemanticMorTopK::Two,
+        })
+        .specialization_registry()
+        .expect("specialization registry");
+
+        assert_eq!(registry.expert_count(), 4);
+        assert_eq!(registry.cluster_of(PageId(0)), Some(MorClusterId(10)));
+        assert_eq!(registry.cluster_of(PageId(1)), Some(MorClusterId(10)));
+        assert_eq!(registry.cluster_of(PageId(2)), Some(MorClusterId(20)));
+        assert_eq!(registry.cluster_of(PageId(3)), Some(MorClusterId(20)));
     }
 
     #[test]
