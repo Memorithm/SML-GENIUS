@@ -110,13 +110,9 @@ impl SemanticMorH4aQualifier {
         qualification_config: SemanticMorH4aQualificationConfig,
     ) -> Result<SemanticMorH4aQualificationArtifact<BITS>, SemanticMorH4aQualificationError> {
         let qualification_config = qualification_config.validate()?;
-        let learned_artifact = SemanticMorHierarchyTrainer::train(
-            baseline,
-            training,
-            development,
-            training_config,
-        )
-        .map_err(SemanticMorH4aQualificationError::Training)?;
+        let learned_artifact =
+            SemanticMorHierarchyTrainer::train(baseline, training, development, training_config)
+                .map_err(SemanticMorH4aQualificationError::Training)?;
 
         let registry = baseline
             .specialization_registry()
@@ -135,11 +131,7 @@ impl SemanticMorH4aQualifier {
             let control = random_medoid_control(baseline, &registry, training, *seed)?;
             random_controls.push(SemanticMorH4aRandomControl {
                 seed: *seed,
-                development_accuracy_ppm: evaluate_accuracy_ppm(
-                    &control,
-                    &registry,
-                    development,
-                )?,
+                development_accuracy_ppm: evaluate_accuracy_ppm(&control, &registry, development)?,
             });
         }
         let random_mean_development_accuracy_ppm = mean_ppm(
@@ -151,8 +143,10 @@ impl SemanticMorH4aQualifier {
 
         let learned_development_accuracy_ppm =
             learned_artifact.report.candidate_development_accuracy_ppm;
-        let learned_gain_over_fixed_ppm =
-            signed_gain(learned_development_accuracy_ppm, fixed_development_accuracy_ppm);
+        let learned_gain_over_fixed_ppm = signed_gain(
+            learned_development_accuracy_ppm,
+            fixed_development_accuracy_ppm,
+        );
         let learned_gain_over_majority_ppm = signed_gain(
             learned_development_accuracy_ppm,
             majority_development_accuracy_ppm,
@@ -218,7 +212,11 @@ fn majority_control<const BITS: usize>(
         for bit in 0..BITS {
             let mut ones = 0_usize;
             for example in &positives {
-                if example.routing.get(bit).map_err(SemanticMorH4aQualificationError::BitField)? {
+                if example
+                    .routing
+                    .get(bit)
+                    .map_err(SemanticMorH4aQualificationError::BitField)?
+                {
                     ones = ones.saturating_add(1);
                 }
             }
@@ -586,10 +584,7 @@ mod tests {
         )
         .expect("second");
 
-        assert_eq!(
-            first.report.random_controls,
-            second.report.random_controls
-        );
+        assert_eq!(first.report.random_controls, second.report.random_controls);
         assert_eq!(
             first
                 .report
