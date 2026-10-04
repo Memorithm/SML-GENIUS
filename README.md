@@ -57,6 +57,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **sml-core::semantic::mor_adaptive_hierarchy**: adaptive 1 -> 2 -> 4 MOR-H2 widening from observable routing/ambiguity signals with cumulative work budgets and an exhaustive research control.
 - **sml-core::mor_specialization**: MOR-H3 exposure-conditioned inter/intra-cluster balancing with neutral first exposure and bounded specialization-preserving adjustments.
 - **sml-core::semantic::mor_hierarchy_train**: MOR-H4a bounded training-only search for cluster prototypes with frozen expert memberships and a separate development gate.
+- **sml-core::semantic::mor_h4a_qualification**: matched fixed/learned/majority/random prototype controls over the same frozen train/development split.
 - **sml-core::task_loss**: task-answer training for hard Boolean conjunction and overwrite-state micro-operations plus held-out panel evaluation.
 - **sml-core::atlas**: dense O(1) circuit-page manifests with exact metadata/alignment accounting.
 - **sml-core::audit**: fail-closed non-attention execution-counter gate.
