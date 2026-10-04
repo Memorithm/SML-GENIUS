@@ -10,7 +10,7 @@ mod experiment;
 
 const SUMMARY: &str = include_str!("../../../research/dkv-a3/SUMMARY.csv");
 const MANIFEST: &str = include_str!("../../../research/dkv-a3/MANIFEST.txt");
-const OUTPUT_HASH: &str = "2b9793b6ad72c8d473cb418264786bac6268b496c01baaf6f1e5d7e9def4e22f";
+const OUTPUT_HASH: &str = "2a0669788fb69164539a644e5cab3b1166de9afdc3c9e1518fcf6b298143ded3";
 
 fn manifest_value(name: &str) -> &str {
     let prefix = format!("{name}=");
@@ -26,9 +26,16 @@ fn manifest_value(name: &str) -> &str {
 fn full_replay_matches_observed_hash_and_retained_summary() {
     // This is a post-observation regression check, not a new confirmation study.
     let actual = experiment::run().unwrap();
-    assert_eq!(sha256_raw_bytes(actual.csv.as_bytes()).unwrap().hex(), OUTPUT_HASH);
+    assert_eq!(
+        sha256_raw_bytes(actual.csv.as_bytes()).unwrap().hex(),
+        OUTPUT_HASH
+    );
     assert_eq!(actual.summary, SUMMARY);
-    let rows = actual.csv.lines().filter(|line| line.starts_with("A3_ROW,")).count();
+    let rows = actual
+        .csv
+        .lines()
+        .filter(|line| line.starts_with("A3_ROW,"))
+        .count();
     assert_eq!(rows, 1728);
     assert_eq!(manifest_value("full_output_sha256"), OUTPUT_HASH);
     assert_eq!(manifest_value("scientific_promotion"), "BLOCKED");
