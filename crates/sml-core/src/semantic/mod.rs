@@ -14,6 +14,7 @@ pub mod evidence_learning;
 pub mod linguistic_bench;
 pub mod metric;
 pub mod mor_adaptive_hierarchy;
+pub mod mor_h4a_qualification;
 pub mod mor_hierarchical;
 pub mod mor_hierarchy_majority;
 pub mod mor_hierarchy_train;
@@ -62,6 +63,11 @@ pub use mor_adaptive_hierarchy::{
     SemanticMorAdaptiveExhaustiveControl, SemanticMorAdaptiveHierarchyError,
     SemanticMorAdaptiveHierarchyPolicy, SemanticMorAdaptiveHierarchyReport,
     SemanticMorAdaptiveStageReport, SemanticMorWidenReason,
+};
+pub use mor_h4a_qualification::{
+    SemanticMorH4aQualificationArtifact, SemanticMorH4aQualificationConfig,
+    SemanticMorH4aQualificationError, SemanticMorH4aQualificationReport, SemanticMorH4aQualifier,
+    SemanticMorH4aRandomControl,
 };
 pub use mor_hierarchical::{
     SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
