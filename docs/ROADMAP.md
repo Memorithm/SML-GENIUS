@@ -432,11 +432,12 @@ Protocol: [SML-DKV-2A-N2-PAGE-DENSITY-REPLAY.md](SML-DKV-2A-N2-PAGE-DENSITY-REPL
 - [x] Triage the supplied DKV-4e patch against the merged ActiveOnly implementation.
 - [x] Reject the duplicate SparseA constructor/core change; current ActiveOnly already supplies the mechanism.
 - [x] Freeze a Rust1.89 replay for page diversity, page conflicts and exact A-density crossover.
-- [ ] Execute the current library through both Bipolar and ActiveOnly with byte-identical retained output.
-- [ ] Decide whether MOR PageId weight 8 is an adequate discriminator before any page-sensitive DKV use.
+- [x] Execute the current library through both Bipolar and ActiveOnly with byte-identical retained Rust1.89 output in `research/dkv-2a-n2/`.
+- [x] Decide current MOR PageId weight 8 is not an adequate discriminator: wrong-page recall nearly equals own-page recall and two-page conflicts remain unresolved.
+- [ ] Preregister and qualify a stronger bounded MOR/PageId key discriminator against N2 E1/E2 plus existing alias/provenance controls.
 - [ ] Use representative SBG A-density measurements, not synthetic density alone, for projector promotion.
 
-The source patch already contains Rust1.97 outcomes, so N2 hypotheses are imported replay targets, not blind preregistration.
+The source patch already contains Rust1.97 outcomes, so N2 hypotheses are imported replay targets, not blind preregistration. Current Rust1.89 observation: [SML-DKV-2A-N2-PAGE-DENSITY-OBSERVATION.md](SML-DKV-2A-N2-PAGE-DENSITY-OBSERVATION.md).
 
 ## DKV projection-agreement follow-up
 
