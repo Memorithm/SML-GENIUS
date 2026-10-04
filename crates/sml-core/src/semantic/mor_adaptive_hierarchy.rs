@@ -574,7 +574,7 @@ mod tests {
             cluster_margin_widen_ppm: 300_000,
             ..quiet_policy()
         };
-        let report = bridge(&[0, 1, 2, 4])
+        let report = bridge(&[0, 1, 2])
             .route_adaptive(
                 &state(&[0, 1, 2, 3], &[]),
                 &registry(),
@@ -661,7 +661,7 @@ mod tests {
             max_cumulative_candidate_edges: 2,
             ..quiet_policy()
         };
-        let error = bridge(&[0, 1, 2, 4])
+        let error = bridge(&[0, 1, 2])
             .route_adaptive(
                 &state(&[0, 1, 2, 3], &[]),
                 &registry(),
