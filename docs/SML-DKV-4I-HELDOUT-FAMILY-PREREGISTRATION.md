@@ -33,9 +33,16 @@ The curriculum contains:
 - TwoFactConjunction;
 - DistractorRejection.
 
-Use disjoint case-id ranges starting at 1,000,000, 1,100,000, ... as in the
-existing multi-task training tests, with 64 cases per family and frozen bounded
-difficulties.
+Use these exact base-curriculum proposals, 64 cases each:
+
+- DelayedBitRecall: start 1,000,000, difficulty 7;
+- OverwriteBitRecall: start 1,100,000, difficulty 7;
+- CopyAfterMarker: start 1,200,000, difficulty 8;
+- TwoFactConjunction: start 1,300,000, difficulty 7;
+- KeyedFactRecall: start 1,400,000, difficulty 7;
+- DistractorRejection: start 1,500,000, difficulty 7.
+
+Use `CurriculumPolicy::default()` and `MultiTaskTrainingPolicy::default()`.
 
 The resulting learned hard micro-operations and event router are frozen before
 applicability training.
@@ -102,8 +109,24 @@ The gate sees only four families:
 - KeyedFactRecall;
 - TwoFactConjunction.
 
-Training and development use disjoint case-id ranges and each include all four
-families. Each family contributes an equal number of examples.
+Training and development each include all four families with exactly 64
+examples per family.
+
+Training ranges, all at difficulty 5:
+
+- DelayedBitRecall: 2,000,000-2,000,063;
+- OverwriteBitRecall: 2,100,000-2,100,063;
+- KeyedFactRecall: 2,200,000-2,200,063;
+- TwoFactConjunction: 2,300,000-2,300,063.
+
+Development ranges, all at difficulty 11:
+
+- DelayedBitRecall: 3,000,000-3,000,063;
+- OverwriteBitRecall: 3,100,000-3,100,063;
+- KeyedFactRecall: 3,200,000-3,200,063;
+- TwoFactConjunction: 3,300,000-3,300,063.
+
+Thus fitting sees 256 training and 256 development applicability examples.
 
 The label for every example is the operational LIGHT-applicable target computed
 from a FULL execution.
@@ -131,7 +154,15 @@ evaluation:
 2. `DistractorRejection`
    - expected operational class: LIGHT not applicable.
 
-Use disjoint test case-id ranges and 64 metadata/task instances per family.
+Use exactly:
+
+- CopyAfterMarker case IDs 4,000,000-4,000,063, with payload length
+  `1 + (case_id mod 16)`;
+- DistractorRejection case IDs 4,100,000-4,100,063, with distractor count
+  `1 + (case_id mod 16)`.
+
+This yields 64 held-out task instances per family. Crossing both recurrent
+state fixtures produces 256 scored routed rows.
 
 Before scoring, execute FULL on the held-out tasks and retain its exact
 task-result and keyed-memory counters as evaluation evidence only.
