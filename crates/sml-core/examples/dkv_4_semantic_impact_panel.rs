@@ -379,7 +379,7 @@ STATUS,DEVELOPMENT_NOT_MODEL_QUALIFICATION
     for ((k, kind), a) in &summaries {
         writeln!(
             text,
-            "SUMMARY,{k},{kind},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            "SUMMARY,{k},{kind},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             a.rows,
             a.written_correct_dkv4,
             a.written_stop_dkv4,
