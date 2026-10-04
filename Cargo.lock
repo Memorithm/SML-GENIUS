@@ -88,17 +88,18 @@ name = "sml-decision"
 version = "0.1.0"
 dependencies = [
  "sml-core",
+ "sml-rsi",
 ]
 
 [[package]]
-name = "sml-runtime"
+name = "sml-rsi"
 version = "0.1.0"
 dependencies = [
  "sml-core",
 ]
 
 [[package]]
-name = "sml-rsi"
+name = "sml-runtime"
 version = "0.1.0"
 dependencies = [
  "sml-core",
