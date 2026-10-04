@@ -63,11 +63,12 @@ pub use mor_adaptive_hierarchy::{
     SemanticMorAdaptiveStageReport, SemanticMorWidenReason,
 };
 pub use mor_hierarchy_learning::{
-    evaluate_cluster_prototypes, SemanticMorClusterEvaluationReport,
-    SemanticMorClusterEvaluationRow, SemanticMorClusterPrototypeArtifact,
-    SemanticMorClusterPrototypeError, SemanticMorClusterPrototypeReport,
-    SemanticMorClusterPrototypeTrainer, SemanticMorClusterPrototypeTrainingConfig,
-    SemanticMorClusterPrototypeTrainingReport, SemanticMorClusterTrainingExample,
+    evaluate_cluster_prototypes, fit_hierarchy_cluster_prototypes,
+    SemanticMorClusterEvaluationReport, SemanticMorClusterEvaluationRow,
+    SemanticMorClusterPrototypeArtifact, SemanticMorClusterPrototypeError,
+    SemanticMorClusterPrototypeReport, SemanticMorClusterPrototypeTrainer,
+    SemanticMorClusterPrototypeTrainingConfig, SemanticMorClusterPrototypeTrainingReport,
+    SemanticMorClusterTrainingExample, SemanticMorLearnedHierarchyArtifact,
 };
 pub use mor_hierarchical::{
     SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
