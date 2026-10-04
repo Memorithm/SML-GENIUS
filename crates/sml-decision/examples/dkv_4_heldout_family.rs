@@ -24,7 +24,7 @@ use sml_core::{
     semantic::{SemanticRewriteTrace, SemanticRewriter, SemanticState, SemanticStateDelta},
     tasks::{
         copy_after_marker, delayed_bit_recall, distractor_rejection, keyed_fact_recall,
-        overwrite_bit_recall, two_fact_conjunction, TaskAnswer, TaskEvent, TaskInstance, TaskKind,
+        overwrite_bit_recall, two_fact_conjunction, TaskEvent, TaskInstance, TaskKind,
     },
     train::TruthTable2,
     HaltingPolicy, PageId,
