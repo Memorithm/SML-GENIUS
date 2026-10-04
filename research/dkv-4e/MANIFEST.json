@@ -1,0 +1,17 @@
+{
+  "schema": "sml.dkv4.dynamic-mor.v1",
+  "protocol": "8a239db660a63b1be2ef4ac7880d325ed5cd14f6",
+  "executed_code": "d6a7c425b25958863a90bdae4b6c73692f0b8f2f",
+  "remoteops_run": 37200716553,
+  "host": "tarek",
+  "architecture": "aarch64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "report_lines": 42,
+  "scored_rows": 8,
+  "mor_rows": 4,
+  "trace_rows": 23,
+  "safety_rows": 4,
+  "identical_reruns": 2,
+  "output_sha256": "91d6aa9b1359dc528d38687861e092193713bb4f92e285feac371b57edc4aa37",
+  "scientific_promotion": "BLOCKED"
+}

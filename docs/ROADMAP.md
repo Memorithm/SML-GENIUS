@@ -177,8 +177,12 @@ workspace.
 - [x] DKV-2c dynamic SBG re-keying mechanism evaluated under frozen MOR selection (merged implementation PR #86; not promoted after missing-successor control remained confidently non-ambiguous);
 - [ ] DKV-3a context/provenance integration preregistered; execution blocked on CONTEXT-0/1, uses qualified DKV-2b frozen-key recurrence only and requires raw verification for source-exact tasks with exact raw provenance and long-range task
   evidence;
-- [ ] DKV-4 adaptive recurrent-compute controller using qualified correction/state
-  signals, compared against fixed-depth and simpler deterministic controls.
+- [x] DKV-4 Development adaptive-compute programme: fail-closed provenance-first
+  controller, actual DKV-2b/SBG/MOR signals, fixed-depth/stability controls, paired
+  K64/K256 evidence, and semantic-impact follow-up completed. DKV-4a absolute-Q12
+  refinement is rejected; DKV-4c removes ~49% of DKV-4a cycles without correctness
+  loss but matches stability-only on the current fixed-MOR panel, so scientific
+  promotion remains blocked. See `SML-DKV-4-FINAL-REPORT.md`.
 
 The external Cadence work is only a hypothesis source for rewritable memory and
 repair-oriented computation. No external implementation or benchmark result is
@@ -238,6 +242,7 @@ Use an early broad routing stage to construct a bounded candidate pool, then res
 - [x] MOR-H2 adaptive 1 -> 2 -> 4 widening from coarse margin, MOR margin/disagreement and SBG ambiguity, with cumulative fail-closed work budgets and a separate exhaustive-primary recall control.
 - [x] MOR-H3 specialization-preserving balance: exposure-conditioned EMAs, neutral first exposure, shared H1/H2 cluster partition, and separate bounded inter/intra-cluster adjustments.
 - [x] MOR-H4a bounded learned cluster prototypes from training-only SBG routing states, with frozen memberships and a separate development holdout gate.
+- [x] MOR-H4a majority-bit control with identical target-expert semantics, weak-bit seed retention, hard mutation budgets and a separate development gate.
 - [x] MOR-H4a matched qualification harness for fixed, learned-medoid, training-majority and deterministic random-medoid prototype arms with explicit gain gates.
 - [ ] MOR-H4b learned expert-to-cluster membership only after a frozen representative-task H4a campaign uses the matched harness with repeated seeds and retains quality/resource evidence.
 - [ ] Preregister and run matched exhaustive/fixed-1/fixed-2/fixed-4/adaptive/random-pool plus legacy/no-balance/H3 balance comparisons on disjoint development tasks.
@@ -399,3 +404,25 @@ This is software conformance only; no new scientific promotion.
 - [ ] Independently qualify learned/representative tasks and physical costs.
 
 See `SML-DKV-C-OBSERVATION.md`; engineering completion does not promote context.
+
+
+## DKV-4 development completion
+
+- [x] Implement typed `Refine / StopCandidate / Abstain` compute control with no
+  `Accept` action.
+- [x] Bind executed DKV-2b cycle evidence, exact SBG V/M/A/R deltas and MOR
+  disagreement/escalation into a bounded controller.
+- [x] Enforce `Missing/Conflict` zero-read abstention and prevent `Unverified`
+  evidence from stopping a candidate.
+- [x] Freeze and execute paired K=64/K=256 Development controls with immutable
+  evidence and exact code/protocol identities.
+- [x] Preserve DKV-4a as negative evidence after ~1.95x stability-only cycles
+  without a correctness gain.
+- [x] Execute DKV-4c semantic-impact follow-up: written correctness preserved;
+  cycles/read-MACs reduced by 48.78% at K64 and 49.08% at K256 versus DKV-4a.
+- [ ] Demonstrate benefit beyond SBG stability-only on a separately frozen,
+  non-trivial MOR-disagreement/escalation panel.
+- [ ] Qualify learned/representative states and physical latency/RSS/traffic/energy.
+
+The checked items close the engineering/development milestone only. They do not
+promote Delta-KV context integration or establish model-quality superiority.

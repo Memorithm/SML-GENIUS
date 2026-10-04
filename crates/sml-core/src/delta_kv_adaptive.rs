@@ -317,6 +317,123 @@ impl Dkv4SemanticController {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dkv4RefinementCapabilities {
+    /// True only when another admitted recurrent cycle can in principle change
+    /// the evidence from which the supplied MOR decision is derived.
+    pub mor_evidence_can_change: bool,
+}
+
+impl Dkv4RefinementCapabilities {
+    /// Current DKV-2b frozen-key composition: V/A may change, R does not.
+    #[must_use]
+    pub const fn dkv2b_fixed_mor() -> Self {
+        Self {
+            mor_evidence_can_change: false,
+        }
+    }
+
+    /// Explicitly declares a composition where MOR evidence can change between
+    /// admitted recurrent cycles.
+    #[must_use]
+    pub const fn dynamic_mor() -> Self {
+        Self {
+            mor_evidence_can_change: true,
+        }
+    }
+}
+
+/// DKV-4d: semantic-impact control with explicit signal actionability.
+///
+/// This keeps DKV-4c's fail-closed provenance and semantic-impact behavior, but
+/// invariant MOR evidence is telemetry rather than an unconditional request for
+/// another DKV-2b cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dkv4ActionableController {
+    policy: Dkv4SemanticPolicy,
+}
+
+impl Dkv4ActionableController {
+    pub fn new(policy: Dkv4SemanticPolicy) -> Result<Self, Dkv4Error> {
+        Ok(Self {
+            policy: policy.validate()?,
+        })
+    }
+
+    #[must_use]
+    pub const fn policy(self) -> Dkv4SemanticPolicy {
+        self.policy
+    }
+
+    pub fn decide(
+        self,
+        signals: Dkv4Signals,
+        capabilities: Dkv4RefinementCapabilities,
+    ) -> Result<Dkv4Decision, Dkv4Error> {
+        if signals.depth == 0 || signals.depth > self.policy.max_depth {
+            return Err(Dkv4Error::InvalidDepth {
+                depth: signals.depth,
+                max: self.policy.max_depth,
+            });
+        }
+        if signals.mor_structural_disagreement_ppm > MOR_SCALE_PPM {
+            return Err(Dkv4Error::InvalidPpm);
+        }
+
+        match signals.provenance {
+            Dkv4Provenance::Missing => {
+                return Ok(Dkv4Decision::Abstain(Dkv4Reason::MissingEvidence))
+            }
+            Dkv4Provenance::Conflict => {
+                return Ok(Dkv4Decision::Abstain(Dkv4Reason::ConflictingEvidence))
+            }
+            Dkv4Provenance::Unverified => {
+                return Ok(if signals.depth < self.policy.max_depth {
+                    Dkv4Decision::Refine(Dkv4Reason::UnverifiedEvidence)
+                } else {
+                    Dkv4Decision::Abstain(Dkv4Reason::UnverifiedEvidence)
+                })
+            }
+            Dkv4Provenance::VerifiedPresent => {}
+        }
+
+        if signals.depth < self.policy.min_depth {
+            return Ok(Dkv4Decision::Refine(Dkv4Reason::MinimumDepth));
+        }
+
+        let unresolved = self.unresolved_reason(signals, capabilities);
+        match unresolved {
+            Some(reason) if signals.depth < self.policy.max_depth => {
+                Ok(Dkv4Decision::Refine(reason))
+            }
+            Some(_) => Ok(Dkv4Decision::Abstain(Dkv4Reason::BudgetExhausted)),
+            None => Ok(Dkv4Decision::StopCandidate(Dkv4Reason::Stable)),
+        }
+    }
+
+    fn unresolved_reason(
+        self,
+        signals: Dkv4Signals,
+        capabilities: Dkv4RefinementCapabilities,
+    ) -> Option<Dkv4Reason> {
+        if signals.ambiguous_values != 0 {
+            return Some(Dkv4Reason::AmbiguousMemory);
+        }
+        if signals.state_delta.total() > self.policy.stable_hamming_threshold as u128 {
+            return Some(Dkv4Reason::StateChanging);
+        }
+        if capabilities.mor_evidence_can_change {
+            if signals.mor_precision_escalation {
+                return Some(Dkv4Reason::MorPrecisionEscalation);
+            }
+            if signals.mor_structural_disagreement_ppm > self.policy.mor_disagreement_refine_ppm {
+                return Some(Dkv4Reason::MorDisagreement);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dkv4RunOutcome<const BITS: usize> {
     pub state: SemanticState<BITS>,
@@ -445,6 +562,76 @@ pub fn run_dkv4_semantic_recurrent<const BITS: usize>(
             .map_err(Dkv4RunError::Controller)?;
         let decision = controller
             .decide(signals)
+            .map_err(Dkv4RunError::Controller)?;
+        trace.push(entry);
+        state = step.state;
+
+        if !matches!(decision, Dkv4Decision::Refine(_)) {
+            return Ok(Dkv4RunOutcome {
+                state,
+                depth,
+                decision,
+                trace,
+                cycles: kernel.cycle_evidence()[cycle_start..].to_vec(),
+            });
+        }
+    }
+
+    Err(Dkv4RunError::InternalInvariant)
+}
+
+/// Executes DKV-2b under DKV-4d actionability-aware control.
+///
+/// The supplied capability declaration is part of the composition contract.
+/// It is not inferred from task outcomes or answer correctness.
+pub fn run_dkv4_actionable_recurrent<const BITS: usize>(
+    initial: SemanticState<BITS>,
+    kernel: &mut DeltaKvRecurrentKernel<BITS>,
+    mor: &MorDecision,
+    provenance: Dkv4Provenance,
+    controller: Dkv4ActionableController,
+    capabilities: Dkv4RefinementCapabilities,
+) -> Result<Dkv4RunOutcome<BITS>, Dkv4RunError> {
+    let preflight = match provenance {
+        Dkv4Provenance::Missing => Some(Dkv4Decision::Abstain(Dkv4Reason::MissingEvidence)),
+        Dkv4Provenance::Conflict => Some(Dkv4Decision::Abstain(Dkv4Reason::ConflictingEvidence)),
+        Dkv4Provenance::VerifiedPresent | Dkv4Provenance::Unverified => None,
+    };
+    if let Some(decision) = preflight {
+        return Ok(Dkv4RunOutcome {
+            state: initial,
+            depth: 0,
+            decision,
+            trace: Vec::new(),
+            cycles: Vec::new(),
+        });
+    }
+
+    let mut state = initial;
+    let mut trace = Vec::with_capacity(controller.policy().max_depth as usize);
+    let cycle_start = kernel.cycle_evidence().len();
+
+    for depth in 1..=controller.policy().max_depth {
+        let before = kernel.cycle_evidence().len();
+        let step = kernel
+            .rewrite(&state, depth)
+            .map_err(Dkv4RunError::Kernel)?;
+        if kernel.cycle_evidence().len() != before.saturating_add(1) {
+            return Err(Dkv4RunError::InternalInvariant);
+        }
+        let entry = SemanticRewriteTrace {
+            depth,
+            delta: SemanticStateDelta::between(&state, &step.state),
+            stability_blocked: step.stability_blocked,
+        };
+        let cycle = kernel
+            .cycle_evidence()
+            .last()
+            .ok_or(Dkv4RunError::InternalInvariant)?;
+        let signals = Dkv4Signals::from_dkv2b(&entry, cycle, mor, provenance)
+            .map_err(Dkv4RunError::Controller)?;
+        let decision = controller
+            .decide(signals, capabilities)
             .map_err(Dkv4RunError::Controller)?;
         trace.push(entry);
         state = step.state;
@@ -956,6 +1143,157 @@ mod tests {
             outcome.decision,
             Dkv4Decision::Abstain(Dkv4Reason::UnverifiedEvidence)
         );
+    }
+
+    #[test]
+    fn actionable_controller_ignores_invariant_mor_signal() {
+        let controller = Dkv4ActionableController::new(Dkv4SemanticPolicy::default()).unwrap();
+        let mut signals = stable(1, Dkv4Provenance::VerifiedPresent);
+        signals.mor_precision_escalation = true;
+        signals.mor_structural_disagreement_ppm = 500_000;
+
+        assert_eq!(
+            controller
+                .decide(signals, Dkv4RefinementCapabilities::dkv2b_fixed_mor())
+                .unwrap(),
+            Dkv4Decision::StopCandidate(Dkv4Reason::Stable)
+        );
+        assert_eq!(
+            controller
+                .decide(signals, Dkv4RefinementCapabilities::dynamic_mor())
+                .unwrap(),
+            Dkv4Decision::Refine(Dkv4Reason::MorPrecisionEscalation)
+        );
+    }
+
+    #[test]
+    fn actionable_controller_keeps_semantic_change_and_ambiguity_active() {
+        let controller = Dkv4ActionableController::new(Dkv4SemanticPolicy::default()).unwrap();
+        let caps = Dkv4RefinementCapabilities::dkv2b_fixed_mor();
+
+        let mut changing = stable(1, Dkv4Provenance::VerifiedPresent);
+        changing.state_delta.value = 1;
+        changing.mor_precision_escalation = true;
+        assert_eq!(
+            controller.decide(changing, caps).unwrap(),
+            Dkv4Decision::Refine(Dkv4Reason::StateChanging)
+        );
+
+        let mut ambiguous = stable(1, Dkv4Provenance::VerifiedPresent);
+        ambiguous.ambiguous_values = 1;
+        assert_eq!(
+            controller.decide(ambiguous, caps).unwrap(),
+            Dkv4Decision::Refine(Dkv4Reason::AmbiguousMemory)
+        );
+    }
+
+    #[test]
+    fn actionable_runner_fixed_mor_stops_when_semantic_state_stabilizes() {
+        let mut initial = SemanticState::<8>::zeroed().unwrap();
+        initial.value.set(0, true).unwrap();
+        let mut disagreement = mor();
+        disagreement.structural_disagreement_ppm = 500_000;
+        disagreement.request_precision_escalation = true;
+
+        let mut semantic_kernel = kernel();
+        let semantic = run_dkv4_semantic_recurrent(
+            initial.clone(),
+            &mut semantic_kernel,
+            &disagreement,
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4SemanticController::new(Dkv4SemanticPolicy::default()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(semantic.depth, 4);
+        assert_eq!(
+            semantic.decision,
+            Dkv4Decision::Abstain(Dkv4Reason::BudgetExhausted)
+        );
+
+        let mut actionable_kernel = kernel();
+        let actionable = run_dkv4_actionable_recurrent(
+            initial,
+            &mut actionable_kernel,
+            &disagreement,
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4ActionableController::new(Dkv4SemanticPolicy::default()).unwrap(),
+            Dkv4RefinementCapabilities::dkv2b_fixed_mor(),
+        )
+        .unwrap();
+        assert_eq!(actionable.depth, 1);
+        assert_eq!(
+            actionable.decision,
+            Dkv4Decision::StopCandidate(Dkv4Reason::Stable)
+        );
+    }
+
+    #[test]
+    fn actionable_runner_dynamic_mor_reproduces_semantic_controller_depth() {
+        let mut initial = SemanticState::<8>::zeroed().unwrap();
+        initial.value.set(0, true).unwrap();
+        let mut disagreement = mor();
+        disagreement.structural_disagreement_ppm = 500_000;
+        disagreement.request_precision_escalation = true;
+
+        let mut semantic_kernel = kernel();
+        let semantic = run_dkv4_semantic_recurrent(
+            initial.clone(),
+            &mut semantic_kernel,
+            &disagreement,
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4SemanticController::new(Dkv4SemanticPolicy::default()).unwrap(),
+        )
+        .unwrap();
+
+        let mut actionable_kernel = kernel();
+        let actionable = run_dkv4_actionable_recurrent(
+            initial,
+            &mut actionable_kernel,
+            &disagreement,
+            Dkv4Provenance::VerifiedPresent,
+            Dkv4ActionableController::new(Dkv4SemanticPolicy::default()).unwrap(),
+            Dkv4RefinementCapabilities::dynamic_mor(),
+        )
+        .unwrap();
+
+        assert_eq!(actionable.depth, semantic.depth);
+        assert_eq!(actionable.decision, semantic.decision);
+        assert_eq!(actionable.state, semantic.state);
+    }
+
+    #[test]
+    fn actionable_runner_preserves_fail_closed_provenance() {
+        let controller = Dkv4ActionableController::new(Dkv4SemanticPolicy::default()).unwrap();
+        let caps = Dkv4RefinementCapabilities::dkv2b_fixed_mor();
+
+        for provenance in [Dkv4Provenance::Missing, Dkv4Provenance::Conflict] {
+            let mut k = kernel();
+            let before = k.counters().reads;
+            let outcome = run_dkv4_actionable_recurrent(
+                SemanticState::<8>::zeroed().unwrap(),
+                &mut k,
+                &mor(),
+                provenance,
+                controller,
+                caps,
+            )
+            .unwrap();
+            assert_eq!(outcome.depth, 0);
+            assert_eq!(k.counters().reads, before);
+            assert!(matches!(outcome.decision, Dkv4Decision::Abstain(_)));
+        }
+
+        let mut k = kernel();
+        let outcome = run_dkv4_actionable_recurrent(
+            SemanticState::<8>::zeroed().unwrap(),
+            &mut k,
+            &mor(),
+            Dkv4Provenance::Unverified,
+            controller,
+            caps,
+        )
+        .unwrap();
+        assert!(!matches!(outcome.decision, Dkv4Decision::StopCandidate(_)));
     }
 
     #[test]
