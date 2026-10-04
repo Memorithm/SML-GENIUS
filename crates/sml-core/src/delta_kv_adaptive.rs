@@ -240,9 +240,7 @@ mod tests {
     fn unverified_never_stops_a_candidate() {
         let c = Dkv4Controller::new(Dkv4Policy::default()).unwrap();
         for depth in 1..=c.policy().max_depth {
-            let d = c
-                .decide(stable(depth, Dkv4Provenance::Unverified))
-                .unwrap();
+            let d = c.decide(stable(depth, Dkv4Provenance::Unverified)).unwrap();
             assert!(!matches!(d, Dkv4Decision::StopCandidate(_)));
         }
     }
@@ -283,10 +281,7 @@ mod tests {
         cases.push((s, Dkv4Reason::CorrectionActive));
 
         for (signals, reason) in cases {
-            assert_eq!(
-                c.decide(signals).unwrap(),
-                Dkv4Decision::Refine(reason)
-            );
+            assert_eq!(c.decide(signals).unwrap(), Dkv4Decision::Refine(reason));
             let mut exhausted = signals;
             exhausted.depth = c.policy().max_depth;
             assert_eq!(
