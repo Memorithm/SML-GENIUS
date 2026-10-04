@@ -228,9 +228,7 @@ fn feature_coordinate(feature: SemanticFeature) -> usize {
     }
 }
 
-fn normal_observed<'a>(
-    mask: &'a SemanticBitField<BITS>,
-) -> ObservedFields<'a, BITS> {
+fn normal_observed<'a>(mask: &'a SemanticBitField<BITS>) -> ObservedFields<'a, BITS> {
     ObservedFields {
         value: mask,
         meaning_mask: mask,
@@ -281,10 +279,7 @@ fn mor_decision(favored: PageId, previous: &PreviousRoute) -> R<MorDecision> {
     })?;
     Ok(registry.route(
         &engine,
-        &[
-            router(0, favored, MOR_SCALE_PPM),
-            router(1, other, 920_000),
-        ],
+        &[router(0, favored, MOR_SCALE_PPM), router(1, other, 920_000)],
         &[],
         previous,
     )?)
@@ -348,9 +343,14 @@ fn dkv_kernel() -> R<DeltaKvRecurrentKernel<BITS>> {
     Ok(kernel)
 }
 
-fn recurrence_state(metadata: &SemanticState<BITS>, fixture: StateFixture) -> R<SemanticState<BITS>> {
+fn recurrence_state(
+    metadata: &SemanticState<BITS>,
+    fixture: StateFixture,
+) -> R<SemanticState<BITS>> {
     let mut state = metadata.clone();
-    state.value.set(0, matches!(fixture, StateFixture::Stable))?;
+    state
+        .value
+        .set(0, matches!(fixture, StateFixture::Stable))?;
     Ok(state)
 }
 
@@ -375,12 +375,12 @@ fn run_dynamic(
         Dkv4Provenance::Missing | Dkv4Provenance::Conflict
     ) {
         let decision = match provenance {
-            Dkv4Provenance::Missing => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence,
-            ),
-            Dkv4Provenance::Conflict => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence,
-            ),
+            Dkv4Provenance::Missing => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence)
+            }
+            Dkv4Provenance::Conflict => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence)
+            }
             _ => unreachable!(),
         };
         return Ok(DynamicOutcome {
@@ -413,8 +413,7 @@ fn run_dynamic(
             .ok_or("missing dynamic DKV cycle evidence")?;
         let mor = mor_decision(favored, &previous)?;
         let signals = Dkv4Signals::from_dkv2b(&trace, dkv, &mor, provenance)?;
-        let decision =
-            controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
+        let decision = controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
         let next = next_previous(&mor);
         state = step.state;
 
@@ -633,7 +632,11 @@ pub fn report() -> R<String> {
     for (metadata_index, metadata) in test_states.iter().enumerate() {
         let bits = latent(metadata_index);
         let expected = expected_page(bits);
-        let favored = if bits.c { expected } else { other_page(expected) };
+        let favored = if bits.c {
+            expected
+        } else {
+            other_page(expected)
+        };
         let aligned = favored == expected;
         let oracle = expert_output(expected)?;
         let (first_mor, second_mor) = validate_geometry(favored)?;
@@ -651,20 +654,11 @@ pub fn report() -> R<String> {
                 },
                 4,
             )?;
-            let dynamic = run_dynamic(
-                initial,
-                base,
-                favored,
-                Dkv4Provenance::VerifiedPresent,
-            )?;
+            let dynamic = run_dynamic(initial, base, favored, Dkv4Provenance::VerifiedPresent)?;
             let (dynamic_page, dynamic_answer) = dynamic_proposal(&dynamic)?
                 .ok_or("dynamic learned-applicability row did not produce singleton proposal")?;
             let gate = gate_for(dynamic_page, &gate0, &gate1)?;
-            let permit = gate.evaluate(
-                row_id,
-                &dynamic.state,
-                normal_observed(&normal_mask),
-            )?;
+            let permit = gate.evaluate(row_id, &dynamic.state, normal_observed(&normal_mask))?;
             let learned_answer = if permit == Some(true) {
                 Some(dynamic_answer)
             } else {
@@ -684,12 +678,7 @@ pub fn report() -> R<String> {
                 None
             };
 
-            dynamic_unguarded.observe(
-                Some(dynamic_answer),
-                oracle,
-                dynamic.depth,
-                dynamic.reads,
-            );
+            dynamic_unguarded.observe(Some(dynamic_answer), oracle, dynamic.depth, dynamic.reads);
             dynamic_learned.observe(learned_answer, oracle, dynamic.depth, dynamic.reads);
             first_primary_learned.observe(
                 first_answer,
@@ -747,7 +736,11 @@ pub fn report() -> R<String> {
         let metadata = &test_states[metadata_index];
         let bits = latent(metadata_index);
         let expected = expected_page(bits);
-        let favored = if bits.c { expected } else { other_page(expected) };
+        let favored = if bits.c {
+            expected
+        } else {
+            other_page(expected)
+        };
         let (_, second_mor) = validate_geometry(favored)?;
         let page = second_mor.selected_experts[0];
         let gate = gate_for(page, &gate0, &gate1)?;

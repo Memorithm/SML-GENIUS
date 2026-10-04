@@ -7,19 +7,28 @@ fn learned_applicability_report_is_deterministic_and_falsifiable() {
     let second = experiment::report().unwrap();
     assert_eq!(first, second);
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("FIT,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("FIT,"))
+            .count(),
         2
     );
     assert!(first.contains("PROMOTION,BLOCKED"));
 
     if first.contains("DOWNSTREAM,SKIPPED") {
         assert_eq!(
-            first.lines().filter(|line| line.starts_with("ROW,")).count(),
+            first
+                .lines()
+                .filter(|line| line.starts_with("ROW,"))
+                .count(),
             0
         );
     } else {
         assert_eq!(
-            first.lines().filter(|line| line.starts_with("ROW,")).count(),
+            first
+                .lines()
+                .filter(|line| line.starts_with("ROW,"))
+                .count(),
             128
         );
         assert_eq!(
