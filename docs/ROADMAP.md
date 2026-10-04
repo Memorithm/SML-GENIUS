@@ -406,6 +406,21 @@ This is software conformance only; no new scientific promotion.
 See `SML-DKV-C-OBSERVATION.md`; engineering completion does not promote context.
 
 
+
+## DKV projection-agreement follow-up
+
+Input review: [SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md](SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md).
+
+- [x] Triage the supplied DKV-4 patch against current provenance, aliasing and adaptive-control contracts.
+- [x] Reject the legacy FNV/unbounded context adapter and older controller where current main is stronger.
+- [x] Retain separately seeded projection agreement as a research-only abstention/compute hypothesis, not a source/correctness signal.
+- [ ] Preregister a current-Rust1.89 replay with 1/3/5/9 members and exact/nearest-neighbour matched controls.
+- [ ] Extend the replay into storage-matched write counts in the hundreds and retain key-width false-acceptance behavior.
+- [ ] Qualify selective-risk/coverage plus physical latency/RSS/traffic before exposing any runtime signal.
+- [ ] Only after separate qualification, compare projection agreement with DKV-4/applicability in a factorial ablation.
+
+This follow-up does not alter the current DKV-3a acceptance policy, DKV-4h protocol or context/model promotion boundary.
+
 ## DKV-4 development completion
 
 - [x] Implement typed `Refine / StopCandidate / Abstain` compute control with no
