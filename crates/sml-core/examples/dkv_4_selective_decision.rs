@@ -114,10 +114,7 @@ fn mor_decision(favored: PageId, previous: &PreviousRoute) -> R<MorDecision> {
             experts: vec![other],
         },
     ];
-    let inputs = vec![
-        router(0, favored, MOR_SCALE_PPM),
-        router(1, other, 920_000),
-    ];
+    let inputs = vec![router(0, favored, MOR_SCALE_PPM), router(1, other, 920_000)];
 
     let registry = MorRouterRegistry::new(
         specializations,
@@ -241,7 +238,10 @@ fn run_dynamic(
     provenance: Dkv4Provenance,
 ) -> R<DynamicOutcome> {
     let reads_start = kernel.counters().reads;
-    if matches!(provenance, Dkv4Provenance::Missing | Dkv4Provenance::Conflict) {
+    if matches!(
+        provenance,
+        Dkv4Provenance::Missing | Dkv4Provenance::Conflict
+    ) {
         let decision = if matches!(provenance, Dkv4Provenance::Missing) {
             Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence)
         } else {
@@ -406,11 +406,8 @@ pub fn report() -> R<String> {
                 Dkv4Provenance::VerifiedPresent,
                 Dkv4SemanticController::new(Dkv4SemanticPolicy::default())?,
             )?;
-            let frozen_answer = selective_answer(
-                frozen_out.decision,
-                &first_mor,
-                &frozen_out.state,
-            )?;
+            let frozen_answer =
+                selective_answer(frozen_out.decision, &first_mor, &frozen_out.state)?;
             let frozen_correct = answer_correct(frozen_answer, task.oracle());
             frozen.observe(
                 frozen_answer.is_some(),
@@ -498,12 +495,24 @@ pub fn report() -> R<String> {
             )?;
         }
 
-        let missing =
-            run_dynamic(initial(StateFixture::Stable)?, kernel()?, task.favored(), Dkv4Provenance::Missing)?;
-        let conflict =
-            run_dynamic(initial(StateFixture::Stable)?, kernel()?, task.favored(), Dkv4Provenance::Conflict)?;
-        let unverified =
-            run_dynamic(initial(StateFixture::Stable)?, kernel()?, task.favored(), Dkv4Provenance::Unverified)?;
+        let missing = run_dynamic(
+            initial(StateFixture::Stable)?,
+            kernel()?,
+            task.favored(),
+            Dkv4Provenance::Missing,
+        )?;
+        let conflict = run_dynamic(
+            initial(StateFixture::Stable)?,
+            kernel()?,
+            task.favored(),
+            Dkv4Provenance::Conflict,
+        )?;
+        let unverified = run_dynamic(
+            initial(StateFixture::Stable)?,
+            kernel()?,
+            task.favored(),
+            Dkv4Provenance::Unverified,
+        )?;
         if missing.depth != 0
             || missing.reads_delta != 0
             || conflict.depth != 0
