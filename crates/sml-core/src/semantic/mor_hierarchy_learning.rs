@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::mor::MOR_SCALE_PPM;
 
 use super::{
-    SemanticBitField, SemanticBitFieldError, SemanticMorClusterSignature,
+    SemanticBitField, SemanticBitFieldError, SemanticHierarchicalMorBridge,
+    SemanticMorClusterSignature, SemanticMorHierarchyError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +98,31 @@ pub struct SemanticMorClusterPrototypeTrainingReport {
 pub struct SemanticMorClusterPrototypeArtifact<const BITS: usize> {
     pub clusters: Vec<SemanticMorClusterSignature<BITS>>,
     pub report: SemanticMorClusterPrototypeTrainingReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticMorLearnedHierarchyArtifact<const BITS: usize> {
+    pub bridge: SemanticHierarchicalMorBridge<BITS>,
+    pub report: SemanticMorClusterPrototypeTrainingReport,
+}
+
+pub fn fit_hierarchy_cluster_prototypes<const BITS: usize>(
+    bridge: &SemanticHierarchicalMorBridge<BITS>,
+    examples: &[SemanticMorClusterTrainingExample<BITS>],
+    config: SemanticMorClusterPrototypeTrainingConfig,
+) -> Result<SemanticMorLearnedHierarchyArtifact<BITS>, SemanticMorClusterPrototypeError> {
+    let fitted = SemanticMorClusterPrototypeTrainer::fit(
+        bridge.cluster_signatures(),
+        examples,
+        config,
+    )?;
+    let learned_bridge = bridge
+        .with_cluster_prototypes(fitted.clusters)
+        .map_err(SemanticMorClusterPrototypeError::Hierarchy)?;
+    Ok(SemanticMorLearnedHierarchyArtifact {
+        bridge: learned_bridge,
+        report: fitted.report,
+    })
 }
 
 pub struct SemanticMorClusterPrototypeTrainer;
@@ -386,6 +412,7 @@ pub enum SemanticMorClusterPrototypeError {
     },
     InternalInvariant,
     BitField(SemanticBitFieldError),
+    Hierarchy(SemanticMorHierarchyError),
 }
 
 impl fmt::Display for SemanticMorClusterPrototypeError {
