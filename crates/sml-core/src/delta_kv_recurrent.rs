@@ -159,8 +159,8 @@ impl<const BITS: usize> SemanticRewriter<BITS> for DeltaKvRecurrentKernel<BITS> 
             } else {
                 -i32::from(DELTA_KV_ONE)
             };
-            correction_abs_max_q12 = correction_abs_max_q12
-                .max(value.saturating_sub(current_q12).unsigned_abs());
+            correction_abs_max_q12 =
+                correction_abs_max_q12.max(value.saturating_sub(current_q12).unsigned_abs());
             if value.unsigned_abs() <= self.policy.ambiguity_threshold_q12 as u32 {
                 next.ambiguity.set(*coordinate, true)?;
                 ambiguous_values = ambiguous_values.saturating_add(1);
