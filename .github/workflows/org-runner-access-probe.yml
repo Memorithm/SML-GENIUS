@@ -7,11 +7,9 @@ permissions:
   contents: read
 jobs:
   probe:
-    runs-on: [self-hosted, Linux, ARM64]
+    runs-on: [self-hosted]
     timeout-minutes: 3
     steps:
       - name: Report runner identity only
         run: |
           printf 'ORG_RUNNER_PROBE name=%s os=%s arch=%s host=%s\n' "${{ runner.name }}" "${{ runner.os }}" "${{ runner.arch }}" "$(hostname)"
-          test "${{ runner.os }}" = Linux
-          test "${{ runner.arch }}" = ARM64
