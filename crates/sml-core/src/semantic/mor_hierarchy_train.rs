@@ -393,9 +393,8 @@ mod tests {
     use crate::{
         mor::{RouterId, MOR_SCALE_PPM},
         semantic::{
-            SemanticBitField, SemanticExpertSignature, SemanticHierarchicalMorBridge,
-            SemanticMorClusterSignature, SemanticMorHierarchyPolicy, SemanticMorTopK,
-            SemanticRouterSignature,
+            SemanticBitField, SemanticHierarchicalMorBridge, SemanticMorClusterSignature,
+            SemanticMorHierarchyPolicy, SemanticMorTopK,
         },
         PageId,
     };
