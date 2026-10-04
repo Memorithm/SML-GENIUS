@@ -9,7 +9,7 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use crate::{
-    delta_kv::{DeltaKvCounters, DeltaKvError, DeltaKvMemory},
+    delta_kv::{DeltaKvCounters, DeltaKvError, DeltaKvMemory, DELTA_KV_ONE},
     delta_kv_semantic::DeltaKvSemanticKeyEvidence,
     semantic::{
         run_semantic_recurrent, SemanticBitFieldError, SemanticHaltReason,
@@ -46,6 +46,9 @@ pub struct DeltaKvRecurrentCycleEvidence {
     pub depth: u32,
     pub read_values_q12: Vec<i32>,
     pub ambiguous_values: usize,
+    /// Maximum absolute difference between the memory proposal and the current
+    /// Boolean value encoded at ±Q12 one. This is compute evidence, not confidence.
+    pub correction_abs_max_q12: u32,
     pub read_macs_delta: u64,
 }
 
@@ -149,7 +152,15 @@ impl<const BITS: usize> SemanticRewriter<BITS> for DeltaKvRecurrentKernel<BITS> 
 
         let mut next = state.clone();
         let mut ambiguous_values = 0_usize;
+        let mut correction_abs_max_q12 = 0_u32;
         for (value, coordinate) in values.iter().zip(&self.value_coordinates) {
+            let current_q12 = if state.value.get(*coordinate)? {
+                i32::from(DELTA_KV_ONE)
+            } else {
+                -i32::from(DELTA_KV_ONE)
+            };
+            correction_abs_max_q12 =
+                correction_abs_max_q12.max(value.saturating_sub(current_q12).unsigned_abs());
             if value.unsigned_abs() <= self.policy.ambiguity_threshold_q12 as u32 {
                 next.ambiguity.set(*coordinate, true)?;
                 ambiguous_values = ambiguous_values.saturating_add(1);
@@ -163,6 +174,7 @@ impl<const BITS: usize> SemanticRewriter<BITS> for DeltaKvRecurrentKernel<BITS> 
             depth,
             read_values_q12: values,
             ambiguous_values,
+            correction_abs_max_q12,
             read_macs_delta: self.counters.read_macs.saturating_sub(before_macs),
         });
 

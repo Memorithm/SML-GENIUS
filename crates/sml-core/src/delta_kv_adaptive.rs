@@ -6,7 +6,11 @@
 
 use core::fmt;
 
-use crate::{mor::MOR_SCALE_PPM, semantic::SemanticStateDelta};
+use crate::{
+    delta_kv_recurrent::DeltaKvRecurrentCycleEvidence,
+    mor::{MorDecision, MOR_SCALE_PPM},
+    semantic::{SemanticRewriteTrace, SemanticStateDelta},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dkv4Provenance {
@@ -27,6 +31,36 @@ pub struct Dkv4Signals {
     pub mor_structural_disagreement_ppm: u32,
     pub mor_precision_escalation: bool,
     pub provenance: Dkv4Provenance,
+}
+
+impl Dkv4Signals {
+    /// Builds DKV-4 compute evidence from one executed DKV-2b/SBG cycle and the
+    /// already-produced MOR decision. Provenance remains an explicit external gate.
+    pub fn from_dkv2b(
+        trace: &SemanticRewriteTrace,
+        cycle: &DeltaKvRecurrentCycleEvidence,
+        mor: &MorDecision,
+        provenance: Dkv4Provenance,
+    ) -> Result<Self, Dkv4Error> {
+        if trace.depth != cycle.depth {
+            return Err(Dkv4Error::EvidenceDepthMismatch {
+                trace: trace.depth,
+                cycle: cycle.depth,
+            });
+        }
+        if mor.structural_disagreement_ppm > MOR_SCALE_PPM {
+            return Err(Dkv4Error::InvalidPpm);
+        }
+        Ok(Self {
+            depth: trace.depth,
+            state_delta: trace.delta,
+            ambiguous_values: cycle.ambiguous_values,
+            correction_abs_max_q12: cycle.correction_abs_max_q12,
+            mor_structural_disagreement_ppm: mor.structural_disagreement_ppm,
+            mor_precision_escalation: mor.request_precision_escalation,
+            provenance,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +206,7 @@ pub enum Dkv4Error {
     InvalidDepthRange { min: u32, max: u32 },
     InvalidDepth { depth: u32, max: u32 },
     InvalidPpm,
+    EvidenceDepthMismatch { trace: u32, cycle: u32 },
 }
 
 impl fmt::Display for Dkv4Error {
@@ -308,6 +343,75 @@ mod tests {
                 .unwrap(),
             Dkv4Decision::StopCandidate(Dkv4Reason::Stable)
         );
+    }
+
+    #[test]
+    fn dkv2b_adapter_preserves_executed_cycle_signals() {
+        let trace = SemanticRewriteTrace {
+            depth: 2,
+            delta: SemanticStateDelta {
+                value: 1,
+                meaning_mask: 2,
+                ambiguity: 3,
+                routing: 4,
+            },
+            stability_blocked: true,
+        };
+        let cycle = DeltaKvRecurrentCycleEvidence {
+            depth: 2,
+            read_values_q12: vec![4096, -4096],
+            ambiguous_values: 1,
+            correction_abs_max_q12: 8192,
+            read_macs_delta: 16,
+        };
+        let mor = MorDecision {
+            active_routers: Vec::new(),
+            ranked_experts: Vec::new(),
+            selected_experts: vec![crate::PageId(1)],
+            noise_ppm: 0,
+            structural_disagreement_ppm: 42,
+            expert_mass_threshold_ppm: 0,
+            request_precision_escalation: true,
+            hysteresis_retained_previous_primary: false,
+        };
+        let signals =
+            Dkv4Signals::from_dkv2b(&trace, &cycle, &mor, Dkv4Provenance::VerifiedPresent).unwrap();
+        assert_eq!(signals.depth, 2);
+        assert_eq!(signals.state_delta.total(), 10);
+        assert_eq!(signals.ambiguous_values, 1);
+        assert_eq!(signals.correction_abs_max_q12, 8192);
+        assert_eq!(signals.mor_structural_disagreement_ppm, 42);
+        assert!(signals.mor_precision_escalation);
+    }
+
+    #[test]
+    fn dkv2b_adapter_rejects_misaligned_cycle_evidence() {
+        let trace = SemanticRewriteTrace {
+            depth: 1,
+            delta: SemanticStateDelta::default(),
+            stability_blocked: false,
+        };
+        let cycle = DeltaKvRecurrentCycleEvidence {
+            depth: 2,
+            read_values_q12: vec![],
+            ambiguous_values: 0,
+            correction_abs_max_q12: 0,
+            read_macs_delta: 0,
+        };
+        let mor = MorDecision {
+            active_routers: Vec::new(),
+            ranked_experts: Vec::new(),
+            selected_experts: vec![crate::PageId(1)],
+            noise_ppm: 0,
+            structural_disagreement_ppm: 0,
+            expert_mass_threshold_ppm: 0,
+            request_precision_escalation: false,
+            hysteresis_retained_previous_primary: false,
+        };
+        assert!(matches!(
+            Dkv4Signals::from_dkv2b(&trace, &cycle, &mor, Dkv4Provenance::VerifiedPresent),
+            Err(Dkv4Error::EvidenceDepthMismatch { trace: 1, cycle: 2 })
+        ));
     }
 
     #[test]
