@@ -7,11 +7,17 @@ fn selective_decision_panel_is_deterministic_and_complete() {
     let second = experiment::report().unwrap();
     assert_eq!(first, second);
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("MOR,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("MOR,"))
+            .count(),
         4
     );
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("ROW,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("ROW,"))
+            .count(),
         8
     );
     assert_eq!(
