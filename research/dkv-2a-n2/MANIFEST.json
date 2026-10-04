@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "input_patch": {
+    "name": "sml-dkv-0005-dkv-4e.patch",
+    "bytes": 42511,
+    "lines": 761,
+    "sha256": "6d8d60b570f7a8fbefa0089b01eb4633625f08bbd23aa18aaef4e71fb5f5d71f"
+  },
+  "protocol_commit": "e0609cef8c40de1b37bea6d517cf10efa82f90ee",
+  "executed_code_head": "d772d5483377149ae5b5f21618ee4a2b859f35dc",
+  "github_actions_run": 37236717769,
+  "job": 111537172347,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 43,
+  "imported_hypotheses": true,
+  "promotion": "BLOCKED"
+}
