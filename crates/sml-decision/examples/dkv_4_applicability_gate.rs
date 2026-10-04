@@ -10,7 +10,9 @@ use sml_core::{
         Dkv4ActionableController, Dkv4Decision, Dkv4Provenance, Dkv4RefinementCapabilities,
         Dkv4SemanticPolicy, Dkv4Signals,
     },
-    delta_kv_recurrent::{compare_delta_kv_recurrent, DeltaKvRecurrentKernel, DeltaKvRecurrentPolicy},
+    delta_kv_recurrent::{
+        compare_delta_kv_recurrent, DeltaKvRecurrentKernel, DeltaKvRecurrentPolicy,
+    },
     delta_kv_semantic::{DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionCounters},
     mor::{
         ExpertProposal, MixtureOfRouters, MorDecision, MorPolicy, PreviousRoute, RouterId,
@@ -137,10 +139,7 @@ fn mor_decision(favored: PageId, previous: &PreviousRoute) -> R<MorDecision> {
     })?;
     Ok(registry.route(
         &engine,
-        &[
-            router(0, favored, MOR_SCALE_PPM),
-            router(1, other, 920_000),
-        ],
+        &[router(0, favored, MOR_SCALE_PPM), router(1, other, 920_000)],
         &[],
         previous,
     )?)
@@ -245,12 +244,12 @@ fn run_dynamic(
         Dkv4Provenance::Missing | Dkv4Provenance::Conflict
     ) {
         let decision = match provenance {
-            Dkv4Provenance::Missing => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence,
-            ),
-            Dkv4Provenance::Conflict => Dkv4Decision::Abstain(
-                sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence,
-            ),
+            Dkv4Provenance::Missing => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence)
+            }
+            Dkv4Provenance::Conflict => {
+                Dkv4Decision::Abstain(sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence)
+            }
             _ => unreachable!(),
         };
         return Ok(DynamicOutcome {
@@ -277,11 +276,13 @@ fn run_dynamic(
             delta: SemanticStateDelta::between(&state, &step.state),
             stability_blocked: step.stability_blocked,
         };
-        let dkv = kernel.cycle_evidence().last().ok_or("missing DKV evidence")?;
+        let dkv = kernel
+            .cycle_evidence()
+            .last()
+            .ok_or("missing DKV evidence")?;
         let mor = mor_decision(favored, &previous)?;
         let signals = Dkv4Signals::from_dkv2b(&trace, dkv, &mor, provenance)?;
-        let decision =
-            controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
+        let decision = controller.decide(signals, Dkv4RefinementCapabilities::dynamic_mor())?;
         let next = next_previous(&mor);
         state = step.state;
 
@@ -310,11 +311,7 @@ fn allowed_set(task: Task) -> R<AllowedExpertSet> {
     )?)
 }
 
-fn screen(
-    set: &AllowedExpertSet,
-    page: PageId,
-    proposal: bool,
-) -> Option<bool> {
+fn screen(set: &AllowedExpertSet, page: PageId, proposal: bool) -> Option<bool> {
     match set.screen(page, proposal) {
         ExpertApplicabilityOutcome::Allowed(value) => Some(value),
         ExpertApplicabilityOutcome::Abstain(_) => None,
@@ -487,8 +484,12 @@ pub fn report() -> R<String> {
         }
 
         for provenance in [Dkv4Provenance::Missing, Dkv4Provenance::Conflict] {
-            let safety =
-                run_dynamic(initial(StateFixture::Stable)?, kernel()?, task.favored(), provenance)?;
+            let safety = run_dynamic(
+                initial(StateFixture::Stable)?,
+                kernel()?,
+                task.favored(),
+                provenance,
+            )?;
             if safety.depth != 0
                 || safety.reads != 0
                 || matches!(safety.decision, Dkv4Decision::StopCandidate(_))
