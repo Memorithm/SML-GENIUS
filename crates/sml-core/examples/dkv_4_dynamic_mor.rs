@@ -300,6 +300,7 @@ struct DynamicOutcome {
     depth: u32,
     decision: Dkv4Decision,
     cycles: Vec<DynamicCycle>,
+    reads_delta: u64,
 }
 
 fn run_dynamic(
@@ -308,6 +309,7 @@ fn run_dynamic(
     fixture: MorFixture,
     provenance: Dkv4Provenance,
 ) -> R<DynamicOutcome> {
+    let reads_start = kernel.counters().reads;
     if matches!(provenance, Dkv4Provenance::Missing) {
         return Ok(DynamicOutcome {
             state: initial,
@@ -316,6 +318,7 @@ fn run_dynamic(
                 sml_core::delta_kv_adaptive::Dkv4Reason::MissingEvidence,
             ),
             cycles: Vec::new(),
+            reads_delta: kernel.counters().reads.saturating_sub(reads_start),
         });
     }
     if matches!(provenance, Dkv4Provenance::Conflict) {
@@ -326,6 +329,7 @@ fn run_dynamic(
                 sml_core::delta_kv_adaptive::Dkv4Reason::ConflictingEvidence,
             ),
             cycles: Vec::new(),
+            reads_delta: kernel.counters().reads.saturating_sub(reads_start),
         });
     }
 
@@ -373,6 +377,7 @@ fn run_dynamic(
                 depth,
                 decision,
                 cycles,
+                reads_delta: kernel.counters().reads.saturating_sub(reads_start),
             });
         }
         previous = previous_out;
@@ -448,11 +453,15 @@ pub fn report() -> R<String> {
             for cycle in &dynamic.cycles {
                 writeln!(
                     out,
-                    "TRACE,{},{},depth={},delta={},ambiguity={},correction={},prev_primary={},prev_selected={},margin={},disagreement={},precision={},primary={},selected={},decision={:?},next_primary={},next_selected={}",
+                    "TRACE,{},{},depth={},delta_total={},delta_v={},delta_m={},delta_a={},delta_r={},ambiguity={},correction={},prev_primary={},prev_selected={},margin={},disagreement={},precision={},primary={},selected={},decision={:?},next_primary={},next_selected={}",
                     fixture.name(),
                     state_fixture.name(),
                     cycle.depth,
                     cycle.delta.total(),
+                    cycle.delta.value,
+                    cycle.delta.meaning_mask,
+                    cycle.delta.ambiguity,
+                    cycle.delta.routing,
                     cycle.ambiguity,
                     cycle.correction_abs_max_q12,
                     format_primary(&cycle.previous_in),
@@ -494,6 +503,12 @@ pub fn report() -> R<String> {
             fixture,
             Dkv4Provenance::Missing,
         )?;
+        let conflict = run_dynamic(
+            initial(StateFixture::Stable)?,
+            kernel()?,
+            fixture,
+            Dkv4Provenance::Conflict,
+        )?;
         let unverified = run_dynamic(
             initial(StateFixture::Stable)?,
             kernel()?,
@@ -501,18 +516,27 @@ pub fn report() -> R<String> {
             Dkv4Provenance::Unverified,
         )?;
         if missing.depth != 0
+            || missing.reads_delta != 0
+            || conflict.depth != 0
+            || conflict.reads_delta != 0
             || matches!(missing.decision, Dkv4Decision::StopCandidate(_))
+            || matches!(conflict.decision, Dkv4Decision::StopCandidate(_))
             || matches!(unverified.decision, Dkv4Decision::StopCandidate(_))
         {
             return Err("dynamic MOR provenance contract drift".into());
         }
         writeln!(
             out,
-            "SAFETY,{},missing_depth={},missing_decision={:?},unverified_depth={},unverified_decision={:?}",
+            "SAFETY,{},missing_depth={},missing_reads={},missing_decision={:?},conflict_depth={},conflict_reads={},conflict_decision={:?},unverified_depth={},unverified_reads={},unverified_decision={:?}",
             fixture.name(),
             missing.depth,
+            missing.reads_delta,
             missing.decision,
+            conflict.depth,
+            conflict.reads_delta,
+            conflict.decision,
             unverified.depth,
+            unverified.reads_delta,
             unverified.decision,
         )?;
     }
@@ -521,6 +545,7 @@ pub fn report() -> R<String> {
     Ok(out)
 }
 
+#[allow(dead_code)]
 fn main() -> R<()> {
     print!("{}", report()?);
     Ok(())
