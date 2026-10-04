@@ -54,6 +54,7 @@ pub mod task_loss;
 pub mod tasks;
 pub mod trace;
 pub mod train;
+pub mod v888_handoff;
 
 /// Inference RAM ceiling for the target SML-25B profile.
 pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
