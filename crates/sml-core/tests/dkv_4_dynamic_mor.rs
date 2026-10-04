@@ -7,11 +7,17 @@ fn dynamic_mor_panel_is_deterministic() {
     let second = experiment::report().unwrap();
     assert_eq!(first, second);
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("MOR,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("MOR,"))
+            .count(),
         4
     );
     assert_eq!(
-        first.lines().filter(|line| line.starts_with("ROW,")).count(),
+        first
+            .lines()
+            .filter(|line| line.starts_with("ROW,"))
+            .count(),
         8
     );
     assert!(first.contains("PROMOTION,BLOCKED"));
@@ -47,7 +53,6 @@ fn persistent_controls_do_not_claim_resolution() {
     assert!(disagreement.contains("second_disagreement=500000"));
     assert!(disagreement.contains("second_precision=true"));
 }
-
 
 #[test]
 fn provenance_safety_rows_measure_zero_missing_and_conflict_reads() {
