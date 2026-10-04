@@ -80,17 +80,13 @@ impl AllowedExpertSet {
     /// Preserves the proposal unchanged when the page is independently
     /// permitted, otherwise returns a typed abstention. This never repairs or
     /// substitutes the caller's proposal.
-    pub fn screen<T>(
-        &self,
-        page_id: PageId,
-        proposal: T,
-    ) -> ExpertApplicabilityOutcome<T> {
+    pub fn screen<T>(&self, page_id: PageId, proposal: T) -> ExpertApplicabilityOutcome<T> {
         if self.allows(page_id) {
             ExpertApplicabilityOutcome::Allowed(proposal)
         } else {
-            ExpertApplicabilityOutcome::Abstain(
-                ExpertApplicabilityAbstention::ExpertNotAllowed(page_id),
-            )
+            ExpertApplicabilityOutcome::Abstain(ExpertApplicabilityAbstention::ExpertNotAllowed(
+                page_id,
+            ))
         }
     }
 }
@@ -137,11 +133,7 @@ mod tests {
 
     #[test]
     fn allowed_pages_are_canonical_and_membership_is_exact() {
-        let set = AllowedExpertSet::new(
-            vec![PageId(3), PageId(1)],
-            limits(),
-        )
-        .unwrap();
+        let set = AllowedExpertSet::new(vec![PageId(3), PageId(1)], limits()).unwrap();
         assert_eq!(set.pages(), &[PageId(1), PageId(3)]);
         assert!(set.allows(PageId(1)));
         assert!(set.allows(PageId(3)));
@@ -176,10 +168,7 @@ mod tests {
             Err(ExpertApplicabilityError::EmptyAllowedSet)
         );
         assert_eq!(
-            AllowedExpertSet::new(
-                vec![PageId(0), PageId(1), PageId(2), PageId(3)],
-                limits(),
-            ),
+            AllowedExpertSet::new(vec![PageId(0), PageId(1), PageId(2), PageId(3)], limits(),),
             Err(ExpertApplicabilityError::AllowedBudget {
                 actual: 4,
                 maximum: 3,
@@ -208,9 +197,9 @@ mod tests {
         );
         assert_eq!(
             set.screen(PageId(0), true),
-            ExpertApplicabilityOutcome::Abstain(
-                ExpertApplicabilityAbstention::ExpertNotAllowed(PageId(0))
-            )
+            ExpertApplicabilityOutcome::Abstain(ExpertApplicabilityAbstention::ExpertNotAllowed(
+                PageId(0)
+            ))
         );
     }
 }
