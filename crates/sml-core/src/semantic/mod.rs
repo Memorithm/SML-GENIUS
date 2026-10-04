@@ -15,6 +15,7 @@ pub mod linguistic_bench;
 pub mod metric;
 pub mod mor_adaptive_hierarchy;
 pub mod mor_hierarchical;
+pub mod mor_hierarchy_learning;
 pub mod mor_routing;
 pub mod recurrent;
 pub mod simd;
@@ -60,6 +61,13 @@ pub use mor_adaptive_hierarchy::{
     SemanticMorAdaptiveExhaustiveControl, SemanticMorAdaptiveHierarchyError,
     SemanticMorAdaptiveHierarchyPolicy, SemanticMorAdaptiveHierarchyReport,
     SemanticMorAdaptiveStageReport, SemanticMorWidenReason,
+};
+pub use mor_hierarchy_learning::{
+    evaluate_cluster_prototypes, SemanticMorClusterEvaluationReport,
+    SemanticMorClusterEvaluationRow, SemanticMorClusterPrototypeArtifact,
+    SemanticMorClusterPrototypeError, SemanticMorClusterPrototypeReport,
+    SemanticMorClusterPrototypeTrainer, SemanticMorClusterPrototypeTrainingConfig,
+    SemanticMorClusterPrototypeTrainingReport, SemanticMorClusterTrainingExample,
 };
 pub use mor_hierarchical::{
     SemanticHierarchicalMorBridge, SemanticHierarchicalMorRoute, SemanticMorClusterEvidence,
