@@ -1,0 +1,13 @@
+TASK,ALIGNED_TRUE,favored=0,allowed=0,aligned=true,oracle=true,first_margin=40000,first_selected=2,second_margin=70000,second_selected=1
+SAFETY,ALIGNED_TRUE,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+TASK,ALIGNED_FALSE,favored=1,allowed=1,aligned=true,oracle=false,first_margin=40000,first_selected=2,second_margin=70000,second_selected=1
+SAFETY,ALIGNED_FALSE,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+TASK,MISALIGNED_FALSE,favored=0,allowed=1,aligned=false,oracle=false,first_margin=40000,first_selected=2,second_margin=70000,second_selected=1
+SAFETY,MISALIGNED_FALSE,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+TASK,MISALIGNED_TRUE,favored=1,allowed=0,aligned=false,oracle=true,first_margin=40000,first_selected=2,second_margin=70000,second_selected=1
+SAFETY,MISALIGNED_TRUE,missing_reads=0,conflict_reads=0,unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+SUMMARY,DYNAMIC_UNGUARDED,rows=8,answered=8,coverage_ppm=1000000,correct_answered=4,errors=4,risk_defined=true,risk_ppm=500000,abstained_not_allowed=0,cycles=16,reads=16
+SUMMARY,DYNAMIC_APPLICABILITY,rows=8,answered=4,coverage_ppm=500000,correct_answered=4,errors=0,risk_defined=true,risk_ppm=0,abstained_not_allowed=4,cycles=16,reads=16
+SUMMARY,FIRST_PRIMARY_APPLICABILITY,rows=8,answered=4,coverage_ppm=500000,correct_answered=4,errors=0,risk_defined=true,risk_ppm=0,abstained_not_allowed=4,cycles=12,reads=12
+SUMMARY,UNIVERSAL_ABSTAIN,rows=8,answered=0,coverage_ppm=0,correct_answered=0,errors=0,risk_defined=false,risk_ppm=0,abstained_not_allowed=0,cycles=0,reads=0
+PROMOTION,BLOCKED,independent_applicability_development_panel
