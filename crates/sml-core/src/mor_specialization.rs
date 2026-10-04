@@ -531,8 +531,8 @@ fn initialize_expert_loads(
             .collect::<Vec<_>>();
         let baseline = mean_values(&existing);
         for page in pages {
-            if !loads.contains_key(&page) {
-                loads.insert(page, baseline);
+            if let std::collections::btree_map::Entry::Vacant(entry) = loads.entry(page) {
+                entry.insert(baseline);
                 initialized.insert(page);
             }
         }
@@ -904,8 +904,8 @@ mod tests {
             .map(|evidence| evidence.inter_cluster_adjustment_ppm)
             .collect::<Vec<_>>();
         assert!(adjustments.iter().all(|value| value.abs() <= 10_000));
-        assert!(adjustments.iter().any(|value| *value == -10_000));
-        assert!(adjustments.iter().any(|value| *value == 10_000));
+        assert!(adjustments.contains(&-10_000));
+        assert!(adjustments.contains(&10_000));
     }
 
     #[test]
