@@ -1,0 +1,15 @@
+MOR,ALIGNED_TRUE,favored=0,oracle=true,first_margin=40000,first_precision=true,first_selected=2,second_margin=70000,second_precision=false,second_selected=1
+SAFETY,ALIGNED_TRUE,missing_reads=0,missing_decision=Abstain(MissingEvidence),conflict_reads=0,conflict_decision=Abstain(ConflictingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+MOR,ALIGNED_FALSE,favored=1,oracle=false,first_margin=40000,first_precision=true,first_selected=2,second_margin=70000,second_precision=false,second_selected=1
+SAFETY,ALIGNED_FALSE,missing_reads=0,missing_decision=Abstain(MissingEvidence),conflict_reads=0,conflict_decision=Abstain(ConflictingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+MOR,MISALIGNED_FALSE,favored=0,oracle=false,first_margin=40000,first_precision=true,first_selected=2,second_margin=70000,second_precision=false,second_selected=1
+SAFETY,MISALIGNED_FALSE,missing_reads=0,missing_decision=Abstain(MissingEvidence),conflict_reads=0,conflict_decision=Abstain(ConflictingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+MOR,MISALIGNED_TRUE,favored=1,oracle=true,first_margin=40000,first_precision=true,first_selected=2,second_margin=70000,second_precision=false,second_selected=1
+SAFETY,MISALIGNED_TRUE,missing_reads=0,missing_decision=Abstain(MissingEvidence),conflict_reads=0,conflict_decision=Abstain(ConflictingEvidence),unverified_depth=4,unverified_decision=Abstain(UnverifiedEvidence)
+SUMMARY,STABILITY_SELECTIVE,rows=8,answered=0,correct_answered=0,errors=0,risk_ppm=0,cycles=12,reads=12
+SUMMARY,FROZEN_DKV4C_SELECTIVE,rows=8,answered=0,correct_answered=0,errors=0,risk_ppm=0,cycles=32,reads=32
+SUMMARY,DYNAMIC_DKV4F_SELECTIVE,rows=8,answered=8,correct_answered=4,errors=4,risk_ppm=500000,cycles=16,reads=16
+SUMMARY,FIRST_PRIMARY,rows=8,answered=8,correct_answered=4,errors=4,risk_ppm=500000,cycles=12,reads=12
+SUMMARY,DYNAMIC_ALIGNED,rows=4,answered=4,correct_answered=4,errors=0,risk_ppm=0,cycles=8,reads=8
+SUMMARY,DYNAMIC_MISALIGNED,rows=4,answered=4,correct_answered=0,errors=4,risk_ppm=1000000,cycles=8,reads=8
+PROMOTION,BLOCKED,selective_downstream_decision_development_panel
