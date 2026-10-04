@@ -1,0 +1,12 @@
+{
+  "schema": "sml.dkv4.dimension.v1",
+  "protocol": "71fc497affd9ae54d11a43cc4c07844078bc6ead",
+  "executed_code": "1cfb395485765fdb30a8e447554aab71213ac9a1",
+  "host": "tarek",
+  "architecture": "aarch64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "rows": 2048,
+  "identical_reruns": 2,
+  "output_sha256": "16ea5242386a5fd4218abef6636ae8c2a9d617a8b28ee5fd576869814629b1d5",
+  "scientific_promotion": "BLOCKED"
+}
