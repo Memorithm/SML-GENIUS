@@ -64,6 +64,19 @@ impl DeltaKvSemanticProjectionPolicy {
     }
 }
 
+/// Research-selectable encoding for the SBG ambiguity field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DeltaKvAmbiguityProjection {
+    /// Qualified DKV-2a behavior: false and true are projected as -1/+1.
+    #[default]
+    Bipolar,
+    /// DKV-2a-N1 candidate: only active ambiguity bits accumulate into the key.
+    ///
+    /// False ambiguity coordinates are still read and counted. This mode is an
+    /// opt-in research candidate and is never selected by the legacy constructor.
+    ActiveOnly,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DeltaKvSemanticProjectionCounters {
     pub semantic_coordinates_read: u64,
@@ -86,6 +99,7 @@ pub struct DeltaKvSemanticKeyEvidence {
 pub struct DeltaKvSemanticProjector<const KEY_DIM: usize> {
     policy: DeltaKvSemanticProjectionPolicy,
     seed: u64,
+    ambiguity_projection: DeltaKvAmbiguityProjection,
 }
 
 impl<const KEY_DIM: usize> DeltaKvSemanticProjector<KEY_DIM> {
@@ -93,13 +107,31 @@ impl<const KEY_DIM: usize> DeltaKvSemanticProjector<KEY_DIM> {
         policy: DeltaKvSemanticProjectionPolicy,
         seed: u64,
     ) -> Result<Self, DeltaKvSemanticError> {
+        Self::new_with_ambiguity_projection(policy, seed, DeltaKvAmbiguityProjection::Bipolar)
+    }
+
+    /// Construct a projector with an explicit ambiguity-field encoding.
+    ///
+    /// The legacy constructor remains pinned to Bipolar. ActiveOnly is a
+    /// research-only DKV-2a-N1 candidate and does not alter source authority.
+    pub fn new_with_ambiguity_projection(
+        policy: DeltaKvSemanticProjectionPolicy,
+        seed: u64,
+        ambiguity_projection: DeltaKvAmbiguityProjection,
+    ) -> Result<Self, DeltaKvSemanticError> {
         if KEY_DIM == 0 {
             return Err(DeltaKvSemanticError::ZeroKeyDimension);
         }
         Ok(Self {
             policy: policy.validate()?,
             seed,
+            ambiguity_projection,
         })
+    }
+
+    #[must_use]
+    pub const fn ambiguity_projection(&self) -> DeltaKvAmbiguityProjection {
+        self.ambiguity_projection
     }
 
     #[must_use]
@@ -212,6 +244,14 @@ impl<const KEY_DIM: usize> DeltaKvSemanticProjector<KEY_DIM> {
         counters.semantic_fields_read = counters.semantic_fields_read.saturating_add(1);
         for index in 0..BITS {
             let bit = field.get(index)?;
+            counters.semantic_coordinates_read =
+                counters.semantic_coordinates_read.saturating_add(1);
+            if field_tag == 2
+                && self.ambiguity_projection == DeltaKvAmbiguityProjection::ActiveOnly
+                && !bit
+            {
+                continue;
+            }
             let hash = mix64(
                 self.seed
                     ^ field_tag.wrapping_mul(0x9e37_79b9_7f4a_7c15)
@@ -232,8 +272,6 @@ impl<const KEY_DIM: usize> DeltaKvSemanticProjector<KEY_DIM> {
             accumulators[bucket] = accumulators[bucket]
                 .checked_add(delta)
                 .ok_or(DeltaKvSemanticError::Overflow)?;
-            counters.semantic_coordinates_read =
-                counters.semantic_coordinates_read.saturating_add(1);
             counters.bucket_accumulations = counters.bucket_accumulations.saturating_add(1);
         }
         Ok(())
