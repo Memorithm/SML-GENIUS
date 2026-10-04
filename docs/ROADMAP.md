@@ -237,7 +237,9 @@ Use an early broad routing stage to construct a bounded candidate pool, then res
 - [x] MOR-H1 reference coarse-to-fine candidate narrowing with exact cluster/expert work accounting and hard candidate/edge budgets.
 - [x] MOR-H2 adaptive 1 -> 2 -> 4 widening from coarse margin, MOR margin/disagreement and SBG ambiguity, with cumulative fail-closed work budgets and a separate exhaustive-primary recall control.
 - [x] MOR-H3 specialization-preserving balance: exposure-conditioned EMAs, neutral first exposure, shared H1/H2 cluster partition, and separate bounded inter/intra-cluster adjustments.
-- [ ] Preregister and run matched exhaustive/fixed-1/fixed-2/fixed-4/adaptive/random-pool plus legacy/no-balance/H3 balance comparisons on disjoint development tasks.
+- [x] MOR-H4a bounded learned cluster prototypes: fixed IDs/membership, integer-majority bit evidence, weak-bit seed retention and hard mutation budgets.
+- [ ] Preregister and run matched exhaustive/fixed-1/fixed-2/fixed-4/adaptive/random-pool plus legacy/no-balance/H3 balance and fixed-vs-learned-prototype comparisons on disjoint development tasks.
+- [ ] Consider MOR-H4b learned membership/topology only after H4a holdout qualification.
 - [ ] Qualify shortlist recall, final task quality, physical latency/traffic and expert-starvation behavior before runtime promotion.
 
 ### SML-DS41-2 — conditional memory comparison
