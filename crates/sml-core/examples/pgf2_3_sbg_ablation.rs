@@ -7,9 +7,7 @@ use std::collections::BTreeSet;
 
 use sml_core::{
     pascal_gf2::pascal_gf2_in_place,
-    semantic::{
-        bind, inverse_rotate_permute, rotate_permute, unbind, SemanticBitField,
-    },
+    semantic::{bind, inverse_rotate_permute, rotate_permute, unbind, SemanticBitField},
 };
 
 const BITS: usize = 2048;
@@ -27,8 +25,7 @@ const QUERY_TAG: u64 = 0xc2b2_ae3d_27d4_eb4f;
 const NOISE_TAG: u64 = 0x1656_67b1_9e37_79f9;
 
 const UNIFORM_H: [usize; 5] = [0, 1, 4, 16, 64];
-const BOUNDARY: [(&str, usize, usize); 3] =
-    [("1_4", 1, 4), ("1_2", 1, 2), ("3_4", 3, 4)];
+const BOUNDARY: [(&str, usize, usize); 3] = [("1_4", 1, 4), ("1_2", 1, 2), ("3_4", 3, 4)];
 
 type Field = SemanticBitField<BITS>;
 
@@ -41,12 +38,7 @@ enum Arm {
 }
 
 impl Arm {
-    const ALL: [Self; 4] = [
-        Self::Identity,
-        Self::Permute,
-        Self::XorPermute,
-        Self::Pgf2,
-    ];
+    const ALL: [Self; 4] = [Self::Identity, Self::Permute, Self::XorPermute, Self::Pgf2];
 
     const fn index(self) -> usize {
         match self {
@@ -613,8 +605,7 @@ fn main() {
             for h_index in 0..UNIFORM_H.len() {
                 let class_rate =
                     uniform_retrieval(family, arm, &transformed_classes, &role, h_index);
-                let route_rate =
-                    uniform_routing(family, arm, &transformed_routes, &role, h_index);
+                let route_rate = uniform_routing(family, arm, &transformed_routes, &role, h_index);
                 retrieval[family_index][h_index][arm_index] = class_rate;
                 routing[family_index][h_index][arm_index] = route_rate;
 
@@ -733,8 +724,7 @@ fn main() {
 
     let structured_best_median = best_control_median(&class_separation[0]);
     let structured_pgf2_median = class_separation[0][Arm::Pgf2.index()].median;
-    let h2 = structured_pgf2_median.saturating_mul(10)
-        >= structured_best_median.saturating_mul(11);
+    let h2 = structured_pgf2_median.saturating_mul(10) >= structured_best_median.saturating_mul(11);
 
     let mut retrieval_improvement = false;
     let mut retrieval_no_regression = true;
@@ -774,8 +764,7 @@ fn main() {
     }
     let h4 = routing_improvement && routing_no_regression;
 
-    let random_best_median_ppm =
-        best_control_median(&class_separation[1]) * PPM / BITS as u64;
+    let random_best_median_ppm = best_control_median(&class_separation[1]) * PPM / BITS as u64;
     let random_pgf2_median_ppm = class_separation[1][Arm::Pgf2.index()].median_ppm();
     let random_best_h0 = best_control_rate(&retrieval[1][0]);
     let random_pgf2_h0 = retrieval[1][0][Arm::Pgf2.index()].ppm();
