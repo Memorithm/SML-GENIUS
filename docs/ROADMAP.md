@@ -471,12 +471,15 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N5 per-hop teacher-forced read / free-running rewrite / reprojection fidelity protocol before proposing another projector mechanism.
 - [x] Execute and retain byte-identical N5 Rust1.89 evidence; every low-load failed L2/L3 chain first diverges on a teacher-forced associative read.
 - [x] Freeze N6 terminal-write crosstalk decomposition: SELF vs same-chain vs count-matched cross-chain vs FULL, plus key geometry.
-- [ ] Execute and retain byte-identical N6 evidence before another projector mechanism.
+- [x] Execute and retain byte-identical N6 Rust1.89 evidence: same-chain correlation ~0.67 dominates count-matched cross-chain interference and reproduces 10/11 K1024 FULL L2/L3 failures.
+- [ ] Freeze a harness-only within-page domain-conditioning candidate before any core change; test capability and near-state brittleness against N6/N4 controls.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
 N5 localization: [SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md](SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md). The remaining low-load L2/L3 failure is already present in exact-state teacher-forced retrieval; free-running drift/rewrite/reprojection are not the first failing stage.
+
+N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md). SELF is perfect; count-matched cross-chain controls are perfect; same-chain shared-M/R keys remain ~0.67 correlated and reproduce most L2/L3 failures.
 
 ## DKV projection-agreement follow-up
 
