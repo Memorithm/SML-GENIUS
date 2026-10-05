@@ -470,7 +470,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Preserve the remaining per-hop capability failure: low-load combined ORACLE is L0=16/16, L1=16/16, L2=13/16, L3=8/16 at every K; no cell is capable.
 - [x] Freeze N5 per-hop teacher-forced read / free-running rewrite / reprojection fidelity protocol before proposing another projector mechanism.
 - [x] Execute and retain byte-identical N5 Rust1.89 evidence; every low-load failed L2/L3 chain first diverges on a teacher-forced associative read.
-- [ ] Freeze a write-crosstalk geometry decomposition (same-chain vs cross-chain vs self contribution) before another projector mechanism.
+- [x] Freeze N6 terminal-write crosstalk decomposition: SELF vs same-chain vs count-matched cross-chain vs FULL, plus key geometry.
+- [ ] Execute and retain byte-identical N6 evidence before another projector mechanism.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
