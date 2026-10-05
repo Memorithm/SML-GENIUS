@@ -505,7 +505,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Execute and retain byte-identical N10 evidence; no interior route fraction clears both secondary-conflict isolation and secondary continuity, so selection is NONE.
 - [x] Freeze N11 two-bank PRIMARY shared retrieval + ORDERED route-specific override resolver with an explicit record/route binding directory; retrieval strength is never presence authority.
 - [x] Execute and retain byte-identical N11 evidence; all ten gates hold and the two-bank resolver is retained as Development memory-composition semantics.
-- [ ] Freeze N12 DKV-3a record/subject/provenance requalification for the retained two-bank resolver, including wrong-state, foreign-subject, Missing/Conflict/Unverified and exact binding controls.
+- [x] Freeze N12 DKV-3a verified-write-locator requalification for the retained two-bank resolver, using current RecordRequest/VerifiedContext/VerifiedHistory/subject-binding APIs and existing Missing/Conflict/Unverified semantics.
+- [ ] Execute and retain byte-identical N12 evidence; require clean continuity/override capability plus fail-closed record, stream, subject, conflict, supersession, corruption, alias and one-bank-read controls.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
