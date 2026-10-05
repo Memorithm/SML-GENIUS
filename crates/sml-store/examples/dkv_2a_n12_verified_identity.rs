@@ -203,10 +203,6 @@ fn candidate(values: &[i32]) -> Option<[bool; 2]> {
     }
 }
 
-fn exact_clear(values: &[i32], bits: [bool; 2]) -> bool {
-    candidate(values) == Some(bits)
-}
-
 fn subject(index: usize) -> SubjectKey {
     SubjectKey::new(index as u64 + 1, 0).expect("subject")
 }
@@ -476,8 +472,6 @@ struct ResolveResult {
     value: Option<[bool; 2]>,
     screened: Option<[bool; 2]>,
     matrix_reads: u64,
-    sources: u64,
-    bytes: u64,
 }
 
 struct ResolveRequest<'a> {
@@ -506,8 +500,6 @@ fn resolve<const K: usize>(
             value: None,
             screened: None,
             matrix_reads: 0,
-            sources: 0,
-            bytes: 0,
         };
     };
     let bank = locator.bank;
@@ -529,8 +521,6 @@ fn resolve<const K: usize>(
                 value: None,
                 screened: None,
                 matrix_reads: 0,
-                sources: 0,
-                bytes: 0,
             };
         }
     };
@@ -580,8 +570,6 @@ fn resolve<const K: usize>(
                 value: None,
                 screened: None,
                 matrix_reads: 0,
-                sources: 0,
-                bytes: 0,
             };
         }
         Err(Dkv4Provenance::Conflict) => {
@@ -592,8 +580,6 @@ fn resolve<const K: usize>(
                 value: None,
                 screened: None,
                 matrix_reads: 0,
-                sources: 0,
-                bytes: 0,
             };
         }
         Err(_) => {
@@ -604,8 +590,6 @@ fn resolve<const K: usize>(
                 value: None,
                 screened: None,
                 matrix_reads: 0,
-                sources: 0,
-                bytes: 0,
             };
         }
     };
@@ -637,8 +621,6 @@ fn resolve<const K: usize>(
         value: latent,
         screened: screened.value(),
         matrix_reads: read_delta,
-        sources: segments,
-        bytes,
     }
 }
 
