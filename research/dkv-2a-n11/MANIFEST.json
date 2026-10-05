@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 186,
+  "protocol_merge": "c9b91294c68f7cdec5e7103e526127a58f0601a1",
+  "executed_code_head": "72b2296f37241f85a42233468957f3ecd7293459",
+  "github_actions_run": 37338234850,
+  "job": 111858364930,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 58,
+  "selected": "two_bank",
+  "promotion": "BLOCKED"
+}

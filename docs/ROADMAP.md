@@ -504,7 +504,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N10 fixed-width PRIMARY_ANCHORED/ORDERED_ROUTE interpolation at r={0,1/4,1/2,3/4,1}, keeping q=3 fixed.
 - [x] Execute and retain byte-identical N10 evidence; no interior route fraction clears both secondary-conflict isolation and secondary continuity, so selection is NONE.
 - [x] Freeze N11 two-bank PRIMARY shared retrieval + ORDERED route-specific override resolver with an explicit record/route binding directory; retrieval strength is never presence authority.
-- [ ] Execute and retain byte-identical N11 evidence; require continuity, override isolation, metadata guards, q=3 capability, Hamming robustness and one-bank-read resolution.
+- [x] Execute and retain byte-identical N11 evidence; all ten gates hold and the two-bank resolver is retained as Development memory-composition semantics.
+- [ ] Freeze N12 DKV-3a record/subject/provenance requalification for the retained two-bank resolver, including wrong-state, foreign-subject, Missing/Conflict/Unverified and exact binding controls.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
@@ -520,6 +521,8 @@ N8 hybrid result: [SML-DKV-2A-N8-HYBRID-OBSERVATION.md](SML-DKV-2A-N8-HYBRID-OBS
 N9 multi-expert result: [SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md](SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md). PRIMARY_ANCHORED preserves secondary continuity and K1024 q=3 capability, but exact R2/R3 conflict-key collisions refute H9; ORDERED_ROUTE isolates conflicts but gives zero secondary continuity.
 
 N10 route-hybrid result: [SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md](SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md). Geometry interpolates smoothly, but r=2 retains ~90% continuity with only 55.47% conflict recall while r=3 reaches 98.83% conflict recall with <8% continuity; no single-key interior candidate is selected.
+
+N11 two-bank result: [SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md](SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md). PRIMARY preserves secondary-route continuity while ORDERED carries explicit route-specific overrides; at K1024 all ten frozen gates hold, with 100% P1/P2/P3 continuity/override recall, 100% G4 F6, 92.97% G16 F6, 29.17% Hamming-1 recovery, zero non-bound false overrides and exactly one resolved bank read per directory probe.
 
 ## DKV projection-agreement follow-up
 
