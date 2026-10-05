@@ -503,21 +503,19 @@ fn main() {
         let arm_name = ["default", "combined"][arm];
         for &load in &LOADS {
             for &k in &KEY_WIDTHS {
-                for class in 0..5 {
+                for (class, class_name) in CLASS_NAMES.iter().enumerate() {
                     let oracle = tally(cells, k, load, class, C_ORACLE);
                     if class == CLASS_NOVEL {
                         writeln!(
                             out,
-                            "N4_CLASS,arm={arm_name},K={k},G={load},class={},oracle_novel_cycles={:.4}",
-                            CLASS_NAMES[class],
+                            "N4_CLASS,arm={arm_name},K={k},G={load},class={class_name},oracle_novel_cycles={:.4}",
                             oracle.cycles as f64 / oracle.n as f64,
                         )
                         .expect("write");
                     } else {
                         writeln!(
                             out,
-                            "N4_CLASS,arm={arm_name},K={k},G={load},class={},oracle_correct={},oracle_n={}",
-                            CLASS_NAMES[class],
+                            "N4_CLASS,arm={arm_name},K={k},G={load},class={class_name},oracle_correct={},oracle_n={}",
                             oracle.correct,
                             oracle.n,
                         )
@@ -527,12 +525,11 @@ fn main() {
 
                 let extra = &extras[&(k, load)];
                 write!(out, "N4_CELL,arm={arm_name},K={k},G={load}").expect("write");
-                for ctrl in 0..CTRL.len() {
+                for (ctrl, ctrl_name) in CTRL.iter().enumerate() {
                     let (accuracy, cycles) = pooled(cells, k, load, ctrl);
                     write!(
                         out,
-                        ",{}={accuracy:.4}/{}cycles={cycles:.4}",
-                        CTRL[ctrl], CTRL[ctrl],
+                        ",{ctrl_name}={accuracy:.4}/{ctrl_name}cycles={cycles:.4}",
                     )
                     .expect("write");
                 }
