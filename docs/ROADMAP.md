@@ -513,6 +513,7 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Preregister N13B after retained N13A values: BALANCED=[15,15,15,15,14,14,14,14,14,14], empirical=[2,4,53,2,4,6,2,9,62,0], independent heavy-skew=[116,4,3,3,3,3,3,3,3,3].
 - [x] Execute and retain byte-identical N13B evidence; all ten frozen gates hold across balanced, N13A-empirical and independent heavy-skew populations; default primary-page isolation and explicit replicated cross-primary sharing are retained as Development semantics. See [SML-DKV-2A-N13B-PAGE-SKEW-OBSERVATION.md](SML-DKV-2A-N13B-PAGE-SKEW-OBSERVATION.md).
 - [ ] Measure physical latency/RSS/traffic/energy before any core PageSeeded/two-bank API promotion.
+- Historical owner input DKV-4n is retained as a negative key-density result: no `with_context_divisor` setting jointly preserves chain recall and same-V/different-context twin separation, so no density API enters the current core. See [SML-DKV-4N-INPUT-REVIEW.md](SML-DKV-4N-INPUT-REVIEW.md).
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
