@@ -411,8 +411,7 @@ fn classify_first_divergence<const K: usize>(
         free_state = step.state;
     }
 
-    let expected_terminal =
-        build_state(chain.codes[chain.length], chain.meaning, chain.routing);
+    let expected_terminal = build_state(chain.codes[chain.length], chain.meaning, chain.routing);
     let failed = free_state != expected_terminal;
     (first, failed)
 }
@@ -468,8 +467,7 @@ fn run_width<const K: usize>(
 
                 for depth in 1..=chain.length {
                     let step = kernel.rewrite(&state, depth as u32).expect("rewrite");
-                    let expected =
-                        build_state(chain.codes[depth], chain.meaning, chain.routing);
+                    let expected = build_state(chain.codes[depth], chain.meaning, chain.routing);
                     let delta = SemanticStateDelta::between(&step.state, &expected);
 
                     let free_tally = free.entry((K, load, depth)).or_default();
@@ -478,8 +476,9 @@ fn run_width<const K: usize>(
                         u64::from(value_bits(&step.state) == chain.codes[depth]);
                     free_tally.ambiguity_clear += u64::from(ambiguity_clear(&step.state));
                     free_tally.state_exact += u64::from(step.state == expected);
-                    free_tally.value_hamming_sum =
-                        free_tally.value_hamming_sum.saturating_add(delta.value as u64);
+                    free_tally.value_hamming_sum = free_tally
+                        .value_hamming_sum
+                        .saturating_add(delta.value as u64);
 
                     let actual_key = projector
                         .project(&step.state, &decision(), None)
@@ -516,8 +515,7 @@ fn run_width<const K: usize>(
                     state = step.state;
                 }
 
-                let (class, failed) =
-                    classify_first_divergence(&memory, projector, chain);
+                let (class, failed) = classify_first_divergence(&memory, projector, chain);
                 let entry = divergence.entry((K, load)).or_default();
                 entry.total += 1;
                 entry.by_class[class] += 1;
@@ -539,12 +537,7 @@ fn ppm(numerator: u64, denominator: u64) -> u64 {
     }
 }
 
-fn teacher_advancing(
-    cells: &TeacherCells,
-    k: usize,
-    load: usize,
-    hop: usize,
-) -> TeacherTally {
+fn teacher_advancing(cells: &TeacherCells, k: usize, load: usize, hop: usize) -> TeacherTally {
     cells
         .get(&(k, load, hop, false))
         .copied()
@@ -622,8 +615,7 @@ fn main() {
                 write!(
                     out,
                     ",{name}={},failed_l23_{name}={}",
-                    div.by_class[index],
-                    div.failed_l23_by_class[index],
+                    div.by_class[index], div.failed_l23_by_class[index],
                 )
                 .expect("write");
             }
@@ -662,9 +654,9 @@ fn main() {
         }
     }
 
-    let h4 = keys.values().all(|tally| {
-        tally.exact_state_checks == tally.exact_state_key_equal
-    });
+    let h4 = keys
+        .values()
+        .all(|tally| tally.exact_state_checks == tally.exact_state_key_equal);
 
     let (failed_l23, classified_l23) = divergence
         .iter()
