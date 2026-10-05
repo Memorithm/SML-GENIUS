@@ -11,9 +11,8 @@ use std::{
 use sml_core::{
     delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE},
     delta_kv_semantic::{
-        DeltaKvAmbiguityProjection, DeltaKvSemanticKeyEvidence,
-        DeltaKvSemanticProjectionCounters, DeltaKvSemanticProjectionPolicy,
-        DeltaKvSemanticProjector,
+        DeltaKvAmbiguityProjection, DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionCounters,
+        DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector,
     },
     mor::MorDecision,
     semantic::SemanticState,
@@ -218,10 +217,7 @@ fn route_hybrid_key<const K: usize>(
     base_seed: u64,
     state: &State,
     route: &[u32],
-) -> (
-    Vec<i16>,
-    [DeltaKvSemanticProjectionCounters; 4],
-) {
+) -> (Vec<i16>, [DeltaKvSemanticProjectionCounters; 4]) {
     let (primary, primary_page, primary_value) =
         endpoint_key::<K>(P_PRIMARY, base_seed, state, route);
     let (ordered, ordered_page, ordered_value) =
@@ -581,10 +577,7 @@ fn conflict_targets(stream: &mut Stream) -> (u64, u64) {
     (first, second)
 }
 
-fn run_conflict<const K: usize>(
-    conflicts: &mut ConflictCells,
-    collisions: &mut CollisionCells,
-) {
+fn run_conflict<const K: usize>(conflicts: &mut ConflictCells, collisions: &mut CollisionCells) {
     for seed in 0..SEEDS {
         let base_seed = seed * 1000 + 17;
         for &r in &ROUTE_FRACTIONS {
@@ -740,10 +733,7 @@ fn conflict_ppm(conflicts: &ConflictCells, k: usize, r: usize, kind: usize) -> u
 fn min_teacher_ppm(teacher: &TeacherCells, k: usize, load: usize, r: usize) -> u64 {
     (0..=2)
         .map(|hop| {
-            let tally = teacher
-                .get(&(k, load, r, hop))
-                .copied()
-                .unwrap_or_default();
+            let tally = teacher.get(&(k, load, r, hop)).copied().unwrap_or_default();
             ppm(tally.exact_clear, tally.observations)
         })
         .min()
@@ -773,7 +763,11 @@ fn main() {
     run_work::<1024>(&mut work);
 
     let mut out = String::new();
-    writeln!(out, "N10_CONTROL,compatibility_assertions={compatibility_checks}").expect("write");
+    writeln!(
+        out,
+        "N10_CONTROL,compatibility_assertions={compatibility_checks}"
+    )
+    .expect("write");
 
     for &k in &KEY_WIDTHS {
         for &r in &ROUTE_FRACTIONS {
@@ -898,8 +892,7 @@ fn main() {
     });
 
     let h4 = ROUTE_FRACTIONS.windows(2).all(|pair| {
-        conflict_ppm(&conflicts, 1024, pair[1], 0)
-            >= conflict_ppm(&conflicts, 1024, pair[0], 0)
+        conflict_ppm(&conflicts, 1024, pair[1], 0) >= conflict_ppm(&conflicts, 1024, pair[0], 0)
     });
 
     let route_qualifies = |r: usize| {
