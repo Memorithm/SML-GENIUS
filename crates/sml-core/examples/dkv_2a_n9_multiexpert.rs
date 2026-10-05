@@ -11,8 +11,8 @@ use std::{
 use sml_core::{
     delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE},
     delta_kv_semantic::{
-        DeltaKvAmbiguityProjection, DeltaKvSemanticKeyEvidence,
-        DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector,
+        DeltaKvAmbiguityProjection, DeltaKvSemanticKeyEvidence, DeltaKvSemanticProjectionPolicy,
+        DeltaKvSemanticProjector,
     },
     mor::MorDecision,
     semantic::SemanticState,
@@ -501,8 +501,7 @@ fn run_geometry<const K: usize>(geometry: &mut GeometryCells) {
             for policy in 0..2 {
                 let anchor = hybrid_key::<K>(policy, base_seed, &state, R2);
                 for route_index in [2_usize, 3, 4, 5] {
-                    let other =
-                        hybrid_key::<K>(policy, base_seed, &state, ROUTES[route_index]);
+                    let other = hybrid_key::<K>(policy, base_seed, &state, ROUTES[route_index]);
                     geometry
                         .entry((K, policy, route_index))
                         .or_default()
@@ -562,10 +561,7 @@ fn conflict_targets(stream: &mut Stream) -> (u64, u64) {
     (first, second)
 }
 
-fn run_conflict<const K: usize>(
-    conflicts: &mut ConflictCells,
-    collisions: &mut CollisionCells,
-) {
+fn run_conflict<const K: usize>(conflicts: &mut ConflictCells, collisions: &mut CollisionCells) {
     for seed in 0..SEEDS {
         let base_seed = seed * 1000 + 17;
         for policy in 0..2 {
@@ -591,8 +587,9 @@ fn run_conflict<const K: usize>(
                 let mut unique = BTreeSet::new();
                 for (state, target, route, _) in &records {
                     let key = hybrid_key::<K>(policy, base_seed, state, route);
-                    *collisions.entry((K, policy, 1 + conflict_kind)).or_default() +=
-                        u64::from(!unique.insert(key.clone()));
+                    *collisions
+                        .entry((K, policy, 1 + conflict_kind))
+                        .or_default() += u64::from(!unique.insert(key.clone()));
                     memory
                         .update(&key, &target_q12(*target), FULL_RATE, &mut counters)
                         .expect("update");
@@ -634,8 +631,7 @@ fn run_chains<const K: usize>(
                 for chain in &chains {
                     for hop in 0..chain.length {
                         let state = build_state(chain.codes[hop], chain.meaning, chain.routing);
-                        let values =
-                            read_state::<K>(policy, base_seed, R2, &memory, &state);
+                        let values = read_state::<K>(policy, base_seed, R2, &memory, &state);
                         teacher
                             .entry((K, load, policy, hop))
                             .or_default()
@@ -670,10 +666,8 @@ fn run_chains<const K: usize>(
                     }) {
                         let perturbed = perturb_one(&fact.state, seed, fact.id);
                         let exact_key = hybrid_key::<K>(policy, base_seed, &fact.state, R2);
-                        let perturbed_key =
-                            hybrid_key::<K>(policy, base_seed, &perturbed, R2);
-                        let values =
-                            read_state::<K>(policy, base_seed, R2, &memory, &perturbed);
+                        let perturbed_key = hybrid_key::<K>(policy, base_seed, &perturbed, R2);
+                        let values = read_state::<K>(policy, base_seed, R2, &memory, &perturbed);
                         let tally = perturb.entry((K, policy)).or_default();
                         tally.observations += 1;
                         tally.abs_cosine_sum += cosine(&exact_key, &perturbed_key).abs();
@@ -698,12 +692,7 @@ fn mean_cosine(geometry: &GeometryCells, k: usize, policy: usize, route_index: u
     tally.abs_cosine_sum / tally.pairs as f64
 }
 
-fn min_teacher_ppm(
-    teacher: &TeacherCells,
-    k: usize,
-    load: usize,
-    policy: usize,
-) -> u64 {
+fn min_teacher_ppm(teacher: &TeacherCells, k: usize, load: usize, policy: usize) -> u64 {
     (0..=2)
         .map(|hop| {
             let tally = teacher
@@ -736,7 +725,11 @@ fn main() {
     run_chains::<1024>(&mut teacher, &mut chains, &mut perturb, &mut collisions);
 
     let mut out = String::new();
-    writeln!(out, "N9_CONTROL,compatibility_assertions={compatibility_checks}").expect("write");
+    writeln!(
+        out,
+        "N9_CONTROL,compatibility_assertions={compatibility_checks}"
+    )
+    .expect("write");
 
     for &k in &KEY_WIDTHS {
         for policy in 0..2 {
