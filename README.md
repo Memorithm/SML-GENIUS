@@ -6,6 +6,27 @@ The long-range target is a 25-billion-parameter model with a storage-backed circ
 
 These are engineering targets. No trained 25B SML model, throughput result, quality result or architectural-novelty claim exists yet.
 
+
+## Model and Harness boundary
+
+`SML-GENIUS` is the model programme. The **Model** is the learned artifact plus
+the inference-time mechanisms required to execute it: SBG, MOR, sparse
+expert/circuit activation, associative memory, recurrent state transitions,
+Elastic Weight runtime semantics and native output/decision heads.
+
+The future **SML-HARNESS** is a separate repository. It will orchestrate
+self-improvement, training, architecture/code mutation, evaluation,
+promotion/rollback, deployment and the independently evolving Memorithm
+components required by those workflows.
+
+The first real 25B SML model is the bootstrap champion, not a permanent maximum.
+After that milestone, the champion may autonomously use SML-HARNESS to create,
+train and qualify larger descendants. Later generations are promoted only when
+measured capability improves without violating active-compute, memory, traffic,
+robustness and reproducibility gates.
+
+See [docs/SML-MODEL-HARNESS-BOUNDARY.md](docs/SML-MODEL-HARNESS-BOUNDARY.md).
+
 ## Non-attention candidate contract
 
 The SML candidate core is designed without Q/K/V attention, QK^T, softmax token scoring, dense token-by-token score matrices, all-history Hamming/POPCOUNT ranking, or a Transformer-semantic KV cache. External attention models remain valid baselines.
