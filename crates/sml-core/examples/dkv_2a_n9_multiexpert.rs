@@ -644,8 +644,7 @@ fn run_chains<const K: usize>(
                     let mut state = build_state(chain.codes[0], chain.meaning, chain.routing);
                     let mut hits = [false; 6];
                     for hit in &mut hits {
-                        let values =
-                            read_state::<K>(policy, base_seed, R2, &memory, &state);
+                        let values = read_state::<K>(policy, base_seed, R2, &memory, &state);
                         state = rewrite_once(&state, &values);
                         *hit = chain_correct(&state, expected);
                     }
