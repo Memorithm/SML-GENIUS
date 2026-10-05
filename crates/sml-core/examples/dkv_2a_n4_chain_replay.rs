@@ -30,7 +30,9 @@ const MOR_PAGE: u32 = 5;
 const KEY_WIDTHS: [usize; 3] = [64, 256, 1024];
 const LOADS: [usize; 2] = [4, 16];
 
-const CTRL: [&str; 9] = ["F1", "F2", "F3", "F6", "STAB", "KEY", "AMB", "MAG", "ORACLE"];
+const CTRL: [&str; 9] = [
+    "F1", "F2", "F3", "F6", "STAB", "KEY", "AMB", "MAG", "ORACLE",
+];
 const C_F6: usize = 3;
 const C_STAB: usize = 4;
 const C_KEY: usize = 5;
@@ -87,7 +89,10 @@ fn mix64(mut value: u64) -> u64 {
 fn build_state(value: u64, meaning: u64, routing: u64) -> State {
     let mut state = State::zeroed().expect("state");
     for bit in 0..BITS {
-        state.value.set(bit, (value >> bit) & 1 == 1).expect("value");
+        state
+            .value
+            .set(bit, (value >> bit) & 1 == 1)
+            .expect("value");
         state
             .meaning_mask
             .set(bit, (meaning >> bit) & 1 == 1)
@@ -125,7 +130,13 @@ fn decision() -> MorDecision {
 
 fn target_q12(code: u64) -> Vec<i16> {
     (0..BITS)
-        .map(|bit| if (code >> bit) & 1 == 1 { DELTA_KV_ONE } else { -DELTA_KV_ONE })
+        .map(|bit| {
+            if (code >> bit) & 1 == 1 {
+                DELTA_KV_ONE
+            } else {
+                -DELTA_KV_ONE
+            }
+        })
         .collect()
 }
 
@@ -185,11 +196,8 @@ fn projector<const K: usize>(combined: bool, seed: u64) -> DeltaKvSemanticProjec
         )
         .expect("combined projector")
     } else {
-        DeltaKvSemanticProjector::<K>::new(
-            DeltaKvSemanticProjectionPolicy::default(),
-            seed,
-        )
-        .expect("default projector")
+        DeltaKvSemanticProjector::<K>::new(DeltaKvSemanticProjectionPolicy::default(), seed)
+            .expect("default projector")
     }
 }
 
@@ -250,7 +258,12 @@ fn stops(trace: &[CycleRecord], expected: Option<u64>) -> [usize; 9] {
             .map_or(MAX_DEPTH, |(index, _)| index + 1)
     };
     let oracle = expected
-        .and_then(|value| trace.iter().position(|record| correct(record, value)).map(|i| i + 1))
+        .and_then(|value| {
+            trace
+                .iter()
+                .position(|record| correct(record, value))
+                .map(|i| i + 1)
+        })
         .unwrap_or(1);
 
     [
@@ -287,7 +300,9 @@ type Extras = BTreeMap<(usize, usize), Extra>;
 
 fn run_cell<const K: usize>(combined: bool, load: usize, cells: &mut Cells, extras: &mut Extras) {
     for seed in 0..SEEDS {
-        let chains: Vec<Chain> = (0..load).map(|index| build_chain(seed, load, index)).collect();
+        let chains: Vec<Chain> = (0..load)
+            .map(|index| build_chain(seed, load, index))
+            .collect();
         let mut writes = Vec::new();
         let mut queries = Vec::new();
 
@@ -361,7 +376,11 @@ fn run_cell<const K: usize>(combined: bool, load: usize, cells: &mut Cells, extr
             )
             .expect("repo recurrent");
             assert_eq!(repo.depth as usize, stop[C_STAB], "STAB depth mismatch");
-            assert_eq!(repo.state, trace[stop[C_STAB] - 1].state, "STAB state mismatch");
+            assert_eq!(
+                repo.state,
+                trace[stop[C_STAB] - 1].state,
+                "STAB state mismatch"
+            );
 
             for (ctrl, &depth) in stop.iter().enumerate() {
                 let tally = cells.entry((K, load, query.class, ctrl)).or_default();
@@ -371,7 +390,8 @@ fn run_cell<const K: usize>(combined: bool, load: usize, cells: &mut Cells, extr
 
                 if let Some(expected) = query.expected {
                     if ctrl == C_ORACLE {
-                        tally.correct += u64::from(trace.iter().any(|record| correct(record, expected)));
+                        tally.correct +=
+                            u64::from(trace.iter().any(|record| correct(record, expected)));
                     } else {
                         tally.correct += u64::from(correct(&trace[depth - 1], expected));
                     }
@@ -450,10 +470,16 @@ fn contracts() -> u64 {
                 let state = build_state(stream.next(), stream.next(), stream.next());
                 assert_eq!(
                     legacy.project(&state, &decision(), None).expect("legacy"),
-                    explicit.project(&state, &decision(), None).expect("explicit"),
+                    explicit
+                        .project(&state, &decision(), None)
+                        .expect("explicit"),
                 );
-                let first = combined.project(&state, &decision(), None).expect("combined");
-                let second = combined.project(&state, &decision(), None).expect("combined");
+                let first = combined
+                    .project(&state, &decision(), None)
+                    .expect("combined");
+                let second = combined
+                    .project(&state, &decision(), None)
+                    .expect("combined");
                 assert_eq!(first, second);
                 assert_eq!(first.counters.semantic_coordinates_read, 256);
                 assert_eq!(first.counters.bucket_accumulations, 193);
@@ -506,18 +532,14 @@ fn main() {
                     write!(
                         out,
                         ",{}={accuracy:.4}/{}cycles={cycles:.4}",
-                        CTRL[ctrl],
-                        CTRL[ctrl],
+                        CTRL[ctrl], CTRL[ctrl],
                     )
                     .expect("write");
                 }
                 writeln!(
                     out,
                     ",novel_clear={}/{},written_clear={}/{}",
-                    extra.novel_clear,
-                    extra.novel_n,
-                    extra.written_clear,
-                    extra.written_n,
+                    extra.novel_clear, extra.novel_n, extra.written_clear, extra.written_n,
                 )
                 .expect("write");
             }
@@ -544,9 +566,7 @@ fn main() {
     let h3 = pooled(combined_cells, 256, 4, C_ORACLE).0 < 90.0
         && pooled(combined_cells, 1024, 4, C_ORACLE).0 < 90.0;
     let h4 = all.iter().all(|&(k, load)| {
-        (pooled(combined_cells, k, load, C_STAB).0
-            - pooled(combined_cells, k, load, C_F6).0)
-            .abs()
+        (pooled(combined_cells, k, load, C_STAB).0 - pooled(combined_cells, k, load, C_F6).0).abs()
             <= 1.0
     });
 
