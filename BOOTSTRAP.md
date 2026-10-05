@@ -485,34 +485,42 @@ qualified cross-block construction exists.
 
 ### PGF2 progression
 
-1. **PGF2-0 — mathematical/scalar oracle**
+1. **PGF2-0 — mathematical/scalar oracle — complete**
    - deterministic Boolean reference for 8/16/32/64-bit fixtures;
    - exhaustive small-width self-inversion checks;
    - equivalence against the binomial-mod-2 matrix definition.
-2. **PGF2-1 — packed Rust butterfly**
+2. **PGF2-1 — packed Rust butterfly — complete**
    - allocation-free in-place `u64` transform after construction;
    - exact parity with PGF2-0;
    - operation and temporary-storage accounting.
-3. **PGF2-2 — width ladder**
-   - qualify 64/128/256/512/1024/2048-bit packed states without claiming one
-     hardware instruction per logical width;
-   - keep fixed-width results separate from any later Elastic policy.
-4. **PGF2-3 — SBG representation ablation**
-   - compare identity, reversible permutation, existing Boolean mixing and PGF2
-     under frozen semantic fixtures;
-   - measure collision rate, intra/inter-class Hamming separation, bit-flip
-     stability and retrieval/routing effects.
-5. **PGF2-4 — MOR / Delta-KV handoff**
-   - only if PGF2-3 has a preregistered positive signal, test transformed state as
-     an optional MOR-routing or Delta-KV key/input representation;
-   - frozen-key DKV-2b remains the current Delta-KV authority unless an independent
-     Delta-KV protocol explicitly promotes the candidate.
-6. **PGF2-5 — model-level qualification**
-   - only after component evidence, run matched training/inference evaluation with
-     identical parameter, data and active-compute budgets;
-   - report quality and systems metrics separately.
+3. **PGF2-2 — width ladder — complete**
+   - 64/128/256/512/1024/2048-bit packed states qualified in PR #197;
+   - K=2048 passes the direct oracle and exact self-inversion on all 16 frozen
+     fixtures at 11,264 logical XOR updates, 272 packed-word updates, 256 state
+     bytes and zero scratch words.
+4. **PGF2-3 — SBG representation ablation — complete, negative**
+   - preregistered in PR #198 and executed in PR #200;
+   - retained evidence/observation merged through PR #202;
+   - at K=2048, global PGF2 contracts STRUCTURED_LOCAL nearest-wrong class
+     median 32 -> 12 and route median 64 -> 6;
+   - at h=64, structured class retrieval falls 100% -> 42.38% and route
+     accuracy 100% -> 57.03%;
+   - H1/H5/H6/H7 hold, H2/H3/H4 are refuted; selection is `PGF2-4=NONE`.
+5. **PGF2-4 — MOR / Delta-KV handoff — blocked for global K=2048 PGF2**
+   - PGF2-3 did not produce the preregistered positive signal;
+   - no transformed global PGF2 state may be promoted into MOR or Delta-KV from
+     this track.
+6. **PGF2-5 — model-level qualification — blocked**
+   - component qualification did not pass the PGF2-3 gate.
 
 Stop rule: if PGF2 does not beat the best matched reversible Boolean control on a
 declared SBG objective after full transform cost is included, retain it as a
 negative result and do not place it on the default SML path.
+
+Current evidence applies specifically to the **global K=2048 transform**.
+`docs/SML-PGF2-3-SBG-ABLATION-OBSERVATION.md` is the retained result and
+`research/pgf2-3/` contains the replay/manifest. A block-local, reordered or
+otherwise differently oriented Pascal construction is a distinct candidate: it
+must receive a new preregistration and cannot reinterpret the failed PGF2-3 gate
+as authorization for PGF2-4.
 
