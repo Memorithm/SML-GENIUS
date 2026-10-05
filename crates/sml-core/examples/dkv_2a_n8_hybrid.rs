@@ -850,20 +850,26 @@ fn main() {
             <= left.abs_cosine_sum / left.observations as f64 + 0.000001
     });
 
-    let qualifies = |load: usize, q: usize| {
-        let chain = chains[&(1024, load, q)];
+    let qualifies_low = |q: usize| {
+        let chain = chains[&(1024, 4, q)];
         let h1_perturb = perturb[&(1024, q, 1)];
         ppm(chain.f6, chain.queries) >= 900_000
-            && advancing_min_ppm(&teacher, 1024, load, q) >= 900_000
+            && advancing_min_ppm(&teacher, 1024, 4, q) >= 900_000
+            && ppm(h1_perturb.exact_clear, h1_perturb.observations) >= 200_000
+    };
+    let qualifies_high = |q: usize| {
+        let chain = chains[&(1024, 16, q)];
+        let h1_perturb = perturb[&(1024, q, 1)];
+        ppm(chain.f6, chain.queries) >= 900_000
             && ppm(h1_perturb.exact_clear, h1_perturb.observations) >= 200_000
     };
 
     let low_candidate = [1_usize, 2, 3]
         .into_iter()
-        .find(|q| qualifies(4, *q));
+        .find(|q| qualifies_low(*q));
     let high_candidate = [1_usize, 2, 3]
         .into_iter()
-        .find(|q| qualifies(16, *q));
+        .find(|q| qualifies_high(*q));
 
     let h4 = low_candidate.is_some();
     let h5 = high_candidate.is_some();
