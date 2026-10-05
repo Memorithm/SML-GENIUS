@@ -43,7 +43,6 @@ const R3: &[u32] = &[5, 8];
 const R4: &[u32] = &[5, 7, 9];
 const R6: &[u32] = &[7, 5];
 
-const BANK_NAMES: [&str; 2] = ["PRIMARY", "ORDERED"];
 const B_PRIMARY: usize = 0;
 const B_ORDERED: usize = 1;
 
