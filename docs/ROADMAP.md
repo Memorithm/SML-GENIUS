@@ -456,6 +456,22 @@ Input review: [SML-DKV-2A-N3-INPUT-REVIEW.md](SML-DKV-2A-N3-INPUT-REVIEW.md).
 
 Protocols: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-REPLAY.md) and [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-REPLAY.md). Observations: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-OBSERVATION.md), [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-OBSERVATION.md). No context/model promotion.
 
+
+## DKV-2a-N4 recurrent-chain requalification
+
+Input review: [SML-DKV-2A-N4-INPUT-REVIEW.md](SML-DKV-2A-N4-INPUT-REVIEW.md).
+Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
+
+- [x] Triage the supplied DKV-4i/4j diff against the merged N3 gates.
+- [x] Reject premature combined/PageSeeded core API until multi-expert and DKV-3a gates are satisfied.
+- [x] Retain value-field weighting as negative source evidence; do not import the option.
+- [x] Freeze current-Rust1.89 replay of the combined ActiveOnly + outer PageSeeded arm on the historical recurrent-chain panel.
+- [ ] Execute and retain byte-identical N4 chain evidence.
+- [ ] Preserve the remaining per-hop capability failure shape before proposing another mechanism.
+- [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
+
+No controller or context/model promotion follows.
+
 ## DKV projection-agreement follow-up
 
 Input review: [SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md](SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md).
