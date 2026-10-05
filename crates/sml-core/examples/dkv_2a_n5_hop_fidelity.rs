@@ -290,6 +290,8 @@ struct FreeTally {
 struct KeyTally {
     queries: u64,
     exact: u64,
+    exact_state_checks: u64,
+    exact_state_key_equal: u64,
     sign_hamming_sum: u64,
     dot_sum: i128,
     actual_norm_sum: u128,
@@ -302,6 +304,7 @@ struct DivergenceTally {
     by_class: [u64; 6],
     failed_l23: u64,
     classified_failed_l23: u64,
+    failed_l23_by_class: [u64; 6],
 }
 
 type TeacherCells = BTreeMap<(usize, usize, usize, bool), TeacherTally>;
@@ -492,6 +495,10 @@ fn run_width<const K: usize>(
                     let key_tally = keys.entry((K, load, depth)).or_default();
                     key_tally.queries += 1;
                     key_tally.exact += u64::from(actual_key == expected_key);
+                    if step.state == expected {
+                        key_tally.exact_state_checks += 1;
+                        key_tally.exact_state_key_equal += u64::from(actual_key == expected_key);
+                    }
                     key_tally.sign_hamming_sum = key_tally
                         .sign_hamming_sum
                         .saturating_add(key_sign_hamming(&actual_key, &expected_key));
@@ -517,6 +524,7 @@ fn run_width<const K: usize>(
                 if chain.length >= 2 && failed {
                     entry.failed_l23 += 1;
                     entry.classified_failed_l23 += u64::from(class != D_NONE);
+                    entry.failed_l23_by_class[class] += 1;
                 }
             }
         }
@@ -581,7 +589,7 @@ fn main() {
                     let key_tally = keys[&(k, load, depth)];
                     writeln!(
                         out,
-                        "N5_FREE,K={k},G={load},depth={depth},queries={},value_exact={},value_ppm={},ambiguity_clear={},clear_ppm={},state_exact={},state_ppm={},value_hamming_sum={},key_exact={},key_ppm={},key_sign_hamming_sum={},dot_sum={},actual_norm_sum={},expected_norm_sum={}",
+                        "N5_FREE,K={k},G={load},depth={depth},queries={},value_exact={},value_ppm={},ambiguity_clear={},clear_ppm={},state_exact={},state_ppm={},value_hamming_sum={},key_exact={},key_ppm={},exact_state_checks={},exact_state_key_equal={},key_sign_hamming_sum={},dot_sum={},actual_norm_sum={},expected_norm_sum={}",
                         tally.queries,
                         tally.value_exact,
                         ppm(tally.value_exact, tally.queries),
@@ -592,6 +600,8 @@ fn main() {
                         tally.value_hamming_sum,
                         key_tally.exact,
                         ppm(key_tally.exact, key_tally.queries),
+                        key_tally.exact_state_checks,
+                        key_tally.exact_state_key_equal,
                         key_tally.sign_hamming_sum,
                         key_tally.dot_sum,
                         key_tally.actual_norm_sum,
@@ -609,7 +619,13 @@ fn main() {
             )
             .expect("write");
             for (index, name) in DIVERGENCE_NAMES.iter().enumerate() {
-                write!(out, ",{name}={}", div.by_class[index]).expect("write");
+                write!(
+                    out,
+                    ",{name}={},failed_l23_{name}={}",
+                    div.by_class[index],
+                    div.failed_l23_by_class[index],
+                )
+                .expect("write");
             }
             writeln!(out).expect("write");
         }
@@ -646,7 +662,9 @@ fn main() {
         }
     }
 
-    let h4 = keys.values().all(|tally| tally.exact <= tally.queries);
+    let h4 = keys.values().all(|tally| {
+        tally.exact_state_checks == tally.exact_state_key_equal
+    });
 
     let (failed_l23, classified_l23) = divergence
         .iter()
@@ -668,11 +686,11 @@ fn main() {
         && (ppm(free_d2.state_exact, free_d2.queries) < 900_000
             || ppm(free_d3.state_exact, free_d3.queries) < 900_000);
 
-    let drift_failures = divergence[&(1024, 4)].by_class[D_FREE_WRONG]
-        + divergence[&(1024, 4)].by_class[D_REWRITE_AMBIGUOUS]
-        + divergence[&(1024, 4)].by_class[D_REPROJECTION_DRIFT];
-    let local_failures = divergence[&(1024, 4)].by_class[D_TEACHER_WRONG]
-        + divergence[&(1024, 4)].by_class[D_TEACHER_WEAK];
+    let drift_failures = divergence[&(1024, 4)].failed_l23_by_class[D_FREE_WRONG]
+        + divergence[&(1024, 4)].failed_l23_by_class[D_REWRITE_AMBIGUOUS]
+        + divergence[&(1024, 4)].failed_l23_by_class[D_REPROJECTION_DRIFT];
+    let local_failures = divergence[&(1024, 4)].failed_l23_by_class[D_TEACHER_WRONG]
+        + divergence[&(1024, 4)].failed_l23_by_class[D_TEACHER_WEAK];
     let h6_status = if !antecedent {
         "NOT_APPLICABLE"
     } else if drift_failures > local_failures {
