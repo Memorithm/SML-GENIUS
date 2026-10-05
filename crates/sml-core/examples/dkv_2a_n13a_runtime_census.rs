@@ -254,8 +254,7 @@ fn a_bin(weight: u64) -> usize {
     }
 }
 
-const A_BIN_NAMES: [&str; A_BIN_COUNT] =
-    ["0", "1", "2", "3-4", "5-8", "9-16", "17-32", "33-64"];
+const A_BIN_NAMES: [&str; A_BIN_COUNT] = ["0", "1", "2", "3-4", "5-8", "9-16", "17-32", "33-64"];
 
 fn popcounts(state: &State) -> [u64; 4] {
     [
@@ -649,8 +648,7 @@ fn disagreement_bin(ppm_value: u32) -> usize {
     }
 }
 
-const DISAGREEMENT_NAMES: [&str; 5] =
-    ["0", "1-49k", "50-249k", "250-499k", "500k-1M"];
+const DISAGREEMENT_NAMES: [&str; 5] = ["0", "1-49k", "50-249k", "250-499k", "500k-1M"];
 
 #[derive(Default)]
 struct MorCensus {
