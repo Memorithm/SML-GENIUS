@@ -180,6 +180,15 @@ jobs:
           cargo run --locked --release -p sml-core --example dkv_2a_n13a_runtime_census > "$RUNNER_TEMP/dkv-2a-n13a-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n13a-first.csv" "$RUNNER_TEMP/dkv-2a-n13a-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n13a-first.csv"
+      - name: DKV-2a-N13B page-skew evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n13b-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-store --example dkv_2a_n13b_page_skew > "$RUNNER_TEMP/dkv-2a-n13b-first.csv"
+          cargo run --locked --release -p sml-store --example dkv_2a_n13b_page_skew > "$RUNNER_TEMP/dkv-2a-n13b-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n13b-first.csv" "$RUNNER_TEMP/dkv-2a-n13b-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n13b-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
