@@ -612,6 +612,15 @@ Any future block-local, reordered or differently oriented Pascal construction is
 a new candidate requiring an independent preregistration; it does not reopen or
 overwrite the global PGF2-3 result.
 
+- [ ] **PGF2-3B**: bounded block-local locality-rescue test at total K=2048,
+  freezing block widths 64/128/256/512 and the original PGF2-3 fixtures before
+  execution; protocol:
+  [SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md](SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md).
+  It may retain a block-local component candidate only if one width simultaneously
+  recovers near-control geometry/noise behavior, materially improves the failed
+  global PGF2 at h=64, respects the bounded amplification gate and reduces
+  structural work. Otherwise the Pascal-as-SBG-representation branch closes.
+
 ### Mandatory measurements
 
 - exact transform/inverse correctness;
