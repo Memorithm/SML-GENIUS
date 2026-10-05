@@ -215,8 +215,10 @@ itself valid evidence.
   h=0 retrieval do not improve by more than **20,000 ppm** relative to
   BEST_CONTROL. A larger gain is treated as a fixture/implementation anomaly
   requiring investigation, not as evidence for PGF2.
-- **H6 — local-noise bound**: PGF2 single-bit amplification p95 is at most
-  **512 output bits** and maximum is at most **1024 output bits**.
+- **H6 — local-noise bound**: PGF2 single-bit amplification mean is at most
+  **128 output bits** and p95 is at most **512 output bits**. The maximum is
+  reported but is not a gate because the Pascal transform structurally maps the
+  input basis bit at coordinate 0 across the complete K=2048 output.
 - **H7 — cost bound**: PGF2 remains at the already qualified
   **11,264 logical XOR updates**, **272 packed-word updates**, **256 state
   bytes**, and **0 scratch words** per K=2048 transform.
