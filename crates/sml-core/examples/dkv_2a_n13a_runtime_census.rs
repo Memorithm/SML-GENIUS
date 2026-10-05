@@ -814,21 +814,20 @@ fn main() -> R<()> {
             ppm(census.v_delta_sum, census.adjacent_pairs),
             ppm(census.r_delta_sum, census.adjacent_pairs),
         )?;
-        for bin in 0..A_BIN_COUNT {
+        for (bin, name) in A_BIN_NAMES.iter().enumerate() {
             writeln!(
                 out,
-                "N13A_B_BIN,G={load},bin={},count={},share_ppm={}",
-                A_BIN_NAMES[bin],
+                "N13A_B_BIN,G={load},bin={name},count={},share_ppm={}",
                 census.bins[bin],
                 ppm(census.bins[bin], census.states)
             )?;
         }
-        for from in 0..A_BIN_COUNT {
-            for to in 0..A_BIN_COUNT {
+        for (from, from_name) in A_BIN_NAMES.iter().enumerate() {
+            for (to, to_name) in A_BIN_NAMES.iter().enumerate() {
                 writeln!(
                     out,
-                    "N13A_B_TRANSITION,G={load},from={},to={},count={}",
-                    A_BIN_NAMES[from], A_BIN_NAMES[to], census.bin_transitions[from][to]
+                    "N13A_B_TRANSITION,G={load},from={from_name},to={to_name},count={}",
+                    census.bin_transitions[from][to]
                 )?;
             }
         }
