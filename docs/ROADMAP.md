@@ -472,7 +472,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Execute and retain byte-identical N5 Rust1.89 evidence; every low-load failed L2/L3 chain first diverges on a teacher-forced associative read.
 - [x] Freeze N6 terminal-write crosstalk decomposition: SELF vs same-chain vs count-matched cross-chain vs FULL, plus key geometry.
 - [x] Execute and retain byte-identical N6 Rust1.89 evidence: same-chain correlation ~0.67 dominates count-matched cross-chain interference and reproduces 10/11 K1024 FULL L2/L3 failures.
-- [ ] Freeze a harness-only within-page domain-conditioning candidate before any core change; test capability and near-state brittleness against N6/N4 controls.
+- [x] Freeze N7 harness-only PAGE_VALUE domain conditioning from exact V; include N6 crosstalk, N4 chain capability and 1/2/4-bit brittleness controls.
+- [ ] Execute and retain byte-identical N7 evidence; do not promote exact-V conditioning if brittleness dominates.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
