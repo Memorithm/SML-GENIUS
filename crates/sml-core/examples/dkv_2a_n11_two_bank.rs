@@ -356,12 +356,7 @@ fn write_bank<const K: usize>(
     counters: &mut DeltaKvCounters,
     cost: &mut Cost,
 ) {
-    let (key, work) = hybrid_key::<K>(
-        bank,
-        context.base_seed,
-        context.state,
-        context.route,
-    );
+    let (key, work) = hybrid_key::<K>(bank, context.base_seed, context.state, context.route);
     cost.add_key(bank, work);
     memory
         .update(&key, &target_q12(target), FULL_RATE, counters)
@@ -791,17 +786,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
             // Non-bound: wrong record id under R3.
             let wrong_id = rid ^ (1_u64 << 48);
             let (bank, values) = resolve::<K>(
-                    wrong_id,
-                    ProjectionContext {
-                        base_seed,
-                        route: R3,
-                        state: state,
-                    },
-                    &primary,
-                    &ordered,
-                    &directory,
-                    cost,
-                );
+                wrong_id,
+                ProjectionContext {
+                    base_seed,
+                    route: R3,
+                    state: state,
+                },
+                &primary,
+                &ordered,
+                &directory,
+                cost,
+            );
             tally.queries += 1;
             tally.false_override_selections += u64::from(bank == Bank::Ordered);
             tally.false_acceptances +=
@@ -809,17 +804,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
 
             // Non-bound: same record id, unbound route R4.
             let (bank, values) = resolve::<K>(
-                    *rid,
-                    ProjectionContext {
-                        base_seed,
-                        route: R4,
-                        state: state,
-                    },
-                    &primary,
-                    &ordered,
-                    &directory,
-                    cost,
-                );
+                *rid,
+                ProjectionContext {
+                    base_seed,
+                    route: R4,
+                    state: state,
+                },
+                &primary,
+                &ordered,
+                &directory,
+                cost,
+            );
             tally.queries += 1;
             tally.false_override_selections += u64::from(bank == Bank::Ordered);
             tally.false_acceptances +=
@@ -832,17 +827,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
             // Bound metadata paired with a different semantic state.
             let different = &rows[(index + 1) % rows.len()].1;
             let (bank, values) = resolve::<K>(
-                    *rid,
-                    ProjectionContext {
-                        base_seed,
-                        route: R3,
-                        state: different,
-                    },
-                    &primary,
-                    &ordered,
-                    &directory,
-                    cost,
-                );
+                *rid,
+                ProjectionContext {
+                    base_seed,
+                    route: R3,
+                    state: different,
+                },
+                &primary,
+                &ordered,
+                &directory,
+                cost,
+            );
             tally.queries += 1;
             tally.wrong_state_ordered += u64::from(bank == Bank::Ordered);
             tally.wrong_state_false_acceptances +=
@@ -987,17 +982,17 @@ fn run_p5<const K: usize>(
                 let mut hits = [false; 6];
                 for hit in &mut hits {
                     let (_, values) = resolve::<K>(
-                    0,
-                    ProjectionContext {
-                        base_seed,
-                        route: R2,
-                        state: &state,
-                    },
-                    &primary,
-                    &ordered,
-                    &directory,
-                    cost,
-                );
+                        0,
+                        ProjectionContext {
+                            base_seed,
+                            route: R2,
+                            state: &state,
+                        },
+                        &primary,
+                        &ordered,
+                        &directory,
+                        cost,
+                    );
                     state = rewrite_once(&state, &values);
                     *hit = chain_correct(&state, expected);
                 }
@@ -1070,17 +1065,17 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
         for (fact, override_target) in selected {
             for (slot, route, target) in [(0_usize, R2, fact.target), (1, R3, override_target)] {
                 let (bank, values) = resolve::<K>(
-                        fact.record_id,
-                        ProjectionContext {
-                            base_seed,
-                            route: route,
-                            state: &fact.state,
-                        },
-                        &primary,
-                        &ordered,
-                        &directory,
-                        cost,
-                    );
+                    fact.record_id,
+                    ProjectionContext {
+                        base_seed,
+                        route: route,
+                        state: &fact.state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
+                );
                 cells
                     .entry((K, slot))
                     .or_default()
@@ -1130,17 +1125,17 @@ fn run_p7<const K: usize>(cells: &mut PerturbCells, cost: &mut Cost) {
             let (exact_key, _) = hybrid_key::<K>(B_PRIMARY, base_seed, &fact.state, R2);
             let (perturbed_key, _) = hybrid_key::<K>(B_PRIMARY, base_seed, &perturbed, R2);
             let (bank, values) = resolve::<K>(
-                        fact.record_id,
-                        ProjectionContext {
-                            base_seed,
-                            route: R2,
-                            state: &perturbed,
-                        },
-                        &primary,
-                        &ordered,
-                        &directory,
-                        cost,
-                    );
+                fact.record_id,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: &perturbed,
+                },
+                &primary,
+                &ordered,
+                &directory,
+                cost,
+            );
             assert_eq!(bank, Bank::Primary);
             let tally = cells.entry(K).or_default();
             tally.observations += 1;
