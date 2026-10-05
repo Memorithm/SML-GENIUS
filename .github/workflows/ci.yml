@@ -99,6 +99,15 @@ jobs:
           cargo run --locked --release -p sml-core --example dkv_2a_n4_chain_replay > "$RUNNER_TEMP/dkv-2a-n4-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n4-first.csv" "$RUNNER_TEMP/dkv-2a-n4-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n4-first.csv"
+      - name: DKV-2a-N5 hop-fidelity evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n5')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n5_hop_fidelity > "$RUNNER_TEMP/dkv-2a-n5-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n5_hop_fidelity > "$RUNNER_TEMP/dkv-2a-n5-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n5-first.csv" "$RUNNER_TEMP/dkv-2a-n5-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n5-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
