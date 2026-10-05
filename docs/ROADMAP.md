@@ -508,7 +508,9 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N12 DKV-3a verified-write-locator requalification for the retained two-bank resolver, using current RecordRequest/VerifiedContext/VerifiedHistory/subject-binding APIs and existing Missing/Conflict/Unverified semantics.
 - [x] Execute and retain byte-identical N12 Rust1.89 evidence; all ten identity/provenance gates hold after explicit preregistered wrong-candidate H6 requalification.
 - [x] Exact record/subject/provenance qualification is complete for the retained N11 two-bank Development semantics.
-- [ ] Qualify representative recurrent SBG/MOR state distributions and ambiguity density against the retained two-bank composition.
+- [x] Freeze N13A prototype-native census over learned SML-1 route traces, retained q=3 recurrent SBG states and native dynamic-MOR controls; explicitly not claimed representative of a future 25B model.
+- [ ] Execute and retain byte-identical N13A census evidence.
+- [ ] Preregister N13B unbalanced page/expert + cross-page sharing stress only after N13A census values are retained.
 - [ ] Qualify unbalanced page/expert populations and explicit cross-page sharing semantics.
 - [ ] Measure physical latency/RSS/traffic/energy before any core PageSeeded/two-bank API promotion.
 
