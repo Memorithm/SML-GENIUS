@@ -6,6 +6,23 @@ The long-range target is a 25-billion-parameter model with a storage-backed circ
 
 These are engineering targets. No trained 25B SML model, throughput result, quality result or architectural-novelty claim exists yet.
 
+
+## Model and Harness boundary
+
+SML development is model-first. The **Model** is the learned 25B artifact plus
+the inference-time mechanisms required to execute it: SBG, MOR, sparse
+expert/circuit activation, associative memory, recurrent state transitions,
+Elastic Weight runtime semantics and native output/decision heads.
+
+Everything outside that executable learned model is **Harness**. This includes
+recursive self-improvement, architecture/code mutation, experiment
+orchestration, evaluation farms, promotion/rollback governance, deployment and
+cross-repository automation.
+
+The broad Harness programme is intentionally deferred until the first real
+SML-6 25B model exists. Pre-25B external tooling is limited to what is required
+to train, measure and fail-closed qualify the model.
+
 ## Non-attention candidate contract
 
 The SML candidate core is designed without Q/K/V attention, QK^T, softmax token scoring, dense token-by-token score matrices, all-history Hamming/POPCOUNT ranking, or a Transformer-semantic KV cache. External attention models remain valid baselines.
