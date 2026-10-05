@@ -1164,12 +1164,6 @@ fn unverified_controls<const K: usize>(
         [!bits[0][0], !bits[0][1]],
     );
 
-    let request = |state: &State| ResolveRequest {
-        record: RecordRequest::new(source.ledger.stream_id(), record),
-        subject: subject(0),
-        route: R3,
-        state,
-    };
     let mut rows = BTreeMap::new();
 
     for (name, mode) in [
@@ -1181,7 +1175,12 @@ fn unverified_controls<const K: usize>(
             &dir,
             &source,
             base_seed,
-            request(&states[0]),
+            ResolveRequest {
+                record: RecordRequest::new(source.ledger.stream_id(), record),
+                subject: subject(0),
+                route: R3,
+                state: &states[0],
+            },
             accounting,
             mode,
             verification_limits(),
@@ -1203,7 +1202,12 @@ fn unverified_controls<const K: usize>(
         &dir,
         &source,
         base_seed,
-        request(&states[0]),
+        ResolveRequest {
+                record: RecordRequest::new(source.ledger.stream_id(), record),
+                subject: subject(0),
+                route: R3,
+                state: &states[0],
+            },
         accounting,
         ReaderMode::Clean,
         verification_limits(),
@@ -1226,7 +1230,12 @@ fn unverified_controls<const K: usize>(
         &dir,
         &source,
         base_seed,
-        request(&states[0]),
+        ResolveRequest {
+                record: RecordRequest::new(source.ledger.stream_id(), record),
+                subject: subject(0),
+                route: R3,
+                state: &states[0],
+            },
         accounting,
         ReaderMode::Clean,
         verification_limits(),
@@ -1239,7 +1248,12 @@ fn unverified_controls<const K: usize>(
         &dir,
         &source,
         base_seed,
-        request(&states[0]),
+        ResolveRequest {
+                record: RecordRequest::new(source.ledger.stream_id(), record),
+                subject: subject(0),
+                route: R3,
+                state: &states[0],
+            },
         accounting,
         ReaderMode::Clean,
         VerificationLimits {
