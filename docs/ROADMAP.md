@@ -566,3 +566,45 @@ This follow-up does not alter the current DKV-3a acceptance policy, DKV-4h proto
 
 The checked items close the engineering/development milestone only. They do not
 promote Delta-KV context integration or establish model-quality superiority.
+
+## PGF2 — Pascal-GF(2) reversible Boolean mixer
+
+Status: preregistration/implementation planning. The durable architectural
+contract is in `BOOTSTRAP.md#pascal-gf2--sierpiński-reversible-mixer-research-track`.
+
+### Research question
+
+Can the self-inverse Pascal/subset-zeta transform over GF(2) provide a useful
+hierarchical reversible mixing primitive for SBG at lower or comparable cost
+than existing reversible Boolean controls, without introducing attention or
+floating-point semantics?
+
+### Milestones
+
+- **PGF2-0**: scalar/binomial oracle, exhaustive small-width equivalence and
+  `P(P(x)) == x`.
+- **PGF2-1**: packed Rust `u64` butterfly with exact oracle parity and operation
+  accounting.
+- **PGF2-2**: fixed width ladder 64/128/256/512/1024/2048 bits; no adaptive-width
+  claim.
+- **PGF2-3**: frozen SBG ablation versus identity, fixed reversible permutation
+  and current qualified Boolean mixer.
+- **PGF2-4**: optional MOR/Delta-KV component experiment only after PGF2-3 passes
+  a preregistered gate.
+- **PGF2-5**: matched model-level evaluation only after component qualification.
+
+### Mandatory measurements
+
+- exact transform/inverse correctness;
+- logical Boolean operations and temporary bytes;
+- wall-clock latency only from declared measured backends;
+- collision and retrieval statistics;
+- intra/inter-class Hamming separation;
+- bit-flip/noise stability;
+- MOR candidate/routing changes when tested;
+- Delta-KV interference/read quality when tested;
+- downstream task quality for model-level work.
+
+No stage may infer semantic superiority from invertibility, Sierpiński structure
+or asymptotic operation count alone.
+
