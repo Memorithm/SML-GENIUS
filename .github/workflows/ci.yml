@@ -90,6 +90,15 @@ jobs:
           cargo run --locked --release -p sml-core --example dkv_2a_n3b_page_seeded > "$RUNNER_TEMP/dkv-2a-n3b-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n3b-first.csv" "$RUNNER_TEMP/dkv-2a-n3b-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n3b-first.csv"
+      - name: DKV-2a-N4 recurrent-chain replay evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n4')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n4_chain_replay > "$RUNNER_TEMP/dkv-2a-n4-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n4_chain_replay > "$RUNNER_TEMP/dkv-2a-n4-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n4-first.csv" "$RUNNER_TEMP/dkv-2a-n4-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n4-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
