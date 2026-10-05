@@ -466,11 +466,12 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Reject premature combined/PageSeeded core API until multi-expert and DKV-3a gates are satisfied.
 - [x] Retain value-field weighting as negative source evidence; do not import the option.
 - [x] Freeze current-Rust1.89 replay of the combined ActiveOnly + outer PageSeeded arm on the historical recurrent-chain panel.
-- [ ] Execute and retain byte-identical N4 chain evidence.
-- [ ] Preserve the remaining per-hop capability failure shape before proposing another mechanism.
+- [x] Execute and retain byte-identical N4 Rust1.89 chain evidence in `research/dkv-2a-n4/`.
+- [x] Preserve the remaining per-hop capability failure: low-load combined ORACLE is L0=16/16, L1=16/16, L2=13/16, L3=8/16 at every K; no cell is capable.
+- [ ] Freeze a per-hop read/rewrite fidelity probe before proposing another projector mechanism.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
-No controller or context/model promotion follows.
+Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
 ## DKV projection-agreement follow-up
 
