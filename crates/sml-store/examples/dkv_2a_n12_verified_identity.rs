@@ -19,8 +19,7 @@ use sml_core::{
 };
 use sml_store::{
     delta_kv_context::{
-        ContextLimits, DeltaKvContextMemory, RecordBindingLimits, RecordRequest,
-        VerificationLimits,
+        ContextLimits, DeltaKvContextMemory, RecordBindingLimits, RecordRequest, VerificationLimits,
     },
     observed_history::{
         bind_projected_subject, encode_event, screen_candidate, verify_history, HistoryLimits,
