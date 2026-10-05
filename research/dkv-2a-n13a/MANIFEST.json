@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 191,
+  "execution_pr": 192,
+  "fixture_freeze": "docs/SML-DKV-2A-N13A-FIXTURE-FREEZE.md",
+  "executed_head": "14a6916ea718702335d75e31ca3c12ea37878082",
+  "github_actions_run": 37363273578,
+  "job": 111942608354,
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 2594,
+  "strata": [
+    "learned_sml1_routes",
+    "q3_recurrent_sbg",
+    "dynamic_mor_controls"
+  ],
+  "representativeness": "current_prototype_only",
+  "promotion": "BLOCKED"
+}
