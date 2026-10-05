@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "protocol": "docs/SML-DKV-2A-N6-CROSSTALK-PREREGISTRATION.md",
+  "protocol_pr": 174,
+  "protocol_merge": "5fad0dd25bf47056e3a759540a652200efdfa4d7",
+  "executed_code_head": "42d6ffe075fd0f5879d508666b8f612fd314582b",
+  "github_actions_run": 37280066984,
+  "job": 111665824121,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 79,
+  "match_replicates": 4,
+  "promotion": "BLOCKED"
+}
