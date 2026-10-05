@@ -561,11 +561,11 @@ fn run_p1<const K: usize>(cells: &mut P1Cells, cf: &mut P1Cells, cost: &mut Cost
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: *target,
+                    state,
                 },
                 &mut primary,
+                *target,
                 &mut p_counters,
-                15892,
                 cost,
             );
             // Counterfactual N9 ORDERED continuity control only.
@@ -574,11 +574,11 @@ fn run_p1<const K: usize>(cells: &mut P1Cells, cf: &mut P1Cells, cost: &mut Cost
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: *target,
+                    state,
                 },
                 &mut ordered,
+                *target,
                 &mut o_counters,
-                16209,
                 cost,
             );
         }
@@ -633,11 +633,11 @@ fn run_p2<const K: usize>(cells: &mut P2Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: *base,
+                    state,
                 },
                 &mut primary,
+                *base,
                 &mut p_counters,
-                17914,
                 cost,
             );
             write_bank::<K>(
@@ -645,11 +645,11 @@ fn run_p2<const K: usize>(cells: &mut P2Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R3,
-                    state: override_target,
+                    state,
                 },
                 &mut ordered,
+                override_target,
                 &mut o_counters,
-                18163,
                 cost,
             );
             directory.bind(*rid, R3);
@@ -700,11 +700,11 @@ fn run_p3<const K: usize>(cells: &mut P3Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: *base,
+                    state,
                 },
                 &mut primary,
+                *base,
                 &mut p_counters,
-                19720,
                 cost,
             );
             write_bank::<K>(
@@ -712,11 +712,11 @@ fn run_p3<const K: usize>(cells: &mut P3Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R6,
-                    state: override_target,
+                    state,
                 },
                 &mut ordered,
+                override_target,
                 &mut o_counters,
-                19969,
                 cost,
             );
             directory.bind(*rid, R6);
@@ -761,11 +761,11 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: *base,
+                    state,
                 },
                 &mut primary,
+                *base,
                 &mut p_counters,
-                21356,
                 cost,
             );
             write_bank::<K>(
@@ -773,11 +773,11 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
                 ProjectionContext {
                     base_seed,
                     route: R3,
-                    state: override_target,
+                    state,
                 },
                 &mut ordered,
+                override_target,
                 &mut o_counters,
-                21605,
                 cost,
             );
             directory.bind(*rid, R3);
@@ -1032,11 +1032,11 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: fact.target,
+                    state: &fact.state,
                 },
                 &mut primary,
+                fact.target,
                 &mut p_counters,
-                29423,
                 cost,
             );
         }
@@ -1056,11 +1056,11 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R3,
-                    state: override_target,
+                    state: &fact.state,
                 },
                 &mut ordered,
+                override_target,
                 &mut o_counters,
-                30154,
                 cost,
             );
             directory.bind(fact.record_id, R3);
@@ -1116,11 +1116,11 @@ fn run_p7<const K: usize>(cells: &mut PerturbCells, cost: &mut Cost) {
                 ProjectionContext {
                     base_seed,
                     route: R2,
-                    state: fact.target,
+                    state: &fact.state,
                 },
                 &mut primary,
+                fact.target,
                 &mut p_counters,
-                32022,
                 cost,
             );
         }
