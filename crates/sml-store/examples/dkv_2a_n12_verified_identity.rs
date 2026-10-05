@@ -102,12 +102,18 @@ fn mix64(mut value: u64) -> u64 {
 fn build_state(value: u64, meaning: u64, routing: u64) -> State {
     let mut state = State::zeroed().expect("state");
     for bit in 0..BITS {
-        state.value.set(bit, (value >> bit) & 1 == 1).expect("value");
+        state
+            .value
+            .set(bit, (value >> bit) & 1 == 1)
+            .expect("value");
         state
             .meaning_mask
             .set(bit, (meaning >> bit) & 1 == 1)
             .expect("meaning");
-        state.routing.set(bit, (routing >> bit) & 1 == 1).expect("routing");
+        state
+            .routing
+            .set(bit, (routing >> bit) & 1 == 1)
+            .expect("routing");
     }
     state
 }
@@ -179,7 +185,13 @@ fn hybrid_key<const K: usize>(
     let page = source_key::<K>(bank, false, base_seed, state, route);
     let value = source_key::<K>(bank, true, base_seed, state, route);
     (0..K)
-        .map(|index| if index % 4 < Q { value[index] } else { page[index] })
+        .map(|index| {
+            if index % 4 < Q {
+                value[index]
+            } else {
+                page[index]
+            }
+        })
         .collect()
 }
 
@@ -296,9 +308,7 @@ fn clean_fixture(seed: u64) -> (SourceSnapshot, Vec<State>, Vec<[bool; 2]>) {
         let state = build_state(stream.next(), stream.next(), stream.next());
         let target_word = stream.next();
         let target = [target_word & 1 != 0, target_word & 2 != 0];
-        events.push(
-            ObservationEvent::new(id, subject(index), target, None).expect("clean event"),
-        );
+        events.push(ObservationEvent::new(id, subject(index), target, None).expect("clean event"));
         states.push(state);
         bits.push(target);
     }
@@ -548,12 +558,12 @@ fn resolve<const K: usize>(
             .bind_record(request.record, record_limits())
             .map_err(|_| Dkv4Provenance::Unverified)?;
 
-        let bound = match bind_projected_subject(&receipt, &history, request.subject, subject_limits())
-        {
-            Ok(bound) => bound,
-            Err(SubjectBindingError::MissingSubject) => return Err(Dkv4Provenance::Missing),
-            Err(_) => return Err(Dkv4Provenance::Unverified),
-        };
+        let bound =
+            match bind_projected_subject(&receipt, &history, request.subject, subject_limits()) {
+                Ok(bound) => bound,
+                Err(SubjectBindingError::MissingSubject) => return Err(Dkv4Provenance::Missing),
+                Err(_) => return Err(Dkv4Provenance::Unverified),
+            };
         let state = bound.observed_state();
         let segments = receipt.sources().len() as u64;
         let bytes = receipt.raw_bytes();
@@ -611,7 +621,10 @@ fn resolve<const K: usize>(
     let bank_id = usize::from(bank == Bank::Ordered);
     let query_key = hybrid_key::<K>(bank_id, base_seed, request.state, request.route);
     let before = banks.memory(bank).numeric_counters().reads;
-    let values = banks.memory_mut(bank).read(&query_key).expect("matrix read");
+    let values = banks
+        .memory_mut(bank)
+        .read(&query_key)
+        .expect("matrix read");
     let after = banks.memory(bank).numeric_counters().reads;
     let read_delta = after - before;
     assert_eq!(read_delta, 1);
@@ -664,7 +677,11 @@ impl Recall {
 }
 
 fn ppm(a: u64, b: u64) -> u64 {
-    if b == 0 { 0 } else { a.saturating_mul(1_000_000) / b }
+    if b == 0 {
+        0
+    } else {
+        a.saturating_mul(1_000_000) / b
+    }
 }
 
 fn clean_panels<const K: usize>(
@@ -838,9 +855,7 @@ fn clean_panels<const K: usize>(
         for index in 0..RECORDS {
             let record = record_id(seed, index);
             let override_bits = [!bits[index][0], !bits[index][1]];
-            for (slot, route, expected) in
-                [(0_usize, R2, bits[index]), (1, R6, override_bits)]
-            {
+            for (slot, route, expected) in [(0_usize, R2, bits[index]), (1, R6, override_bits)] {
                 let result = resolve::<K>(
                     &mut switch_banks,
                     &switch_dir,
@@ -863,7 +878,9 @@ fn clean_panels<const K: usize>(
     }
 }
 
-fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTreeMap<&'static str, u64> {
+fn identity_negative<const K: usize>(
+    accounting: &mut ResolveAccounting,
+) -> BTreeMap<&'static str, u64> {
     let seed = 0;
     let base_seed = 17;
     let (source, states, bits) = clean_fixture(seed);
@@ -900,7 +917,10 @@ fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTre
         verification_limits(),
         None,
     );
-    result.insert("nonexistent", u64::from(missing.provenance != Dkv4Provenance::VerifiedPresent));
+    result.insert(
+        "nonexistent",
+        u64::from(missing.provenance != Dkv4Provenance::VerifiedPresent),
+    );
 
     let foreign = resolve::<K>(
         &mut banks,
@@ -918,7 +938,10 @@ fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTre
         verification_limits(),
         None,
     );
-    result.insert("foreign_stream", u64::from(foreign.provenance != Dkv4Provenance::VerifiedPresent));
+    result.insert(
+        "foreign_stream",
+        u64::from(foreign.provenance != Dkv4Provenance::VerifiedPresent),
+    );
 
     let wrong_subject = resolve::<K>(
         &mut banks,
@@ -936,7 +959,10 @@ fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTre
         verification_limits(),
         None,
     );
-    result.insert("wrong_subject", u64::from(wrong_subject.provenance != Dkv4Provenance::VerifiedPresent));
+    result.insert(
+        "wrong_subject",
+        u64::from(wrong_subject.provenance != Dkv4Provenance::VerifiedPresent),
+    );
 
     // Incomplete subject: two versions, only first behind selected write key.
     let key = subject(0);
@@ -950,12 +976,28 @@ fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTre
     let mut ibanks = Banks::new::<K>(incomplete.ledger.stream_id());
     let mut idir = Directory::default();
     admit::<K>(
-        &mut ibanks, &mut idir, &incomplete, Bank::Primary, base_seed, 1, key, &state, R2,
+        &mut ibanks,
+        &mut idir,
+        &incomplete,
+        Bank::Primary,
+        base_seed,
+        1,
+        key,
+        &state,
+        R2,
         [false, false],
     );
     // Admit record2 under a different exact key so the selected receipt omits it.
     admit::<K>(
-        &mut ibanks, &mut idir, &incomplete, Bank::Primary, base_seed, 2, key, &other_state, R2,
+        &mut ibanks,
+        &mut idir,
+        &incomplete,
+        Bank::Primary,
+        base_seed,
+        2,
+        key,
+        &other_state,
+        R2,
         [true, true],
     );
     let inc = resolve::<K>(
@@ -974,7 +1016,10 @@ fn identity_negative<const K: usize>(accounting: &mut ResolveAccounting) -> BTre
         verification_limits(),
         None,
     );
-    result.insert("incomplete_subject", u64::from(inc.provenance != Dkv4Provenance::VerifiedPresent));
+    result.insert(
+        "incomplete_subject",
+        u64::from(inc.provenance != Dkv4Provenance::VerifiedPresent),
+    );
     result
 }
 
@@ -994,8 +1039,16 @@ fn conflict_and_supersession<const K: usize>(
     let mut cbanks = Banks::new::<K>(conflict_source.ledger.stream_id());
     let mut cdir = Directory::default();
     admit::<K>(
-        &mut cbanks, &mut cdir, &conflict_source, Bank::Primary, base_seed, 1, key, &same_state,
-        R2, [false, false],
+        &mut cbanks,
+        &mut cdir,
+        &conflict_source,
+        Bank::Primary,
+        base_seed,
+        1,
+        key,
+        &same_state,
+        R2,
+        [false, false],
     );
     // Same selected write key, separate record/source.
     let write_key = hybrid_key::<K>(B_PRIMARY, base_seed, &same_state, R2);
@@ -1037,8 +1090,16 @@ fn conflict_and_supersession<const K: usize>(
     let mut sbanks = Banks::new::<K>(supersede_source.ledger.stream_id());
     let mut sdir = Directory::default();
     admit::<K>(
-        &mut sbanks, &mut sdir, &supersede_source, Bank::Primary, base_seed, 1, key, &same_state,
-        R2, [false, false],
+        &mut sbanks,
+        &mut sdir,
+        &supersede_source,
+        Bank::Primary,
+        base_seed,
+        1,
+        key,
+        &same_state,
+        R2,
+        [false, false],
     );
     let source2 = source_for_record(&supersede_source.ledger, 2);
     sbanks
@@ -1073,7 +1134,9 @@ fn conflict_and_supersession<const K: usize>(
     (conflict, supersede, wrong_preserved)
 }
 
-fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BTreeMap<&'static str, ResolveResult> {
+fn unverified_controls<const K: usize>(
+    accounting: &mut ResolveAccounting,
+) -> BTreeMap<&'static str, ResolveResult> {
     let seed = 0;
     let base_seed = 17;
     let (source, states, bits) = clean_fixture(seed);
@@ -1081,12 +1144,28 @@ fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BT
     let mut banks = Banks::new::<K>(source.ledger.stream_id());
     let mut dir = Directory::default();
     admit::<K>(
-        &mut banks, &mut dir, &source, Bank::Primary, base_seed, record, subject(0), &states[0],
-        R2, bits[0],
+        &mut banks,
+        &mut dir,
+        &source,
+        Bank::Primary,
+        base_seed,
+        record,
+        subject(0),
+        &states[0],
+        R2,
+        bits[0],
     );
     admit::<K>(
-        &mut banks, &mut dir, &source, Bank::Ordered, base_seed, record, subject(0), &states[0],
-        R3, [!bits[0][0], !bits[0][1]],
+        &mut banks,
+        &mut dir,
+        &source,
+        Bank::Ordered,
+        base_seed,
+        record,
+        subject(0),
+        &states[0],
+        R3,
+        [!bits[0][0], !bits[0][1]],
     );
 
     let request = |state: &State| ResolveRequest {
@@ -1102,8 +1181,15 @@ fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BT
         ("substitution", ReaderMode::SubstituteFirst),
     ] {
         let result = resolve::<K>(
-            &mut banks, &dir, &source, base_seed, request(&states[0]), accounting, mode,
-            verification_limits(), None,
+            &mut banks,
+            &dir,
+            &source,
+            base_seed,
+            request(&states[0]),
+            accounting,
+            mode,
+            verification_limits(),
+            None,
         );
         rows.insert(name, result);
     }
@@ -1111,19 +1197,21 @@ fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BT
     // Stale ledger: omit final segment.
     let stale_events: Vec<_> = (0..RECORDS - 1)
         .map(|index| {
-            ObservationEvent::new(
-                record_id(seed, index),
-                subject(index),
-                bits[index],
-                None,
-            )
-            .unwrap()
+            ObservationEvent::new(record_id(seed, index), subject(index), bits[index], None)
+                .unwrap()
         })
         .collect();
     let stale = snapshot(&stale_events, 1);
     let result = resolve::<K>(
-        &mut banks, &dir, &source, base_seed, request(&states[0]), accounting, ReaderMode::Clean,
-        verification_limits(), Some(&stale.ledger),
+        &mut banks,
+        &dir,
+        &source,
+        base_seed,
+        request(&states[0]),
+        accounting,
+        ReaderMode::Clean,
+        verification_limits(),
+        Some(&stale.ledger),
     );
     rows.insert("stale", result);
 
@@ -1139,11 +1227,19 @@ fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BT
             .unwrap()
         })
         .collect();
-    fork_events[0] = ObservationEvent::new(record, subject(0), [!bits[0][0], bits[0][1]], None).unwrap();
+    fork_events[0] =
+        ObservationEvent::new(record, subject(0), [!bits[0][0], bits[0][1]], None).unwrap();
     let fork = snapshot(&fork_events, 1);
     let result = resolve::<K>(
-        &mut banks, &dir, &source, base_seed, request(&states[0]), accounting, ReaderMode::Clean,
-        verification_limits(), Some(&fork.ledger),
+        &mut banks,
+        &dir,
+        &source,
+        base_seed,
+        request(&states[0]),
+        accounting,
+        ReaderMode::Clean,
+        verification_limits(),
+        Some(&fork.ledger),
     );
     rows.insert("fork", result);
 
@@ -1165,7 +1261,9 @@ fn unverified_controls<const K: usize>(accounting: &mut ResolveAccounting) -> BT
     rows
 }
 
-fn alias_controls<const K: usize>(accounting: &mut ResolveAccounting) -> (Dkv4Provenance, Dkv4Provenance, Dkv4Provenance) {
+fn alias_controls<const K: usize>(
+    accounting: &mut ResolveAccounting,
+) -> (Dkv4Provenance, Dkv4Provenance, Dkv4Provenance) {
     let base_seed = 17;
     let s1 = SubjectKey::new(1, 0).unwrap();
     let s2 = SubjectKey::new(2, 0).unwrap();
@@ -1178,7 +1276,15 @@ fn alias_controls<const K: usize>(accounting: &mut ResolveAccounting) -> (Dkv4Pr
     let mut banks = Banks::new::<K>(source.ledger.stream_id());
     let mut dir = Directory::default();
     admit::<K>(
-        &mut banks, &mut dir, &source, Bank::Primary, base_seed, 1, s1, &state, R2,
+        &mut banks,
+        &mut dir,
+        &source,
+        Bank::Primary,
+        base_seed,
+        1,
+        s1,
+        &state,
+        R2,
         [true, false],
     );
     let same_key = hybrid_key::<K>(B_PRIMARY, base_seed, &state, R2);
@@ -1196,15 +1302,22 @@ fn alias_controls<const K: usize>(accounting: &mut ResolveAccounting) -> (Dkv4Pr
         .unwrap();
 
     let unwritten = resolve::<K>(
-        &mut banks, &dir, &source, base_seed,
+        &mut banks,
+        &dir,
+        &source,
+        base_seed,
         ResolveRequest {
             record: RecordRequest::new(source.ledger.stream_id(), 1),
             subject: SubjectKey::new(3, 0).unwrap(),
             route: R2,
             state: &state,
         },
-        accounting, ReaderMode::Clean, verification_limits(), None,
-    ).provenance;
+        accounting,
+        ReaderMode::Clean,
+        verification_limits(),
+        None,
+    )
+    .provenance;
 
     // Conflict for requested subject behind same exact key.
     let conflict_events = [
@@ -1215,45 +1328,93 @@ fn alias_controls<const K: usize>(accounting: &mut ResolveAccounting) -> (Dkv4Pr
     let mut cbanks = Banks::new::<K>(csource.ledger.stream_id());
     let mut cdir = Directory::default();
     admit::<K>(
-        &mut cbanks, &mut cdir, &csource, Bank::Primary, base_seed, 1, s1, &state, R2,
+        &mut cbanks,
+        &mut cdir,
+        &csource,
+        Bank::Primary,
+        base_seed,
+        1,
+        s1,
+        &state,
+        R2,
         [true, false],
     );
     let source2 = source_for_record(&csource.ledger, 2);
-    cbanks.primary.write(&csource.ledger, 2, &same_key, &target_q12([false, true]), FULL_RATE, &[source2]).unwrap();
+    cbanks
+        .primary
+        .write(
+            &csource.ledger,
+            2,
+            &same_key,
+            &target_q12([false, true]),
+            FULL_RATE,
+            &[source2],
+        )
+        .unwrap();
     let conflict = resolve::<K>(
-        &mut cbanks, &cdir, &csource, base_seed,
+        &mut cbanks,
+        &cdir,
+        &csource,
+        base_seed,
         ResolveRequest {
             record: RecordRequest::new(csource.ledger.stream_id(), 1),
             subject: s1,
             route: R2,
             state: &state,
         },
-        accounting, ReaderMode::Clean, verification_limits(), None,
-    ).provenance;
+        accounting,
+        ReaderMode::Clean,
+        verification_limits(),
+        None,
+    )
+    .provenance;
 
     // Incomplete requested subject: second version behind different key.
     let isource = snapshot(&conflict_events, 1);
     let mut ibanks = Banks::new::<K>(isource.ledger.stream_id());
     let mut idir = Directory::default();
     admit::<K>(
-        &mut ibanks, &mut idir, &isource, Bank::Primary, base_seed, 1, s1, &state, R2,
+        &mut ibanks,
+        &mut idir,
+        &isource,
+        Bank::Primary,
+        base_seed,
+        1,
+        s1,
+        &state,
+        R2,
         [true, false],
     );
     let other_state = build_state(70, 80, 90);
     admit::<K>(
-        &mut ibanks, &mut idir, &isource, Bank::Primary, base_seed, 2, s1, &other_state, R2,
+        &mut ibanks,
+        &mut idir,
+        &isource,
+        Bank::Primary,
+        base_seed,
+        2,
+        s1,
+        &other_state,
+        R2,
         [false, true],
     );
     let incomplete = resolve::<K>(
-        &mut ibanks, &idir, &isource, base_seed,
+        &mut ibanks,
+        &idir,
+        &isource,
+        base_seed,
         ResolveRequest {
             record: RecordRequest::new(isource.ledger.stream_id(), 1),
             subject: s1,
             route: R2,
             state: &state,
         },
-        accounting, ReaderMode::Clean, verification_limits(), None,
-    ).provenance;
+        accounting,
+        ReaderMode::Clean,
+        verification_limits(),
+        None,
+    )
+    .provenance;
 
     (unwritten, conflict, incomplete)
 }
@@ -1316,7 +1477,11 @@ fn main() {
     let p8_1024 = alias_controls::<1024>(&mut accounting);
 
     let mut out = String::new();
-    writeln!(out, "N12_CONTROL,compatibility_assertions={compatibility_checks}").unwrap();
+    writeln!(
+        out,
+        "N12_CONTROL,compatibility_assertions={compatibility_checks}"
+    )
+    .unwrap();
 
     for &k in &KEY_WIDTHS {
         for (panel, cells, routes) in [
@@ -1418,9 +1583,7 @@ fn main() {
 
     let h1 = (0..3).all(|slot| {
         let row = p1[&(1024, slot)];
-        ppm(row.exact, row.n) >= 950_000
-            && row.verified == row.n
-            && row.ordered == 0
+        ppm(row.exact, row.n) >= 950_000 && row.verified == row.n && row.ordered == 0
     });
     let h2 = (0..3).all(|slot| {
         let row = p2[&(1024, slot)];
@@ -1440,9 +1603,9 @@ fn main() {
     let h6 = p6_1024.provenance == Dkv4Provenance::VerifiedPresent
         && p6_1024.screened == p6_1024.value
         && wrong_1024;
-    let h7 = p7_1024.values().all(|result| {
-        result.provenance == Dkv4Provenance::Unverified && result.matrix_reads == 0
-    });
+    let h7 = p7_1024
+        .values()
+        .all(|result| result.provenance == Dkv4Provenance::Unverified && result.matrix_reads == 0);
     let h8 = p8_1024.0 != Dkv4Provenance::VerifiedPresent
         && p8_1024.1 == Dkv4Provenance::Conflict
         && p8_1024.2 != Dkv4Provenance::VerifiedPresent;
