@@ -106,7 +106,10 @@ fn hypothesis_state(stream: &mut Stream, h: usize, m: usize, noise_bp: u64) -> (
 
     let mut state = State::zeroed().expect("state");
     for bit in 0..BITS {
-        let votes = hypotheses.iter().filter(|field| field.get(bit).expect("bit")).count();
+        let votes = hypotheses
+            .iter()
+            .filter(|field| field.get(bit).expect("bit"))
+            .count();
         state.value.set(bit, votes * 2 > h).expect("value");
     }
     state.ambiguity = ambiguity;
@@ -177,8 +180,7 @@ fn run_width<const K: usize>(cells: &mut Cells) {
                 );
                 let mut facts: Vec<(State, u64, u64)> = (0..LOAD)
                     .map(|_| {
-                        let (state, weight) =
-                            hypothesis_state(&mut stream, h, m, noise_bp);
+                        let (state, weight) = hypothesis_state(&mut stream, h, m, noise_bp);
                         (state, stream.next(), weight)
                     })
                     .collect();
@@ -188,13 +190,12 @@ fn run_width<const K: usize>(cells: &mut Cells) {
                 }
 
                 for arm in 0..2 {
-                    let projector =
-                        DeltaKvSemanticProjector::<K>::new_with_ambiguity_projection(
-                            DeltaKvSemanticProjectionPolicy::default(),
-                            projector_seed,
-                            mode(arm),
-                        )
-                        .expect("projector");
+                    let projector = DeltaKvSemanticProjector::<K>::new_with_ambiguity_projection(
+                        DeltaKvSemanticProjectionPolicy::default(),
+                        projector_seed,
+                        mode(arm),
+                    )
+                    .expect("projector");
                     let mut memory = DeltaKvMemory::new(K, BITS).expect("memory");
                     let mut counters = DeltaKvCounters::default();
 
@@ -290,8 +291,7 @@ fn report() -> String {
 
     let h1 = (0..CONFIGS.len()).all(|config| {
         (1..NOISE_BP.len()).all(|noise| {
-            mean_weight(&cells, 1024, config, noise)
-                >= mean_weight(&cells, 1024, config, noise - 1)
+            mean_weight(&cells, 1024, config, noise) >= mean_weight(&cells, 1024, config, noise - 1)
         })
     });
 
