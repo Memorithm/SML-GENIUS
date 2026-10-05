@@ -531,10 +531,10 @@ fn run_width<const K: usize>(
                     let expected = chain.codes[chain.length];
                     let mut state = build_state(chain.codes[0], chain.meaning, chain.routing);
                     let mut hits = [false; 6];
-                    for cycle in 0..6 {
+                    for hit in &mut hits {
                         let values = read_state::<K>(arm, base_seed, &full, &state);
                         state = rewrite_once(&state, &values);
-                        hits[cycle] = chain_correct(&state, expected);
+                        *hit = chain_correct(&state, expected);
                     }
                     let tally = chains_out.entry((K, load, arm)).or_default();
                     tally.queries += 1;
