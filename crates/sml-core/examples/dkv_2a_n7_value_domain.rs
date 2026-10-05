@@ -2,7 +2,10 @@
 //!
 //! Protocol: docs/SML-DKV-2A-N7-VALUE-DOMAIN-PREREGISTRATION.md.
 
-use std::{collections::{BTreeMap, BTreeSet}, fmt::Write as _};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
+};
 
 use sml_core::{
     delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_ONE, DELTA_KV_SCALE},
@@ -357,11 +360,7 @@ type TeacherCells = BTreeMap<(usize, usize, usize, usize, bool), RecallTally>;
 type ChainCells = BTreeMap<(usize, usize, usize), ChainTally>;
 type PerturbCells = BTreeMap<(usize, usize, usize), PerturbTally>;
 
-fn build_memory<const K: usize>(
-    arm: usize,
-    base_seed: u64,
-    facts: &[WriteFact],
-) -> DeltaKvMemory {
+fn build_memory<const K: usize>(arm: usize, base_seed: u64, facts: &[WriteFact]) -> DeltaKvMemory {
     let mut memory = DeltaKvMemory::new(K, BITS).expect("memory");
     let mut counters = DeltaKvCounters::default();
     let mut ordered: Vec<&WriteFact> = facts.iter().collect();
@@ -485,18 +484,15 @@ fn run_width<const K: usize>(
                             .filter(|fact| fact.chain == query.chain)
                             .collect();
 
-                        for (subset_index, subset) in [
-                            (S_SELF, self_subset),
-                            (S_SAME, same_subset),
-                        ] {
+                        for (subset_index, subset) in [(S_SELF, self_subset), (S_SAME, same_subset)]
+                        {
                             let memory = build_subset_memory::<K>(arm, base_seed, &subset);
                             let values = read_state::<K>(arm, base_seed, &memory, &query.state);
                             p1.entry((K, arm, length, subset_index))
                                 .or_default()
                                 .add(&values, query.target);
                         }
-                        let full_values =
-                            read_state::<K>(arm, base_seed, &full, &query.state);
+                        let full_values = read_state::<K>(arm, base_seed, &full, &query.state);
                         p1.entry((K, arm, length, S_FULL))
                             .or_default()
                             .add(&full_values, query.target);
@@ -515,8 +511,7 @@ fn run_width<const K: usize>(
                 // P2 teacher-forced exact true nodes.
                 for chain in &chains {
                     for hop in 0..=chain.length {
-                        let state =
-                            build_state(chain.codes[hop], chain.meaning, chain.routing);
+                        let state = build_state(chain.codes[hop], chain.meaning, chain.routing);
                         let target = if hop == chain.length {
                             chain.codes[hop]
                         } else {
@@ -534,12 +529,10 @@ fn run_width<const K: usize>(
                 // P3 six-cycle free-running replay.
                 for chain in &chains {
                     let expected = chain.codes[chain.length];
-                    let mut state =
-                        build_state(chain.codes[0], chain.meaning, chain.routing);
+                    let mut state = build_state(chain.codes[0], chain.meaning, chain.routing);
                     let mut hits = [false; 6];
                     for cycle in 0..6 {
-                        let values =
-                            read_state::<K>(arm, base_seed, &full, &state);
+                        let values = read_state::<K>(arm, base_seed, &full, &state);
                         state = rewrite_once(&state, &values);
                         hits[cycle] = chain_correct(&state, expected);
                     }
@@ -558,10 +551,8 @@ fn run_width<const K: usize>(
                         let (exact_key, _) = project::<K>(arm, base_seed, &fact.state);
                         for &h in &PERTURB_H {
                             let perturbed = perturb_state(&fact.state, seed, fact.id, h);
-                            let (perturbed_key, _) =
-                                project::<K>(arm, base_seed, &perturbed);
-                            let values =
-                                read_state::<K>(arm, base_seed, &full, &perturbed);
+                            let (perturbed_key, _) = project::<K>(arm, base_seed, &perturbed);
+                            let values = read_state::<K>(arm, base_seed, &full, &perturbed);
                             let entry = perturb.entry((K, arm, h)).or_default();
                             entry.observations += 1;
                             entry.abs_cosine_sum += cosine(&exact_key, &perturbed_key).abs();
