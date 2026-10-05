@@ -572,8 +572,9 @@ promote Delta-KV context integration or establish model-quality superiority.
 
 ## PGF2 — Pascal-GF(2) reversible Boolean mixer
 
-Status: preregistration/implementation planning. The durable architectural
-contract is in `BOOTSTRAP.md#pascal-gf2--sierpiński-reversible-mixer-research-track`.
+Status: global K=2048 component qualification complete with a retained negative
+SBG result. The durable architectural contract is in
+`BOOTSTRAP.md#pascal-gf2--sierpiński-reversible-mixer-research-track`.
 
 ### Research question
 
@@ -584,18 +585,32 @@ floating-point semantics?
 
 ### Milestones
 
-- **PGF2-0**: scalar/binomial oracle, exhaustive small-width equivalence and
+- [x] **PGF2-0**: scalar/binomial oracle, exhaustive small-width equivalence and
   `P(P(x)) == x`.
-- **PGF2-1**: packed Rust `u64` butterfly with exact oracle parity and operation
-  accounting.
-- **PGF2-2**: fixed width ladder 64/128/256/512/1024/2048 bits; no adaptive-width
-  claim.
-- **PGF2-3**: frozen K=2048 SBG ablation versus identity, fixed reversible
+- [x] **PGF2-1**: packed Rust `u64` butterfly with exact oracle parity and
+  operation accounting.
+- [x] **PGF2-2**: fixed width ladder 64/128/256/512/1024/2048 bits; PR #197
+  qualifies K=2048 at 11,264 logical XOR updates, 272 packed-word updates,
+  256 state bytes and zero scratch words.
+- [x] **PGF2-3**: frozen K=2048 SBG ablation versus identity, fixed reversible
   permutation and current qualified Boolean mixer; preregistered in
-  [SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md](SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md).
-- **PGF2-4**: optional MOR/Delta-KV component experiment only after PGF2-3 passes
-  a preregistered gate.
-- **PGF2-5**: matched model-level evaluation only after component qualification.
+  [SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md](SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md)
+  and retained in
+  [SML-PGF2-3-SBG-ABLATION-OBSERVATION.md](SML-PGF2-3-SBG-ABLATION-OBSERVATION.md).
+- [ ] **PGF2-4**: **BLOCKED for global K=2048 PGF2**. PGF2-3 selection is
+  `NONE`; no MOR/Delta-KV handoff is authorized.
+- [ ] **PGF2-5**: blocked because the component gate did not pass.
+
+PGF2-3 retained result: exactness, random-control sanity, the preregistered
+local-noise bound and structural-cost bound hold, but the required SBG benefit
+does not. On STRUCTURED_LOCAL, global PGF2 contracts class nearest-wrong median
+from 32 to 12 and route median from 64 to 6; at h=64, class retrieval falls from
+100% to 42.38% and route accuracy from 100% to 57.03%. H2/H3/H4 are refuted and
+`PGF2-4=NONE`. The negative result is retained in `research/pgf2-3/`.
+
+Any future block-local, reordered or differently oriented Pascal construction is
+a new candidate requiring an independent preregistration; it does not reopen or
+overwrite the global PGF2-3 result.
 
 ### Mandatory measurements
 
