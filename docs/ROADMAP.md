@@ -511,7 +511,7 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N13A prototype-native census over learned SML-1 route traces, retained q=3 recurrent SBG states and native dynamic-MOR controls; explicitly not claimed representative of a future 25B model.
 - [x] Execute and retain byte-identical N13A census evidence; learned SML-1 pages are strongly skewed (page8=43.06%, page2=36.81%, page9=0) while the retained q=3 recurrent proxy remains ambiguity-sparse.
 - [x] Preregister N13B after retained N13A values: BALANCED=[15,15,15,15,14,14,14,14,14,14], empirical=[2,4,53,2,4,6,2,9,62,0], independent heavy-skew=[116,4,3,3,3,3,3,3,3,3].
-- [ ] Execute and retain byte-identical N13B evidence; qualify unbalanced page/expert populations, default primary-page isolation and explicit replicated cross-primary sharing.
+- [x] Execute and retain byte-identical N13B evidence; all ten frozen gates hold across balanced, N13A-empirical and independent heavy-skew populations; default primary-page isolation and explicit replicated cross-primary sharing are retained as Development semantics. See [SML-DKV-2A-N13B-PAGE-SKEW-OBSERVATION.md](SML-DKV-2A-N13B-PAGE-SKEW-OBSERVATION.md).
 - [ ] Measure physical latency/RSS/traffic/energy before any core PageSeeded/two-bank API promotion.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
