@@ -348,7 +348,7 @@ fn population_fixture(seed: u64, pop: usize) -> (SourceSnapshot, Vec<Fact>) {
     let mut stream = tagged(seed, 13, 0, 1313);
     let mut events = Vec::with_capacity(RECORDS);
     let mut facts = Vec::with_capacity(RECORDS);
-    for index in 0..RECORDS {
+    for (index, &page) in pages.iter().enumerate().take(RECORDS) {
         let record = record_id(seed, index);
         let state = build_state(stream.next(), stream.next(), stream.next());
         let word = stream.next();
@@ -361,7 +361,7 @@ fn population_fixture(seed: u64, pop: usize) -> (SourceSnapshot, Vec<Fact>) {
             subject,
             state,
             target,
-            page: pages[index],
+            page,
         });
     }
     (snapshot(&events, pop as u64 + 1), facts)
@@ -832,6 +832,7 @@ fn observe(
     map.entry((k, pop, page)).or_default().add(result, expected);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_base_population<const K: usize>(
     seed: u64,
     pop: usize,
