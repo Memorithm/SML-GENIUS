@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 194,
+  "protocol_merge": "5de6346a9f77c58716a7dbbfc7a62c38b4772fc2",
+  "pre_execution_metric_correction_pr": 195,
+  "pre_execution_metric_correction_merge": "46ebd64838ddc635e19e7b6616fda6ce1b289d7a",
+  "fixture_freeze_commit": "e0c1b64cb6c8912f07395205c73c4804789ef840",
+  "executed_code_head": "554a9180f8e13015a5bc0ca5819c8738d6afcae2",
+  "github_actions_run": 37372778887,
+  "job": 111973797573,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 218,
+  "populations": {
+    "balanced": [
+      15,
+      15,
+      15,
+      15,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14
+    ],
+    "n13a_empirical": [
+      2,
+      4,
+      53,
+      2,
+      4,
+      6,
+      2,
+      9,
+      62,
+      0
+    ],
+    "heavy_skew": [
+      116,
+      4,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+    ]
+  },
+  "q": 3,
+  "selection": "RETAIN",
+  "promotion": "BLOCKED"
+}
