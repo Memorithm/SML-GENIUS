@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 198,
+  "protocol_merge": "9e6b66cdb6c8d80d67c0a6fcc321b6b81cd8dd25",
+  "execution_pr": 200,
+  "executed_code_head": "dbf02474c9124df9f30f5625727eff727027c349",
+  "ci_base_sha": "29b1d1fd09cf4588e49265517cdac3af7edd12a1",
+  "ci_merge_sha": "877b00223cbdaa35a0a2949f0bc1ca1b4b846761",
+  "github_actions_run": 37379128362,
+  "job": 111996153340,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 146,
+  "selected": "NONE",
+  "pgf2_4": "BLOCKED",
+  "promotion": "BLOCKED"
+}
