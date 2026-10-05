@@ -945,17 +945,17 @@ fn run_p5<const K: usize>(
 
             for fact in &facts {
                 write_bank::<K>(
-                B_PRIMARY,
-                ProjectionContext {
-                    base_seed,
-                    route: R2,
-                    state: fact.target,
-                },
-                &mut primary,
-                &mut p_counters,
-                26673,
-                cost,
-            );
+                    B_PRIMARY,
+                    ProjectionContext {
+                        base_seed,
+                        route: R2,
+                        state: &fact.state,
+                    },
+                    &mut primary,
+                    fact.target,
+                    &mut p_counters,
+                    cost,
+                );
             }
 
             for (chain_index, chain) in chains.iter().enumerate() {
