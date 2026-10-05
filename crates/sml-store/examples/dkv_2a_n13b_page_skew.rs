@@ -61,7 +61,6 @@ const ROUTE_C: u64 = 0xc2b2_ae3d_27d4_eb4f;
 const RANK_C: u64 = 0x1656_67b1_9e37_79f9;
 const LEN_C: u64 = 0x85eb_ca77_c2b2_ae63;
 
-
 const B_PRIMARY: usize = 0;
 const B_ORDERED: usize = 1;
 
@@ -679,7 +678,10 @@ fn resolve<const K: usize>(
     let bank_id = usize::from(bank == Bank::Ordered);
     let query_key = hybrid_key::<K>(bank_id, base_seed, request.state, request.route);
     let before = banks.memory(bank).numeric_counters().reads;
-    let values = banks.memory_mut(bank).read(&query_key).expect("matrix read");
+    let values = banks
+        .memory_mut(bank)
+        .read(&query_key)
+        .expect("matrix read");
     let after = banks.memory(bank).numeric_counters().reads;
     let read_delta = after - before;
     assert_eq!(read_delta, 1);
@@ -827,9 +829,7 @@ fn observe(
     result: ResolveResult,
     expected: [bool; 2],
 ) {
-    map.entry((k, pop, page))
-        .or_default()
-        .add(result, expected);
+    map.entry((k, pop, page)).or_default().add(result, expected);
 }
 
 fn write_base_population<const K: usize>(
@@ -1026,14 +1026,7 @@ fn run_p3<const K: usize>(
                         [!fact.target[0], !fact.target[1]],
                     );
                 } else {
-                    observe(
-                        &mut maps.unbound,
-                        K,
-                        pop,
-                        fact.page,
-                        result,
-                        fact.target,
-                    );
+                    observe(&mut maps.unbound, K, pop, fact.page, result, fact.target);
                 }
             }
             merge_accounting(accounting, local);
@@ -1092,8 +1085,7 @@ fn run_p4<const K: usize>(
                 );
                 tally.target_n += 1;
                 tally.target_exact += u64::from(result.value == Some(fact.target));
-                tally.verified +=
-                    u64::from(result.provenance == Dkv4Provenance::VerifiedPresent);
+                tally.verified += u64::from(result.provenance == Dkv4Provenance::VerifiedPresent);
             }
             merge_accounting(accounting, local);
         }
@@ -1339,10 +1331,7 @@ fn incomplete_control<const K: usize>(
     )
 }
 
-fn run_p7(
-    negatives: &mut BTreeMap<usize, Negative>,
-    accounting: &mut ResolveAccounting,
-) {
+fn run_p7(negatives: &mut BTreeMap<usize, Negative>, accounting: &mut ResolveAccounting) {
     for pop in 0..POP_NAMES.len() {
         let seed = 0;
         let base_seed = 17;
@@ -1432,8 +1421,7 @@ fn run_p7(
         ];
         for result in cases {
             tally.cases += 1;
-            tally.non_verified +=
-                u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
+            tally.non_verified += u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
             tally.zero_read += u64::from(result.matrix_reads == 0);
         }
 
@@ -1466,8 +1454,7 @@ fn run_p7(
             ReaderMode::CorruptFirst,
         );
         tally.cases += 1;
-        tally.non_verified +=
-            u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
+        tally.non_verified += u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
         tally.zero_read += u64::from(result.matrix_reads == 0);
         tally.ordered_unverified += u64::from(
             result.bank == Some(Bank::Ordered)
@@ -1477,8 +1464,7 @@ fn run_p7(
 
         let result = incomplete_control::<1024>(fact.page, &mut local);
         tally.cases += 1;
-        tally.non_verified +=
-            u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
+        tally.non_verified += u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
         tally.zero_read += u64::from(result.matrix_reads == 0);
 
         merge_accounting(accounting, local);
@@ -1521,9 +1507,8 @@ fn aggregate(
 }
 
 fn clean_rows_hold(map: &BTreeMap<(usize, usize, u32), Recall>) -> bool {
-    map.values().all(|row| {
-        row.verified == row.n && row.reads == row.n && row.screened_same == row.n
-    })
+    map.values()
+        .all(|row| row.verified == row.n && row.reads == row.n && row.screened_same == row.n)
 }
 
 fn main() {
@@ -1757,16 +1742,19 @@ fn main() {
         ppm(row.exact, row.n) >= 850_000 && row.reads == row.n
     });
 
-    let h9 = TRANSITIONS.iter().enumerate().all(|(pair, &(from, to, _))| {
-        let row = p6[&(1024, pair)];
-        if from == to {
-            ppm(row.same.exact, row.same.n) >= 900_000
-        } else {
-            row.geometry.equal == 0
-                && row.geometry.abs_cosine_sum / row.geometry.n as f64 <= 0.10
-                && ppm(row.shared.exact, row.shared.n) >= 850_000
-        }
-    });
+    let h9 = TRANSITIONS
+        .iter()
+        .enumerate()
+        .all(|(pair, &(from, to, _))| {
+            let row = p6[&(1024, pair)];
+            if from == to {
+                ppm(row.same.exact, row.same.n) >= 900_000
+            } else {
+                row.geometry.equal == 0
+                    && row.geometry.abs_cosine_sum / row.geometry.n as f64 <= 0.10
+                    && ppm(row.shared.exact, row.shared.n) >= 850_000
+            }
+        });
 
     let h10 = accounting.matrix_reads == accounting.verified;
 
