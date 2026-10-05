@@ -477,7 +477,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N8 fixed-width PAGE/PAGE_VALUE hybrid-domain tradeoff at q={0,1/4,1/2,3/4,1}, with capability and Hamming-robustness gates.
 - [x] Execute and retain byte-identical N8 evidence; q=3/4 is the smallest interior fraction passing both low- and high-load capability/robustness gates.
 - [x] Freeze N9 canonical multi-expert domain semantics: PRIMARY_ANCHORED candidate versus ORDERED_ROUTE isolation control.
-- [ ] Execute and retain byte-identical N9 evidence; select PRIMARY_ANCHORED only if continuity, primary isolation, q=3 capability and Hamming-1 gates all pass.
+- [x] Execute and retain byte-identical N9 evidence; PRIMARY_ANCHORED passes continuity/capability/robustness but H9 exact-collision gate fails, so canonical selection is NONE.
+- [ ] Freeze N10 fixed-width PRIMARY_ANCHORED/ORDERED_ROUTE interpolation to trade secondary conflict isolation against secondary continuity without changing q=3.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
@@ -489,6 +490,8 @@ N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-O
 N7 value-domain result: [SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md](SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md). PAGE_VALUE removes same-chain correlation and reaches 100% K1024 capability, but exact-V conditioning is rejected for direct promotion because a one-bit V perturbation produces near-orthogonal keys and 0/96 next-value recovery.
 
 N8 hybrid result: [SML-DKV-2A-N8-HYBRID-OBSERVATION.md](SML-DKV-2A-N8-HYBRID-OBSERVATION.md). At fixed K, q=3/4 PAGE_VALUE is selected at both G=4 and G=16: K1024 F6=100% / 91.80% while Hamming-1 exact+clear recovery remains 25/96=26.04%.
+
+N9 multi-expert result: [SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md](SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md). PRIMARY_ANCHORED preserves secondary continuity and K1024 q=3 capability, but exact R2/R3 conflict-key collisions refute H9; ORDERED_ROUTE isolates conflicts but gives zero secondary continuity.
 
 ## DKV projection-agreement follow-up
 
