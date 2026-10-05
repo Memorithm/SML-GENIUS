@@ -28,8 +28,7 @@ fn checksum(words: &[u64]) -> u64 {
         .copied()
         .enumerate()
         .fold(0x9e37_79b9_7f4a_7c15_u64, |acc, (index, word)| {
-            acc.rotate_left(7)
-                ^ word.wrapping_mul(0xd6e8_feb8_6659_fd93 ^ index as u64)
+            acc.rotate_left(7) ^ word.wrapping_mul(0xd6e8_feb8_6659_fd93 ^ index as u64)
         })
 }
 
@@ -57,8 +56,7 @@ fn main() {
     let mut ladder_checksum = 0_u64;
 
     for width in WIDTHS {
-        let (stats, transformed_checksum) =
-            qualify(width, 0x5047_4632_0000_0000 ^ width as u64);
+        let (stats, transformed_checksum) = qualify(width, 0x5047_4632_0000_0000 ^ width as u64);
         ladder_checksum ^= transformed_checksum.rotate_left(width.ilog2());
         println!(
             "PGF2_WIDTH,K={},words={},stages={},logical_xor_ops={},packed_word_updates={},state_bytes={},scratch_words={},oracle_equal=1,self_inverse=1,checksum={:016x}",
@@ -75,8 +73,10 @@ fn main() {
 
     let mut k2048_checksum = 0_u64;
     for seed in 0..K2048_SEEDS {
-        let (stats, transformed_checksum) =
-            qualify(2048, 0x2048_5047_4632_0001_u64 ^ seed.wrapping_mul(0x9e37_79b9));
+        let (stats, transformed_checksum) = qualify(
+            2048,
+            0x2048_5047_4632_0001_u64 ^ seed.wrapping_mul(0x9e37_79b9),
+        );
         assert_eq!(stats.bits, 2048);
         k2048_checksum ^= transformed_checksum.rotate_left(seed as u32);
     }
