@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "input_patch": {
+    "name": "sml-dkv-0006-dkv-4f-4g-4h.diff",
+    "bytes": 69014,
+    "lines": 1363,
+    "sha256": "8b201dbde1a5655fc049536c1457f5f6ed3a352eb0001c7d38ffe803344a9664"
+  },
+  "protocol_pr": 168,
+  "protocol_merge": "4023eb817d873d431b4f8593fc45a800d6641f7d",
+  "executed_code_head": "eb0938627c5f02eb4844b43b202911a76fea66a5",
+  "github_actions_run": 37268594839,
+  "job": 111630572185,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions_per_panel": 2,
+  "byte_identical": true,
+  "n3a_lines": 94,
+  "n3b_lines": 11,
+  "imported_source_hypotheses": true,
+  "promotion": "BLOCKED"
+}
