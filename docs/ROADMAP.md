@@ -14,6 +14,29 @@ Progression is evidence-gated. Model size does not advance because a calendar mi
 | SML-7 | 25B | Can instruction tuning preserve SML properties? | post-training quality without collapse of sparsity/depth/memory behavior |
 | SML-8 | 25B | Is the system reproducibly qualified? | independent reruns, ablations, robustness, complete artefact provenance |
 
+
+## Model-first boundary
+
+`SML-GENIUS` is the Model programme. Durable boundary:
+[SML-MODEL-HARNESS-BOUNDARY.md](SML-MODEL-HARNESS-BOUNDARY.md).
+
+The first real SML-6 25B artifact is the bootstrap champion. The future
+`Memorithm/SML-HARNESS` will be a **separate repository** created after that
+milestone. It will compose Forge, ProofLab, TDI, KVLab, ElasticXxx,
+CCOS-Enterprise, RemoteOps and other independently evolving Memorithm products
+through versioned contracts/adapters rather than absorbing them into the model.
+
+Recursive self-improvement, cross-repository mutation, experiment orchestration,
+promotion/rollback and autonomous scale-up belong to SML-HARNESS. After the
+first 25B champion, the model may use the Harness to design, train, qualify and
+propose larger descendant generations. No post-25B parameter count is frozen:
+growth is accepted only when capability improves while active compute/resource
+scaling remains within the SML gates.
+
+Until the first real 25B model exists, the critical path is the model. External
+tooling advances only where required to train, measure and fail-closed qualify
+that model.
+
 ## SML-0 implementation status
 
 The following are reference-semantics milestones, not model-quality results:
@@ -61,14 +84,14 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Immediate implementation sequence
 
-1. Bootstrap SML-RSI RSI-0a/0b as an independent SML-GENIUS implementation inspired by lessons from Memorithm/RSI: candidate PR evidence manifest, exact-head evidence binding, promotion eligibility, lineage/rollback and the invariant that only the repository owner's merge can promote.
-2. Start SML-CONTEXT CONTEXT-0/1: exact raw/token/span accounting, immutable raw-segment ledger, provenance-linked SBG index and bounded streaming ingest. Durable protocol: `SML-CONTEXT-BOOTSTRAP.md`.
-3. Advance SML-D2/D3/D4: proper-scoring calibration on reserved data, SBG/MOR coarse-to-fine candidate shortlisting, hot expert residency/prefetch, and DIRECT/REFINE/ABSTAIN gating. Include the SML-CLM-0/1 preregistration and bounded score/label foundation below as the contrastive research input; calibration and action authorization remain separate gates.
-4. Measure SBG-0.13c growing-store cold/warm lookup latency, RSS, page faults and index/record traffic. Logical mapped-byte counters alone do not satisfy a RAM gate. SBG-0.13b was merged through PR #60.
-5. Build SBG-0.14 native integration: mapped semantic/raw lookup -> SBG -> MOR -> Elastic Weight page selection/materialization -> expert/memory execution -> recurrent rewriting -> typed decision or optional generation, with common evidence and ablations.
-6. Learn marker/control micro-operations and compare fixed versus adaptive recurrent depth on the same task panels; keep protected holdouts separate from development feedback.
-7. Freeze the SML-0 exit report and SML-1 development protocol before larger training runs.
-8. Evaluate learned wiring separately against fixed/Forge-selected topology; assess reusable primitives for SciRust without coupling the final SML runtime to it.
+1. Close the remaining **model-core** SML-0/SML-1 gates: learned control/micro-operation semantics, learned-routing/memory advantage, bounded recurrent behavior and the frozen SML-0 exit report.
+2. Complete the inference-time SBG -> MOR -> memory/expert -> recurrent rewrite -> decision/generation path, including the active DKV domain/memory qualification required by the model.
+3. Complete context mechanisms that are part of model runtime semantics: bounded active context, mapped semantic/raw lookup and provenance-linked retrieval.
+4. Measure growing-store cold/warm latency, RSS, page faults, traffic and active working-set behavior so the scale gates remain physical and auditable.
+5. Advance the learned model through SML-2 50M -> SML-3 300M -> SML-4 1.5B -> SML-5 7B with frozen scale gates and total-versus-active parameter accounting.
+6. Train and serve the first real **SML-6 25B** champion with audited learned-parameter count, storage layout and runtime envelope.
+7. Freeze the Model/Harness interface and create the separate **Memorithm/SML-HARNESS** repository.
+8. Integrate the independently evolving ecosystem capabilities needed by SML-HARNESS and enable autonomous descendant training/evolution. Later generations may exceed 25B only under explicit capability/resource scaling gates.
 
 ## Stop conditions
 
