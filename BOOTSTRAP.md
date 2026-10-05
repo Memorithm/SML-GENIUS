@@ -73,6 +73,8 @@ DKV-2c observation: dynamic SBG re-keying is executable but is not promoted into
 
 DKV-3a context integration remains governed by `docs/SML-DKV-3A-CONTEXT-PREREGISTRATION.md`. The two supplied DKV-3a-0 patches are consolidated in the bounded source-evidence adapter `sml_store::delta_kv_context`; see `docs/SML-DKV-3A-0-HARDENING.md`. Software conformance is not context promotion. The projected-key SBG recurrence and MOR preregistration/integration remain a separate, deferred owner-supplied tranche. Raw-source authority stays outside the Q12 matrix.
 
+Current DKV-2a Development qualification has advanced through N13B. The retained candidate is the q=3 fixed-width PAGE/PAGE_VALUE composition with the N11 two-bank PRIMARY/ORDERED resolver and N12 exact source/record/subject preflight. N13B preserved all ten frozen gates under balanced, N13A-empirical and independent heavy-skew page populations; primary-page isolation remains the default and cross-primary sharing requires an explicit replicated numeric write. This is Development evidence only; core API/model/context promotion remains blocked until physical latency/RSS/traffic/energy are measured. See `docs/SML-DKV-2A-N13B-PAGE-SKEW-OBSERVATION.md`. The owner-supplied DKV-4k/4l/4m patch is retained as historical mechanism input only: its shared-M/R key-correlation finding is consistent with current N6 evidence, but its field-mask/context-weight APIs are not imported into the current stack; see `docs/SML-DKV-4K-4M-INPUT-REVIEW.md`.
+
 ## Versioning reconciliation
 
 The repository already uses `SML-0.7` for Elastic Weights and has merged later `SML-0.8.x` MOR / Boolean-integral work. The earlier conversational SBG roadmap used overlapping SML-0.x labels.
