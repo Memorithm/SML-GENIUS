@@ -489,15 +489,6 @@ impl MorFixture {
         Self::StructuralDisagreement,
     ];
 
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Consensus => "CONSENSUS",
-            Self::ResolvingMargin => "RESOLVING_MARGIN",
-            Self::PersistentMargin => "PERSISTENT_MARGIN",
-            Self::StructuralDisagreement => "STRUCTURAL_DISAGREEMENT",
-        }
-    }
-
     fn from_name(name: &str) -> R<Self> {
         match name {
             "CONSENSUS" => Ok(Self::Consensus),
