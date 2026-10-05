@@ -1110,7 +1110,39 @@ fn conflict_and_supersession<const K: usize>(
         None,
     );
     // Agreement must preserve, not repair, an intentionally wrong latent candidate.
-    let wrong_preserved = supersede.screened == supersede.value;
+    // Re-run the authoritative source/identity path explicitly so H6 checks the
+    // preregistered [false,false] candidate rather than merely the matrix output.
+    let history = verify_history(
+        &supersede_source.ledger,
+        history_limits(),
+        history_verification_limits(),
+        |reference| read_source(reference, &supersede_source.raw, ReaderMode::Clean),
+    )
+    .unwrap();
+    let receipt = sbanks
+        .primary
+        .query(&write_key)
+        .unwrap()
+        .verify(
+            &supersede_source.ledger,
+            verification_limits(),
+            |reference| read_source(reference, &supersede_source.raw, ReaderMode::Clean),
+        )
+        .unwrap();
+    let record = receipt
+        .bind_record(
+            RecordRequest::new(supersede_source.ledger.stream_id(), 1),
+            record_limits(),
+        )
+        .unwrap();
+    let bound = bind_projected_subject(&receipt, &history, key, subject_limits()).unwrap();
+    let complete = record.source_count() == 1
+        && bound.matched_sources() == 2
+        && bound.observed_state() == ObservedState::Agreement;
+    let screened_wrong = bound.screen(Some([false, false]));
+    let wrong_preserved = complete
+        && screened_wrong.original() == Some([false, false])
+        && screened_wrong.value() == Some([false, false]);
     (conflict, supersede, wrong_preserved)
 }
 

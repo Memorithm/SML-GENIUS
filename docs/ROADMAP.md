@@ -506,8 +506,11 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N11 two-bank PRIMARY shared retrieval + ORDERED route-specific override resolver with an explicit record/route binding directory; retrieval strength is never presence authority.
 - [x] Execute and retain byte-identical N11 evidence; all ten gates hold and the two-bank resolver is retained as Development memory-composition semantics.
 - [x] Freeze N12 DKV-3a verified-write-locator requalification for the retained two-bank resolver, using current RecordRequest/VerifiedContext/VerifiedHistory/subject-binding APIs and existing Missing/Conflict/Unverified semantics.
-- [ ] Execute and retain byte-identical N12 evidence; require clean continuity/override capability plus fail-closed record, stream, subject, conflict, supersession, corruption, alias and one-bank-read controls.
-- [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
+- [x] Execute and retain byte-identical N12 Rust1.89 evidence; all ten identity/provenance gates hold after explicit preregistered wrong-candidate H6 requalification.
+- [x] Exact record/subject/provenance qualification is complete for the retained N11 two-bank Development semantics.
+- [ ] Qualify representative recurrent SBG/MOR state distributions and ambiguity density against the retained two-bank composition.
+- [ ] Qualify unbalanced page/expert populations and explicit cross-page sharing semantics.
+- [ ] Measure physical latency/RSS/traffic/energy before any core PageSeeded/two-bank API promotion.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
@@ -524,6 +527,8 @@ N9 multi-expert result: [SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md](SML-DKV-2A-N9
 N10 route-hybrid result: [SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md](SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md). Geometry interpolates smoothly, but r=2 retains ~90% continuity with only 55.47% conflict recall while r=3 reaches 98.83% conflict recall with <8% continuity; no single-key interior candidate is selected.
 
 N11 two-bank result: [SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md](SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md). PRIMARY preserves secondary-route continuity while ORDERED carries explicit route-specific overrides; at K1024 all ten frozen gates hold, with 100% P1/P2/P3 continuity/override recall, 100% G4 F6, 92.97% G16 F6, 29.17% Hamming-1 recovery, zero non-bound false overrides and exactly one resolved bank read per directory probe.
+
+N12 verified-identity result: [SML-DKV-2A-N12-VERIFIED-IDENTITY-OBSERVATION.md](SML-DKV-2A-N12-VERIFIED-IDENTITY-OBSERVATION.md). All ten source/identity gates hold: clean continuity and route overrides remain 100% at K1024, Missing/Conflict/Unverified are zero-read fail-closed outcomes, the supersession control preserves an explicitly wrong candidate rather than repairing it, and 2,306 VerifiedPresent resolutions correspond to exactly 2,306 selected-bank matrix reads.
 
 ## DKV projection-agreement follow-up
 
