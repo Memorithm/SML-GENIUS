@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "protocol": "docs/SML-DKV-2A-N8-HYBRID-PREREGISTRATION.md",
+  "protocol_pr": 178,
+  "protocol_merge": "9081fbdefde46119ee86fca4b8a23c6a6eda9831",
+  "executed_code_head": "3535c556369c7005c134561598e1cf031659ad1e",
+  "github_actions_run": 37283646953,
+  "job": 111677303446,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 419,
+  "selected_low_load_q": 3,
+  "selected_high_load_q": 3,
+  "core_changed": false,
+  "promotion": "BLOCKED"
+}
