@@ -602,7 +602,7 @@ fn main() {
                 low12_collisions[family_index][arm_index],
             );
 
-            for h_index in 0..UNIFORM_H.len() {
+            for (h_index, flips) in UNIFORM_H.iter().copied().enumerate() {
                 let class_rate =
                     uniform_retrieval(family, arm, &transformed_classes, &role, h_index);
                 let route_rate = uniform_routing(family, arm, &transformed_routes, &role, h_index);
@@ -613,7 +613,7 @@ fn main() {
                     "PGF2_3_RETRIEVAL,family={},arm={},panel=UNIFORM,h={},observations={},correct={},ties={},ppm={}",
                     family.name,
                     arm.name(),
-                    UNIFORM_H[h_index],
+                    flips,
                     class_rate.observations,
                     class_rate.correct,
                     class_rate.ties,
@@ -623,7 +623,7 @@ fn main() {
                     "PGF2_3_ROUTING,family={},arm={},panel=UNIFORM,h={},observations={},correct={},ties={},ppm={}",
                     family.name,
                     arm.name(),
-                    UNIFORM_H[h_index],
+                    flips,
                     route_rate.observations,
                     route_rate.correct,
                     route_rate.ties,
