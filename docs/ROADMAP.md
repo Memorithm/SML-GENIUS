@@ -478,7 +478,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Execute and retain byte-identical N8 evidence; q=3/4 is the smallest interior fraction passing both low- and high-load capability/robustness gates.
 - [x] Freeze N9 canonical multi-expert domain semantics: PRIMARY_ANCHORED candidate versus ORDERED_ROUTE isolation control.
 - [x] Execute and retain byte-identical N9 evidence; PRIMARY_ANCHORED passes continuity/capability/robustness but H9 exact-collision gate fails, so canonical selection is NONE.
-- [ ] Freeze N10 fixed-width PRIMARY_ANCHORED/ORDERED_ROUTE interpolation to trade secondary conflict isolation against secondary continuity without changing q=3.
+- [x] Freeze N10 fixed-width PRIMARY_ANCHORED/ORDERED_ROUTE interpolation at r={0,1/4,1/2,3/4,1}, keeping q=3 fixed.
+- [ ] Execute and retain byte-identical N10 evidence; select the smallest interior route fraction that simultaneously clears secondary-conflict, continuity, capability and Hamming-1 gates.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
