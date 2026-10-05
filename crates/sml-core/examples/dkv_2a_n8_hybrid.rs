@@ -238,7 +238,11 @@ fn hybrid_key<const K: usize>(
     q: usize,
     base_seed: u64,
     state: &State,
-) -> (Vec<i16>, DeltaKvSemanticProjectionCounters, DeltaKvSemanticProjectionCounters) {
+) -> (
+    Vec<i16>,
+    DeltaKvSemanticProjectionCounters,
+    DeltaKvSemanticProjectionCounters,
+) {
     let (page, page_work) = source_projection::<K>(false, base_seed, state);
     let (value, value_work) = source_projection::<K>(true, base_seed, state);
     let mut key = Vec::with_capacity(K);
@@ -419,11 +423,7 @@ type PerturbCells = BTreeMap<(usize, usize, usize), PerturbTally>;
 type CollisionCells = BTreeMap<(usize, usize, usize), u64>;
 type WorkCells = BTreeMap<(usize, usize), WorkTally>;
 
-fn build_memory<const K: usize>(
-    q: usize,
-    base_seed: u64,
-    facts: &[WriteFact],
-) -> DeltaKvMemory {
+fn build_memory<const K: usize>(q: usize, base_seed: u64, facts: &[WriteFact]) -> DeltaKvMemory {
     let mut memory = DeltaKvMemory::new(K, BITS).expect("memory");
     let mut counters = DeltaKvCounters::default();
     let mut ordered: Vec<&WriteFact> = facts.iter().collect();
@@ -542,16 +542,13 @@ fn run_width<const K: usize>(
                             .filter(|fact| fact.chain == query.chain)
                             .collect();
 
-                        let same_memory =
-                            build_subset_memory::<K>(q, base_seed, &same_subset);
-                        let same_values =
-                            read_state::<K>(q, base_seed, &same_memory, &query.state);
+                        let same_memory = build_subset_memory::<K>(q, base_seed, &same_subset);
+                        let same_values = read_state::<K>(q, base_seed, &same_memory, &query.state);
                         p1.entry((K, q, length, S_SAME))
                             .or_default()
                             .add(&same_values, query.target);
 
-                        let full_values =
-                            read_state::<K>(q, base_seed, &full, &query.state);
+                        let full_values = read_state::<K>(q, base_seed, &full, &query.state);
                         p1.entry((K, q, length, S_FULL))
                             .or_default()
                             .add(&full_values, query.target);
@@ -611,8 +608,7 @@ fn run_width<const K: usize>(
                         let (exact_key, _, _) = hybrid_key::<K>(q, base_seed, &fact.state);
                         for &h in &PERTURB_H {
                             let perturbed = perturb_state(&fact.state, seed, fact.id, h);
-                            let (perturbed_key, _, _) =
-                                hybrid_key::<K>(q, base_seed, &perturbed);
+                            let (perturbed_key, _, _) = hybrid_key::<K>(q, base_seed, &perturbed);
                             let values = read_state::<K>(q, base_seed, &full, &perturbed);
                             let entry = perturb.entry((K, q, h)).or_default();
                             entry.observations += 1;
@@ -864,12 +860,8 @@ fn main() {
             && ppm(h1_perturb.exact_clear, h1_perturb.observations) >= 200_000
     };
 
-    let low_candidate = [1_usize, 2, 3]
-        .into_iter()
-        .find(|q| qualifies_low(*q));
-    let high_candidate = [1_usize, 2, 3]
-        .into_iter()
-        .find(|q| qualifies_high(*q));
+    let low_candidate = [1_usize, 2, 3].into_iter().find(|q| qualifies_low(*q));
+    let high_candidate = [1_usize, 2, 3].into_iter().find(|q| qualifies_high(*q));
 
     let h4 = low_candidate.is_some();
     let h5 = high_candidate.is_some();
