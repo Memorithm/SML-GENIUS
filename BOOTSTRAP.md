@@ -438,3 +438,79 @@ Retained evidence is in `research/dkv-4b/` and `research/dkv-4c/`. Any next
 claim requires a separately frozen non-trivial MOR panel, learned/representative
 states and physical resource measurements. Context/model promotion remains
 BLOCKED.
+
+## Pascal-GF(2) / Sierpiński reversible-mixer research track
+
+Status: research hypothesis added 2026-10-05. No model-quality, latency, novelty or
+production claim is implied.
+
+SML must not reinterpret this track as Transformer attention. The candidate is a
+native Boolean state transform for Semantic Boolean Geometry (SBG), defined over
+GF(2) by the lower-triangular Pascal matrix
+
+```text
+P[n,k] = binom(n,k) mod 2
+y[n]   = XOR{x[k] | k is a binary submask of n}
+```
+
+For power-of-two widths, Lucas' theorem gives the executable membership rule
+`k & n == k`. Over GF(2), the subset-zeta transform is self-inverse, so the
+reference contract requires `P(P(x)) == x` exactly. This algebraic property is
+the reason to test the candidate; it is not evidence that it improves semantic
+quality.
+
+The first implementation target is Rust-only and uses packed `u64` words. A
+64-bit scalar/bit-parallel reference has six butterfly stages; wider
+power-of-two states add one stage per width doubling. Wider SBG fields may apply
+the transform independently to fixed power-of-two blocks until a separately
+qualified cross-block construction exists.
+
+### PGF2 invariants
+
+- no Q/K/V, QK^T, softmax, attention-score matrix or Transformer-semantic KV
+  cache is introduced;
+- no `f32`/`f64` dependency in the PGF2 core;
+- exact self-inversion and padding validity are mandatory before any semantic
+  experiment;
+- the transform is a candidate mixer, not a learned semantic metric;
+- identity, fixed reversible permutation and the current qualified XOR/permutation
+  mixing path are mandatory matched controls;
+- all state widths, operation counts, temporary bytes and block boundaries are
+  reported exactly;
+- a positive synthetic separation result does not authorize SBG/MOR/Delta-KV
+  promotion;
+- negative and null results are retained.
+
+### PGF2 progression
+
+1. **PGF2-0 — mathematical/scalar oracle**
+   - deterministic Boolean reference for 8/16/32/64-bit fixtures;
+   - exhaustive small-width self-inversion checks;
+   - equivalence against the binomial-mod-2 matrix definition.
+2. **PGF2-1 — packed Rust butterfly**
+   - allocation-free in-place `u64` transform after construction;
+   - exact parity with PGF2-0;
+   - operation and temporary-storage accounting.
+3. **PGF2-2 — width ladder**
+   - qualify 64/128/256/512/1024/2048-bit packed states without claiming one
+     hardware instruction per logical width;
+   - keep fixed-width results separate from any later Elastic policy.
+4. **PGF2-3 — SBG representation ablation**
+   - compare identity, reversible permutation, existing Boolean mixing and PGF2
+     under frozen semantic fixtures;
+   - measure collision rate, intra/inter-class Hamming separation, bit-flip
+     stability and retrieval/routing effects.
+5. **PGF2-4 — MOR / Delta-KV handoff**
+   - only if PGF2-3 has a preregistered positive signal, test transformed state as
+     an optional MOR-routing or Delta-KV key/input representation;
+   - frozen-key DKV-2b remains the current Delta-KV authority unless an independent
+     Delta-KV protocol explicitly promotes the candidate.
+6. **PGF2-5 — model-level qualification**
+   - only after component evidence, run matched training/inference evaluation with
+     identical parameter, data and active-compute budgets;
+   - report quality and systems metrics separately.
+
+Stop rule: if PGF2 does not beat the best matched reversible Boolean control on a
+declared SBG objective after full transform cost is included, retain it as a
+negative result and do not place it on the default SML path.
+
