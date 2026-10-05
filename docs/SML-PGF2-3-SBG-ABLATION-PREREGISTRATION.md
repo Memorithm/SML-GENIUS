@@ -103,6 +103,31 @@ Tags are combined only with wrapping multiplication/XOR using these constants:
 - query tag: `0xc2b2_ae3d_27d4_eb4f`;
 - noise tag: `0x1656_67b1_9e37_79f9`.
 
+Every stream seed is derived exactly as:
+
+```text
+derived(family, kind, id, sample) =
+    BASE
+    XOR (family + 1) * CLASS_TAG
+    XOR (kind   + 1) * ROUTE_TAG
+    XOR (id     + 1) * QUERY_TAG
+    XOR (sample + 1) * NOISE_TAG
+```
+
+where every multiplication/addition is wrapping `u64`.
+
+Frozen stream coordinates:
+
+- STRUCTURED_LOCAL common anchor: `(family=0, kind=0, id=0, sample=0)`;
+- BALANCED_RANDOM class `c`: `(1, 1, c, 0)`;
+- BALANCED_RANDOM route `r`: `(1, 2, r, 0)`;
+- uniform-noise class query: `(family, 3 + h_index, class, seed)`;
+- uniform-noise route query: `(family, 8 + h_index, route, seed)`.
+
+Distinct flip coordinates are selected by deterministic Fisher-Yates shuffle of
+`0..2047`: for `i` descending from 2047 to 1, swap `i` with
+`next() mod (i+1)`; take the first `h` coordinates.
+
 No random API, wall-clock seed or platform entropy is permitted.
 
 ## Frozen query/noise panels
@@ -149,6 +174,10 @@ Report output Hamming amplification:
 - mean numerator/denominator;
 - p95;
 - maximum.
+
+Percentiles are computed after ascending sort using the nearest-rank rule:
+rank `ceil(p*N)`, converted to zero-based index `rank-1`. For the even
+N=2048 median, report the integer floor of the mean of elements 1023 and 1024.
 
 ## Frozen measurements
 
