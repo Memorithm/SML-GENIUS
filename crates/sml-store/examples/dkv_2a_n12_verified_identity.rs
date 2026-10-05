@@ -4,14 +4,11 @@
 //! Fixture freeze: docs/SML-DKV-2A-N12-FIXTURE-FREEZE.md.
 //! Harness-only: current projector, context-memory and observed-history APIs are unchanged.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
-};
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use sml_core::{
     context_ledger::{ContextSegmentId, ContextSegmentRef, ContextStreamId, RawContextLedger},
-    delta_kv::{DeltaKvError, DELTA_KV_ONE, DELTA_KV_SCALE},
+    delta_kv::{DELTA_KV_ONE, DELTA_KV_SCALE},
     delta_kv_adaptive::Dkv4Provenance,
     delta_kv_semantic::{
         DeltaKvAmbiguityProjection, DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector,
@@ -22,8 +19,8 @@ use sml_core::{
 };
 use sml_store::{
     delta_kv_context::{
-        record::{RecordBindingLimits, RecordRequest},
-        ContextError, ContextLimits, DeltaKvContextMemory, VerificationLimits,
+        ContextLimits, DeltaKvContextMemory, RecordBindingLimits, RecordRequest,
+        VerificationLimits,
     },
     observed_history::{
         bind_projected_subject, encode_event, screen_candidate, verify_history, HistoryLimits,
