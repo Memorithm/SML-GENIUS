@@ -1218,13 +1218,8 @@ fn unverified_controls<const K: usize>(
     // Same-count fork: change first event bits, rebuilding descriptor/hash.
     let mut fork_events: Vec<_> = (0..RECORDS)
         .map(|index| {
-            ObservationEvent::new(
-                record_id(seed, index),
-                subject(index),
-                bits[index],
-                None,
-            )
-            .unwrap()
+            ObservationEvent::new(record_id(seed, index), subject(index), bits[index], None)
+                .unwrap()
         })
         .collect();
     fork_events[0] =
