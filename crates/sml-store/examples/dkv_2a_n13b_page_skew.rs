@@ -1286,13 +1286,12 @@ fn incomplete_control<const K: usize>(
     page: u32,
     accounting: &mut ResolveAccounting,
 ) -> ResolveResult {
-    let stream = ContextStreamId::new(159).unwrap();
     let subject = SubjectKey::new(900_001, 0).unwrap();
     let events = [
         ObservationEvent::new(900_001, subject, [false, false], None).unwrap(),
         ObservationEvent::new(900_002, subject, [true, true], None).unwrap(),
     ];
-    let source = snapshot(&events, stream.get());
+    let source = snapshot(&events, 159);
     let history = verified_history(&source);
     let mut banks = Banks::new::<K>(source.ledger.stream_id());
     let mut directory = Directory::default();
