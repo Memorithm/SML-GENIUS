@@ -116,7 +116,7 @@ pub fn pascal_gf2_in_place(words: &mut [u64]) -> Result<PascalGf2Stats, PascalGf
         stages,
         logical_xor_ops: (bits as u64 / 2) * u64::from(stages),
         packed_word_updates,
-        state_bytes: words.len() * core::mem::size_of::<u64>(),
+        state_bytes: core::mem::size_of_val(words),
         scratch_words: 0,
     })
 }
@@ -130,7 +130,7 @@ pub fn pascal_gf2_oracle(input: &[bool]) -> Result<Vec<bool>, PascalGf2Error> {
     validate_bits(input.len())?;
 
     let mut output = vec![false; input.len()];
-    for n in 0..input.len() {
+    for (n, value) in output.iter_mut().enumerate() {
         let mut parity = false;
         let mut k = n;
         loop {
@@ -140,7 +140,7 @@ pub fn pascal_gf2_oracle(input: &[bool]) -> Result<Vec<bool>, PascalGf2Error> {
             }
             k = (k - 1) & n;
         }
-        output[n] = parity;
+        *value = parity;
     }
     Ok(output)
 }
