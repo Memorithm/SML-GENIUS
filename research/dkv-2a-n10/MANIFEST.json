@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 183,
+  "protocol_merge": "ade47eef1e198df5da29708a031fea56efca8f62",
+  "executed_code_head": "82473950cb7c045d544f2d0ddf4b0ad428625c60",
+  "github_actions_run": 37288126527,
+  "job": 111691835985,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 191,
+  "route_selection": "NONE",
+  "core_changed": false,
+  "promotion": "BLOCKED"
+}
