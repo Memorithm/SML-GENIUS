@@ -439,6 +439,23 @@ Protocol: [SML-DKV-2A-N2-PAGE-DENSITY-REPLAY.md](SML-DKV-2A-N2-PAGE-DENSITY-REPL
 
 The source patch already contains Rust1.97 outcomes, so N2 hypotheses are imported replay targets, not blind preregistration. Current Rust1.89 observation: [SML-DKV-2A-N2-PAGE-DENSITY-OBSERVATION.md](SML-DKV-2A-N2-PAGE-DENSITY-OBSERVATION.md).
 
+
+## DKV-2a-N3 ambiguity producer and page conditioning
+
+Input review: [SML-DKV-2A-N3-INPUT-REVIEW.md](SML-DKV-2A-N3-INPUT-REVIEW.md).
+
+- [x] Triage the supplied DKV-4f/4g/4h diff without reusing its conflicting DKV-4 labels.
+- [x] Keep ActiveOnly as the existing A mechanism; reject the duplicate SparseA constructor.
+- [x] Record additive PageSpread as a negative source result, not a library candidate.
+- [x] Freeze N3A current-Rust1.89 replay using the repository's actual derive_ambiguity producer.
+- [x] Freeze N3B current-Rust1.89 PageSeeded replay using only the existing projector API plus an outer page-derived seed.
+- [ ] Execute and retain byte-identical N3A evidence.
+- [ ] Execute and retain byte-identical N3B evidence.
+- [ ] If PageSeeded reproduces, freeze multi-expert semantics and record/subject alias requalification before any core API.
+- [ ] Measure representative recurrent SBG ambiguity, not just independent-bit hypothesis noise, before A-mode promotion.
+
+Protocols: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-REPLAY.md) and [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-REPLAY.md). No context/model promotion.
+
 ## DKV projection-agreement follow-up
 
 Input review: [SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md](SML-DKV-PROJECTION-AGREEMENT-INPUT-REVIEW.md).
