@@ -7,6 +7,20 @@ Parent evidence:
 - `SML-DKV-2A-N12-VERIFIED-IDENTITY-OBSERVATION.md`;
 - `SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md`.
 
+## Pre-execution metric correction
+
+This correction was frozen **before the first N13B execution**.
+
+The original H7/H9 wording used <=10% exact+clear recovery of a two-bit target
+as an isolation gate. That is statistically invalid: an independent two-bit
+sign output has a 25% exact-match chance baseline.
+
+No population, route, q value, write count, sharing subset or capability
+threshold changed. Only the unshared cross-primary isolation criterion is
+corrected to the preregisterable geometric property that the mechanism is meant
+to provide: zero exact key collisions plus mean |cosine| <=0.10. Two-bit target
+agreement is still retained and reported descriptively.
+
 ## Purpose
 
 N11/N12 retained a q=3 two-bank Development composition with exact
@@ -175,9 +189,14 @@ However there is **no declared cross-primary sharing write**.
 Report:
 
 - provenance;
-- exact+clear recovery of the original target;
-- wrong-page key cosine;
-- false-sharing rate.
+- exact+clear recovery of the original two-bit target as a descriptive control;
+- exact projected-key equality count;
+- mean and maximum absolute cosine between BASE and SWITCH keys.
+
+The two-bit exact-target rate is **not** an isolation gate: an independent
+two-bit sign candidate has a 25% exact-match chance baseline. Primary-page
+isolation is therefore judged geometrically before the matrix value is
+interpreted.
 
 This panel defines primary-page switch as isolated by default.
 
@@ -286,17 +305,18 @@ three population arms and PRIMARY is selected for every query.
 H6 — explicit secondary override: at K=1024 P3 bound ORDERED and unbound PRIMARY
 queries are each >=85% exact+clear in every population arm.
 
-H7 — default primary-switch isolation: at K=1024 P4 unshared exact+clear
-false-sharing is <=10% in every arm. VerifiedPresent provenance is allowed and
-must be reported independently of latent recall.
+H7 — default primary-switch isolation: at K=1024 P4 has zero exact BASE/SWITCH
+key equalities and mean absolute BASE/SWITCH key cosine <=0.10 in every arm.
+The two-bit target-agreement rate is descriptive only. VerifiedPresent
+provenance is allowed and must be reported independently of latent recall.
 
 H8 — explicit cross-primary sharing: at K=1024 P5 shared-switch recall is >=85%
 in every population arm and each resolved query still performs exactly one
 matrix read.
 
 H9 — learned-transition semantics: at K=1024 every frozen cross-page pair has
-<=10% unshared false-sharing and >=85% explicitly-shared recall; same-page
-controls are >=90%.
+zero exact unshared key equalities, mean absolute unshared key cosine <=0.10 and
+>=85% explicitly-shared recall; same-page controls are >=90%.
 
 H10 — no hidden source authority: no page population, transition frequency,
 key cosine, Q12 magnitude or successful numeric read changes bank choice,
