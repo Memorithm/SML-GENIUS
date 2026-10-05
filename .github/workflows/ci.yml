@@ -42,6 +42,15 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked --workspace
+      - name: PGF2 K2048 correctness evidence
+        if: startsWith(github.head_ref, 'research/pgf2-k2048-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pgf2_k2048 > "$RUNNER_TEMP/pgf2-k2048-first.csv"
+          cargo run --locked --release -p sml-core --example pgf2_k2048 > "$RUNNER_TEMP/pgf2-k2048-second.csv"
+          cmp "$RUNNER_TEMP/pgf2-k2048-first.csv" "$RUNNER_TEMP/pgf2-k2048-second.csv"
+          cat "$RUNNER_TEMP/pgf2-k2048-first.csv"
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
