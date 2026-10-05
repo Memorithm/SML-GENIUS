@@ -341,17 +341,27 @@ enum Bank {
     Ordered,
 }
 
+#[derive(Clone, Copy)]
+struct ProjectionContext<'a> {
+    base_seed: u64,
+    route: &'a [u32],
+    state: &'a State,
+}
+
 fn write_bank<const K: usize>(
     bank: usize,
-    base_seed: u64,
-    route: &[u32],
+    context: ProjectionContext<'_>,
     memory: &mut DeltaKvMemory,
-    state: &State,
     target: u64,
     counters: &mut DeltaKvCounters,
     cost: &mut Cost,
 ) {
-    let (key, work) = hybrid_key::<K>(bank, base_seed, state, route);
+    let (key, work) = hybrid_key::<K>(
+        bank,
+        context.base_seed,
+        context.state,
+        context.route,
+    );
     cost.add_key(bank, work);
     memory
         .update(&key, &target_q12(target), FULL_RATE, counters)
@@ -389,24 +399,38 @@ fn read_specific<const K: usize>(
 
 fn resolve<const K: usize>(
     record_id: u64,
-    base_seed: u64,
-    route: &[u32],
+    context: ProjectionContext<'_>,
     primary: &DeltaKvMemory,
     ordered: &DeltaKvMemory,
     directory: &OverrideDirectory,
-    state: &State,
     cost: &mut Cost,
 ) -> (Bank, Vec<i32>) {
     cost.directory_probes += 1;
-    if directory.contains(record_id, route) {
+    if directory.contains(record_id, context.route) {
         (
             Bank::Ordered,
-            read_specific::<K>(B_ORDERED, base_seed, route, ordered, state, cost, false),
+            read_specific::<K>(
+                B_ORDERED,
+                context.base_seed,
+                context.route,
+                ordered,
+                context.state,
+                cost,
+                false,
+            ),
         )
     } else {
         (
             Bank::Primary,
-            read_specific::<K>(B_PRIMARY, base_seed, route, primary, state, cost, false),
+            read_specific::<K>(
+                B_PRIMARY,
+                context.base_seed,
+                context.route,
+                primary,
+                context.state,
+                cost,
+                false,
+            ),
         )
     }
 }
@@ -534,23 +558,27 @@ fn run_p1<const K: usize>(cells: &mut P1Cells, cf: &mut P1Cells, cost: &mut Cost
         for (_, state, target) in &facts {
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: *target,
+                },
                 &mut primary,
-                state,
-                *target,
                 &mut p_counters,
+                15892,
                 cost,
             );
             // Counterfactual N9 ORDERED continuity control only.
             write_bank::<K>(
                 B_ORDERED,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: *target,
+                },
                 &mut ordered,
-                state,
-                *target,
                 &mut o_counters,
+                16209,
                 cost,
             );
         }
@@ -558,7 +586,16 @@ fn run_p1<const K: usize>(cells: &mut P1Cells, cf: &mut P1Cells, cost: &mut Cost
         for (rid, state, target) in &facts {
             for (slot, route) in [(0_usize, R2), (1, R3), (2, R4)] {
                 let (bank, values) = resolve::<K>(
-                    *rid, base_seed, route, &primary, &ordered, &directory, state, cost,
+                    *rid,
+                    ProjectionContext {
+                        base_seed,
+                        route: route,
+                        state: state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
                 );
                 cells
                     .entry((K, slot))
@@ -593,22 +630,26 @@ fn run_p2<const K: usize>(cells: &mut P2Cells, cost: &mut Cost) {
             let override_target = independent_target(*base, *rid);
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: *base,
+                },
                 &mut primary,
-                state,
-                *base,
                 &mut p_counters,
+                17914,
                 cost,
             );
             write_bank::<K>(
                 B_ORDERED,
-                base_seed,
-                R3,
+                ProjectionContext {
+                    base_seed,
+                    route: R3,
+                    state: override_target,
+                },
                 &mut ordered,
-                state,
-                override_target,
                 &mut o_counters,
+                18163,
                 cost,
             );
             directory.bind(*rid, R3);
@@ -622,7 +663,16 @@ fn run_p2<const K: usize>(cells: &mut P2Cells, cost: &mut Cost) {
                 (2, R4, *base),
             ] {
                 let (bank, values) = resolve::<K>(
-                    *rid, base_seed, route, &primary, &ordered, &directory, state, cost,
+                    *rid,
+                    ProjectionContext {
+                        base_seed,
+                        route: route,
+                        state: state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
                 );
                 cells
                     .entry((K, slot))
@@ -647,29 +697,42 @@ fn run_p3<const K: usize>(cells: &mut P3Cells, cost: &mut Cost) {
             let override_target = independent_target(*base, *rid);
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: *base,
+                },
                 &mut primary,
-                state,
-                *base,
                 &mut p_counters,
+                19720,
                 cost,
             );
             write_bank::<K>(
                 B_ORDERED,
-                base_seed,
-                R6,
+                ProjectionContext {
+                    base_seed,
+                    route: R6,
+                    state: override_target,
+                },
                 &mut ordered,
-                state,
-                override_target,
                 &mut o_counters,
+                19969,
                 cost,
             );
             directory.bind(*rid, R6);
 
             for (slot, route, target) in [(0_usize, R2, *base), (1, R6, override_target)] {
                 let (bank, values) = resolve::<K>(
-                    *rid, base_seed, route, &primary, &ordered, &directory, state, cost,
+                    *rid,
+                    ProjectionContext {
+                        base_seed,
+                        route: route,
+                        state: state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
                 );
                 cells
                     .entry((K, slot))
@@ -695,22 +758,26 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
             let override_target = independent_target(*base, *rid);
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: *base,
+                },
                 &mut primary,
-                state,
-                *base,
                 &mut p_counters,
+                21356,
                 cost,
             );
             write_bank::<K>(
                 B_ORDERED,
-                base_seed,
-                R3,
+                ProjectionContext {
+                    base_seed,
+                    route: R3,
+                    state: override_target,
+                },
                 &mut ordered,
-                state,
-                override_target,
                 &mut o_counters,
+                21605,
                 cost,
             );
             directory.bind(*rid, R3);
@@ -724,8 +791,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
             // Non-bound: wrong record id under R3.
             let wrong_id = rid ^ (1_u64 << 48);
             let (bank, values) = resolve::<K>(
-                wrong_id, base_seed, R3, &primary, &ordered, &directory, state, cost,
-            );
+                    wrong_id,
+                    ProjectionContext {
+                        base_seed,
+                        route: R3,
+                        state: state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
+                );
             tally.queries += 1;
             tally.false_override_selections += u64::from(bank == Bank::Ordered);
             tally.false_acceptances +=
@@ -733,8 +809,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
 
             // Non-bound: same record id, unbound route R4.
             let (bank, values) = resolve::<K>(
-                *rid, base_seed, R4, &primary, &ordered, &directory, state, cost,
-            );
+                    *rid,
+                    ProjectionContext {
+                        base_seed,
+                        route: R4,
+                        state: state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
+                );
             tally.queries += 1;
             tally.false_override_selections += u64::from(bank == Bank::Ordered);
             tally.false_acceptances +=
@@ -747,8 +832,17 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
             // Bound metadata paired with a different semantic state.
             let different = &rows[(index + 1) % rows.len()].1;
             let (bank, values) = resolve::<K>(
-                *rid, base_seed, R3, &primary, &ordered, &directory, different, cost,
-            );
+                    *rid,
+                    ProjectionContext {
+                        base_seed,
+                        route: R3,
+                        state: different,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
+                );
             tally.queries += 1;
             tally.wrong_state_ordered += u64::from(bank == Bank::Ordered);
             tally.wrong_state_false_acceptances +=
@@ -851,15 +945,17 @@ fn run_p5<const K: usize>(
 
             for fact in &facts {
                 write_bank::<K>(
-                    B_PRIMARY,
+                B_PRIMARY,
+                ProjectionContext {
                     base_seed,
-                    R2,
-                    &mut primary,
-                    &fact.state,
-                    fact.target,
-                    &mut p_counters,
-                    cost,
-                );
+                    route: R2,
+                    state: fact.target,
+                },
+                &mut primary,
+                &mut p_counters,
+                26673,
+                cost,
+            );
             }
 
             for (chain_index, chain) in chains.iter().enumerate() {
@@ -870,12 +966,14 @@ fn run_p5<const K: usize>(
                         .expect("chain fact");
                     let (bank, values) = resolve::<K>(
                         fact.record_id,
-                        base_seed,
-                        R2,
+                        ProjectionContext {
+                            base_seed,
+                            route: R2,
+                            state: &fact.state,
+                        },
                         &primary,
                         &ordered,
                         &directory,
-                        &fact.state,
                         cost,
                     );
                     teacher
@@ -889,8 +987,17 @@ fn run_p5<const K: usize>(
                 let mut hits = [false; 6];
                 for hit in &mut hits {
                     let (_, values) = resolve::<K>(
-                        0, base_seed, R2, &primary, &ordered, &directory, &state, cost,
-                    );
+                    0,
+                    ProjectionContext {
+                        base_seed,
+                        route: R2,
+                        state: &state,
+                    },
+                    &primary,
+                    &ordered,
+                    &directory,
+                    cost,
+                );
                     state = rewrite_once(&state, &values);
                     *hit = chain_correct(&state, expected);
                 }
@@ -922,12 +1029,14 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
         for fact in &facts {
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: fact.target,
+                },
                 &mut primary,
-                &fact.state,
-                fact.target,
                 &mut p_counters,
+                29423,
                 cost,
             );
         }
@@ -944,12 +1053,14 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
             let override_target = independent_target(fact.target, fact.record_id);
             write_bank::<K>(
                 B_ORDERED,
-                base_seed,
-                R3,
+                ProjectionContext {
+                    base_seed,
+                    route: R3,
+                    state: override_target,
+                },
                 &mut ordered,
-                &fact.state,
-                override_target,
                 &mut o_counters,
+                30154,
                 cost,
             );
             directory.bind(fact.record_id, R3);
@@ -959,15 +1070,17 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
         for (fact, override_target) in selected {
             for (slot, route, target) in [(0_usize, R2, fact.target), (1, R3, override_target)] {
                 let (bank, values) = resolve::<K>(
-                    fact.record_id,
-                    base_seed,
-                    route,
-                    &primary,
-                    &ordered,
-                    &directory,
-                    &fact.state,
-                    cost,
-                );
+                        fact.record_id,
+                        ProjectionContext {
+                            base_seed,
+                            route: route,
+                            state: &fact.state,
+                        },
+                        &primary,
+                        &ordered,
+                        &directory,
+                        cost,
+                    );
                 cells
                     .entry((K, slot))
                     .or_default()
@@ -1000,12 +1113,14 @@ fn run_p7<const K: usize>(cells: &mut PerturbCells, cost: &mut Cost) {
         for fact in &facts {
             write_bank::<K>(
                 B_PRIMARY,
-                base_seed,
-                R2,
+                ProjectionContext {
+                    base_seed,
+                    route: R2,
+                    state: fact.target,
+                },
                 &mut primary,
-                &fact.state,
-                fact.target,
                 &mut p_counters,
+                32022,
                 cost,
             );
         }
@@ -1015,15 +1130,17 @@ fn run_p7<const K: usize>(cells: &mut PerturbCells, cost: &mut Cost) {
             let (exact_key, _) = hybrid_key::<K>(B_PRIMARY, base_seed, &fact.state, R2);
             let (perturbed_key, _) = hybrid_key::<K>(B_PRIMARY, base_seed, &perturbed, R2);
             let (bank, values) = resolve::<K>(
-                fact.record_id,
-                base_seed,
-                R2,
-                &primary,
-                &ordered,
-                &directory,
-                &perturbed,
-                cost,
-            );
+                        fact.record_id,
+                        ProjectionContext {
+                            base_seed,
+                            route: R2,
+                            state: &perturbed,
+                        },
+                        &primary,
+                        &ordered,
+                        &directory,
+                        cost,
+                    );
             assert_eq!(bank, Bank::Primary);
             let tally = cells.entry(K).or_default();
             tally.observations += 1;
