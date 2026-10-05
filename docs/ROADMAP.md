@@ -509,9 +509,9 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Execute and retain byte-identical N12 Rust1.89 evidence; all ten identity/provenance gates hold after explicit preregistered wrong-candidate H6 requalification.
 - [x] Exact record/subject/provenance qualification is complete for the retained N11 two-bank Development semantics.
 - [x] Freeze N13A prototype-native census over learned SML-1 route traces, retained q=3 recurrent SBG states and native dynamic-MOR controls; explicitly not claimed representative of a future 25B model.
-- [ ] Execute and retain byte-identical N13A census evidence.
-- [ ] Preregister N13B unbalanced page/expert + cross-page sharing stress only after N13A census values are retained.
-- [ ] Qualify unbalanced page/expert populations and explicit cross-page sharing semantics.
+- [x] Execute and retain byte-identical N13A census evidence; learned SML-1 pages are strongly skewed (page8=43.06%, page2=36.81%, page9=0) while the retained q=3 recurrent proxy remains ambiguity-sparse.
+- [x] Preregister N13B after retained N13A values: BALANCED=[15,15,15,15,14,14,14,14,14,14], empirical=[2,4,53,2,4,6,2,9,62,0], independent heavy-skew=[116,4,3,3,3,3,3,3,3,3].
+- [ ] Execute and retain byte-identical N13B evidence; qualify unbalanced page/expert populations, default primary-page isolation and explicit replicated cross-primary sharing.
 - [ ] Measure physical latency/RSS/traffic/energy before any core PageSeeded/two-bank API promotion.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
@@ -531,6 +531,8 @@ N10 route-hybrid result: [SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md](SML-DKV-2A
 N11 two-bank result: [SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md](SML-DKV-2A-N11-TWO-BANK-OBSERVATION.md). PRIMARY preserves secondary-route continuity while ORDERED carries explicit route-specific overrides; at K1024 all ten frozen gates hold, with 100% P1/P2/P3 continuity/override recall, 100% G4 F6, 92.97% G16 F6, 29.17% Hamming-1 recovery, zero non-bound false overrides and exactly one resolved bank read per directory probe.
 
 N12 verified-identity result: [SML-DKV-2A-N12-VERIFIED-IDENTITY-OBSERVATION.md](SML-DKV-2A-N12-VERIFIED-IDENTITY-OBSERVATION.md). All ten source/identity gates hold: clean continuity and route overrides remain 100% at K1024, Missing/Conflict/Unverified are zero-read fail-closed outcomes, the supersession control preserves an explicitly wrong candidate rather than repairing it, and 2,306 VerifiedPresent resolutions correspond to exactly 2,306 selected-bank matrix reads.
+
+N13A prototype census: [SML-DKV-2A-N13A-RUNTIME-CENSUS-OBSERVATION.md](SML-DKV-2A-N13A-RUNTIME-CENSUS-OBSERVATION.md). The learned SML-1 route population is already 31x imbalanced among nonzero pages; the exact reduced vector is `[2,4,53,2,4,6,2,9,62,0]`. N13B protocol: [SML-DKV-2A-N13B-PAGE-SKEW-PREREGISTRATION.md](SML-DKV-2A-N13B-PAGE-SKEW-PREREGISTRATION.md).
 
 ## DKV projection-agreement follow-up
 
