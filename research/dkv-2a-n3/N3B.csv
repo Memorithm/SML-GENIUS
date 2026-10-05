@@ -1,0 +1,11 @@
+N3B,K=256,arm=Additive,e1_facts=256,own=241,own_ppm=941406,wrong=238,wrong_ppm=929687,e2_reads=256,e2_strict=121,e2_ppm=472656,same_page_cosine=0.007837,cross_page_cosine=0.987623,projections=10880,semantic_coordinates=2785280,bucket_accumulations=2099840,quantized_coordinates=2785280
+N3B,K=256,arm=PageSeeded,e1_facts=256,own=256,own_ppm=1000000,wrong=0,wrong_ppm=0,e2_reads=256,e2_strict=256,e2_ppm=1000000,same_page_cosine=0.008137,cross_page_cosine=-0.000981,projections=10880,semantic_coordinates=2785280,bucket_accumulations=2099840,quantized_coordinates=2785280
+N3B,K=1024,arm=Additive,e1_facts=256,own=252,own_ppm=984375,wrong=252,wrong_ppm=984375,e2_reads=256,e2_strict=127,e2_ppm=496093,same_page_cosine=0.005005,cross_page_cosine=0.992988,projections=10880,semantic_coordinates=2785280,bucket_accumulations=2099840,quantized_coordinates=11141120
+N3B,K=1024,arm=PageSeeded,e1_facts=256,own=256,own_ppm=1000000,wrong=0,wrong_ppm=0,e2_reads=256,e2_strict=256,e2_ppm=1000000,same_page_cosine=0.004711,cross_page_cosine=-0.000299,projections=10880,semantic_coordinates=2785280,bucket_accumulations=2099840,quantized_coordinates=11141120
+N3B_HYPOTHESIS,H0_CONTROL,HOLDS
+N3B_HYPOTHESIS,H1_ISOLATION,HOLDS
+N3B_HYPOTHESIS,H2_CONFLICT_RESOLVES,HOLDS
+N3B_HYPOTHESIS,H3_OWN_RECALL_WITHIN_3PT,REFUTED
+N3B_HYPOTHESIS,H4_GEOMETRY,HOLDS
+N3B_HYPOTHESIS,WORK_COUNTERS_EQUAL,HOLDS
+PROMOTION,BLOCKED,n3b_single_page_only
