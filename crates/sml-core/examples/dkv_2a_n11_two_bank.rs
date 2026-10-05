@@ -584,8 +584,8 @@ fn run_p1<const K: usize>(cells: &mut P1Cells, cf: &mut P1Cells, cost: &mut Cost
                     *rid,
                     ProjectionContext {
                         base_seed,
-                        route: route,
-                        state: state,
+                        route,
+                        state,
                     },
                     &primary,
                     &ordered,
@@ -661,8 +661,8 @@ fn run_p2<const K: usize>(cells: &mut P2Cells, cost: &mut Cost) {
                     *rid,
                     ProjectionContext {
                         base_seed,
-                        route: route,
-                        state: state,
+                        route,
+                        state,
                     },
                     &primary,
                     &ordered,
@@ -721,8 +721,8 @@ fn run_p3<const K: usize>(cells: &mut P3Cells, cost: &mut Cost) {
                     *rid,
                     ProjectionContext {
                         base_seed,
-                        route: route,
-                        state: state,
+                        route,
+                        state,
                     },
                     &primary,
                     &ordered,
@@ -790,7 +790,7 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
                 ProjectionContext {
                     base_seed,
                     route: R3,
-                    state: state,
+                    state,
                 },
                 &primary,
                 &ordered,
@@ -808,7 +808,7 @@ fn run_p4<const K: usize>(guard: &mut BTreeMap<usize, GuardTally>, cost: &mut Co
                 ProjectionContext {
                     base_seed,
                     route: R4,
-                    state: state,
+                    state,
                 },
                 &primary,
                 &ordered,
@@ -1068,7 +1068,7 @@ fn run_p6<const K: usize>(cells: &mut P6Cells, cost: &mut Cost) {
                     fact.record_id,
                     ProjectionContext {
                         base_seed,
-                        route: route,
+                        route,
                         state: &fact.state,
                     },
                     &primary,
