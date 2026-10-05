@@ -353,7 +353,7 @@ struct PerturbTally {
 
 type P1Cells = BTreeMap<(usize, usize, usize, usize), RecallTally>;
 type GeometryCells = BTreeMap<(usize, usize, usize, usize), GeometryTally>;
-type TeacherCells = BTreeMap<(usize, usize, usize, usize), RecallTally>;
+type TeacherCells = BTreeMap<(usize, usize, usize, usize, bool), RecallTally>;
 type ChainCells = BTreeMap<(usize, usize, usize), ChainTally>;
 type PerturbCells = BTreeMap<(usize, usize, usize), PerturbTally>;
 
@@ -523,8 +523,9 @@ fn run_width<const K: usize>(
                             chain.codes[hop + 1]
                         };
                         let values = read_state::<K>(arm, base_seed, &full, &state);
+                        let terminal = hop == chain.length;
                         teacher
-                            .entry((K, load, arm, hop))
+                            .entry((K, load, arm, hop, terminal))
                             .or_default()
                             .add(&values, target);
                     }
@@ -652,19 +653,21 @@ fn main() {
         for &load in &LOADS {
             for arm in 0..2 {
                 for hop in 0..4 {
-                    if let Some(tally) = teacher.get(&(k, load, arm, hop)) {
-                        writeln!(
-                            out,
-                            "N7_TEACHER,K={k},G={load},arm={},hop={hop},observations={},exact_clear={},clear_ppm={},sign_exact={},wrong_coordinates={},min_abs={}",
-                            ARMS[arm],
-                            tally.observations,
-                            tally.exact_clear,
-                            ppm(tally.exact_clear, tally.observations),
-                            tally.sign_exact,
-                            tally.wrong_coordinates,
-                            tally.min_abs,
-                        )
-                        .expect("write");
+                    for terminal in [false, true] {
+                        if let Some(tally) = teacher.get(&(k, load, arm, hop, terminal)) {
+                            writeln!(
+                                out,
+                                "N7_TEACHER,K={k},G={load},arm={},hop={hop},terminal={terminal},observations={},exact_clear={},clear_ppm={},sign_exact={},wrong_coordinates={},min_abs={}",
+                                ARMS[arm],
+                                tally.observations,
+                                tally.exact_clear,
+                                ppm(tally.exact_clear, tally.observations),
+                                tally.sign_exact,
+                                tally.wrong_coordinates,
+                                tally.min_abs,
+                            )
+                            .expect("write");
+                        }
                     }
                 }
                 let tally = chains[&(k, load, arm)];
@@ -735,7 +738,7 @@ fn main() {
     });
 
     let h4 = (0..=2).all(|hop| {
-        let tally = teacher[&(1024, 4, A_VALUE, hop)];
+        let tally = teacher[&(1024, 4, A_VALUE, hop, false)];
         ppm(tally.exact_clear, tally.observations) >= 900_000
     });
 
