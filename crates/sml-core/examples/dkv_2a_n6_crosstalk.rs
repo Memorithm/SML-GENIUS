@@ -195,11 +195,7 @@ fn build_writes(seed: u64, chains: &[Chain]) -> Vec<WriteFact> {
             source_hop: chain.length,
             terminal: true,
             global_pos: 0,
-            state: build_state(
-                chain.codes[chain.length],
-                chain.meaning,
-                chain.routing,
-            ),
+            state: build_state(chain.codes[chain.length], chain.meaning, chain.routing),
             target: chain.codes[chain.length],
         });
     }
@@ -367,8 +363,7 @@ fn matched_cross<'a>(
         .filter(|fact| fact.chain != query.chain)
         .map(|fact| {
             let score = mix64(
-                seed
-                    ^ (query.id as u64).wrapping_mul(MATCH_C1)
+                seed ^ (query.id as u64).wrapping_mul(MATCH_C1)
                     ^ (replicate as u64).wrapping_mul(MATCH_C2)
                     ^ (fact.id as u64).wrapping_mul(MATCH_C3),
             );
@@ -507,8 +502,7 @@ fn main() {
         writeln!(
             out,
             "N6_REPRO,K={k},full_fail_l23={},same_fail_when_full_l23={}",
-            repro.full_fail_l23,
-            repro.same_fail_when_full_l23,
+            repro.full_fail_l23, repro.same_fail_when_full_l23,
         )
         .expect("write");
     }
@@ -538,8 +532,8 @@ fn main() {
             >= ppm(l3_same.exact_clear, l3_same.observations) + 200_000;
 
     let repro = reproduction[&1024];
-    let h4 = repro.full_fail_l23 > 0
-        && repro.same_fail_when_full_l23 * 10 >= repro.full_fail_l23 * 8;
+    let h4 =
+        repro.full_fail_l23 > 0 && repro.same_fail_when_full_l23 * 10 >= repro.full_fail_l23 * 8;
 
     let h5 = ppm(l3_same.exact_clear, l3_same.observations) < 900_000;
 
