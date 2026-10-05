@@ -475,14 +475,15 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N7 harness-only PAGE_VALUE domain conditioning from exact V; include N6 crosstalk, N4 chain capability and 1/2/4-bit brittleness controls.
 - [x] Execute and retain byte-identical N7 evidence: exact-V conditioning restores K1024 capability to 100% but one-bit perturbations yield 0/96 retrieval, so direct promotion is rejected.
 - [x] Freeze N8 fixed-width PAGE/PAGE_VALUE hybrid-domain tradeoff at q={0,1/4,1/2,3/4,1}, with capability and Hamming-robustness gates.
-- [ ] Execute and retain byte-identical N8 evidence; select the smallest qualifying interior PAGE_VALUE fraction or report no candidate.
+- [x] Execute and retain byte-identical N8 evidence; q=3/4 is the smallest interior fraction passing both low- and high-load capability/robustness gates.
+- [ ] Freeze canonical multi-expert domain semantics for the q=3/4 candidate before any core API.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
 N5 localization: [SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md](SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md). The remaining low-load L2/L3 failure is already present in exact-state teacher-forced retrieval; free-running drift/rewrite/reprojection are not the first failing stage.
 
-N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md). SELF is perfect; count-matched cross-chain controls are perfect; same-chain shared-M/R keys remain ~0.67 correlated and reproduce most L2/L3 failures.\n\nN7 value-domain result: [SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md](SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md). PAGE_VALUE removes same-chain correlation and reaches 100% K1024 capability, but exact-V conditioning is rejected for direct promotion because a one-bit V perturbation produces near-orthogonal keys and 0/96 next-value recovery.
+N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md). SELF is perfect; count-matched cross-chain controls are perfect; same-chain shared-M/R keys remain ~0.67 correlated and reproduce most L2/L3 failures.\n\nN7 value-domain result: [SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md](SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md). PAGE_VALUE removes same-chain correlation and reaches 100% K1024 capability, but exact-V conditioning is rejected for direct promotion because a one-bit V perturbation produces near-orthogonal keys and 0/96 next-value recovery.\n\nN8 hybrid result: [SML-DKV-2A-N8-HYBRID-OBSERVATION.md](SML-DKV-2A-N8-HYBRID-OBSERVATION.md). At fixed K, q=3/4 PAGE_VALUE is selected at both G=4 and G=16: K1024 F6=100% / 91.80% while Hamming-1 exact+clear recovery remains 25/96=26.04%.
 
 ## DKV projection-agreement follow-up
 
