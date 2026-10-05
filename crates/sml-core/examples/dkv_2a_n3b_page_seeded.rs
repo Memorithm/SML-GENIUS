@@ -98,7 +98,10 @@ fn random_state(stream: &mut Stream) -> State {
             .meaning_mask
             .set(bit, (meaning >> bit) & 1 == 1)
             .expect("m");
-        state.routing.set(bit, (routing >> bit) & 1 == 1).expect("r");
+        state
+            .routing
+            .set(bit, (routing >> bit) & 1 == 1)
+            .expect("r");
     }
     state
 }
@@ -300,12 +303,10 @@ fn run_width<const K: usize>(results: &mut Results) {
                 let a = random_state(&mut e3_stream);
                 let b = random_state(&mut e3_stream);
                 let page = 1 + e3_stream.below(PAGES) as u32;
-                let other_page =
-                    1 + ((page as usize - 1) + 1 + e3_stream.below(PAGES - 1)) % PAGES;
+                let other_page = 1 + ((page as usize - 1) + 1 + e3_stream.below(PAGES - 1)) % PAGES;
                 let (a_page, a_counters) = project::<K>(base_seed, &a, page, arm);
                 let (b_page, b_counters) = project::<K>(base_seed, &b, page, arm);
-                let (a_other, cross_counters) =
-                    project::<K>(base_seed, &a, other_page as u32, arm);
+                let (a_other, cross_counters) = project::<K>(base_seed, &a, other_page as u32, arm);
                 let work = results.work.entry((K, arm)).or_default();
                 work.add(a_counters);
                 work.add(b_counters);
