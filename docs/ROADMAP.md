@@ -449,12 +449,12 @@ Input review: [SML-DKV-2A-N3-INPUT-REVIEW.md](SML-DKV-2A-N3-INPUT-REVIEW.md).
 - [x] Record additive PageSpread as a negative source result, not a library candidate.
 - [x] Freeze N3A current-Rust1.89 replay using the repository's actual derive_ambiguity producer.
 - [x] Freeze N3B current-Rust1.89 PageSeeded replay using only the existing projector API plus an outer page-derived seed.
-- [ ] Execute and retain byte-identical N3A evidence.
-- [ ] Execute and retain byte-identical N3B evidence.
-- [ ] If PageSeeded reproduces, freeze multi-expert semantics and record/subject alias requalification before any core API.
+- [x] Execute and retain byte-identical N3A Rust1.89 evidence; all five imported replay hypotheses hold.
+- [x] Execute and retain byte-identical N3B Rust1.89 evidence; PageSeeded gives 0% wrong-page and 100% conflict resolution on the frozen one-page panel.
+- [ ] PageSeeded reproduced; freeze multi-expert semantics, unbalanced-page controls and record/subject alias requalification before any core API.
 - [ ] Measure representative recurrent SBG ambiguity, not just independent-bit hypothesis noise, before A-mode promotion.
 
-Protocols: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-REPLAY.md) and [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-REPLAY.md). No context/model promotion.
+Protocols: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-REPLAY.md) and [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-REPLAY.md). Observations: [N3A](SML-DKV-2A-N3A-HYPOTHESIS-AMBIGUITY-OBSERVATION.md), [N3B](SML-DKV-2A-N3B-PAGE-SEEDED-OBSERVATION.md). No context/model promotion.
 
 ## DKV projection-agreement follow-up
 

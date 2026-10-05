@@ -72,6 +72,24 @@ jobs:
           cargo run --locked --release -p sml-core --example dkv_2a_n2_page_density > "$RUNNER_TEMP/dkv-2a-n2-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n2-first.csv" "$RUNNER_TEMP/dkv-2a-n2-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n2-first.csv"
+      - name: DKV-2a-N3A hypothesis ambiguity replay evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n3')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n3a_hypothesis_ambiguity > "$RUNNER_TEMP/dkv-2a-n3a-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n3a_hypothesis_ambiguity > "$RUNNER_TEMP/dkv-2a-n3a-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n3a-first.csv" "$RUNNER_TEMP/dkv-2a-n3a-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n3a-first.csv"
+      - name: DKV-2a-N3B page-seeded replay evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n3')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n3b_page_seeded > "$RUNNER_TEMP/dkv-2a-n3b-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n3b_page_seeded > "$RUNNER_TEMP/dkv-2a-n3b-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n3b-first.csv" "$RUNNER_TEMP/dkv-2a-n3b-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n3b-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
