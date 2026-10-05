@@ -473,14 +473,15 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N6 terminal-write crosstalk decomposition: SELF vs same-chain vs count-matched cross-chain vs FULL, plus key geometry.
 - [x] Execute and retain byte-identical N6 Rust1.89 evidence: same-chain correlation ~0.67 dominates count-matched cross-chain interference and reproduces 10/11 K1024 FULL L2/L3 failures.
 - [x] Freeze N7 harness-only PAGE_VALUE domain conditioning from exact V; include N6 crosstalk, N4 chain capability and 1/2/4-bit brittleness controls.
-- [ ] Execute and retain byte-identical N7 evidence; do not promote exact-V conditioning if brittleness dominates.
+- [x] Execute and retain byte-identical N7 evidence: exact-V conditioning restores K1024 capability to 100% but one-bit perturbations yield 0/96 retrieval, so direct promotion is rejected.
+- [ ] Freeze a fixed-width PAGE/PAGE_VALUE hybrid-domain tradeoff panel before proposing any core domain API.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
 
 N5 localization: [SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md](SML-DKV-2A-N5-HOP-FIDELITY-OBSERVATION.md). The remaining low-load L2/L3 failure is already present in exact-state teacher-forced retrieval; free-running drift/rewrite/reprojection are not the first failing stage.
 
-N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md). SELF is perfect; count-matched cross-chain controls are perfect; same-chain shared-M/R keys remain ~0.67 correlated and reproduce most L2/L3 failures.
+N6 crosstalk: [SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md](SML-DKV-2A-N6-CROSSTALK-OBSERVATION.md). SELF is perfect; count-matched cross-chain controls are perfect; same-chain shared-M/R keys remain ~0.67 correlated and reproduce most L2/L3 failures.\n\nN7 value-domain result: [SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md](SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md). PAGE_VALUE removes same-chain correlation and reaches 100% K1024 capability, but exact-V conditioning is rejected for direct promotion because a one-bit V perturbation produces near-orthogonal keys and 0/96 next-value recovery.
 
 ## DKV projection-agreement follow-up
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "protocol": "docs/SML-DKV-2A-N7-VALUE-DOMAIN-PREREGISTRATION.md",
+  "protocol_pr": 176,
+  "executed_code_head": "0b584f604f52f987b4b90cc9fcffee50d381b2e2",
+  "github_actions_run": 37281920659,
+  "job": 111671731941,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 169,
+  "core_changed": false,
+  "promotion": "BLOCKED"
+}
