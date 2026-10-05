@@ -47,7 +47,7 @@ does not invalidate the retained composition on this Development panel.
 
 For unshared BASE -> SWITCH queries at K=1024:
 
-| Population | exact key equalities | mean |cosine| | max |cosine| | two-bit target agreement |
+| Population | exact key equalities | mean abs cosine | max abs cosine | two-bit target agreement |
 |---|---:|---:|---:|---:|
 | BALANCED | 0 | 0.025089 | 0.132954 | 21.88% |
 | N13A_EMPIRICAL | 0 | 0.025350 | 0.114817 | 21.92% |
