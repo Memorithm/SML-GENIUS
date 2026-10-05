@@ -381,6 +381,7 @@ impl Banks {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn admit<const K: usize>(
     banks: &mut Banks,
     directory: &mut Directory,
@@ -481,6 +482,7 @@ struct ResolveRequest<'a> {
     state: &'a State,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve<const K: usize>(
     banks: &mut Banks,
     directory: &Directory,
