@@ -589,8 +589,9 @@ floating-point semantics?
   accounting.
 - **PGF2-2**: fixed width ladder 64/128/256/512/1024/2048 bits; no adaptive-width
   claim.
-- **PGF2-3**: frozen SBG ablation versus identity, fixed reversible permutation
-  and current qualified Boolean mixer.
+- **PGF2-3**: frozen K=2048 SBG ablation versus identity, fixed reversible
+  permutation and current qualified Boolean mixer; preregistered in
+  [SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md](SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md).
 - **PGF2-4**: optional MOR/Delta-KV component experiment only after PGF2-3 passes
   a preregistered gate.
 - **PGF2-5**: matched model-level evaluation only after component qualification.
