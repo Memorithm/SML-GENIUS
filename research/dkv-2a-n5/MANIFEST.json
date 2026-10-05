@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "protocol": "docs/SML-DKV-2A-N5-HOP-FIDELITY-PREREGISTRATION.md",
+  "protocol_pr": 172,
+  "protocol_merge": "6cef85d13aff83535497a3c06fb63666e341576d",
+  "executed_code_head": "c8cd883848ace1e3b21db44504217015fe32b1f7",
+  "github_actions_run": 37278718915,
+  "job": 111661502767,
+  "runner": "tarek-scirust-arm64-01",
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 74,
+  "projector": "ActiveOnly + outer PageId(5)-derived seed",
+  "promotion": "BLOCKED"
+}
