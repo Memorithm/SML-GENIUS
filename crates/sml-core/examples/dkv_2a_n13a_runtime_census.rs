@@ -4,11 +4,7 @@
 //! Fixture freeze: docs/SML-DKV-2A-N13A-FIXTURE-FREEZE.md.
 //! Measurement only: no memory, MOR, training or runtime policy changes.
 
-use std::{
-    collections::BTreeMap,
-    error::Error,
-    fmt::Write as _,
-};
+use std::{collections::BTreeMap, error::Error, fmt::Write as _};
 
 use sml_core::{
     candidate::{SmlTaskCandidate, TaskCandidateConfig},
@@ -156,11 +152,7 @@ fn source_key<const K: usize>(
     .key_q12
 }
 
-fn primary_q3_key<const K: usize>(
-    base_seed: u64,
-    state: &State,
-    route: &[u32],
-) -> Vec<i16> {
+fn primary_q3_key<const K: usize>(base_seed: u64, state: &State, route: &[u32]) -> Vec<i16> {
     let page = source_key::<K>(false, base_seed, state, route);
     let value = source_key::<K>(true, base_seed, state, route);
     (0..K)
@@ -262,8 +254,9 @@ fn a_bin(weight: u64) -> usize {
     }
 }
 
-const A_BIN_NAMES: [&str; A_BIN_COUNT] =
-    ["0", "1", "2", "3-4", "5-8", "9-16", "17-32", "33-64"];
+const A_BIN_NAMES: [&str; A_BIN_COUNT] = [
+    "0", "1", "2", "3-4", "5-8", "9-16", "17-32", "33-64",
+];
 
 fn popcounts(state: &State) -> [u64; 4] {
     [
@@ -459,15 +452,7 @@ fn census_sbg(out: &mut String) -> R<BTreeMap<usize, SbgCensus>> {
                     census.v_delta_sum += state.value.xor_popcount(&prior.value);
                     census.r_delta_sum += state.routing.xor_popcount(&prior.routing);
 
-                    observe_sbg_state(
-                        out,
-                        &mut census,
-                        load,
-                        seed,
-                        chain_index,
-                        cycle,
-                        &state,
-                    )?;
+                    observe_sbg_state(out, &mut census, load, seed, chain_index, cycle, &state)?;
                 }
             }
         }
@@ -564,10 +549,7 @@ fn mor_decision(fixture: MorFixture, previous: &PreviousRoute) -> R<MorDecision>
                     experts: vec![PageId(1)],
                 },
             ],
-            vec![
-                mor_router(0, 0, MOR_SCALE_PPM),
-                mor_router(1, 1, 920_000),
-            ],
+            vec![mor_router(0, 0, MOR_SCALE_PPM), mor_router(1, 1, 920_000)],
         ),
         MorFixture::PersistentMargin => (
             vec![
@@ -668,8 +650,9 @@ fn disagreement_bin(ppm_value: u32) -> usize {
     }
 }
 
-const DISAGREEMENT_NAMES: [&str; 5] =
-    ["0", "1-49k", "50-249k", "250-499k", "500k-1M"];
+const DISAGREEMENT_NAMES: [&str; 5] = [
+    "0", "1-49k", "50-249k", "250-499k", "500k-1M",
+];
 
 #[derive(Default)]
 struct MorCensus {
@@ -778,7 +761,12 @@ fn main() -> R<()> {
             "N13A_A_KIND,kind={kind},tasks={tasks},exact={exact},traces={traces}"
         )?;
     }
-    let nonzero: Vec<u64> = a.page_counts.iter().copied().filter(|count| *count != 0).collect();
+    let nonzero: Vec<u64> = a
+        .page_counts
+        .iter()
+        .copied()
+        .filter(|count| *count != 0)
+        .collect();
     let max_page = nonzero.iter().copied().max().unwrap_or(0);
     let min_page = nonzero.iter().copied().min().unwrap_or(0);
     let imbalance_ppm = if min_page == 0 {
@@ -801,7 +789,11 @@ fn main() -> R<()> {
         a.longest_same_page_run,
     )?;
     for (page, count) in a.page_counts.iter().enumerate() {
-        writeln!(out, "N13A_A_PAGE,page={page},count={count},share_ppm={}", ppm(*count, a.traces))?;
+        writeln!(
+            out,
+            "N13A_A_PAGE,page={page},count={count},share_ppm={}",
+            ppm(*count, a.traces)
+        )?;
     }
     for (address, count) in a.address_counts.iter().enumerate() {
         writeln!(out, "N13A_A_ADDRESS,address={address},count={count}")?;
@@ -849,9 +841,7 @@ fn main() -> R<()> {
                 writeln!(
                     out,
                     "N13A_B_TRANSITION,G={load},from={},to={},count={}",
-                    A_BIN_NAMES[from],
-                    A_BIN_NAMES[to],
-                    census.bin_transitions[from][to]
+                    A_BIN_NAMES[from], A_BIN_NAMES[to], census.bin_transitions[from][to]
                 )?;
             }
         }
