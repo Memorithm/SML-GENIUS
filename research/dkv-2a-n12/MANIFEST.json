@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 188,
+  "execution_pr": 189,
+  "executed_head": "848a2610a2271f7b57292cb93bd1a6fac56f58e5",
+  "github_actions_run": 37357762345,
+  "job": 111924403713,
+  "rust": "1.89.0",
+  "executions": 2,
+  "byte_identical": true,
+  "retained_lines": 56,
+  "selected": "RETAIN",
+  "promotion": "BLOCKED"
+}
