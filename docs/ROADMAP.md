@@ -479,7 +479,8 @@ Protocol: [SML-DKV-2A-N4-CHAIN-REPLAY.md](SML-DKV-2A-N4-CHAIN-REPLAY.md).
 - [x] Freeze N9 canonical multi-expert domain semantics: PRIMARY_ANCHORED candidate versus ORDERED_ROUTE isolation control.
 - [x] Execute and retain byte-identical N9 evidence; PRIMARY_ANCHORED passes continuity/capability/robustness but H9 exact-collision gate fails, so canonical selection is NONE.
 - [x] Freeze N10 fixed-width PRIMARY_ANCHORED/ORDERED_ROUTE interpolation at r={0,1/4,1/2,3/4,1}, keeping q=3 fixed.
-- [ ] Execute and retain byte-identical N10 evidence; select the smallest interior route fraction that simultaneously clears secondary-conflict, continuity, capability and Hamming-1 gates.
+- [x] Execute and retain byte-identical N10 evidence; no interior route fraction clears both secondary-conflict isolation and secondary continuity, so selection is NONE.
+- [ ] Freeze N11 two-bank PRIMARY shared retrieval + ORDERED route-specific override resolver; measure false overrides and conflict resolution without using retrieval strength as source authority.
 - [ ] Keep multi-expert, unbalanced-page and exact record/subject/provenance qualification ahead of any core PageSeeded API.
 
 Observation: [SML-DKV-2A-N4-CHAIN-OBSERVATION.md](SML-DKV-2A-N4-CHAIN-OBSERVATION.md). The combined arm materially improves F6, including 23.05% -> 71.48% at K1024/G16, but no historical capability cell passes. No controller or context/model promotion follows.
@@ -493,6 +494,8 @@ N7 value-domain result: [SML-DKV-2A-N7-VALUE-DOMAIN-OBSERVATION.md](SML-DKV-2A-N
 N8 hybrid result: [SML-DKV-2A-N8-HYBRID-OBSERVATION.md](SML-DKV-2A-N8-HYBRID-OBSERVATION.md). At fixed K, q=3/4 PAGE_VALUE is selected at both G=4 and G=16: K1024 F6=100% / 91.80% while Hamming-1 exact+clear recovery remains 25/96=26.04%.
 
 N9 multi-expert result: [SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md](SML-DKV-2A-N9-MULTIEXPERT-OBSERVATION.md). PRIMARY_ANCHORED preserves secondary continuity and K1024 q=3 capability, but exact R2/R3 conflict-key collisions refute H9; ORDERED_ROUTE isolates conflicts but gives zero secondary continuity.
+
+N10 route-hybrid result: [SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md](SML-DKV-2A-N10-ROUTE-HYBRID-OBSERVATION.md). Geometry interpolates smoothly, but r=2 retains ~90% continuity with only 55.47% conflict recall while r=3 reaches 98.83% conflict recall with <8% continuity; no single-key interior candidate is selected.
 
 ## DKV projection-agreement follow-up
 

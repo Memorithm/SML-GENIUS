@@ -144,6 +144,15 @@ jobs:
           cargo run --locked --release -p sml-core --example dkv_2a_n9_multiexpert > "$RUNNER_TEMP/dkv-2a-n9-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n9-first.csv" "$RUNNER_TEMP/dkv-2a-n9-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n9-first.csv"
+      - name: DKV-2a-N10 route-hybrid evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n10')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example dkv_2a_n10_route_hybrid > "$RUNNER_TEMP/dkv-2a-n10-first.csv"
+          cargo run --locked --release -p sml-core --example dkv_2a_n10_route_hybrid > "$RUNNER_TEMP/dkv-2a-n10-second.csv"
+          cmp "$RUNNER_TEMP/dkv-2a-n10-first.csv" "$RUNNER_TEMP/dkv-2a-n10-second.csv"
+          cat "$RUNNER_TEMP/dkv-2a-n10-first.csv"
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
