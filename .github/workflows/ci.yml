@@ -216,6 +216,31 @@ jobs:
           cargo run --locked --release -p sml-store --example dkv_2a_n13b_page_skew > "$RUNNER_TEMP/dkv-2a-n13b-second.csv"
           cmp "$RUNNER_TEMP/dkv-2a-n13b-first.csv" "$RUNNER_TEMP/dkv-2a-n13b-second.csv"
           cat "$RUNNER_TEMP/dkv-2a-n13b-first.csv"
+      - name: DKV-2a-N14 physical resource evidence
+        if: startsWith(github.head_ref, 'research/dkv-2a-n14-physical')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-store --example dkv_2a_n14_physical
+          bin="target/release/examples/dkv_2a_n14_physical"
+          out="$RUNNER_TEMP/dkv-2a-n14"
+          mkdir -p "$out"
+          for k in 256 1024; do
+            for arm in primary mixed direct-primary direct-mixed; do
+              for pop in 0 1 2; do
+                "$bin" "$k" "$arm" "$pop" > "$out/k${k}-${arm}-p${pop}.csv"
+              done
+            done
+          done
+          cat "$out"/*.csv
+          if grep -q '^N14_HYPOTHESIS,H1_SEMANTICS,REFUTED$' "$out"/*.csv; then
+            echo "N14 H1 semantic invariant failed" >&2
+            exit 1
+          fi
+          if grep -q '^N14_HYPOTHESIS,H5_SINGLE_READ,REFUTED$' "$out"/*.csv; then
+            echo "N14 H5 single-read invariant failed" >&2
+            exit 1
+          fi
       - name: Delta-KV dynamic re-keying evidence
         shell: bash
         run: |
