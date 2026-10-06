@@ -182,10 +182,8 @@ fn pb1_zeta() -> bool {
         BITS, min, median, sum, p95, max
     );
 
-    let valid = oracle_failures == 0
-        && inverse_failures == 0
-        && source_collisions == 0
-        && collisions == 0;
+    let valid =
+        oracle_failures == 0 && inverse_failures == 0 && source_collisions == 0 && collisions == 0;
     println!(
         "PB1_HYPOTHESIS,EXACT_SUBSET_PARITY,{}",
         if valid { "HOLDS" } else { "INVALID" }
