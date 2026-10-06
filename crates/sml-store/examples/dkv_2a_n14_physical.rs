@@ -1077,6 +1077,7 @@ fn direct_resolve<const K: usize>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn one_query<const K: usize>(
     arm: PhysicalArm,
     banks: &mut Banks,
