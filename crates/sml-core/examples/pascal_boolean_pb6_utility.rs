@@ -5,12 +5,7 @@
 //! - deterministic: byte-stable exactness/work evidence.
 //! - benchmark: non-deterministic physical timing on the pinned runner.
 
-use std::{
-    collections::BTreeSet,
-    env,
-    hint::black_box,
-    time::Instant,
-};
+use std::{collections::BTreeSet, env, hint::black_box, time::Instant};
 
 use sml_core::{
     anf::{AnfMonomial, AnfPolynomial},
@@ -288,8 +283,12 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
     let gate = build_gate_evidence();
     let schedule = address_schedule();
     let sources = deterministic_sources();
-    let source_collisions =
-        sources.iter().cloned().collect::<BTreeSet<_>>().len().abs_diff(CORPUS);
+    let source_collisions = sources
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .len()
+        .abs_diff(CORPUS);
 
     let mut prefixes = [PrefixEvidence::default(); Q_VALUES.len()];
     let mut inverse_failures = 0_u64;
@@ -336,12 +335,9 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
                 evidence.a_mismatches += u64::from(a != expected);
                 evidence.b_mismatches += u64::from(b != expected);
                 evidence.c_mismatches += u64::from(c != expected);
-                evidence.a_checksum =
-                    checksum_push(evidence.a_checksum, a, sample, position);
-                evidence.b_checksum =
-                    checksum_push(evidence.b_checksum, b, sample, position);
-                evidence.c_checksum =
-                    checksum_push(evidence.c_checksum, c, sample, position);
+                evidence.a_checksum = checksum_push(evidence.a_checksum, a, sample, position);
+                evidence.b_checksum = checksum_push(evidence.b_checksum, b, sample, position);
+                evidence.c_checksum = checksum_push(evidence.c_checksum, c, sample, position);
                 evidence.oracle_checksum =
                     checksum_push(evidence.oracle_checksum, expected, sample, position);
             }
@@ -488,8 +484,7 @@ fn run_benchmark_arm(
             }
             Arm::Direct => {
                 for (position, &address) in schedule.iter().enumerate() {
-                    let answer =
-                        direct_submask_parity(&decoded, address) & gate_values[address];
+                    let answer = direct_submask_parity(&decoded, address) & gate_values[address];
                     checksum = checksum_push(checksum, answer, sample, position);
                 }
             }
@@ -615,8 +610,7 @@ fn benchmark() {
         && b_checksums.iter().all(|&value| value == checksum_b)
         && c_checksums.iter().all(|&value| value == checksum_c);
 
-    let checksums_equal =
-        stable_checksums && checksum_a == checksum_b && checksum_a == checksum_c;
+    let checksums_equal = stable_checksums && checksum_a == checksum_b && checksum_a == checksum_c;
 
     let paired_wins = (0..MEASURED_REPS)
         .filter(|&index| a_times[index] < b_times[index].min(c_times[index]))
@@ -646,9 +640,8 @@ fn benchmark() {
             .last()
             .is_some_and(|evidence| evidence.answer_count == (CORPUS * BITS) as u64);
 
-    let states_per_second = |elapsed_ns: u128| -> u128 {
-        (CORPUS as u128 * 1_000_000_000_u128) / elapsed_ns.max(1)
-    };
+    let states_per_second =
+        |elapsed_ns: u128| -> u128 { (CORPUS as u128 * 1_000_000_000_u128) / elapsed_ns.max(1) };
 
     println!(
         "PB6_BENCH_ARM,arm={},times_ns={},median_ns={},p95_ns={},states_per_second={},checksum={:016x}",
@@ -705,7 +698,9 @@ fn benchmark() {
 }
 
 fn main() {
-    let mode = env::args().nth(1).unwrap_or_else(|| "deterministic".to_string());
+    let mode = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "deterministic".to_string());
     match mode.as_str() {
         "deterministic" => {
             run_deterministic(true);
