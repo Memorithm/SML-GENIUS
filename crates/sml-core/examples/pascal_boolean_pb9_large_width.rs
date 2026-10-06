@@ -651,12 +651,7 @@ fn bench_query(bits: usize, q: usize) -> QueryBench {
             black_box(query_direct(&query_sources, &addresses, q));
         } else {
             black_box(query_direct(&query_sources, &addresses, q));
-            black_box(query_pascal(
-                &query_sources,
-                &addresses,
-                q,
-                &mut workspace,
-            ));
+            black_box(query_pascal(&query_sources, &addresses, q, &mut workspace));
         }
         black_box(query_copy(&query_sources, &addresses, q, &mut workspace));
     }
@@ -691,12 +686,7 @@ fn bench_query(bits: usize, q: usize) -> QueryBench {
         }
 
         let start = Instant::now();
-        black_box(query_copy(
-            &query_sources,
-            &addresses,
-            q,
-            &mut workspace,
-        ));
+        black_box(query_copy(&query_sources, &addresses, q, &mut workspace));
         c_times.push(start.elapsed().as_nanos());
     }
 
@@ -925,8 +915,7 @@ fn benchmark() {
     );
     println!("PB9_FURTHEST_EXECUTED,bits={furthest_width}");
 
-    let mandatory_valid =
-        deterministic.l1 && deterministic.l2 && l3 && query_sanity && l4 && l6;
+    let mandatory_valid = deterministic.l1 && deterministic.l2 && l3 && query_sanity && l4 && l6;
     let decision = if !mandatory_valid {
         "INVALID"
     } else if l5 {
