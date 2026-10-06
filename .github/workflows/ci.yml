@@ -60,6 +60,15 @@ jobs:
           cargo run --locked --release -p sml-core --example pgf2_3_sbg_ablation > "$RUNNER_TEMP/pgf2-3-second.csv"
           cmp "$RUNNER_TEMP/pgf2-3-first.csv" "$RUNNER_TEMP/pgf2-3-second.csv"
           cat "$RUNNER_TEMP/pgf2-3-first.csv"
+      - name: PGF2-3B K2048 block-local rescue evidence
+        if: startsWith(github.head_ref, 'research/pgf2-3b-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pgf2_3b_block_local > "$RUNNER_TEMP/pgf2-3b-first.csv"
+          cargo run --locked --release -p sml-core --example pgf2_3b_block_local > "$RUNNER_TEMP/pgf2-3b-second.csv"
+          cmp "$RUNNER_TEMP/pgf2-3b-first.csv" "$RUNNER_TEMP/pgf2-3b-second.csv"
+          cat "$RUNNER_TEMP/pgf2-3b-first.csv"
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
