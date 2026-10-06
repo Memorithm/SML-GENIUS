@@ -541,13 +541,20 @@ outside the closed representation-mixing objective.
   evidence showing that low-degree truncation is not a generic approximation;
 - PB-4 P-FEISTEL: retained reversible nonlinear composition at 2/4/6 rounds,
   with zero inverse/collision failures and explicit nonlinearity witnesses;
-- PB-5 composed functional evaluation: ready for separate preregistration.
+- PB-5 composed functional evaluation: retained after 131,072 independent
+  state/address comparisons with zero end-to-end mismatches; all C1..C6 gates
+  hold and the frozen decision is `RETAIN_COMPOSED_FUNCTION`.
 
-Protocol, retained observation and replay are in
+Protocol and retained evidence are in
 `docs/SML-PASCAL-BOOLEAN-SUITE-PREREGISTRATION.md`,
-`docs/SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md` and
-`research/pascal-boolean-suite/`.
+`docs/SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md`,
+`docs/SML-PASCAL-BOOLEAN-PB5-PREREGISTRATION.md`,
+`docs/SML-PASCAL-BOOLEAN-PB5-OBSERVATION.md`,
+`research/pascal-boolean-suite/` and
+`research/pascal-boolean-pb5/`.
 
-These positive functional results do not reopen PGF2-4 and do not by themselves
-promote Pascal operators into SBG, MOR, Delta-KV, context or model architecture.
+The next justified Pascal experiment must test measurable task utility against
+matched controls. These positive functional results do not reopen PGF2-4 and do
+not by themselves promote Pascal operators into SBG, MOR, Delta-KV, context or
+model architecture.
 

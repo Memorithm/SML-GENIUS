@@ -108,11 +108,13 @@ Scaling stops if any of the following persists after a bounded research iteratio
 
 The closed PGF2 representation-mixing result remains unchanged. A separate
 K=2048 functional suite has retained P-ZETA, P-ROUTER, P-ANF and P-FEISTEL
-under frozen exactness/reversibility contracts. PB-5 composed evaluation is
-ready for separate preregistration. See
-`SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md`.
+under frozen exactness/reversibility contracts. PB-5 also retains their composed
+pipeline: all C1..C6 gates hold and all 131,072 end-to-end comparisons match the
+independent oracle. See `SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md` and
+`SML-PASCAL-BOOLEAN-PB5-OBSERVATION.md`.
 
-No SBG/MOR/Delta-KV/context/model promotion follows from these component
+The next gate is a separately preregistered matched-control task-utility test.
+No SBG/MOR/Delta-KV/context/model promotion follows from the current functional
 contracts alone.
 
 ## Semantic Boolean Geometry track

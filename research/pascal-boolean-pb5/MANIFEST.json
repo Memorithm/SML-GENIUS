@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 213,
+  "protocol_merge": "0988de1d1e15babb9ffd48406eac0436cc964f8a",
+  "implementation_pr": 214,
+  "executed_code_head": "78d91c20bcb7daaf9d6ea38e6418517b0a223665",
+  "implementation_merge": "9e5888fdbe23c69eda08803c6b52c182dca7e1b6",
+  "github_actions_run": 37435044606,
+  "job": 112174676286,
+  "runner": "tarek-scirust-arm64-01",
+  "machine": "tarek",
+  "rust": "1.89.0",
+  "target": "aarch64-unknown-linux-gnu",
+  "retained_lines": 17,
+  "output_sha256": "24929c525983f15accee1663ac316c5ba1613315dad4c4d985d3e61f61066e86",
+  "cross_run_byte_identical": true,
+  "width_bits": 2048,
+  "states": 64,
+  "addresses": 2048,
+  "comparisons": 131072,
+  "feistel_rounds": 4,
+  "gates": {
+    "C1_reversible_storage": "HOLDS",
+    "C2_router_zeta": "HOLDS",
+    "C3_anf_gate": "HOLDS",
+    "C4_end_to_end": "HOLDS",
+    "C5_deterministic_replay": "CI_ENFORCED",
+    "C6_accounting": "HOLDS"
+  },
+  "decision": "RETAIN_COMPOSED_FUNCTION",
+  "model_promotion": "BLOCKED"
+}

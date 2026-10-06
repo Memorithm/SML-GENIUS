@@ -1,0 +1,17 @@
+PB5_BEGIN,protocol=1,bits=2048,states=64,addresses=2048,comparisons=131072,feistel_rounds=4
+PB5_ANF,expected_coefficients=1|10|292|640,actual_coefficients=1|10|292|640,coefficient_mismatches=0,gate_mismatches=0,gate_true=1024,anf_monomials=8192,boolean_ops=8192,gf2_ops=8192
+PB5_C1,source_collisions=0,encoded_collisions=0,inverse_failures=0,feistel_determinism_failures=0
+PB5_C2,parity_mismatches=0,comparisons=131072
+PB5_C3,coefficient_mismatches=0,gate_mismatches=0,addresses=2048
+PB5_C4,final_mismatches=0,comparisons=131072,expected_comparisons=131072
+PB5_ACCOUNTING,zeta_xor_per_state=11264,zeta_packed_updates_per_state=272,zeta_state_bytes=256,zeta_stats_mismatches=0,feistel_xor_per_state=57344,feistel_and_per_state=8192,feistel_packed_updates_per_state=1280,feistel_coordinate_maps_per_state=16384,direct_subset_reads_per_state=177147,direct_subset_reads_total=11337408,native_query_reads_total=131072,final_and_ops=131072
+PB5_REPRESENTATION,implicit_route_learned_bits=0,explicit_membership_bits=4194304,gate_truth_table_bits=2048,gate_active_anf_coefficients=4
+PB5_ANF_TRANSFORM_COST,logical_xor_ops=11264,packed_word_updates=272,state_bytes=256
+PB5_GATE,C1_REVERSIBLE_STORAGE,HOLDS
+PB5_GATE,C2_ROUTER_ZETA,HOLDS
+PB5_GATE,C3_ANF_GATE,HOLDS
+PB5_GATE,C4_END_TO_END,HOLDS
+PB5_GATE,C5_DETERMINISTIC_REPLAY,CI_ENFORCED
+PB5_GATE,C6_ACCOUNTING,HOLDS
+PB5_DECISION,RETAIN_COMPOSED_FUNCTION
+PROMOTION,BLOCKED,pb5_functional_composition_only
