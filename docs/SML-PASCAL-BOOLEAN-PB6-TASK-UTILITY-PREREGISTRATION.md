@@ -134,8 +134,12 @@ require byte-identical stdout.
 Physical timing is intentionally separate from deterministic replay because
 wall-clock values are not byte-stable evidence.
 
-Frozen benchmark workload:
+Frozen benchmark environment and workload:
 
+- runner: `tarek-scirust-arm64-01`;
+- machine: `tarek`;
+- target: `aarch64-unknown-linux-gnu`;
+- Rust: 1.89.0;
 - Q=2048 only;
 - all 64 source states;
 - 20 measured repetitions per arm after 3 warmup repetitions;
