@@ -25,7 +25,7 @@ struct Stream(u64);
 
 impl Stream {
     const fn new(seed: u64) -> Self {
-        Self(seed | 1)
+        Self(seed)
     }
 
     fn next(&mut self) -> u64 {
@@ -128,17 +128,20 @@ fn pb1_zeta() -> bool {
         .filter(|&n| get_bit(&transformed, n) != direct_submask_parity(&original, n))
         .count();
 
-    let mut unique = BTreeSet::new();
+    let mut unique_sources = BTreeSet::new();
+    let mut unique_outputs = BTreeSet::new();
     let mut inverse_failures = 0_u64;
     for sample in 0..CORPUS {
         let source = words_from_seed(WORDS, BASE ^ 0x1000 ^ sample as u64);
+        unique_sources.insert(source.clone());
         let mut encoded = source.clone();
         pascal_gf2_in_place(&mut encoded).expect("PB1 corpus transform");
-        unique.insert(encoded.clone());
+        unique_outputs.insert(encoded.clone());
         pascal_gf2_in_place(&mut encoded).expect("PB1 corpus inverse");
         inverse_failures += u64::from(encoded != source);
     }
-    let collisions = CORPUS - unique.len();
+    let source_collisions = CORPUS - unique_sources.len();
+    let collisions = CORPUS - unique_outputs.len();
 
     let mut avalanche = Vec::with_capacity(BITS);
     for coordinate in 0..BITS {
@@ -161,8 +164,8 @@ fn pb1_zeta() -> bool {
     }
 
     println!(
-        "PB1_EXACTNESS,oracle_failures={},inverse_failures={},corpus={},collisions={}",
-        oracle_failures, inverse_failures, CORPUS, collisions
+        "PB1_EXACTNESS,oracle_failures={},inverse_failures={},corpus={},source_collisions={},output_collisions={}",
+        oracle_failures, inverse_failures, CORPUS, source_collisions, collisions
     );
     println!(
         "PB1_COST,stages={},logical_xor_ops={},packed_word_updates={},state_bytes={},direct_full_sweep_reads={},zeta_full_sweep_reads={},uniform_break_even_queries={}",
@@ -179,7 +182,10 @@ fn pb1_zeta() -> bool {
         BITS, min, median, sum, p95, max
     );
 
-    let valid = oracle_failures == 0 && inverse_failures == 0 && collisions == 0;
+    let valid = oracle_failures == 0
+        && inverse_failures == 0
+        && source_collisions == 0
+        && collisions == 0;
     println!(
         "PB1_HYPOTHESIS,EXACT_SUBSET_PARITY,{}",
         if valid { "HOLDS" } else { "INVALID" }
