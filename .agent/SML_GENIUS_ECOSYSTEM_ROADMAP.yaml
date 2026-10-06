@@ -23,3 +23,65 @@ ax_task_program:
     - engineering_targets_are_not_results
     - task_success_does_not_establish_architectural_superiority_or_novelty
     - adaptive_resource_changes_remain_explicit_in_comparison_evidence
+pascal_vector_projection_program_2026_10_06:
+  status: active_research_program
+  objective: >-
+    Compile retained Pascal/subset-zeta and massive ANF-bank semantics into
+    regular bit-sliced/vector-register and portable GPU execution layouts,
+    avoiding pointer-chasing graph representations while preserving exact
+    Boolean semantics and the workload boundaries retained by PB-7 through PB-9.
+  model_sovereignty:
+    - SML_GENIUS_is_the_model_and_scientific_authority
+    - final_SML_model_must_be_sufficient_to_execute_its_declared_model_semantics_without_FLAT_SciRust_or_NNIS_as_mandatory_runtime_dependencies
+    - reusable_external_primitives_may_be_reimplemented_or_internalized_only_through_versioned_contracts_oracles_tests_provenance_and_license_compliance
+    - future_SML_HARNESS_is_a_separate_orchestration_training_evaluation_and_serving_surface_not_part_of_the_model_semantics
+    - the_model_must_remain_usable_without_the_future_harness
+  hardware_sovereignty:
+    policy: ecosystem_first_vendor_neutral
+    allowed_vendor_layer_for_new_SML_PVP_path:
+      - installed_GPU_driver_needed_by_the_open_backend
+    forbidden_as_required_dependencies_for_new_SML_PVP_path:
+      - CUDA
+      - NVRTC
+      - cuDNN
+      - TensorRT
+      - TensorRT_LLM
+      - NVML
+      - CUTLASS
+      - CUBIN_specific_runtime_contracts
+      - project_authored_vendor_C_or_CPP_SDK_bridges
+    preferred_execution:
+      - scalar_u64_reference
+      - SciRust_CPU_SIMD_NEON_AVX2_AVX512_SVE_when_qualified
+      - WGPU_WGSL_portable_GPU
+      - FLAT_open_kernel_IR_and_autotuning
+      - NNIS_portable_CPU_WGPU_runtime_qualification
+  representation:
+    candidate_name: Pascal_Vector_Projection_PVP
+    logical_layout: address_major_gate_bitplanes
+    cpu_shape: "[K, ceil(G/64)] u64"
+    portable_gpu_shape: "[K, ceil(G/128)] vec4<u32>"
+    execution: deterministic_butterfly_stages_over_contiguous_bitplanes
+    forbidden_default: explicit_pointer_graph_or_adjacency_list_for_Pascal_subset_lattice
+  ecosystem_roles:
+    Memorithm/SML-GENIUS: owns_model_semantics_ANF_bank_meaning_and_final_internal_runtime_boundary
+    Memorithm/scirust: owns_reusable_bitplane_layout_CPU_SIMD_capability_dispatch_and_shared_oracles
+    Memorithm/FLAT-ATTENTION: owns_portable_WGPU_kernel_IR_tiling_subgroup_and_device_autotuning_research
+    Memorithm/NNIS: owns_optional_portable_runtime_carrier_session_and_end_to_end_hardware_qualification
+    Memorithm/ElasticXxx: may_later_select_only_among_prequalified_PVP_execution_plans
+  ordered_sequence:
+    - PVP0_freeze_layout_transpose_pack_unpack_and_scalar_oracle
+    - PVP1_qualify_SciRust_CPU_SIMD_candidates_against_oracle
+    - PVP2_qualify_FLAT_WGSL_vec4_u32_butterfly
+    - PVP3_test_stage_fusion_workgroup_tiling_subgroups_and_double_buffering
+    - PVP4_qualify_NNIS_portable_CPU_WGPU_runtime_carrier
+    - PVP5_cross_backend_same_semantics_same_inputs_evidence_and_autotuning
+    - PVP6_model_aligned_massive_ANF_bank_experiment
+    - PVP7_internalize_only_the_winning_minimal_execution_contract_into_self_sufficient_SML
+    - PVP8_define_separate_SML_HARNESS_contract_after_model_interface_is_frozen
+  evidence_boundaries:
+    - PB9_large_width_scaling_does_not_prove_GPU_or_SIMD_speedup
+    - hardware_projection_speedups_require_real_device_exact_head_measurement
+    - layout_or_kernel_microbenchmarks_do_not_establish_model_quality
+    - no_attention_replacement_claim_until_separately_preregistered_model_level_evidence
+
