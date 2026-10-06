@@ -7,12 +7,7 @@
 //! - deterministic: byte-stable exactness and structural evidence.
 //! - benchmark: physical timing on the pinned ARM64 runner.
 
-use std::{
-    collections::BTreeSet,
-    env,
-    hint::black_box,
-    time::Instant,
-};
+use std::{collections::BTreeSet, env, hint::black_box, time::Instant};
 
 use sml_core::pascal_gf2::pascal_gf2_in_place;
 
@@ -50,11 +45,7 @@ enum ScheduleKind {
 }
 
 impl ScheduleKind {
-    const ALL: [Self; 3] = [
-        Self::AffineUniform,
-        Self::LowPopcount,
-        Self::HighPopcount,
-    ];
+    const ALL: [Self; 3] = [Self::AffineUniform, Self::LowPopcount, Self::HighPopcount];
 
     const fn name(self) -> &'static str {
         match self {
@@ -94,12 +85,7 @@ fn words_from_seed(word_count: usize, seed: u64) -> Vec<u64> {
 fn sources(bits: usize, count: usize) -> Vec<Vec<u64>> {
     let words = bits / 64;
     (0..count)
-        .map(|sample| {
-            words_from_seed(
-                words,
-                BASE ^ ((bits as u64) << 32) ^ (sample as u64),
-            )
-        })
+        .map(|sample| words_from_seed(words, BASE ^ ((bits as u64) << 32) ^ (sample as u64)))
         .collect()
 }
 
@@ -140,9 +126,7 @@ fn logical_fast_zeta(words: &[u64], bits: usize) -> Vec<bool> {
 
 fn schedule(bits: usize, kind: ScheduleKind) -> Vec<usize> {
     match kind {
-        ScheduleKind::AffineUniform => (0..bits)
-            .map(|index| (405 * index + 17) % bits)
-            .collect(),
+        ScheduleKind::AffineUniform => (0..bits).map(|index| (405 * index + 17) % bits).collect(),
         ScheduleKind::LowPopcount => {
             let mut addresses = (0..bits).collect::<Vec<_>>();
             addresses.sort_by_key(|&address| (address.count_ones(), address));
@@ -162,14 +146,7 @@ fn schedule(bits: usize, kind: ScheduleKind) -> Vec<usize> {
 }
 
 fn q_values(bits: usize) -> Vec<usize> {
-    let mut values = vec![
-        1,
-        (bits / 64).max(1),
-        bits / 16,
-        bits / 4,
-        bits / 2,
-        bits,
-    ];
+    let mut values = vec![1, (bits / 64).max(1), bits / 16, bits / 4, bits / 2, bits];
     values.sort_unstable();
     values.dedup();
     values
@@ -259,11 +236,7 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
 
     for bits in WIDTHS {
         let width_sources = sources(bits, DETERMINISTIC_CORPUS);
-        let unique_sources = width_sources
-            .iter()
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .len();
+        let unique_sources = width_sources.iter().cloned().collect::<BTreeSet<_>>().len();
         let source_collisions = DETERMINISTIC_CORPUS - unique_sources;
         let mut packed_logical_mismatches = 0_u64;
         let mut packed_oracle_mismatches = 0_u64;
@@ -375,13 +348,11 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
             && cell.answer_count == (DETERMINISTIC_CORPUS * cell.q) as u64
     });
 
-    let g2 = WIDTHS
-        .into_iter()
-        .all(|bits| bits / 8 == bits.div_ceil(8));
+    let g2 = WIDTHS.into_iter().all(|bits| bits / 8 == bits.div_ceil(8));
 
-    let full_domain_advantage = WIDTHS.into_iter().all(|bits| {
-        zeta_xor_ops(bits) + (bits as u64) < full_direct_reads(bits) + bits as u64
-    });
+    let full_domain_advantage = WIDTHS
+        .into_iter()
+        .all(|bits| zeta_xor_ops(bits) + (bits as u64) < full_direct_reads(bits) + bits as u64);
     let ratios_monotonic = WIDTHS.windows(2).all(|pair| {
         let left = pair[0];
         let right = pair[1];
@@ -521,8 +492,7 @@ fn run_benchmark_arm(
             Arm::GenericFull => {
                 let generic = direct_truth_vector(source, bits);
                 for (position, &address) in addresses.iter().take(q).enumerate() {
-                    checksum =
-                        checksum_push(checksum, generic[address], sample, address, position);
+                    checksum = checksum_push(checksum, generic[address], sample, address, position);
                 }
             }
         }
@@ -591,13 +561,7 @@ fn benchmark_cell(bits: usize, kind: ScheduleKind, q: usize) -> BenchResult {
             _ => [Arm::GenericFull, Arm::PackedPascal, Arm::Direct],
         };
         for arm in order {
-            black_box(run_benchmark_arm(
-                arm,
-                bits,
-                &width_sources,
-                &addresses,
-                q,
-            ));
+            black_box(run_benchmark_arm(arm, bits, &width_sources, &addresses, q));
         }
     }
 
@@ -652,11 +616,8 @@ fn benchmark_cell(bits: usize, kind: ScheduleKind, q: usize) -> BenchResult {
     let stable_c = c_checksums
         .first()
         .is_some_and(|&first| c_checksums.iter().all(|&value| value == first));
-    let checksums_equal = stable_a
-        && stable_b
-        && stable_c
-        && b_checksum == a_checksum
-        && c_checksum == a_checksum;
+    let checksums_equal =
+        stable_a && stable_b && stable_c && b_checksum == a_checksum && c_checksum == a_checksum;
 
     let paired_wins = (0..MEASURED_REPS)
         .filter(|&index| a_times[index] < b_times[index].min(c_times[index]))
@@ -774,20 +735,26 @@ fn benchmark() {
         results.push(result);
     }
 
-    let g5 = results.iter().find(|result| {
-        result.bits == 2048
-            && result.schedule == ScheduleKind::AffineUniform
-            && result.q == 2048
-    }).is_some_and(|result| {
-        result.checksums_equal && result.ten_percent_gate && result.paired_wins >= 9
-    });
+    let g5 = results
+        .iter()
+        .find(|result| {
+            result.bits == 2048
+                && result.schedule == ScheduleKind::AffineUniform
+                && result.q == 2048
+        })
+        .is_some_and(|result| {
+            result.checksums_equal && result.ten_percent_gate && result.paired_wins >= 9
+        });
 
     let g6 = [512_usize, 1024, 2048, 4096].into_iter().all(|bits| {
-        results.iter().find(|result| {
-            result.bits == bits
-                && result.schedule == ScheduleKind::AffineUniform
-                && result.q == bits
-        }).is_some_and(|result| result.checksums_equal && result.ten_percent_gate)
+        results
+            .iter()
+            .find(|result| {
+                result.bits == bits
+                    && result.schedule == ScheduleKind::AffineUniform
+                    && result.q == bits
+            })
+            .is_some_and(|result| result.checksums_equal && result.ten_percent_gate)
     });
 
     let repetitions_valid = results.iter().all(|result| {
@@ -802,11 +769,9 @@ fn benchmark() {
     let deterministic_valid =
         deterministic.g1 && deterministic.g2 && deterministic.g3 && deterministic.g4;
     let cells_valid = results.len() == physical_cells().len()
-        && results.iter().all(|result| {
-            result.checksums_equal
-                && result.q > 0
-                && result.q <= result.bits
-        });
+        && results
+            .iter()
+            .all(|result| result.checksums_equal && result.q > 0 && result.q <= result.bits);
     let g7 = repetitions_valid
         && runner_valid
         && deterministic_valid
