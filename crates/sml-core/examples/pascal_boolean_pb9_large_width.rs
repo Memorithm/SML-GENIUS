@@ -7,24 +7,12 @@
 //! - deterministic: mandatory exactness/accounting through K=1,048,576.
 //! - benchmark: mandatory physical panels plus resource-bounded extensions.
 
-use std::{
-    collections::BTreeSet,
-    env, fs,
-    hint::black_box,
-    time::Instant,
-};
+use std::{collections::BTreeSet, env, fs, hint::black_box, time::Instant};
 
 use sml_core::pascal_gf2::{pascal_gf2_in_place, PascalGf2Stats};
 
 const MANDATORY_WIDTHS: [usize; 8] = [
-    8_192,
-    16_384,
-    32_768,
-    65_536,
-    131_072,
-    262_144,
-    524_288,
-    1_048_576,
+    8_192, 16_384, 32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576,
 ];
 
 const EXTENSION_WIDTHS: [usize; 8] = [
@@ -111,28 +99,27 @@ fn set_bit(words: &mut [u64], index: usize) {
 }
 
 fn source_words(bits: usize, sample: usize) -> Vec<u64> {
-    let seed = BASE
-        ^ (bits as u64).rotate_left(17)
-        ^ (sample as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let seed =
+        BASE ^ (bits as u64).rotate_left(17) ^ (sample as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let mut stream = Stream::new(seed);
     (0..words_for(bits)).map(|_| stream.next()).collect()
 }
 
 fn sources(bits: usize, count: usize) -> Vec<Vec<u64>> {
-    (0..count).map(|sample| source_words(bits, sample)).collect()
+    (0..count)
+        .map(|sample| source_words(bits, sample))
+        .collect()
 }
 
 fn word_checksum(words: &[u64]) -> u64 {
-    words.iter().enumerate().fold(
-        0xcbf2_9ce4_8422_2325_u64,
-        |checksum, (index, &word)| {
-            checksum
-                .rotate_left(9)
-                .wrapping_mul(0x1000_0000_01b3)
+    words
+        .iter()
+        .enumerate()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |checksum, (index, &word)| {
+            checksum.rotate_left(9).wrapping_mul(0x1000_0000_01b3)
                 ^ word
                 ^ (index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
-        },
-    )
+        })
 }
 
 fn checksum_push(
@@ -226,10 +213,7 @@ fn analytic_fixture_mismatches(bits: usize) -> (u64, PascalGf2Stats) {
     let mut basis_zero = vec![0_u64; words];
     set_bit(&mut basis_zero, 0);
     pascal_gf2_in_place(&mut basis_zero).expect("PB9 basis-zero fixture");
-    mismatches += basis_zero
-        .iter()
-        .filter(|&&word| word != u64::MAX)
-        .count() as u64;
+    mismatches += basis_zero.iter().filter(|&&word| word != u64::MAX).count() as u64;
 
     let mut basis_half = vec![0_u64; words];
     set_bit(&mut basis_half, bits / 2);
@@ -243,11 +227,7 @@ fn analytic_fixture_mismatches(bits: usize) -> (u64, PascalGf2Stats) {
     set_bit(&mut basis_last, bits - 1);
     pascal_gf2_in_place(&mut basis_last).expect("PB9 basis-last fixture");
     for (index, &word) in basis_last.iter().enumerate() {
-        let expected = if index + 1 == words {
-            1_u64 << 63
-        } else {
-            0
-        };
+        let expected = if index + 1 == words { 1_u64 << 63 } else { 0 };
         mismatches += u64::from(word != expected);
     }
 
@@ -278,11 +258,7 @@ struct DeterministicEvidence {
 
 fn mandatory_width_evidence(bits: usize) -> WidthEvidence {
     let dense_sources = sources(bits, DETERMINISTIC_SOURCES);
-    let unique = dense_sources
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>()
-        .len();
+    let unique = dense_sources.iter().cloned().collect::<BTreeSet<_>>().len();
     let source_collisions = DETERMINISTIC_SOURCES - unique;
 
     let (analytic_mismatches, stats) = analytic_fixture_mismatches(bits);
@@ -305,18 +281,16 @@ fn mandatory_width_evidence(bits: usize) -> WidthEvidence {
         let mut transformed = source.clone();
         pascal_gf2_in_place(&mut transformed).expect("PB9 sampled transform");
         for &address in &addresses {
-            sampled_direct_mismatches += u64::from(
-                get_bit(&transformed, address) != direct_submask_parity(source, address),
-            );
+            sampled_direct_mismatches +=
+                u64::from(get_bit(&transformed, address) != direct_submask_parity(source, address));
         }
     }
 
     let designated = &dense_sources[0];
     let mut transformed = designated.clone();
     pascal_gf2_in_place(&mut transformed).expect("PB9 last-address transform");
-    let last_address_mismatch = u64::from(
-        get_bit(&transformed, bits - 1) != direct_submask_parity(designated, bits - 1),
-    );
+    let last_address_mismatch =
+        u64::from(get_bit(&transformed, bits - 1) != direct_submask_parity(designated, bits - 1));
 
     let logical = logical_fast_zeta(designated, bits);
     let logical_reference_mismatches = (0..bits)
@@ -534,14 +508,11 @@ fn bench_transform(bits: usize, warmups: usize, reps: usize) -> TransformBench {
 }
 
 fn emit_transform_bench(panel: &str, bench: &TransformBench) {
-    let bits_per_second =
-        (bench.bits as u128 * 1_000_000_000_u128) / bench.kernel_median.max(1);
-    let xor_per_second =
-        (expected_logical_xor(bench.bits) as u128 * 1_000_000_000_u128)
-            / bench.kernel_median.max(1);
-    let packed_per_second =
-        (expected_packed_updates(bench.bits) as u128 * 1_000_000_000_u128)
-            / bench.kernel_median.max(1);
+    let bits_per_second = (bench.bits as u128 * 1_000_000_000_u128) / bench.kernel_median.max(1);
+    let xor_per_second = (expected_logical_xor(bench.bits) as u128 * 1_000_000_000_u128)
+        / bench.kernel_median.max(1);
+    let packed_per_second = (expected_packed_updates(bench.bits) as u128 * 1_000_000_000_u128)
+        / bench.kernel_median.max(1);
 
     println!(
         "PB9_BENCH_TRANSFORM,panel={},bits={},kernel_times_ns={},kernel_median_ns={},kernel_p95_ns={},materialize_times_ns={},materialize_median_ns={},materialize_p95_ns={},bits_per_second={},logical_xor_per_second={},packed_updates_per_second={},state_bytes={},checksum={:016x},stable={},rss_before_kib={},rss_after_kib={},hwm_after_kib={}",
@@ -588,9 +559,7 @@ fn extension_correctness(bits: usize) -> (u64, u64, bool, u64) {
 }
 
 fn query_schedule(bits: usize) -> Vec<usize> {
-    (0..bits)
-        .map(|index| (405 * index + 17) % bits)
-        .collect()
+    (0..bits).map(|index| (405 * index + 17) % bits).collect()
 }
 
 fn direct_reads_for_prefix(addresses: &[usize], q: usize) -> u64 {
@@ -601,12 +570,7 @@ fn direct_reads_for_prefix(addresses: &[usize], q: usize) -> u64 {
         .sum()
 }
 
-fn query_pascal(
-    sources: &[Vec<u64>],
-    addresses: &[usize],
-    q: usize,
-    workspace: &mut [u64],
-) -> u64 {
+fn query_pascal(sources: &[Vec<u64>], addresses: &[usize], q: usize, workspace: &mut [u64]) -> u64 {
     let mut checksum = 0_u64;
     for (sample, source) in sources.iter().enumerate() {
         workspace.copy_from_slice(source);
@@ -640,12 +604,7 @@ fn query_direct(sources: &[Vec<u64>], addresses: &[usize], q: usize) -> u64 {
     checksum
 }
 
-fn query_copy(
-    sources: &[Vec<u64>],
-    addresses: &[usize],
-    q: usize,
-    workspace: &mut [u64],
-) -> u64 {
+fn query_copy(sources: &[Vec<u64>], addresses: &[usize], q: usize, workspace: &mut [u64]) -> u64 {
     let mut checksum = 0_u64;
     for (sample, source) in sources.iter().enumerate() {
         workspace.copy_from_slice(source);
@@ -688,12 +647,7 @@ fn bench_query(bits: usize, q: usize) -> QueryBench {
 
     for warmup in 0..QUERY_WARMUPS {
         if warmup % 2 == 0 {
-            black_box(query_pascal(
-                &query_sources,
-                &addresses,
-                q,
-                &mut workspace,
-            ));
+            black_box(query_pascal(&query_sources, &addresses, q, &mut workspace));
             black_box(query_direct(&query_sources, &addresses, q));
         } else {
             black_box(query_direct(&query_sources, &addresses, q));
@@ -704,12 +658,7 @@ fn bench_query(bits: usize, q: usize) -> QueryBench {
                 &mut workspace,
             ));
         }
-        black_box(query_copy(
-            &query_sources,
-            &addresses,
-            q,
-            &mut workspace,
-        ));
+        black_box(query_copy(&query_sources, &addresses, q, &mut workspace));
     }
 
     let mut a_times = Vec::with_capacity(QUERY_REPS);
@@ -887,7 +836,9 @@ fn benchmark() {
             },
             &bench,
         );
-        if !bench.stable || bench.kernel_times.len() != reps || bench.materialize_times.len() != reps
+        if !bench.stable
+            || bench.kernel_times.len() != reps
+            || bench.materialize_times.len() != reps
         {
             extension_valid = false;
             println!("PB9_EXTENSION_STOP,bits={bits},reason=BENCHMARK_SANITY");
@@ -954,7 +905,11 @@ fn benchmark() {
     );
     println!(
         "PB9_GATE,L3_MANDATORY_PHYSICAL_SANITY,{}",
-        if l3 && query_sanity { "HOLDS" } else { "INVALID" }
+        if l3 && query_sanity {
+            "HOLDS"
+        } else {
+            "INVALID"
+        }
     );
     println!(
         "PB9_GATE,L4_ONE_MILLION_EXECUTION,{}",
