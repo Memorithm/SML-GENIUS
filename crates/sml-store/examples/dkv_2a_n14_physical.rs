@@ -716,7 +716,8 @@ const MEASURE_PASSES: usize = 8;
 enum PhysicalArm {
     Primary,
     Mixed,
-    Direct,
+    DirectPrimary,
+    DirectMixed,
 }
 
 impl PhysicalArm {
@@ -724,8 +725,9 @@ impl PhysicalArm {
         match value {
             "primary" => Self::Primary,
             "mixed" => Self::Mixed,
-            "direct" => Self::Direct,
-            _ => panic!("arm must be primary|mixed|direct"),
+            "direct-primary" => Self::DirectPrimary,
+            "direct-mixed" => Self::DirectMixed,
+            _ => panic!("arm must be primary|mixed|direct-primary|direct-mixed"),
         }
     }
 
@@ -733,12 +735,17 @@ impl PhysicalArm {
         match self {
             Self::Primary => "PRIMARY",
             Self::Mixed => "MIXED",
-            Self::Direct => "DIRECT",
+            Self::DirectPrimary => "DIRECT_PRIMARY",
+            Self::DirectMixed => "DIRECT_MIXED",
         }
     }
 
     const fn uses_overrides(self) -> bool {
-        matches!(self, Self::Mixed | Self::Direct)
+        matches!(self, Self::Mixed | Self::DirectMixed)
+    }
+
+    const fn is_direct(self) -> bool {
+        matches!(self, Self::DirectPrimary | Self::DirectMixed)
     }
 }
 
@@ -1081,7 +1088,7 @@ fn one_query<const K: usize>(
     accounting: &mut ResolveAccounting,
 ) -> ResolveResult {
     let route = secondary_route(fact.page);
-    if arm == PhysicalArm::Direct {
+    if arm.is_direct() {
         let result = direct_resolve::<K>(banks, directory, base_seed, fact, &route);
         accounting.matrix_reads += result.matrix_reads;
         match result.bank {
@@ -1237,7 +1244,7 @@ fn run_cell<const K: usize>(pop: usize, arm: PhysicalArm) -> Aggregate {
                 aggregate.exact += u64::from(result.value == Some(expected_target(arm, fact)));
                 aggregate.bank_mismatch +=
                     u64::from(result.bank != Some(expected_bank(arm, fact)));
-                if arm != PhysicalArm::Direct {
+                if !arm.is_direct() {
                     aggregate.non_verified +=
                         u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
                 }
@@ -1409,7 +1416,7 @@ fn execute<const K: usize>(pop: usize, arm: PhysicalArm) {
             == aggregate.warmup_exact * MEASURE_PASSES as u64
         && aggregate.non_verified == 0
         && aggregate.bank_mismatch == 0
-        && (arm == PhysicalArm::Direct || aggregate.verified == expected_measured)
+        && (arm.is_direct() || aggregate.verified == expected_measured)
         && aggregate.matrix_reads == expected_measured
         && aggregate.primary_reads == expected_primary
         && aggregate.ordered_reads == expected_ordered;
@@ -1474,7 +1481,7 @@ fn main() {
     assert_eq!(
         args.len(),
         4,
-        "usage: dkv_2a_n14_physical <256|1024> <primary|mixed|direct> <population 0|1|2>"
+        "usage: dkv_2a_n14_physical <256|1024> <primary|mixed|direct-primary|direct-mixed> <population 0|1|2>"
     );
     let width = args[1].parse::<usize>().expect("width");
     let arm = PhysicalArm::parse(&args[2]);
