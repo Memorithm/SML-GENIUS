@@ -517,10 +517,15 @@ Stop rule: if PGF2 does not beat the best matched reversible Boolean control on 
 declared SBG objective after full transform cost is included, retain it as a
 negative result and do not place it on the default SML path.
 
-Current evidence applies specifically to the **global K=2048 transform**.
-`docs/SML-PGF2-3-SBG-ABLATION-OBSERVATION.md` is the retained result and
-`research/pgf2-3/` contains the replay/manifest. A block-local, reordered or
-otherwise differently oriented Pascal construction is a distinct candidate: it
-must receive a new preregistration and cannot reinterpret the failed PGF2-3 gate
-as authorization for PGF2-4.
+Current representation-mixing evidence covers both the **global K=2048
+transform** and the preregistered **block-local 64/128/256/512** rescue. Global
+PGF2-3 is retained in `docs/SML-PGF2-3-SBG-ABLATION-OBSERVATION.md` and
+`research/pgf2-3/`; block-local PGF2-3B is retained in
+`docs/SML-PGF2-3B-BLOCK-LOCAL-OBSERVATION.md` and `research/pgf2-3b/`.
+PGF2-3B improves locality/cost and the failed global h=64 result but does not
+recover the preregistered structured geometry/noise gates at any tested block
+width. The current Pascal-as-general-SBG-representation-mixer branch is therefore
+closed and PGF2-4 remains blocked. Future Pascal work requires a different
+prospectively declared objective, not another post-hoc block size, coordinate
+ordering or orientation.
 

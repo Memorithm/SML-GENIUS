@@ -574,8 +574,9 @@ promote Delta-KV context integration or establish model-quality superiority.
 
 ## PGF2 — Pascal-GF(2) reversible Boolean mixer
 
-Status: global K=2048 component qualification complete with a retained negative
-SBG result. The durable architectural contract is in
+Status: global and block-local K=2048 representation-mixing qualification is
+complete with retained negative SBG results. The current Pascal-as-general-SBG-
+representation-mixer branch is closed. The durable architectural contract is in
 `BOOTSTRAP.md#pascal-gf2--sierpiński-reversible-mixer-research-track`.
 
 ### Research question
@@ -599,8 +600,8 @@ floating-point semantics?
   [SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md](SML-PGF2-3-SBG-ABLATION-PREREGISTRATION.md)
   and retained in
   [SML-PGF2-3-SBG-ABLATION-OBSERVATION.md](SML-PGF2-3-SBG-ABLATION-OBSERVATION.md).
-- [ ] **PGF2-4**: **BLOCKED for global K=2048 PGF2**. PGF2-3 selection is
-  `NONE`; no MOR/Delta-KV handoff is authorized.
+- [ ] **PGF2-4**: **BLOCKED for global and block-local K=2048 PGF2**. PGF2-3
+  and PGF2-3B both select `NONE`; no MOR/Delta-KV handoff is authorized.
 - [ ] **PGF2-5**: blocked because the component gate did not pass.
 
 PGF2-3 retained result: exactness, random-control sanity, the preregistered
@@ -614,14 +615,14 @@ Any future block-local, reordered or differently oriented Pascal construction is
 a new candidate requiring an independent preregistration; it does not reopen or
 overwrite the global PGF2-3 result.
 
-- [ ] **PGF2-3B**: bounded block-local locality-rescue test at total K=2048,
-  freezing block widths 64/128/256/512 and the original PGF2-3 fixtures before
-  execution; protocol:
-  [SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md](SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md).
-  It may retain a block-local component candidate only if one width simultaneously
-  recovers near-control geometry/noise behavior, materially improves the failed
-  global PGF2 at h=64, respects the bounded amplification gate and reduces
-  structural work. Otherwise the Pascal-as-SBG-representation branch closes.
+- [x] **PGF2-3B**: block-local 64/128/256/512 rescue executed and retained.
+  Locality reduces amplification and structural work and B64 improves the failed
+  global candidate at h=64, but no width satisfies the required structured
+  geometry + low/moderate-noise joint gate. Selection is `NONE`,
+  `representation_mixing=CLOSE`, and PGF2-4 remains blocked. Protocol:
+  [SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md](SML-PGF2-3B-BLOCK-LOCAL-PREREGISTRATION.md);
+  observation:
+  [SML-PGF2-3B-BLOCK-LOCAL-OBSERVATION.md](SML-PGF2-3B-BLOCK-LOCAL-OBSERVATION.md).
 
 ### Mandatory measurements
 
