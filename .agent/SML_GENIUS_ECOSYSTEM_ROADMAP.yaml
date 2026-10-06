@@ -42,9 +42,14 @@ pascal_vector_projection_program_2026_10_06:
       pull_request: 1538
       merge_sha: 1405a81fcd1ac3b22ca2cd8baffd22a9af18c506
     SciRust_PVP1_SVE:
-      status: exact_head_CI_in_progress_QEMU_SVE_execution_green
+      status: merged_qualified_SVE_execution_candidate
       pull_request: 1540
       exact_head: 110e7bef528dc25e0d18af9a204834ef54cb60dd
+      merge_sha: a89282f46fc7ace3a5939a9d98547e0338cba735
+      evidence:
+        - aarch64_nightly_compile_green
+        - QEMU_SVE_exact_candidate_vs_scalar_execution_green
+        - auto_dispatch_prefers_SVE_on_SVE_runtime_green
       performance_claim: blocked_until_native_SVE_measurement
     FLAT_PVP0_FLAT1:
       status: merged_qualified_scalar_WGPU_reference
@@ -78,7 +83,6 @@ pascal_vector_projection_program_2026_10_06:
       merge_sha: 01e6c2ec99e99b089b5a98f4ee784a237fe6dc64
     promotion_boundary:
       - none_of_these_component_results_authorizes_attention_replacement_or_model_quality_claims
-      - SciRust_SVE_must_close_exact_head_CI_before_SVE_downstream_promotion
       - final_SML_internalization_remains_blocked_until_cross_backend_and_model_aligned_evidence
   model_sovereignty:
     - SML_GENIUS_is_the_model_and_scientific_authority
