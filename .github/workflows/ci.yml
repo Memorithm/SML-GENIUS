@@ -135,6 +135,22 @@ jobs:
           set -euo pipefail
           echo "PB8_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
           cargo run --locked --release -p sml-core --example pascal_boolean_pb8_gate_bank -- benchmark
+      - name: PB9 deterministic large-width Pascal evidence
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb9-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb9_large_width -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb9-first.csv"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb9_large_width -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb9-second.csv"
+          cmp "$RUNNER_TEMP/pascal-boolean-pb9-first.csv" "$RUNNER_TEMP/pascal-boolean-pb9-second.csv"
+          cat "$RUNNER_TEMP/pascal-boolean-pb9-first.csv"
+      - name: PB9 physical large-width Pascal scaling
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb9-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PB9_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb9_large_width -- benchmark
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
