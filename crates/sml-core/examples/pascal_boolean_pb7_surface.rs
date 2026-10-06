@@ -572,7 +572,9 @@ struct BenchResult {
     a_p95: u128,
     b_p95: u128,
     c_p95: u128,
-    checksum: u64,
+    a_checksum: u64,
+    b_checksum: u64,
+    c_checksum: u64,
     checksums_equal: bool,
     paired_wins: usize,
     ten_percent_gate: bool,
@@ -640,8 +642,10 @@ fn benchmark_cell(bits: usize, kind: ScheduleKind, q: usize) -> BenchResult {
     let a_median = median(&a_times);
     let b_median = median(&b_times);
     let c_median = median(&c_times);
-    let checksum = a_checksums.first().copied().unwrap_or_default();
-    let stable_a = a_checksums.iter().all(|&value| value == checksum);
+    let a_checksum = a_checksums.first().copied().unwrap_or_default();
+    let b_checksum = b_checksums.first().copied().unwrap_or_default();
+    let c_checksum = c_checksums.first().copied().unwrap_or_default();
+    let stable_a = a_checksums.iter().all(|&value| value == a_checksum);
     let stable_b = b_checksums
         .first()
         .is_some_and(|&first| b_checksums.iter().all(|&value| value == first));
@@ -651,8 +655,8 @@ fn benchmark_cell(bits: usize, kind: ScheduleKind, q: usize) -> BenchResult {
     let checksums_equal = stable_a
         && stable_b
         && stable_c
-        && b_checksums.first().copied() == Some(checksum)
-        && c_checksums.first().copied() == Some(checksum);
+        && b_checksum == a_checksum
+        && c_checksum == a_checksum;
 
     let paired_wins = (0..MEASURED_REPS)
         .filter(|&index| a_times[index] < b_times[index].min(c_times[index]))
@@ -673,7 +677,9 @@ fn benchmark_cell(bits: usize, kind: ScheduleKind, q: usize) -> BenchResult {
         a_median,
         b_median,
         c_median,
-        checksum,
+        a_checksum,
+        b_checksum,
+        c_checksum,
         checksums_equal,
         paired_wins,
         ten_percent_gate,
@@ -729,7 +735,7 @@ fn benchmark() {
             result.a_median,
             result.a_p95,
             states_per_second(result.a_median),
-            result.checksum
+            result.a_checksum
         );
         println!(
             "PB7_BENCH_ARM,bits={},schedule={},q={},arm={},times_ns={},median_ns={},p95_ns={},states_per_second={},checksum={:016x}",
@@ -741,7 +747,7 @@ fn benchmark() {
             result.b_median,
             result.b_p95,
             states_per_second(result.b_median),
-            result.checksum
+            result.b_checksum
         );
         println!(
             "PB7_BENCH_ARM,bits={},schedule={},q={},arm={},times_ns={},median_ns={},p95_ns={},states_per_second={},checksum={:016x}",
@@ -753,7 +759,7 @@ fn benchmark() {
             result.c_median,
             result.c_p95,
             states_per_second(result.c_median),
-            result.checksum
+            result.c_checksum
         );
         println!(
             "PB7_BENCH_COMPARE,bits={},schedule={},q={},faster_control_median_ns={},paired_wins_a_of_12={},ten_percent_gate={},checksums_equal={}",
