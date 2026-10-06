@@ -103,6 +103,22 @@ jobs:
           set -euo pipefail
           echo "PB6_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
           cargo run --locked --release -p sml-core --example pascal_boolean_pb6_utility -- benchmark
+      - name: PB7 deterministic Pascal utility-surface evidence
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb7-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb7_surface -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb7-first.csv"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb7_surface -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb7-second.csv"
+          cmp "$RUNNER_TEMP/pascal-boolean-pb7-first.csv" "$RUNNER_TEMP/pascal-boolean-pb7-second.csv"
+          cat "$RUNNER_TEMP/pascal-boolean-pb7-first.csv"
+      - name: PB7 physical Pascal utility-surface benchmark
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb7-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PB7_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb7_surface -- benchmark
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
