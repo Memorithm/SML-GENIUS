@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 210,
+  "protocol_merge": "e9c771ab411c48bedb72fc54f5acda1e72fe7d16",
+  "implementation_pr": 211,
+  "executed_code_head": "fa29a7fd6ce82736daeb3b7f1dce8d5892fbdbb9",
+  "implementation_merge": "ed9eae2c66e9936827660814a8da7d0b2e8500d8",
+  "github_actions_run": 37429866442,
+  "job": 112157954175,
+  "runner": "tarek-scirust-arm64-01",
+  "machine": "tarek",
+  "rust": "1.89.0",
+  "target": "aarch64-unknown-linux-gnu",
+  "retained_lines": 85,
+  "output_sha256": "6d9f0b515ac2f31304811b9f603afd151c79458626b94bc8da16523ba52d2cf9",
+  "cross_run_byte_identical": true,
+  "width_bits": 2048,
+  "functions": {
+    "PB1_P_ZETA": "RETAIN_FUNCTION",
+    "PB2_P_ROUTER": "RETAIN_FUNCTION",
+    "PB3_P_ANF": "RETAIN_FUNCTION",
+    "PB4_P_FEISTEL": "RETAIN_FUNCTION"
+  },
+  "PB5": "READY_FOR_COMPOSED_PREREGISTRATION",
+  "model_promotion": "BLOCKED"
+}
