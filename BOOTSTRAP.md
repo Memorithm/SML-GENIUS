@@ -544,17 +544,26 @@ outside the closed representation-mixing objective.
 - PB-5 composed functional evaluation: retained after 131,072 independent
   state/address comparisons with zero end-to-end mismatches; all C1..C6 gates
   hold and the frozen decision is `RETAIN_COMPOSED_FUNCTION`.
+- PB-6 matched task utility: retained on the frozen K=2048 subset-parity task.
+  U1..U6 hold; P-ZETA median whole-pipeline time is 3.368060 ms versus
+  13.344107 ms for the faster matched control, a 3.961956x median speedup with
+  20/20 paired wins and exact checksum equality. The advantage is task-bounded,
+  not a model-wide speedup claim.
 
 Protocol and retained evidence are in
 `docs/SML-PASCAL-BOOLEAN-SUITE-PREREGISTRATION.md`,
 `docs/SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md`,
 `docs/SML-PASCAL-BOOLEAN-PB5-PREREGISTRATION.md`,
 `docs/SML-PASCAL-BOOLEAN-PB5-OBSERVATION.md`,
-`research/pascal-boolean-suite/` and
-`research/pascal-boolean-pb5/`.
+`docs/SML-PASCAL-BOOLEAN-PB6-TASK-UTILITY-PREREGISTRATION.md`,
+`docs/SML-PASCAL-BOOLEAN-PB6-TASK-UTILITY-OBSERVATION.md`,
+`research/pascal-boolean-suite/`,
+`research/pascal-boolean-pb5/` and
+`research/pascal-boolean-pb6/`.
 
-The next justified Pascal experiment must test measurable task utility against
-matched controls. These positive functional results do not reopen PGF2-4 and do
-not by themselves promote Pascal operators into SBG, MOR, Delta-KV, context or
-model architecture.
+The next justified Pascal work is a prospectively declared generalization
+campaign over width, query load, address population and stronger matched
+controls, followed by a separate model-aligned task protocol if the signal
+survives. PB-6 does not reopen PGF2-4 and does not by itself promote Pascal
+operators into SBG, MOR, Delta-KV, context or model architecture.
 
