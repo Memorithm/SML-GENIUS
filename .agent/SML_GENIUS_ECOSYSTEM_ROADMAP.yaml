@@ -25,6 +25,8 @@ ax_task_program:
     - adaptive_resource_changes_remain_explicit_in_comparison_evidence
 pascal_vector_projection_program_2026_10_06:
   status: active_research_program
+  main_contract_pr: 227
+  main_contract_merge: 17fcbdbf7775f060f4403bcba56256fb650dd40b
   objective: >-
     Compile retained Pascal/subset-zeta and massive ANF-bank semantics into
     regular bit-sliced/vector-register and portable GPU execution layouts,
