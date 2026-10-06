@@ -529,3 +529,25 @@ closed and PGF2-4 remains blocked. Future Pascal work requires a different
 prospectively declared objective, not another post-hoc block size, coordinate
 ordering or orientation.
 
+### Pascal-Boolean functional suite
+
+A separate prospectively declared functional track now tests Pascal/GF(2)
+outside the closed representation-mixing objective.
+
+- PB-1 P-ZETA: retained exact subset-parity aggregation at K=2048;
+- PB-2 P-ROUTER: retained exact implicit submask routing across all 2,048
+  eleven-bit addresses;
+- PB-3 P-ANF: retained exact truth-table <-> ANF conversion, with random-control
+  evidence showing that low-degree truncation is not a generic approximation;
+- PB-4 P-FEISTEL: retained reversible nonlinear composition at 2/4/6 rounds,
+  with zero inverse/collision failures and explicit nonlinearity witnesses;
+- PB-5 composed functional evaluation: ready for separate preregistration.
+
+Protocol, retained observation and replay are in
+`docs/SML-PASCAL-BOOLEAN-SUITE-PREREGISTRATION.md`,
+`docs/SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md` and
+`research/pascal-boolean-suite/`.
+
+These positive functional results do not reopen PGF2-4 and do not by themselves
+promote Pascal operators into SBG, MOR, Delta-KV, context or model architecture.
+
