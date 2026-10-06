@@ -5,12 +5,7 @@
 //! Protocol: docs/SML-DKV-2A-N14-PHYSICAL-PREREGISTRATION.md.
 //! Harness-only: retained q=3 two-bank and N12 identity/provenance APIs are unchanged.
 
-use std::{
-    collections::BTreeMap,
-    env, fs,
-    path::Path,
-    time::Instant,
-};
+use std::{collections::BTreeMap, env, fs, path::Path, time::Instant};
 
 use sml_core::{
     context_ledger::{ContextSegmentId, ContextSegmentRef, ContextStreamId, RawContextLedger},
@@ -707,7 +702,6 @@ fn resolve<const K: usize>(
     }
 }
 
-
 const N14_SEEDS: u64 = 8;
 const WARMUP_PASSES: usize = 2;
 const MEASURE_PASSES: usize = 8;
@@ -889,7 +883,10 @@ fn io_snapshot() -> Option<IoSnapshot> {
 fn fault_snapshot() -> Option<FaultSnapshot> {
     let text = fs::read_to_string("/proc/self/stat").ok()?;
     let close = text.rfind(')')?;
-    let fields = text.get(close + 1..)?.split_whitespace().collect::<Vec<_>>();
+    let fields = text
+        .get(close + 1..)?
+        .split_whitespace()
+        .collect::<Vec<_>>();
     Some(FaultSnapshot {
         minor: fields.get(7)?.parse().ok()?,
         major: fields.get(9)?.parse().ok()?,
@@ -1064,7 +1061,10 @@ fn direct_resolve<const K: usize>(
     let bank_id = usize::from(bank == Bank::Ordered);
     let query_key = hybrid_key::<K>(bank_id, base_seed, &fact.state, route);
     let before = banks.memory(bank).numeric_counters().reads;
-    let values = banks.memory_mut(bank).read(&query_key).expect("direct read");
+    let values = banks
+        .memory_mut(bank)
+        .read(&query_key)
+        .expect("direct read");
     let after = banks.memory(bank).numeric_counters().reads;
     let read_delta = after - before;
     assert_eq!(read_delta, 1);
@@ -1181,15 +1181,11 @@ fn run_cell<const K: usize>(pop: usize, arm: PhysicalArm) -> Aggregate {
             build_world::<K>(seed, pop, arm);
         let history_started = Instant::now();
         let history = verified_history(&source);
-        let history_ns =
-            u64::try_from(history_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let history_ns = u64::try_from(history_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
         aggregate
             .build_ns
             .push(preliminary_build_ns.saturating_add(history_ns));
-        observe_memory(
-            &mut aggregate.rss_build_max,
-            &mut aggregate.hwm_build_max,
-        );
+        observe_memory(&mut aggregate.rss_build_max, &mut aggregate.hwm_build_max);
 
         let order = deterministic_order(seed, pop);
         let base_seed = seed * 1000 + 17;
@@ -1212,10 +1208,7 @@ fn run_cell<const K: usize>(pop: usize, arm: PhysicalArm) -> Aggregate {
                     u64::from(result.value == Some(expected_target(arm, fact)));
             }
         }
-        observe_memory(
-            &mut aggregate.rss_warm_max,
-            &mut aggregate.hwm_warm_max,
-        );
+        observe_memory(&mut aggregate.rss_warm_max, &mut aggregate.hwm_warm_max);
 
         let io_before = io_snapshot();
         let faults_before = fault_snapshot();
@@ -1242,8 +1235,7 @@ fn run_cell<const K: usize>(pop: usize, arm: PhysicalArm) -> Aggregate {
                     .push(u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
                 aggregate.measured_n += 1;
                 aggregate.exact += u64::from(result.value == Some(expected_target(arm, fact)));
-                aggregate.bank_mismatch +=
-                    u64::from(result.bank != Some(expected_bank(arm, fact)));
+                aggregate.bank_mismatch += u64::from(result.bank != Some(expected_bank(arm, fact)));
                 if !arm.is_direct() {
                     aggregate.non_verified +=
                         u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
@@ -1307,7 +1299,9 @@ fn nearest_rank(sorted: &[u64], percent: usize) -> u64 {
 
 fn print_distribution(label: &str, mut values: Vec<u64>) {
     values.sort_unstable();
-    let total = values.iter().fold(0_u128, |acc, value| acc + u128::from(*value));
+    let total = values
+        .iter()
+        .fold(0_u128, |acc, value| acc + u128::from(*value));
     println!(
         "N14_{label},samples={},min_ns={},p50_ns={},p95_ns={},p99_ns={},max_ns={},total_ns={}",
         values.len(),
@@ -1412,8 +1406,7 @@ fn execute<const K: usize>(pop: usize, arm: PhysicalArm) {
     let expected_primary = expected_measured - expected_ordered;
     let semantics_hold = aggregate.measured_n == expected_measured
         && aggregate.warmup_n == expected_warmup
-        && aggregate.exact * WARMUP_PASSES as u64
-            == aggregate.warmup_exact * MEASURE_PASSES as u64
+        && aggregate.exact * WARMUP_PASSES as u64 == aggregate.warmup_exact * MEASURE_PASSES as u64
         && aggregate.non_verified == 0
         && aggregate.bank_mismatch == 0
         && (arm.is_direct() || aggregate.verified == expected_measured)
@@ -1428,8 +1421,7 @@ fn execute<const K: usize>(pop: usize, arm: PhysicalArm) {
     let io_hold = aggregate.io_available_batches == N14_SEEDS
         && aggregate.io.read_bytes == 0
         && aggregate.io.write_bytes == 0;
-    let faults_hold =
-        aggregate.fault_available_batches == N14_SEEDS && aggregate.faults.major == 0;
+    let faults_hold = aggregate.fault_available_batches == N14_SEEDS && aggregate.faults.major == 0;
     let single_read_hold = aggregate.matrix_reads == expected_measured
         && aggregate.primary_reads + aggregate.ordered_reads == expected_measured;
     let energy_hold =
@@ -1454,7 +1446,11 @@ fn execute<const K: usize>(pop: usize, arm: PhysicalArm) {
     );
     println!(
         "N14_HYPOTHESIS,H2_INSTRUMENTATION,{}",
-        if instrumentation_hold { "HOLDS" } else { "REFUTED" }
+        if instrumentation_hold {
+            "HOLDS"
+        } else {
+            "REFUTED"
+        }
     );
     println!(
         "N14_HYPOTHESIS,H3_ZERO_BLOCK_IO,{}",
