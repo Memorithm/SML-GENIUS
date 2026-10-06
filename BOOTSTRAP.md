@@ -579,7 +579,18 @@ counts predict. This is measured implementation evidence, not a universal cost
 model.
 
 PB-7 satisfies the preregistered gate for defining a separate PB-8
-model-aligned task protocol. PB-6/PB-7 do not reopen PGF2-4 and do not by
-themselves promote Pascal operators into SBG, MOR, Delta-KV, context or model
-architecture.
+model-aligned task protocol.
+
+PB-8 is now preregistered in
+`docs/SML-PASCAL-BOOLEAN-PB8-MODEL-ALIGNED-GATE-PREREGISTRATION.md`. It tests
+16-gate banks of 11-feature Boolean/ANF predicates at four coefficient densities
+against sparse-ANF scan, direct submask query, generic truth materialization and
+a separately labelled hot-resident truth-table reference. The full deterministic
+matrix has 144 density/population/Q/reuse cells; the physical panel freezes 17
+cells on the qualified ARM64 runner. The experiment is a candidate
+admission/decision-gate workload only and does not modify current MOR or
+decision semantics.
+
+PB-6/PB-7/PB-8 do not reopen PGF2-4 and do not by themselves promote Pascal
+operators into SBG, MOR, Delta-KV, context or model architecture.
 

@@ -129,9 +129,17 @@ every full-domain cell. The retained K=2048 LOW_POPCOUNT boundary shows direct
 on-demand winning at Q=32 and Pascal missing the 10% threshold at Q=128. See
 `SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-OBSERVATION.md`.
 
-PB-8 may now be preregistered as a separate model-aligned task study with
-competent task-native controls. No SBG/MOR/Delta-KV/context/model promotion
-follows from PB-6 or PB-7 alone.
+PB-8 is preregistered as the first model-aligned Pascal task study. It
+treats 11-feature ANF predicates as candidate admission/decision gates and
+compares packed Pascal materialization against sparse ANF scan, direct submask
+query, generic truth materialization and a hot-resident truth-table reference.
+The frozen deterministic matrix spans coefficient density, record population,
+batch size and reuse; the physical panel tests materialization, dense-gate
+utility and amortization. See
+`SML-PASCAL-BOOLEAN-PB8-MODEL-ALIGNED-GATE-PREREGISTRATION.md`.
+
+No current MOR/decision implementation is changed by PB-8. A positive result
+can justify only a later separately preregistered integration arm.
 
 ## Semantic Boolean Geometry track
 
