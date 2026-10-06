@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 219,
+  "protocol_merge": "4d91b2dd9571052ec0bfc1174a7797611058df07",
+  "implementation_pr": 220,
+  "executed_code_head": "350f64e00a6210f6efb4492ecb766503999c714a",
+  "implementation_merge": "de1dc6265c0cc23e25486f9691e2730d325373e1",
+  "github_actions_run": 37451150142,
+  "job": 112227757121,
+  "runner": "tarek-scirust-arm64-01",
+  "machine": "tarek",
+  "rust": "1.89.0",
+  "target": "aarch64-unknown-linux-gnu",
+  "deterministic_retained_lines": 158,
+  "deterministic_sha256": "3bc01389cc6a21f839726551b365f6a2628ccaacc5b3d3dc31349455a94cc98d",
+  "deterministic_cross_run_byte_identical": true,
+  "physical_retained_lines": 91,
+  "physical_sha256": "dde1a3b3e6d7e4f3239d26c8a9215118fd12514c41cc3ebd4e4943dddd5b1cf0",
+  "widths_bits": [64, 128, 256, 512, 1024, 2048, 4096],
+  "deterministic_states_per_width": 64,
+  "physical_states_per_cell": 8,
+  "physical_cells": 21,
+  "warmups": 2,
+  "measured_repetitions": 12,
+  "full_domain_affine": {
+    "64": {"pascal_median_ns": 1338, "faster_control": "DIRECT_ON_DEMAND", "faster_control_median_ns": 4495, "paired_wins": 12},
+    "128": {"pascal_median_ns": 2560, "faster_control": "DIRECT_ON_DEMAND", "faster_control_median_ns": 13791, "paired_wins": 12},
+    "256": {"pascal_median_ns": 4986, "faster_control": "DIRECT_ON_DEMAND", "faster_control_median_ns": 42764, "paired_wins": 12},
+    "512": {"pascal_median_ns": 9893, "faster_control": "DIRECT_ON_DEMAND", "faster_control_median_ns": 134966, "paired_wins": 12},
+    "1024": {"pascal_median_ns": 20032, "faster_control": "GENERIC_FULL_PRECOMPUTE", "faster_control_median_ns": 424581, "paired_wins": 12},
+    "2048": {"pascal_median_ns": 57102, "faster_control": "GENERIC_FULL_PRECOMPUTE", "faster_control_median_ns": 1290144, "paired_wins": 12},
+    "4096": {"pascal_median_ns": 133712, "faster_control": "GENERIC_FULL_PRECOMPUTE", "faster_control_median_ns": 3880521, "paired_wins": 12}
+  },
+  "low_popcount_k2048": {
+    "q32": {"pascal_median_ns": 2250, "direct_median_ns": 782, "ten_percent_gate": false},
+    "q128": {"pascal_median_ns": 4018, "direct_median_ns": 4222, "ten_percent_gate": false},
+    "q512": {"pascal_median_ns": 11166, "direct_median_ns": 34342, "ten_percent_gate": true},
+    "q1024": {"pascal_median_ns": 20648, "direct_median_ns": 134157, "ten_percent_gate": true},
+    "q2048": {"pascal_median_ns": 45472, "direct_median_ns": 1235626, "ten_percent_gate": true}
+  },
+  "gates": {
+    "G1_exactness": "HOLDS",
+    "G2_storage_parity": "HOLDS",
+    "G3_full_domain_structural_advantage": "HOLDS",
+    "G4_address_popcount_bounds": "HOLDS",
+    "G5_pb6_signal_replication": "HOLDS",
+    "G6_width_generalization": "HOLDS",
+    "G7_benchmark_sanity": "HOLDS"
+  },
+  "decision": "RETAIN_GENERALIZED_UTILITY_SURFACE",
+  "model_promotion": "BLOCKED"
+}
