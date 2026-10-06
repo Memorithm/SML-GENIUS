@@ -141,13 +141,16 @@ utility and amortization. See
 No current MOR/decision implementation is changed by PB-8. A positive result
 can justify only a later separately preregistered integration arm.
 
-PB-9 is separately preregistered as the large-width scaling campaign. It
-requires exact execution at K=8,192, 16,384, 32,768, 65,536, 131,072,
-262,144, 524,288 and 1,048,576, with kernel/materialization timing and a
-matched K=1,048,576 query-utility gate. A resource-bounded extension may
-continue through K=268,435,456 while retaining explicit STOP_RESOURCE evidence
-instead of overcommitting CI. See
-`SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-PREREGISTRATION.md`.
+PB-9 large-width scaling is executed and retained. All L1..L6 gates hold.
+Exact mandatory evidence reaches K=1,048,576; its packed 128 KiB state transforms
+in 183.634 us median on the pinned ARM64 runner. At K=1,048,576 the frozen
+Q=2,048 affine task records 903.755 us for Pascal versus 17.606782 ms direct
+(19.4818x, 12/12 paired wins), while Q=128 remains a retained direct-evaluation
+win. The resource-bounded extension reaches the full preregistered deep ladder
+through K=268,435,456 without STOP_RESOURCE; the 32 MiB state has an 81.195066 ms
+kernel median. Decision:
+`RETAIN_LARGE_WIDTH_SCALING_AND_1M_UTILITY`. See
+`SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-OBSERVATION.md`.
 
 ## Semantic Boolean Geometry track
 
