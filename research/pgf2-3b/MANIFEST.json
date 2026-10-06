@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 204,
+  "protocol_merge": "aaee37d5aa38c056df5d7a1bd22fd0414f772c49",
+  "implementation_pr": 205,
+  "executed_code_head": "85db9739ee8eebe846f490e72b2189ab5a92f3df",
+  "implementation_merge": "44d16762a4923ab6370622ac86f7e4579581710c",
+  "github_actions_run": 37424429490,
+  "job": 112140758553,
+  "runner": "tarek-scirust-arm64-01",
+  "machine": "tarek",
+  "rust": "1.89.0",
+  "target": "aarch64-unknown-linux-gnu",
+  "retained_lines": 295,
+  "output_sha256": "75c471f5a80e0048105bdaa80bcb70a13b1980b8468c68facce87c695aefb5f6",
+  "prior_green_run": 37422055607,
+  "prior_green_job": 112133355171,
+  "prior_output_sha256": "75c471f5a80e0048105bdaa80bcb70a13b1980b8468c68facce87c695aefb5f6",
+  "cross_run_byte_identical": true,
+  "total_width_bits": 2048,
+  "block_widths": [64, 128, 256, 512],
+  "hypotheses": {
+    "H1_exactness": "HOLDS",
+    "H2_structured_geometry_rescue_any": "REFUTED",
+    "H3_low_noise_parity_any": "REFUTED",
+    "H4_moderate_noise_viability_any": "REFUTED",
+    "H5_global_improvement_any": "HOLDS",
+    "H6_random_control_sanity": "HOLDS",
+    "H7_bounded_amplification_any": "HOLDS",
+    "H8_cost_reduction_any": "HOLDS"
+  },
+  "candidate_gates": {
+    "PGF2_B64": "REFUTED",
+    "PGF2_B128": "REFUTED",
+    "PGF2_B256": "REFUTED",
+    "PGF2_B512": "REFUTED"
+  },
+  "selection": {
+    "representation_mixing": "CLOSE",
+    "arm": "NONE",
+    "PGF2_4": "BLOCKED"
+  },
+  "model_context_promotion": "BLOCKED"
+}
