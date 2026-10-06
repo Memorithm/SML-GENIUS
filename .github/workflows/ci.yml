@@ -224,91 +224,11 @@ jobs:
             done
           done
           cat "$out"/*.csv
-          if grep -q '^N14_HYPOTHESIS,H1_SEMANTICS,REFUTED      - name: Native RAM materialization evidence
-        run: cargo test --locked -p sml-runtime -- --nocapture
-      - name: Mapped semantic store evidence
-        run: cargo test --locked -p sml-store -- --nocapture
-      - name: Context streaming ingest evidence
-        run: cargo test --locked -p sml-store --test context_ingest -- --nocapture
-      - name: Context semantic/provenance emission evidence
-        run: cargo test --locked -p sml-store --test context_semantic_ingest -- --nocapture
-      - name: Lockfile reproducibility
-        run: bash scripts/check-lockfile.sh
-      - name: SBG-0.12 packed semantic benchmark
-        if: startsWith(github.head_ref, 'research/sbg-0.12')
-        run: cargo run --locked --release -p sml-cli -- sbg012-bench
-      - name: SBG-0.12 code-generation audit
-        if: startsWith(github.head_ref, 'research/sbg-0.12')
-        run: bash scripts/audit-sbg012-codegen.sh
-      - name: Contract probe
-        run: cargo run --locked -p sml-cli -- contract
-      - name: SML-0.1 smoke
-        run: cargo run --locked -p sml-cli -- sml01-smoke
-      - name: SML-0.2 smoke
-        run: cargo run --locked -p sml-cli -- sml02-smoke
-      - name: SML-0.3 smoke
-        run: cargo run --locked -p sml-cli -- sml03-smoke
-      - name: SML-0.4 smoke
-        run: cargo run --locked -p sml-cli -- sml04-smoke
-      - name: SML-0.5 smoke
-        run: cargo run --locked -p sml-cli -- sml05-smoke
-      - name: SML-0.6 smoke
-        run: cargo run --locked -p sml-cli -- sml06-smoke
-      - name: SML-0.7 elastic weights smoke
-        run: cargo run --locked -p sml-cli -- sml07-smoke
-      - name: SML-1.0 pilot smoke
-        run: cargo run --locked -p sml-cli -- sml10-smoke
-      - name: SML-1.1 task-loss smoke
-        run: cargo run --locked -p sml-cli -- sml11-smoke
-      - name: SML-1.2 state-update smoke
-        run: cargo run --locked -p sml-cli -- sml12-smoke
-      - name: SML-1.4 recall/copy task-loss smoke
-        run: cargo run --locked -p sml-cli -- sml14-smoke
- "$out"/*.csv; then
+          if grep -q '^N14_HYPOTHESIS,H1_SEMANTICS,REFUTED$' "$out"/*.csv; then
             echo "N14 H1 semantic invariant failed" >&2
             exit 1
           fi
-          if grep -q '^N14_HYPOTHESIS,H5_SINGLE_READ,REFUTED      - name: Native RAM materialization evidence
-        run: cargo test --locked -p sml-runtime -- --nocapture
-      - name: Mapped semantic store evidence
-        run: cargo test --locked -p sml-store -- --nocapture
-      - name: Context streaming ingest evidence
-        run: cargo test --locked -p sml-store --test context_ingest -- --nocapture
-      - name: Context semantic/provenance emission evidence
-        run: cargo test --locked -p sml-store --test context_semantic_ingest -- --nocapture
-      - name: Lockfile reproducibility
-        run: bash scripts/check-lockfile.sh
-      - name: SBG-0.12 packed semantic benchmark
-        if: startsWith(github.head_ref, 'research/sbg-0.12')
-        run: cargo run --locked --release -p sml-cli -- sbg012-bench
-      - name: SBG-0.12 code-generation audit
-        if: startsWith(github.head_ref, 'research/sbg-0.12')
-        run: bash scripts/audit-sbg012-codegen.sh
-      - name: Contract probe
-        run: cargo run --locked -p sml-cli -- contract
-      - name: SML-0.1 smoke
-        run: cargo run --locked -p sml-cli -- sml01-smoke
-      - name: SML-0.2 smoke
-        run: cargo run --locked -p sml-cli -- sml02-smoke
-      - name: SML-0.3 smoke
-        run: cargo run --locked -p sml-cli -- sml03-smoke
-      - name: SML-0.4 smoke
-        run: cargo run --locked -p sml-cli -- sml04-smoke
-      - name: SML-0.5 smoke
-        run: cargo run --locked -p sml-cli -- sml05-smoke
-      - name: SML-0.6 smoke
-        run: cargo run --locked -p sml-cli -- sml06-smoke
-      - name: SML-0.7 elastic weights smoke
-        run: cargo run --locked -p sml-cli -- sml07-smoke
-      - name: SML-1.0 pilot smoke
-        run: cargo run --locked -p sml-cli -- sml10-smoke
-      - name: SML-1.1 task-loss smoke
-        run: cargo run --locked -p sml-cli -- sml11-smoke
-      - name: SML-1.2 state-update smoke
-        run: cargo run --locked -p sml-cli -- sml12-smoke
-      - name: SML-1.4 recall/copy task-loss smoke
-        run: cargo run --locked -p sml-cli -- sml14-smoke
- "$out"/*.csv; then
+          if grep -q '^N14_HYPOTHESIS,H5_SINGLE_READ,REFUTED$' "$out"/*.csv; then
             echo "N14 H5 single-read invariant failed" >&2
             exit 1
           fi
