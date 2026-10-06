@@ -104,6 +104,17 @@ Scaling stops if any of the following persists after a bounded research iteratio
 - metadata/index storage overwhelms the low-bit weight advantage;
 - the target memory hierarchy cannot hide storage traffic sufficiently for the SML-4 throughput gate.
 
+## Pascal-Boolean functional track
+
+The closed PGF2 representation-mixing result remains unchanged. A separate
+K=2048 functional suite has retained P-ZETA, P-ROUTER, P-ANF and P-FEISTEL
+under frozen exactness/reversibility contracts. PB-5 composed evaluation is
+ready for separate preregistration. See
+`SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md`.
+
+No SBG/MOR/Delta-KV/context/model promotion follows from these component
+contracts alone.
+
 ## Semantic Boolean Geometry track
 
 SBG is a parallel evidence-gated semantic-representation track. It does not reuse occupied SML-0.x milestone numbers; implementation slices use the `SBG-0.x` namespace. The durable detailed sequence is recorded in `BOOTSTRAP.md`.
