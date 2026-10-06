@@ -561,15 +561,25 @@ Protocol and retained evidence are in
 `research/pascal-boolean-pb5/` and
 `research/pascal-boolean-pb6/`.
 
-PB-7 now preregisters that next generalization campaign in
-`docs/SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-PREREGISTRATION.md`. It freezes
-K=64..4096, affine/low-popcount/high-popcount address populations, relative query
-loads, direct and full-precompute controls, an independent logical-fast-zeta
-attribution reference, deterministic crossover accounting and a pinned ARM64
-physical panel. PB-7 must preserve losing cells as evidence.
+PB-7 utility-surface generalization is now executed and retained. Across
+K=64..4096, packed Pascal matches both the direct oracle and an independently
+written logical fast-zeta reference; G1..G7 all hold and the frozen decision is
+`RETAIN_GENERALIZED_UTILITY_SURFACE`. On the full-domain affine panel the
+median speedup over the faster matched control rises from 3.359x at K=64 to
+29.021x at K=4096, with 12/12 paired wins in every full-domain cell. The
+K=2048 LOW_POPCOUNT panel also retains the losing boundary: at Q=32 direct
+on-demand is 2.877x faster, and at Q=128 Pascal misses the frozen 10% advantage
+threshold. See
+`docs/SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-OBSERVATION.md` and
+`research/pascal-boolean-pb7/`.
 
-Only if PB-7 retains generalized utility may the SML-side Pascal track proceed
-to a separately preregistered model-aligned task protocol. PB-6/PB-7 do not
-reopen PGF2-4 and do not by themselves promote Pascal operators into SBG, MOR,
-Delta-KV, context or model architecture.
+The retained surface distinguishes structural work from physical latency:
+packed u64 execution can cross over earlier than scalar logical-operation
+counts predict. This is measured implementation evidence, not a universal cost
+model.
+
+PB-7 satisfies the preregistered gate for defining a separate PB-8
+model-aligned task protocol. PB-6/PB-7 do not reopen PGF2-4 and do not by
+themselves promote Pascal operators into SBG, MOR, Delta-KV, context or model
+architecture.
 

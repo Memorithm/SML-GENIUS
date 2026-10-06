@@ -120,15 +120,18 @@ paired physical repetitions, and records a 3.368060 ms median versus
 13.344107 ms for the faster matched control (3.961956x). See
 `SML-PASCAL-BOOLEAN-PB6-TASK-UTILITY-OBSERVATION.md`.
 
-PB-7 preregisters the utility-generalization campaign across K=64..4096,
-affine/low-popcount/high-popcount query populations and relative query loads,
-with matched direct/full-precompute controls, an independent logical-fast-zeta
-attribution reference and a pinned ARM64 timing panel. See
-`SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-PREREGISTRATION.md`.
+PB-7 utility generalization is executed and retained. G1..G7 hold across
+the frozen K=64..4096 deterministic/physical programme and the decision is
+`RETAIN_GENERALIZED_UTILITY_SURFACE`. Full-domain affine speedup over the
+faster matched control is 3.359x at K=64, 13.643x at K=512, 22.594x at
+K=2048 and 29.021x at K=4096, with exact checksums and 12/12 paired wins in
+every full-domain cell. The retained K=2048 LOW_POPCOUNT boundary shows direct
+on-demand winning at Q=32 and Pascal missing the 10% threshold at Q=128. See
+`SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-OBSERVATION.md`.
 
-Only a retained generalized PB-7 signal may proceed to a separate model-aligned
-protocol. A mixed/negative surface remains evidence. No
-SBG/MOR/Delta-KV/context/model promotion follows from PB-6 or PB-7 alone.
+PB-8 may now be preregistered as a separate model-aligned task study with
+competent task-native controls. No SBG/MOR/Delta-KV/context/model promotion
+follows from PB-6 or PB-7 alone.
 
 ## Semantic Boolean Geometry track
 
