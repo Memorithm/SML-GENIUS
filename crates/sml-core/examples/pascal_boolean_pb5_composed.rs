@@ -302,17 +302,14 @@ fn main() {
 
     let feistel_round_xor_ops = half_stats.logical_xor_ops + 2 * HALF_BITS as u64;
     let feistel_round_and_ops = HALF_BITS as u64;
-    let feistel_round_packed_updates =
-        half_stats.packed_word_updates + 2 * HALF_WORDS as u64;
+    let feistel_round_packed_updates = half_stats.packed_word_updates + 2 * HALF_WORDS as u64;
     let feistel_round_coordinate_maps = 2 * HALF_BITS as u64;
 
     let feistel_passes_per_state = 2 * FEISTEL_ROUNDS as u64;
     let feistel_xor_per_state = feistel_round_xor_ops * feistel_passes_per_state;
     let feistel_and_per_state = feistel_round_and_ops * feistel_passes_per_state;
-    let feistel_packed_per_state =
-        feistel_round_packed_updates * feistel_passes_per_state;
-    let feistel_maps_per_state =
-        feistel_round_coordinate_maps * feistel_passes_per_state;
+    let feistel_packed_per_state = feistel_round_packed_updates * feistel_passes_per_state;
+    let feistel_maps_per_state = feistel_round_coordinate_maps * feistel_passes_per_state;
 
     let direct_subset_reads_per_state: u64 =
         (0..BITS).map(|address| 1_u64 << address.count_ones()).sum();
@@ -365,12 +362,27 @@ fn main() {
         && half_stats.bits == HALF_BITS
         && half_stats.stages == 10;
 
-    println!("PB5_GATE,C1_REVERSIBLE_STORAGE,{}", if c1 { "HOLDS" } else { "REFUTED" });
-    println!("PB5_GATE,C2_ROUTER_ZETA,{}", if c2 { "HOLDS" } else { "REFUTED" });
-    println!("PB5_GATE,C3_ANF_GATE,{}", if c3 { "HOLDS" } else { "REFUTED" });
-    println!("PB5_GATE,C4_END_TO_END,{}", if c4 { "HOLDS" } else { "REFUTED" });
+    println!(
+        "PB5_GATE,C1_REVERSIBLE_STORAGE,{}",
+        if c1 { "HOLDS" } else { "REFUTED" }
+    );
+    println!(
+        "PB5_GATE,C2_ROUTER_ZETA,{}",
+        if c2 { "HOLDS" } else { "REFUTED" }
+    );
+    println!(
+        "PB5_GATE,C3_ANF_GATE,{}",
+        if c3 { "HOLDS" } else { "REFUTED" }
+    );
+    println!(
+        "PB5_GATE,C4_END_TO_END,{}",
+        if c4 { "HOLDS" } else { "REFUTED" }
+    );
     println!("PB5_GATE,C5_DETERMINISTIC_REPLAY,CI_ENFORCED");
-    println!("PB5_GATE,C6_ACCOUNTING,{}", if c6 { "HOLDS" } else { "INVALID" });
+    println!(
+        "PB5_GATE,C6_ACCOUNTING,{}",
+        if c6 { "HOLDS" } else { "INVALID" }
+    );
 
     let retained = c1 && c2 && c3 && c4 && c6;
     println!(
