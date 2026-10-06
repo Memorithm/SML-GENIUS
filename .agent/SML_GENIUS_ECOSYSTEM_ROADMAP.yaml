@@ -104,6 +104,18 @@ pascal_vector_projection_program_2026_10_06:
         - MSRV_1_77_green
         - portable_dependency_boundaries_green
       performance_claim: none
+    NNIS_PVP3:
+      status: merged_qualified_cross_session_evidence
+      pull_request: 258
+      merge_sha: 8adcc96feaeab017b26c63b207e3c0c9c8a5abea
+      evidence:
+        - mandatory_wgpu_pvp_cross_session_suite
+        - seven_frozen_K_G_geometries
+        - every_CPU_u64_word_vs_WGPU_to_CPU_word_bit_exact
+        - structural_accounting_and_dispatch_checks
+        - WGPU_self_inverse_round_trip
+        - software_vs_hardware_adapter_evidence_classification_retained
+      performance_claim: none
     promotion_boundary:
       - none_of_these_component_results_authorizes_attention_replacement_or_model_quality_claims
       - final_SML_internalization_remains_blocked_until_cross_backend_and_model_aligned_evidence
