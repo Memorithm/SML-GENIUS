@@ -217,7 +217,7 @@ jobs:
           out="$RUNNER_TEMP/dkv-2a-n14"
           mkdir -p "$out"
           for k in 256 1024; do
-            for arm in primary mixed direct; do
+            for arm in primary mixed direct-primary direct-mixed; do
               for pop in 0 1 2; do
                 "$bin" "$k" "$arm" "$pop" > "$out/k${k}-${arm}-p${pop}.csv"
               done
