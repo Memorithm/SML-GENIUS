@@ -591,6 +591,18 @@ cells on the qualified ARM64 runner. The experiment is a candidate
 admission/decision-gate workload only and does not modify current MOR or
 decision semantics.
 
-PB-6/PB-7/PB-8 do not reopen PGF2-4 and do not by themselves promote Pascal
-operators into SBG, MOR, Delta-KV, context or model architecture.
+PB-9 is now preregistered independently of PB-8 in
+`docs/SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-PREREGISTRATION.md`.
+Its mandatory ladder is K=8,192 through K=1,048,576. A resource-bounded
+extension then probes powers of two through K=67,108,864 and, if the frozen
+probe/latency/buffer gates remain valid, K=134,217,728 and K=268,435,456.
+Mandatory exactness combines analytic full-state fixtures, self-inversion,
+sampled direct-submask oracles and an independent logical fast-zeta reference;
+above one million bits the exact full-state contracts continue without attempting
+impractical multi-billion-read exhaustive controls. The physical programme
+separates in-place kernel cost, clone+materialize cost and a one-million-bit
+matched query-utility gate.
+
+PB-6/PB-7/PB-8/PB-9 do not reopen PGF2-4 and do not by themselves promote
+Pascal operators into SBG, MOR, Delta-KV, context or model architecture.
 
