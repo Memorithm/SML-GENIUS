@@ -3,12 +3,7 @@
 //! Frozen protocol:
 //! docs/SML-PASCAL-BOOLEAN-PB8-MODEL-ALIGNED-GATE-PREREGISTRATION.md
 
-use std::{
-    collections::BTreeSet,
-    env,
-    hint::black_box,
-    time::Instant,
-};
+use std::{collections::BTreeSet, env, hint::black_box, time::Instant};
 
 use sml_core::pascal_gf2::pascal_gf2_in_place;
 
@@ -51,11 +46,7 @@ enum ScheduleKind {
 }
 
 impl ScheduleKind {
-    const ALL: [Self; 3] = [
-        Self::AffineUniform,
-        Self::LowPopcount,
-        Self::HighPopcount,
-    ];
+    const ALL: [Self; 3] = [Self::AffineUniform, Self::LowPopcount, Self::HighPopcount];
 
     const fn name(self) -> &'static str {
         match self {
@@ -171,9 +162,7 @@ fn set_bit(words: &mut [u64], index: usize) {
 
 fn schedule(kind: ScheduleKind) -> Vec<usize> {
     match kind {
-        ScheduleKind::AffineUniform => (0..BITS)
-            .map(|index| (405 * index + 17) % BITS)
-            .collect(),
+        ScheduleKind::AffineUniform => (0..BITS).map(|index| (405 * index + 17) % BITS).collect(),
         ScheduleKind::LowPopcount => {
             let mut addresses = (0..BITS).collect::<Vec<_>>();
             addresses.sort_by_key(|&address| (address.count_ones(), address));
@@ -417,14 +406,8 @@ fn cell_checksum(
         let truth = table_for_arm(tables, arm);
         for repeat in 0..reuse {
             for (position, &x) in addresses.iter().take(q).enumerate() {
-                checksum = checksum_push(
-                    checksum,
-                    get_bit(truth, x),
-                    gate_index,
-                    repeat,
-                    position,
-                    x,
-                );
+                checksum =
+                    checksum_push(checksum, get_bit(truth, x), gate_index, repeat, position, x);
             }
         }
     }
@@ -447,9 +430,8 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
                         cell_checksum(density, Arm::ALL[index], &addresses, q, reuse)
                     });
                     let oracle_checksum = checksums[Arm::Resident.index()];
-                    let mismatches = std::array::from_fn(|index| {
-                        u64::from(checksums[index] != oracle_checksum)
-                    });
+                    let mismatches =
+                        std::array::from_fn(|index| u64::from(checksums[index] != oracle_checksum));
                     let gate_evaluations = (GATES * q * reuse) as u64;
                     cells.push(CellEvidence {
                         density: density.density,
@@ -482,7 +464,10 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
             && density.pascal_generic_table_mismatches == 0
     }) && cells.iter().all(|cell| {
         cell.mismatches.iter().all(|&count| count == 0)
-            && cell.checksums.iter().all(|&checksum| checksum == cell.checksums[0])
+            && cell
+                .checksums
+                .iter()
+                .all(|&checksum| checksum == cell.checksums[0])
     });
 
     let m2 = densities.iter().all(|density| {
@@ -590,13 +575,7 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
     }
 }
 
-fn run_arm(
-    arm: Arm,
-    gates: &[Gate],
-    addresses: &[usize],
-    q: usize,
-    reuse: usize,
-) -> u64 {
+fn run_arm(arm: Arm, gates: &[Gate], addresses: &[usize], q: usize, reuse: usize) -> u64 {
     let mut checksum = 0_u64;
     for (gate_index, gate) in gates.iter().enumerate() {
         match arm {
@@ -793,10 +772,8 @@ fn benchmark_cell(cell: PhysicalCell) -> BenchResult {
         }
     }
 
-    let mut times: [Vec<u128>; 5] =
-        std::array::from_fn(|_| Vec::with_capacity(MEASURED_REPS));
-    let mut checksums: [Vec<u64>; 5] =
-        std::array::from_fn(|_| Vec::with_capacity(MEASURED_REPS));
+    let mut times: [Vec<u128>; 5] = std::array::from_fn(|_| Vec::with_capacity(MEASURED_REPS));
+    let mut checksums: [Vec<u64>; 5] = std::array::from_fn(|_| Vec::with_capacity(MEASURED_REPS));
 
     for repetition in 0..MEASURED_REPS {
         for arm in arm_order(repetition) {
@@ -812,16 +789,17 @@ fn benchmark_cell(cell: PhysicalCell) -> BenchResult {
 
     let medians = std::array::from_fn(|index| median(&times[index]));
     let p95s = std::array::from_fn(|index| percentile(&times[index], 95, 100));
-    let first_checksums = std::array::from_fn(|index| {
-        checksums[index].first().copied().unwrap_or_default()
-    });
+    let first_checksums =
+        std::array::from_fn(|index| checksums[index].first().copied().unwrap_or_default());
     let stable = (0..Arm::ALL.len()).all(|index| {
         checksums[index]
             .iter()
             .all(|&value| value == first_checksums[index])
     });
-    let checksums_equal =
-        stable && first_checksums.iter().all(|&value| value == first_checksums[0]);
+    let checksums_equal = stable
+        && first_checksums
+            .iter()
+            .all(|&value| value == first_checksums[0]);
 
     BenchResult {
         cell,
@@ -856,8 +834,7 @@ fn benchmark() {
         let gate_evaluations = (GATES * cell.q * cell.reuse) as u128;
         for arm in Arm::ALL {
             let index = arm.index();
-            let throughput = gate_evaluations * 1_000_000_000_u128
-                / result.medians[index].max(1);
+            let throughput = gate_evaluations * 1_000_000_000_u128 / result.medians[index].max(1);
             println!(
                 "PB8_BENCH_ARM,panel={},density={},schedule={},q={},reuse={},arm={},times_ns={},median_ns={},p95_ns={},gate_evals_per_second={},checksum={:016x}",
                 cell.panel.name(),
@@ -921,27 +898,31 @@ fn benchmark() {
 
     let m7_cells = [(128_usize, 16_usize), (2048_usize, 1_usize)];
     let m7 = m7_cells.into_iter().all(|(q, reuse)| {
-        results.iter().find(|result| {
-            result.cell.panel == Panel::P1
-                && result.cell.density == 256
-                && result.cell.schedule == ScheduleKind::AffineUniform
-                && result.cell.q == q
-                && result.cell.reuse == reuse
-        }).is_some_and(|result| {
-            let faster = result.medians[Arm::Sparse.index()]
-                .min(result.medians[Arm::Submask.index()])
-                .min(result.medians[Arm::Generic.index()]);
-            result.checksums_equal
-                && ten_percent_faster(result.medians[Arm::Pascal.index()], faster)
-        })
+        results
+            .iter()
+            .find(|result| {
+                result.cell.panel == Panel::P1
+                    && result.cell.density == 256
+                    && result.cell.schedule == ScheduleKind::AffineUniform
+                    && result.cell.q == q
+                    && result.cell.reuse == reuse
+            })
+            .is_some_and(|result| {
+                let faster = result.medians[Arm::Sparse.index()]
+                    .min(result.medians[Arm::Submask.index()])
+                    .min(result.medians[Arm::Generic.index()]);
+                result.checksums_equal
+                    && ten_percent_faster(result.medians[Arm::Pascal.index()], faster)
+            })
     });
 
     let deterministic_valid =
         deterministic.m1 && deterministic.m2 && deterministic.m3 && deterministic.m4;
     let repetitions_valid = results.iter().all(|result| {
-        result.times.iter().all(|times| {
-            times.len() == MEASURED_REPS && times.iter().all(|&elapsed| elapsed > 0)
-        })
+        result
+            .times
+            .iter()
+            .all(|times| times.len() == MEASURED_REPS && times.iter().all(|&elapsed| elapsed > 0))
     });
     let cells_valid = results.len() == 17
         && results.iter().all(|result| {
