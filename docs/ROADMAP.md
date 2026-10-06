@@ -687,3 +687,20 @@ overwrite the global PGF2-3 result.
 No stage may infer semantic superiority from invertibility, Sierpiński structure
 or asymptotic operation count alone.
 
+
+
+## Pascal Vector Projection (PVP) hardware-alignment track
+
+This track follows retained PB-9 evidence and does not change the closed PGF2 representation-mixing result.
+
+- [ ] **PVP-0** — versioned address-major bitplane layout; exact pack/unpack/transpose and scalar oracle.
+- [ ] **PVP-1** — SciRust CPU candidate matrix: scalar u64, NEON, AVX2, AVX-512, SVE where available; correctness before timing.
+- [ ] **PVP-2** — FLAT portable WGSL scalar-u32 and `vec4<u32>` butterfly parity.
+- [ ] **PVP-3** — multi-stage workgroup fusion, subgroup and double-buffer candidates with bounded resource accounting.
+- [ ] **PVP-4** — NNIS portable CPU/WGPU session carrier over the same immutable layout contract.
+- [ ] **PVP-5** — exact cross-backend parity, real-device manifests and deterministic autotuning keyed by problem/device identity.
+- [ ] **PVP-6** — prospectively declared massive-ANF-bank model task; compare against competent sparse/direct/resident controls.
+- [ ] **PVP-7** — internalize only a qualified minimal execution contract into self-sufficient SML; external repositories remain optional.
+- [ ] **PVP-8** — freeze Model/Harness interface and create the separate `Memorithm/SML-HARNESS` repository.
+
+The PVP target path is CPU/SIMD/WGPU/open-GPU. No CUDA, NVRTC, cuDNN, TensorRT/TensorRT-LLM, NVML, CUTLASS or vendor SDK is a required dependency; only the installed GPU driver may be vendor-specific. A hardware microbenchmark cannot close PVP-6, and a model-quality result cannot be inferred from kernel throughput.
