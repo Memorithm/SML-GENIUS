@@ -113,9 +113,17 @@ pipeline: all C1..C6 gates hold and all 131,072 end-to-end comparisons match the
 independent oracle. See `SML-PASCAL-BOOLEAN-SUITE-OBSERVATION.md` and
 `SML-PASCAL-BOOLEAN-PB5-OBSERVATION.md`.
 
-The next gate is a separately preregistered matched-control task-utility test.
-No SBG/MOR/Delta-KV/context/model promotion follows from the current functional
-contracts alone.
+PB-6 completes the first matched-control task-utility gate on the frozen K=2048
+subset-parity workload. U1..U6 hold: P-ZETA produces exact answers, has equal
+256-byte answer-vector storage to the generic-precompute control, wins 20/20
+paired physical repetitions, and records a 3.368060 ms median versus
+13.344107 ms for the faster matched control (3.961956x). See
+`SML-PASCAL-BOOLEAN-PB6-TASK-UTILITY-OBSERVATION.md`.
+
+The next gate is a separately preregistered utility-generalization campaign
+across width, query load, address populations and stronger matched controls.
+Only a surviving signal may proceed to a separate model-aligned protocol. No
+SBG/MOR/Delta-KV/context/model promotion follows from PB-6 alone.
 
 ## Semantic Boolean Geometry track
 
