@@ -32,6 +32,47 @@ pascal_vector_projection_program_2026_10_06:
     regular bit-sliced/vector-register and portable GPU execution layouts,
     avoiding pointer-chasing graph representations while preserving exact
     Boolean semantics and the workload boundaries retained by PB-7 through PB-9.
+  implementation_evidence:
+    SciRust_PVP0:
+      status: merged_qualified_scalar_reference
+      pull_request: 1537
+      merge_sha: 527ec0e6dbde7e422397f68d9ff32c013b81f54f
+    SciRust_PVP1_stable_SIMD:
+      status: merged_qualified_AVX2_AVX512_NEON_candidates
+      pull_request: 1538
+      merge_sha: 1405a81fcd1ac3b22ca2cd8baffd22a9af18c506
+    SciRust_PVP1_SVE:
+      status: exact_head_CI_in_progress_QEMU_SVE_execution_green
+      pull_request: 1540
+      exact_head: 110e7bef528dc25e0d18af9a204834ef54cb60dd
+      performance_claim: blocked_until_native_SVE_measurement
+    FLAT_PVP0_FLAT1:
+      status: merged_qualified_scalar_WGPU_reference
+      pull_request: 334
+      merge_sha: 004f378dcaf89b289d3d675db6085a7db70bbee3
+      evidence:
+        - actual_WGPU_readback_exact_parity
+        - Vulkan_lavapipe_green
+        - Metal_green
+        - Direct3D12_green
+        - Thor_qualification_green
+    FLAT_PVP2_VEC4:
+      status: exact_head_CI_in_progress
+      pull_request: 335
+      exact_head: b70168b97fc18a6af7002dbca6ee385c47fafa33
+      performance_claim: none
+    NNIS_PVP0:
+      status: merged_qualified_portable_layout_adapter
+      pull_request: 255
+      merge_sha: 6b67719322d000405b88dda56ebbc2ebd6f92033
+    NNIS_PVP1:
+      status: merged_qualified_CPU_reference_session
+      pull_request: 256
+      merge_sha: 01e6c2ec99e99b089b5a98f4ee784a237fe6dc64
+    promotion_boundary:
+      - none_of_these_component_results_authorizes_attention_replacement_or_model_quality_claims
+      - FLAT_VEC4_and_SciRust_SVE_must_close_exact_head_CI_before_downstream_promotion
+      - final_SML_internalization_remains_blocked_until_cross_backend_and_model_aligned_evidence
   model_sovereignty:
     - SML_GENIUS_is_the_model_and_scientific_authority
     - final_SML_model_must_be_sufficient_to_execute_its_declared_model_semantics_without_FLAT_SciRust_or_NNIS_as_mandatory_runtime_dependencies
