@@ -607,3 +607,12 @@ intact. The frozen decision is
 PB-6/PB-7/PB-8/PB-9 do not reopen PGF2-4 and do not by themselves promote
 Pascal operators into SBG, MOR, Delta-KV, context or model architecture.
 
+
+
+### Pascal Vector Projection (PVP) hardware alignment
+
+PB-9 establishes exact packed Pascal execution through K=268,435,456, but the next systems question is hardware alignment rather than larger scalar widths. The PVP programme freezes an address-major gate-bitplane representation and compiles Pascal/subset-zeta into regular staged XOR butterflies over contiguous words/register vectors. See `docs/SML-PASCAL-PVP-HARDWARE-ALIGNMENT-BOOTSTRAP.md`.
+
+The candidate CPU layout is `[K, ceil(G/64)] u64`; the portable GPU unit is `vec4<u32>`, representing 128 gates at one address. The hot path must not materialize the subset lattice as graph nodes or adjacency lists. SciRust qualifies reusable CPU/SIMD and layout primitives; FLAT qualifies portable WGPU kernels and autotuning; NNIS provides optional portable CPU/WGPU runtime qualification. None becomes a mandatory dependency of the final model.
+
+Hardware policy for this programme is vendor-neutral and ecosystem-first: the GPU driver is the only vendor-specific software layer admitted in the target path. The final SML model must be sufficient to itself; after its model interface is frozen, a distinct `SML-HARNESS` will own orchestration/training/evaluation/serving utilities without supplying hidden model semantics.
