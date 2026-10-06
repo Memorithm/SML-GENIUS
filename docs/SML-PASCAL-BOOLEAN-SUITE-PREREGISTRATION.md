@@ -110,6 +110,7 @@ Qualification:
 - zero collisions in the corpus;
 - one-bit avalanche distribution;
 - repeat-input determinism;
+- an explicit XOR-superposition witness must demonstrate that the candidate is not a linear GF(2) map;
 - report logical XOR/AND work and packed-word updates;
 - compare avalanche and work against identity, fixed permutation, XOR-permutation, and linear Pascal controls.
 
