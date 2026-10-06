@@ -87,6 +87,22 @@ jobs:
           cargo run --locked --release -p sml-core --example pascal_boolean_pb5_composed > "$RUNNER_TEMP/pascal-boolean-pb5-second.csv"
           cmp "$RUNNER_TEMP/pascal-boolean-pb5-first.csv" "$RUNNER_TEMP/pascal-boolean-pb5-second.csv"
           cat "$RUNNER_TEMP/pascal-boolean-pb5-first.csv"
+      - name: PB6 deterministic Pascal task-utility evidence
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb6-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb6_utility -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb6-first.csv"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb6_utility -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb6-second.csv"
+          cmp "$RUNNER_TEMP/pascal-boolean-pb6-first.csv" "$RUNNER_TEMP/pascal-boolean-pb6-second.csv"
+          cat "$RUNNER_TEMP/pascal-boolean-pb6-first.csv"
+      - name: PB6 physical Pascal task-utility benchmark
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb6-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PB6_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb6_utility -- benchmark
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
