@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "protocol_pr": 224,
+  "protocol_merge": "6c376b197eede8e8c99b8b9d912a59071a8a5f0e",
+  "implementation_pr": 225,
+  "executed_code_head": "b74392ecd22c7045679555a0c352bd5b28a1c527",
+  "implementation_merge": "78964bb670952aceaf41f9020485b5a32adcc5db",
+  "github_actions_run": 37463073880,
+  "job": 112267220560,
+  "runner": "tarek-scirust-arm64-01",
+  "machine": "tarek",
+  "rust": "1.89.0",
+  "target": "aarch64-unknown-linux-gnu",
+  "deterministic_retained_lines": 21,
+  "deterministic_sha256": "2780d2e82c18ddadfbe2564152a05dc4532e85f47ff055a8186cbe2fa7e2becf",
+  "deterministic_cross_run_byte_identical": true,
+  "physical_retained_lines": 45,
+  "physical_sha256": "a91a9ac01d0c932c1eca754d792d839902d2ea2e6b81d1ad739ff97121ae8dae",
+  "mandatory_widths_bits": [
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576
+  ],
+  "furthest_executed_bits": 268435456,
+  "furthest_state_bytes": 33554432,
+  "mandatory_one_million": {
+    "kernel_median_ns": 183634,
+    "materialize_median_ns": 185676,
+    "state_bytes": 131072,
+    "logical_xor_ops": 10485760,
+    "packed_word_updates": 212992
+  },
+  "one_million_query_q2048": {
+    "pascal_median_ns": 903755,
+    "direct_median_ns": 17606782,
+    "paired_wins": 12,
+    "checksum": "a9bc9f61cae260a6"
+  },
+  "deep_268435456": {
+    "kernel_median_ns": 81195066,
+    "materialize_median_ns": 82536261,
+    "state_bytes": 33554432,
+    "hwm_after_kib": 223840
+  },
+  "gates": {
+    "L1_mandatory_exactness": "HOLDS",
+    "L2_accounting_exactness": "HOLDS",
+    "L3_mandatory_physical_sanity": "HOLDS",
+    "L4_one_million_execution": "HOLDS",
+    "L5_one_million_task_utility": "HOLDS",
+    "L6_extension_integrity": "HOLDS"
+  },
+  "decision": "RETAIN_LARGE_WIDTH_SCALING_AND_1M_UTILITY",
+  "model_promotion": "BLOCKED"
+}
