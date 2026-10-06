@@ -85,6 +85,20 @@ pascal_vector_projection_program_2026_10_06:
         - Direct3D12_green
         - Thor_green
       performance_claim: blocked_until_PVP3b_same_device_measurement
+    FLAT_PVP3B_PHYSICAL_BENCH:
+      status: benchmark_surface_merged_first_Thor_attempt_deferred_gpu_busy
+      implementation_pr: 337
+      implementation_merge: 26690c7c467db24ae5fc3bebe235c1f0310f4f2a
+      first_attempt:
+        workflow_run: 37513743739
+        job: 112441232837
+        result: deferred_gpu_busy
+        accepted_measurement_rows: 0
+        performance_claim: none
+      retry_trigger_pr: 338
+      decision_boundary:
+        - no_fused2_speed_claim_until_complete_clean_Thor_measurement
+        - preserve_PVP2_vec4_as_qualified_control
     NNIS_PVP0:
       status: merged_qualified_portable_layout_adapter
       pull_request: 255
