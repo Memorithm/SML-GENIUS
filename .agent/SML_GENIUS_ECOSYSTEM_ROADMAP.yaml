@@ -73,6 +73,18 @@ pascal_vector_projection_program_2026_10_06:
         - Direct3D12_green
         - Thor_green
       performance_claim: none
+    FLAT_PVP3A_FUSED2:
+      status: merged_qualified_two_stage_register_fusion
+      pull_request: 336
+      merge_sha: 28199e51b8442f913172e8255596b9c1830f2ed7
+      evidence:
+        - exact_host_fused2_vs_PVP2_vec4_reference
+        - exact_WGPU_readback_parity
+        - Vulkan_green
+        - Metal_green
+        - Direct3D12_green
+        - Thor_green
+      performance_claim: blocked_until_PVP3b_same_device_measurement
     NNIS_PVP0:
       status: merged_qualified_portable_layout_adapter
       pull_request: 255
