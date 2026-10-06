@@ -1062,7 +1062,7 @@ fn direct_resolve<const K: usize>(
     let read_delta = after - before;
     assert_eq!(read_delta, 1);
     ResolveResult {
-        provenance: Dkv4Provenance::VerifiedPresent,
+        provenance: Dkv4Provenance::Unverified,
         bank: Some(bank),
         value: candidate(&values),
         screened: None,
@@ -1083,7 +1083,6 @@ fn one_query<const K: usize>(
     let route = secondary_route(fact.page);
     if arm == PhysicalArm::Direct {
         let result = direct_resolve::<K>(banks, directory, base_seed, fact, &route);
-        accounting.verified += 1;
         accounting.matrix_reads += result.matrix_reads;
         match result.bank {
             Some(Bank::Primary) => accounting.primary_reads += 1,
@@ -1238,8 +1237,10 @@ fn run_cell<const K: usize>(pop: usize, arm: PhysicalArm) -> Aggregate {
                 aggregate.exact += u64::from(result.value == Some(expected_target(arm, fact)));
                 aggregate.bank_mismatch +=
                     u64::from(result.bank != Some(expected_bank(arm, fact)));
-                aggregate.non_verified +=
-                    u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
+                if arm != PhysicalArm::Direct {
+                    aggregate.non_verified +=
+                        u64::from(result.provenance != Dkv4Provenance::VerifiedPresent);
+                }
             }
         }
 
@@ -1408,6 +1409,7 @@ fn execute<const K: usize>(pop: usize, arm: PhysicalArm) {
             == aggregate.warmup_exact * MEASURE_PASSES as u64
         && aggregate.non_verified == 0
         && aggregate.bank_mismatch == 0
+        && (arm == PhysicalArm::Direct || aggregate.verified == expected_measured)
         && aggregate.matrix_reads == expected_measured
         && aggregate.primary_reads == expected_primary
         && aggregate.ordered_reads == expected_ordered;
