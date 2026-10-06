@@ -591,17 +591,18 @@ cells on the qualified ARM64 runner. The experiment is a candidate
 admission/decision-gate workload only and does not modify current MOR or
 decision semantics.
 
-PB-9 is now preregistered independently of PB-8 in
-`docs/SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-PREREGISTRATION.md`.
-Its mandatory ladder is K=8,192 through K=1,048,576. A resource-bounded
-extension then probes powers of two through K=67,108,864 and, if the frozen
-probe/latency/buffer gates remain valid, K=134,217,728 and K=268,435,456.
-Mandatory exactness combines analytic full-state fixtures, self-inversion,
-sampled direct-submask oracles and an independent logical fast-zeta reference;
-above one million bits the exact full-state contracts continue without attempting
-impractical multi-billion-read exhaustive controls. The physical programme
-separates in-place kernel cost, clone+materialize cost and a one-million-bit
-matched query-utility gate.
+PB-9 large-width scaling is executed and retained in
+`docs/SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-OBSERVATION.md` and
+`research/pascal-boolean-pb9/`. L1..L6 all hold. Exactness and accounting
+survive the mandatory K=8,192..1,048,576 ladder; K=1,048,576 records a
+183.634 us in-place median for a 128 KiB packed state. On the frozen affine
+query panel, direct evaluation still wins at Q=128, while Pascal wins at Q=512
+and reaches a 19.4818x median speedup with 12/12 paired wins at Q=2,048.
+The resource-bounded extension reaches every preregistered width through
+K=268,435,456 (32 MiB packed state) without STOP_RESOURCE; the deepest kernel
+median is 81.195066 ms and exact extension accounting/self-inversion remain
+intact. The frozen decision is
+`RETAIN_LARGE_WIDTH_SCALING_AND_1M_UTILITY`.
 
 PB-6/PB-7/PB-8/PB-9 do not reopen PGF2-4 and do not by themselves promote
 Pascal operators into SBG, MOR, Delta-KV, context or model architecture.
