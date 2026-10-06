@@ -57,9 +57,16 @@ pascal_vector_projection_program_2026_10_06:
         - Direct3D12_green
         - Thor_qualification_green
     FLAT_PVP2_VEC4:
-      status: exact_head_CI_in_progress
+      status: merged_qualified_vec4_WGPU_reference
       pull_request: 335
       exact_head: b70168b97fc18a6af7002dbca6ee385c47fafa33
+      merge_sha: b91ed691ee6b4ea62b11309b36b052d8c266ea5e
+      evidence:
+        - exact_WGPU_readback_parity
+        - Vulkan_lavapipe_green
+        - Metal_green
+        - Direct3D12_green
+        - Thor_green
       performance_claim: none
     NNIS_PVP0:
       status: merged_qualified_portable_layout_adapter
@@ -71,7 +78,7 @@ pascal_vector_projection_program_2026_10_06:
       merge_sha: 01e6c2ec99e99b089b5a98f4ee784a237fe6dc64
     promotion_boundary:
       - none_of_these_component_results_authorizes_attention_replacement_or_model_quality_claims
-      - FLAT_VEC4_and_SciRust_SVE_must_close_exact_head_CI_before_downstream_promotion
+      - SciRust_SVE_must_close_exact_head_CI_before_SVE_downstream_promotion
       - final_SML_internalization_remains_blocked_until_cross_backend_and_model_aligned_evidence
   model_sovereignty:
     - SML_GENIUS_is_the_model_and_scientific_authority
