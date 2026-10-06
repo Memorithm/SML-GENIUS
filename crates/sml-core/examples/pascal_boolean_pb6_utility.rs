@@ -367,7 +367,7 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
         .iter()
         .copied()
         .filter(|q| *q >= 256)
-        .all(|q| P_ZETA_XOR_OPS + q as u64 < direct_reads_for_prefix(&schedule, q));
+        .all(|q| P_ZETA_XOR_OPS + (q as u64) < direct_reads_for_prefix(&schedule, q));
 
     let u3 = FULL_DIRECT_READS >= 15 * P_ZETA_XOR_OPS;
     let u4 = 256_usize == BITS / 8;
