@@ -141,6 +141,14 @@ utility and amortization. See
 No current MOR/decision implementation is changed by PB-8. A positive result
 can justify only a later separately preregistered integration arm.
 
+PB-9 is separately preregistered as the large-width scaling campaign. It
+requires exact execution at K=8,192, 16,384, 32,768, 65,536, 131,072,
+262,144, 524,288 and 1,048,576, with kernel/materialization timing and a
+matched K=1,048,576 query-utility gate. A resource-bounded extension may
+continue through K=268,435,456 while retaining explicit STOP_RESOURCE evidence
+instead of overcommitting CI. See
+`SML-PASCAL-BOOLEAN-PB9-LARGE-WIDTH-SCALING-PREREGISTRATION.md`.
+
 ## Semantic Boolean Geometry track
 
 SBG is a parallel evidence-gated semantic-representation track. It does not reuse occupied SML-0.x milestone numbers; implementation slices use the `SBG-0.x` namespace. The durable detailed sequence is recorded in `BOOTSTRAP.md`.
