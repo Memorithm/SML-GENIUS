@@ -69,6 +69,15 @@ jobs:
           cargo run --locked --release -p sml-core --example pgf2_3b_block_local > "$RUNNER_TEMP/pgf2-3b-second.csv"
           cmp "$RUNNER_TEMP/pgf2-3b-first.csv" "$RUNNER_TEMP/pgf2-3b-second.csv"
           cat "$RUNNER_TEMP/pgf2-3b-first.csv"
+      - name: Pascal-Boolean sequential K2048 suite evidence
+        if: startsWith(github.head_ref, 'research/pascal-boolean-suite-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pascal_boolean_suite > "$RUNNER_TEMP/pascal-boolean-suite-first.csv"
+          cargo run --locked --release -p sml-core --example pascal_boolean_suite > "$RUNNER_TEMP/pascal-boolean-suite-second.csv"
+          cmp "$RUNNER_TEMP/pascal-boolean-suite-first.csv" "$RUNNER_TEMP/pascal-boolean-suite-second.csv"
+          cat "$RUNNER_TEMP/pascal-boolean-suite-first.csv"
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
