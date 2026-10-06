@@ -144,8 +144,8 @@ struct CellEvidence {
 
 #[derive(Debug)]
 struct DeterministicEvidence {
-    densities: Vec<DensityEvidence>,
-    cells: Vec<CellEvidence>,
+    density_count: usize,
+    cell_count: usize,
     m1: bool,
     m2: bool,
     m3: bool,
@@ -566,8 +566,8 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
     }
 
     DeterministicEvidence {
-        densities,
-        cells,
+        density_count: densities.len(),
+        cell_count: cells.len(),
         m1,
         m2,
         m3,
@@ -932,7 +932,12 @@ fn benchmark() {
                 && DENSITIES.contains(&result.cell.density)
         });
     let runner_valid = runner == EXPECTED_RUNNER && arch == "aarch64";
-    let m8 = deterministic_valid && repetitions_valid && cells_valid && runner_valid;
+    let m8 = deterministic_valid
+        && deterministic.density_count == DENSITIES.len()
+        && deterministic.cell_count == 144
+        && repetitions_valid
+        && cells_valid
+        && runner_valid;
 
     println!(
         "PB8_GATE,M5_SAME_SOURCE_MATERIALIZATION_UTILITY,{}",
