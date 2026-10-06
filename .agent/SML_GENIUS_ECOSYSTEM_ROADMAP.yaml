@@ -93,6 +93,17 @@ pascal_vector_projection_program_2026_10_06:
       status: merged_qualified_CPU_reference_session
       pull_request: 256
       merge_sha: 01e6c2ec99e99b089b5a98f4ee784a237fe6dc64
+    NNIS_PVP2:
+      status: merged_qualified_resident_WGPU_session
+      pull_request: 257
+      exact_head: 0fb9dc5d6b88a2330edadfb364a5283a3b66ecf8
+      merge_sha: 93cae5a07737b1db97e7f755d5141a2d88fe9583
+      evidence:
+        - independent_NNIS_WGSL_runtime_no_FLAT_binary_dependency
+        - mandatory_lavapipe_CPU_WGPU_bit_exact_parity_green
+        - MSRV_1_77_green
+        - portable_dependency_boundaries_green
+      performance_claim: none
     promotion_boundary:
       - none_of_these_component_results_authorizes_attention_replacement_or_model_quality_claims
       - final_SML_internalization_remains_blocked_until_cross_backend_and_model_aligned_evidence
