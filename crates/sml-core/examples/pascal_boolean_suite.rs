@@ -149,13 +149,10 @@ fn pb1_zeta() -> bool {
     }
     let (min, median, sum, p95, max) = distribution(avalanche);
 
-    let direct_full_sweep_reads: u64 = (0..BITS)
-        .map(|n| 1_u64 << n.count_ones())
-        .sum();
+    let direct_full_sweep_reads: u64 = (0..BITS).map(|n| 1_u64 << n.count_ones()).sum();
     let mut uniform_break_even_queries = 0_usize;
     for queries in 1..=BITS {
-        let zeta_scaled =
-            (stats.logical_xor_ops + queries as u64) * BITS as u64;
+        let zeta_scaled = (stats.logical_xor_ops + queries as u64) * BITS as u64;
         let direct_scaled = queries as u64 * direct_full_sweep_reads;
         if zeta_scaled < direct_scaled {
             uniform_break_even_queries = queries;
@@ -189,11 +186,7 @@ fn pb1_zeta() -> bool {
     );
     println!(
         "PB1_DECISION,{}",
-        if valid {
-            "RETAIN_FUNCTION"
-        } else {
-            "INVALID"
-        }
+        if valid { "RETAIN_FUNCTION" } else { "INVALID" }
     );
     valid
 }
@@ -249,8 +242,7 @@ fn pb2_router() -> bool {
         let mut pairs = 0_u64;
         for i in 0..addresses.len() {
             for j in (i + 1)..addresses.len() {
-                let intersection =
-                    1_u64 << (addresses[i] & addresses[j]).count_ones();
+                let intersection = 1_u64 << (addresses[i] & addresses[j]).count_ones();
                 let union = 2 * active - intersection;
                 overlap_sum_ppm += intersection * PPM / union;
                 pairs += 1;
@@ -283,19 +275,14 @@ fn pb2_router() -> bool {
         membership_failures, cardinality_failures, duplicate_failures
     );
 
-    let valid =
-        membership_failures == 0 && cardinality_failures == 0 && duplicate_failures == 0;
+    let valid = membership_failures == 0 && cardinality_failures == 0 && duplicate_failures == 0;
     println!(
         "PB2_HYPOTHESIS,EXACT_SUBMASK_ROUTING,{}",
         if valid { "HOLDS" } else { "INVALID" }
     );
     println!(
         "PB2_DECISION,{}",
-        if valid {
-            "RETAIN_FUNCTION"
-        } else {
-            "INVALID"
-        }
+        if valid { "RETAIN_FUNCTION" } else { "INVALID" }
     );
     valid
 }
@@ -488,11 +475,7 @@ fn pb3_anf() -> bool {
     );
     println!(
         "PB3_DECISION,{}",
-        if valid {
-            "RETAIN_FUNCTION"
-        } else {
-            "INVALID"
-        }
+        if valid { "RETAIN_FUNCTION" } else { "INVALID" }
     );
     valid
 }
@@ -621,8 +604,7 @@ fn pb4_feistel() -> bool {
         "PB4_CONTROL_COST,arm=XOR_PERMUTE,logical_xor_ops={BITS},logical_and_ops=0,packed_word_updates={WORDS},coordinate_maps={BITS}"
     );
     let mut pascal_cost_words = vec![0_u64; WORDS];
-    let pascal_cost =
-        pascal_gf2_in_place(&mut pascal_cost_words).expect("PB4 Pascal control cost");
+    let pascal_cost = pascal_gf2_in_place(&mut pascal_cost_words).expect("PB4 Pascal control cost");
     println!(
         "PB4_CONTROL_COST,arm=PASCAL_LINEAR,logical_xor_ops={},logical_and_ops=0,packed_word_updates={},coordinate_maps=0",
         pascal_cost.logical_xor_ops, pascal_cost.packed_word_updates
@@ -680,10 +662,8 @@ fn pb4_feistel() -> bool {
             rounds, CORPUS, inverse_failures, determinism_failures, collisions
         );
 
-        let valid = inverse_failures == 0
-            && determinism_failures == 0
-            && collisions == 0
-            && nonlinear;
+        let valid =
+            inverse_failures == 0 && determinism_failures == 0 && collisions == 0 && nonlinear;
         all_valid &= valid;
         println!(
             "PB4_GATE,rounds={},{}",
