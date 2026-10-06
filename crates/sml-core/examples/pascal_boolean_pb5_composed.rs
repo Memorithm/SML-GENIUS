@@ -203,14 +203,14 @@ fn main() {
     let mut anf_gate_values = vec![false; BITS];
     let mut gate_mismatches = 0_u64;
     let mut gate_true = 0_u64;
-    for address in 0..BITS {
+    for (address, gate_value) in anf_gate_values.iter_mut().enumerate() {
         let inputs = (0..VARS)
             .map(|variable| address & (1_usize << variable) != 0)
             .collect::<Vec<_>>();
         let observed = polynomial
             .evaluate(&inputs, &mut anf_counters)
             .expect("PB5 ANF gate evaluation");
-        anf_gate_values[address] = observed;
+        *gate_value = observed;
         gate_true += u64::from(observed);
         gate_mismatches += u64::from(observed != direct_gate(address));
     }
@@ -260,12 +260,12 @@ fn main() {
             zeta_stats = Some(stats);
         }
 
-        for address in 0..BITS {
+        for (address, &gate_value) in anf_gate_values.iter().enumerate() {
             let native_parity = get_bit(&zeta, address);
             let routed_parity = direct_submask_parity(&decoded, address);
             parity_mismatches += u64::from(native_parity != routed_parity);
 
-            let native_answer = native_parity & anf_gate_values[address];
+            let native_answer = native_parity & gate_value;
             let direct_answer = direct_submask_parity(&source, address) & direct_gate(address);
             final_mismatches += u64::from(native_answer != direct_answer);
             comparisons += 1;
