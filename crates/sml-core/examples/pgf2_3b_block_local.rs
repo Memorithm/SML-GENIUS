@@ -290,11 +290,7 @@ fn transform(arm: Arm, input: &Field, role: &Field) -> Field {
         Arm::Identity => input.clone(),
         Arm::Permute => rotate_permute(input, PERMUTE_SHIFT).expect("fixed permutation"),
         Arm::XorPermute => bind(role, input).expect("qualified bind"),
-        Arm::Pgf2Global
-        | Arm::Pgf2B64
-        | Arm::Pgf2B128
-        | Arm::Pgf2B256
-        | Arm::Pgf2B512 => {
+        Arm::Pgf2Global | Arm::Pgf2B64 | Arm::Pgf2B128 | Arm::Pgf2B256 | Arm::Pgf2B512 => {
             pgf2_block_local(input, arm.block_bits().expect("PGF2 block width"))
         }
     }
@@ -307,11 +303,9 @@ fn recover(arm: Arm, transformed: &Field, role: &Field) -> Field {
             inverse_rotate_permute(transformed, PERMUTE_SHIFT).expect("inverse permutation")
         }
         Arm::XorPermute => unbind(role, transformed).expect("qualified unbind"),
-        Arm::Pgf2Global
-        | Arm::Pgf2B64
-        | Arm::Pgf2B128
-        | Arm::Pgf2B256
-        | Arm::Pgf2B512 => transform(arm, transformed, role),
+        Arm::Pgf2Global | Arm::Pgf2B64 | Arm::Pgf2B128 | Arm::Pgf2B256 | Arm::Pgf2B512 => {
+            transform(arm, transformed, role)
+        }
     }
 }
 
@@ -579,11 +573,7 @@ fn cost(arm: Arm) -> Cost {
             state_bytes: 256,
             scratch_words: 0,
         },
-        Arm::Pgf2Global
-        | Arm::Pgf2B64
-        | Arm::Pgf2B128
-        | Arm::Pgf2B256
-        | Arm::Pgf2B512 => {
+        Arm::Pgf2Global | Arm::Pgf2B64 | Arm::Pgf2B128 | Arm::Pgf2B256 | Arm::Pgf2B512 => {
             let block_bits = arm.block_bits().expect("block width");
             let words_per_block = block_bits / 64;
             let mut words = vec![0_u64; WORDS];
@@ -803,11 +793,9 @@ fn main() {
         Arm::CONTROLS.iter().all(|arm| {
             let index = arm.index();
             class_separation[family][index].min == class_separation[family][first].min
-                && class_separation[family][index].median
-                    == class_separation[family][first].median
+                && class_separation[family][index].median == class_separation[family][first].median
                 && route_separation[family][index].min == route_separation[family][first].min
-                && route_separation[family][index].median
-                    == route_separation[family][first].median
+                && route_separation[family][index].median == route_separation[family][first].median
         })
     });
     println!(
