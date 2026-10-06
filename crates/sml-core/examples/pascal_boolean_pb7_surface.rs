@@ -250,7 +250,7 @@ fn earliest_crossover(bits: usize, kind: ScheduleKind) -> Option<usize> {
     let addresses = schedule(bits, kind);
     q_values(bits)
         .into_iter()
-        .find(|&q| zeta_xor_ops(bits) + q as u64 < direct_reads(&addresses, q))
+        .find(|&q| zeta_xor_ops(bits) + (q as u64) < direct_reads(&addresses, q))
 }
 
 fn run_deterministic(emit: bool) -> DeterministicEvidence {
@@ -380,7 +380,7 @@ fn run_deterministic(emit: bool) -> DeterministicEvidence {
         .all(|bits| bits / 8 == bits.div_ceil(8));
 
     let full_domain_advantage = WIDTHS.into_iter().all(|bits| {
-        zeta_xor_ops(bits) + bits as u64 < full_direct_reads(bits) + bits as u64
+        zeta_xor_ops(bits) + (bits as u64) < full_direct_reads(bits) + bits as u64
     });
     let ratios_monotonic = WIDTHS.windows(2).all(|pair| {
         let left = pair[0];
