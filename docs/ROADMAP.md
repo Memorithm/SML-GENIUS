@@ -120,10 +120,15 @@ paired physical repetitions, and records a 3.368060 ms median versus
 13.344107 ms for the faster matched control (3.961956x). See
 `SML-PASCAL-BOOLEAN-PB6-TASK-UTILITY-OBSERVATION.md`.
 
-The next gate is a separately preregistered utility-generalization campaign
-across width, query load, address populations and stronger matched controls.
-Only a surviving signal may proceed to a separate model-aligned protocol. No
-SBG/MOR/Delta-KV/context/model promotion follows from PB-6 alone.
+PB-7 preregisters the utility-generalization campaign across K=64..4096,
+affine/low-popcount/high-popcount query populations and relative query loads,
+with matched direct/full-precompute controls, an independent logical-fast-zeta
+attribution reference and a pinned ARM64 timing panel. See
+`SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-PREREGISTRATION.md`.
+
+Only a retained generalized PB-7 signal may proceed to a separate model-aligned
+protocol. A mixed/negative surface remains evidence. No
+SBG/MOR/Delta-KV/context/model promotion follows from PB-6 or PB-7 alone.
 
 ## Semantic Boolean Geometry track
 

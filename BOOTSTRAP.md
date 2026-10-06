@@ -561,9 +561,15 @@ Protocol and retained evidence are in
 `research/pascal-boolean-pb5/` and
 `research/pascal-boolean-pb6/`.
 
-The next justified Pascal work is a prospectively declared generalization
-campaign over width, query load, address population and stronger matched
-controls, followed by a separate model-aligned task protocol if the signal
-survives. PB-6 does not reopen PGF2-4 and does not by itself promote Pascal
-operators into SBG, MOR, Delta-KV, context or model architecture.
+PB-7 now preregisters that next generalization campaign in
+`docs/SML-PASCAL-BOOLEAN-PB7-UTILITY-SURFACE-PREREGISTRATION.md`. It freezes
+K=64..4096, affine/low-popcount/high-popcount address populations, relative query
+loads, direct and full-precompute controls, an independent logical-fast-zeta
+attribution reference, deterministic crossover accounting and a pinned ARM64
+physical panel. PB-7 must preserve losing cells as evidence.
+
+Only if PB-7 retains generalized utility may the SML-side Pascal track proceed
+to a separately preregistered model-aligned task protocol. PB-6/PB-7 do not
+reopen PGF2-4 and do not by themselves promote Pascal operators into SBG, MOR,
+Delta-KV, context or model architecture.
 
