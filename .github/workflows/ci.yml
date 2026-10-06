@@ -119,6 +119,22 @@ jobs:
           set -euo pipefail
           echo "PB7_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
           cargo run --locked --release -p sml-core --example pascal_boolean_pb7_surface -- benchmark
+      - name: PB8 deterministic model-aligned gate-bank evidence
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb8-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb8_gate_bank -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb8-first.csv"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb8_gate_bank -- deterministic > "$RUNNER_TEMP/pascal-boolean-pb8-second.csv"
+          cmp "$RUNNER_TEMP/pascal-boolean-pb8-first.csv" "$RUNNER_TEMP/pascal-boolean-pb8-second.csv"
+          cat "$RUNNER_TEMP/pascal-boolean-pb8-first.csv"
+      - name: PB8 physical model-aligned gate-bank benchmark
+        if: startsWith(github.head_ref, 'research/pascal-boolean-pb8-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PB8_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
+          cargo run --locked --release -p sml-core --example pascal_boolean_pb8_gate_bank -- benchmark
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence
