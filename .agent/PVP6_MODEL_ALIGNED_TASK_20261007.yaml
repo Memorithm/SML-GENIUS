@@ -1,5 +1,5 @@
 PVP6_next_model_aligned_slice_2026_10_07:
-  status: fixture_contract_implemented_PR230_task_timing_not_executed
+  status: fixture_contract_merged_PR230_task_timing_not_executed
   owner: SML_GENIUS
   objective: compare_activation_plus_query_cost_under_identical_ANF_gate_semantics
   existing_semantic_source: 013741325d02cd35eabc0086383b1d050c7ab1e8
