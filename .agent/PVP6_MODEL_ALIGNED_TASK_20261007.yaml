@@ -1,0 +1,38 @@
+PVP6_next_model_aligned_slice_2026_10_07:
+  status: prospective_task_protocol_preparation_not_executed
+  owner: SML_GENIUS
+  objective: compare_activation_plus_query_cost_under_identical_ANF_gate_semantics
+  existing_semantic_source: 013741325d02cd35eabc0086383b1d050c7ab1e8
+  source_file: crates/sml-core/examples/pascal_boolean_pb8_gate_bank.rs
+  source_blob: afdcea93eb2d0dc8689e6f1b35602d3c383ba0db
+  semantics: "f(x) = XOR(a[S] for S subseteq x)"
+  first_destination_reference:
+    domain_K: 2048
+    Boolean_features: 11
+    original_gates: 16
+    densities: [4, 32, 256, 1024]
+    populations: [AFFINE_UNIFORM, LOW_POPCOUNT, HIGH_POPCOUNT]
+    query_prefixes_Q: [32, 128, 512, 2048]
+    reuse_R: [1, 4, 16]
+    coefficient_and_truth_export: pending_exact_word_and_fixture_hash_contract
+    larger_banks: separately_declared_after_original_reference_passes
+  required_controls:
+    - SML_scalar_packed_Pascal_activation_plus_query
+    - competent_sparse_ANF_scan
+    - competent_submask_coefficient_query
+    - same_source_generic_truth_materialization
+    - resident_truth_lookup_separate_lifecycle_reference
+    - optional_portable_packed7_GPU_full_conversion_transfer_and_query_cost
+  before_task_timing:
+    - freeze_protocol_source_fixtures_output_contract_and_failure_rules
+    - independent_SML_monomial_oracle_every_word_and_query_output
+    - deterministic_replay_twice_byte_identical
+    - retain_sparse_low_query_and_dense_amortized_regimes
+    - declare_physical_panels_order_repetitions_and_resource_caps
+    - controlled_GPU_admission_before_confirmatory_gain
+  boundary:
+    - Dell_synthetic_carrier_ratios_do_not_prove_task_utility
+    - no_current_router_decision_head_Delta_KV_or_model_semantics_change
+    - no_mandatory_FLAT_SciRust_NNIS_runtime_dependency
+    - Rust_CPU_WGPU_only_installed_driver_vendor_specific
+    - future_SML_HARNESS_separate_from_self_sufficient_model

@@ -726,3 +726,5 @@ PVP_native_Dell_correctness_2026_10_07:
     - no_Thor_Dell_cohort_pooling
     - driver_only_vendor_layer_Rust_CPU_WGPU_path
     - final_SML_self_sufficient_FLAT_SciRust_NNIS_optional
+
+PVP6_next_slice_proposal: .agent/PVP6_MODEL_ALIGNED_TASK_20261007.yaml
