@@ -3,6 +3,10 @@ name: CI
 on:
   # The workflow definition comes from the protected base branch. Candidate
   # changes cannot select a persistent runner for their own validation run.
+  # Transitional bootstrap trigger. A follow-up PR removes this entry after
+  # pull_request_target is installed on main and can validate that removal.
+  pull_request:
+    branches: [main]
   pull_request_target:
     branches: [main]
   push:
@@ -24,7 +28,7 @@ jobs:
   rust:
     # PR code executes on a fresh GitHub-hosted VM. The persistent runner is
     # reserved for trusted code already integrated into main.
-    runs-on: ${{ github.event_name == 'pull_request_target' && 'ubuntu-24.04' || 'self-hosted' }}
+    runs-on: ${{ startsWith(github.event_name, 'pull_request') && 'ubuntu-24.04' || 'self-hosted' }}
     steps:
       - name: Checkout exact source revision without persistent credentials
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

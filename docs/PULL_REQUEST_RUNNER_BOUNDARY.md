@@ -2,11 +2,10 @@
 
 Audit finding: `COG-SML-002`.
 
-## Enforced workflow boundary
+## Intended final boundary
 
-The CI workflow is installed on `main` and is triggered with
-`pull_request_target`. GitHub therefore evaluates the workflow definition from
-the base branch rather than from candidate code.
+The CI workflow uses `pull_request_target`, so GitHub evaluates the workflow
+definition from the base branch rather than from candidate code.
 
 For a pull request:
 
@@ -19,16 +18,22 @@ For a pull request:
 For a push to `main`, the same job may run on the repository's self-hosted
 runner. That path only receives code after review and integration.
 
-This split prevents a pull request from changing its own runner selection and
-then executing candidate code on the persistent runner. Future changes to the
-workflow take effect for pull requests only after those changes are merged.
+## Two-step installation
 
-## Qualification and limits
+The bootstrap PR temporarily retains the legacy `pull_request` trigger so its
+exact head can execute all existing gates. Both pull-request event types select
+the GitHub-hosted runner.
 
-A follow-up pull request must exercise the installed base-branch definition and
-record the exact candidate SHA and runner class before this audit finding is
-closed. A successful bootstrap run alone is not sufficient, because the old
-`pull_request` definition controls that bootstrap run.
+After the bootstrap is merged, a follow-up PR removes the legacy trigger. That
+follow-up is evaluated by the already-installed `pull_request_target`
+definition from `main`, proving the final boundary on its exact head. The
+finding remains open until the follow-up and the target push are qualified.
+
+Once the follow-up is integrated, a future pull request cannot change its own
+runner selection: workflow changes affect `pull_request_target` only after
+review and merge.
+
+## Administrative limits
 
 Repository rulesets and runner-group administration are not available to the
 current GitHub App connection. This document does not claim that branch
