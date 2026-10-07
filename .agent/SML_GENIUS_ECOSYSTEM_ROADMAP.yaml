@@ -786,3 +786,44 @@ PVP_native_Dell_E2E_timing_2026_10_07:
     - no_Thor_Dell_pooling_default_route_model_quality_register_or_bandwidth_promotion
     - Rust_CPU_WGPU_only_installed_driver_vendor_specific
     - final_SML_self_sufficient_FLAT_SciRust_NNIS_optional_harness_separate
+
+SML_architecture_freeze_program_2026_10_07:
+  status: first_reference_fixture_slice_merged_architecture_not_frozen
+  user_authorization: apply_seven_gate_architecture_validation_roadmap
+  decision_contract: docs/SML-ARCHITECTURE-DECISION-GATES.md
+  fixture_contract: docs/SML-PVP6-ANF-FIXTURE-CONTRACT.md
+  pull_request: 230
+  exact_head: be55646855378a1f5b3c162a23121a5b6007c32e
+  merge_sha: eb3dea1e7bb5fc05ab85ea2b1f0005ba0608f922
+  exact_head_CI: {run_id: 37648607024, rust: success}
+  local_validation:
+    compiler: Rust_1_89_0
+    architecture: aarch64
+    workspace_tests: 108_successful_suite_summaries_zero_failures
+    workspace_all_targets_Clippy: success
+    example_tests: 4_passed
+    deterministic_replays_per_mode: 2_byte_identical
+    cells: 144
+    arms: 5
+    complete_arm_comparisons: 720
+    output_words_compared: 3427200
+    mismatches: 0
+    fixture_lines: 32770
+    fixture_bytes: 1404649
+    fixture_SHA256: feb1a144e23d9a29439b7cad6704f56637a7f7ead1a9b9abb39ad9c0ac5325fd
+    independent_supermask_export_check: 2048_bank_words_24576_output_words_zero_mismatches
+  next_active_slice: preregister_and_implement_full_output_activation_plus_query_timing
+  remaining_gates:
+    - learned_or_declared_integration_bank_export
+    - native_CPU_SIMD_and_optional_GPU_identical_task_comparison
+    - RemoteOps_controlled_physical_confirmation_separate_Thor_Dell
+    - recurrent_integration
+    - end_to_end_learning
+    - matched_architectural_ablations
+    - capacity_scaling_and_self_sufficient_destination_requalification
+  boundaries:
+    - PB8_synthetic_reference_not_trained_model_banks
+    - exact_task_evidence_is_not_speed_or_model_quality
+    - frozen_PB8_benchmark_and_closed_PGF2_mixing_result_unchanged
+    - Rust_CPU_WGPU_driver_only_vendor_layer
+    - final_SML_self_sufficient_optional_partners_separate_harness
