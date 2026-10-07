@@ -873,3 +873,19 @@ PVP6_native_CPU_task_2026_10_07:
     - no_default_route_autotuning_architecture_quality_or_tokens_per_second_promotion
     - no_GPU_vendor_API_or_existing_service_changes
     - Rust_CPU_WGPU_driver_only_vendor_layer_final_SML_self_sufficient_separate_harness
+
+
+PVP6_native_SciRust_PVP3_harness_2026_10_07:
+  status: PR_open_exact_head_CI_pending
+  repository: Memorithm/scirust
+  pull_request: 1566
+  exact_head: da00421c97d53feca8cc55f88e4a5ddf311ec741
+  protocol: docs/PVP3_NATIVE_BENCHMARK_PROTOCOL.md
+  scope:
+    - dependency_free_scalar_AVX2_AVX512_NEON_SVE_native_transform_harness
+    - scalar_and_small_case_direct_oracle_before_timing
+    - same_input_per_candidate_median_p95_checksum_and_storage_accounting
+  boundary:
+    - deterministic_harness_fixture_is_not_the_frozen_SML_PVP6_corpus
+    - native_Thor_execution_and_cross_repository_fixture_adapter_remain_pending
+    - no_SML_architecture_default_route_GPU_or_model_quality_claim
