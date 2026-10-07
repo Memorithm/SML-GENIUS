@@ -978,6 +978,8 @@ fn main() {
         "benchmark" => benchmark(),
         "pvp6-fixture" => pvp6_fixture(),
         "pvp6-exact-task" => pvp6_exact_task(),
+        "pvp6-task-plan" => pvp6_task_plan(),
+        "pvp6-task-benchmark" => pvp6_task_benchmark(),
         other => panic!("unknown PB8 mode: {other}"),
     }
 }
@@ -1173,5 +1175,155 @@ mod pvp6_tests {
             task_words(Arm::Resident, &gates, &addresses, 32, 1),
             expected
         );
+    }
+}
+
+const PVP6_WARMUPS: usize = 5;
+const PVP6_REPETITIONS: usize = 20;
+
+fn pvp6_timing_cells() -> Vec<(usize, ScheduleKind, usize, usize)> {
+    let mut cells = physical_cells()
+        .into_iter()
+        .map(|c| (c.density, c.schedule, c.q, c.reuse))
+        .collect::<Vec<_>>();
+    for kind in ScheduleKind::ALL {
+        cells.push((4, kind, 32, 1));
+    }
+    cells.push((1024, ScheduleKind::AffineUniform, 2048, 16));
+    let mut seen = BTreeSet::new();
+    cells.retain(|(d, k, q, r)| seen.insert((*d, k.name(), *q, *r)));
+    cells
+}
+
+fn pvp6_order(process: usize, cell: usize, repetition: usize) -> Vec<Arm> {
+    let offset = (process - 1 + cell + repetition % 5) % 5;
+    (0..5)
+        .map(|position| {
+            let step = if (repetition / 5) % 2 == 0 {
+                position
+            } else {
+                (5 - position) % 5
+            };
+            Arm::ALL[(offset + step) % 5]
+        })
+        .collect()
+}
+
+fn pvp6_task_plan() {
+    println!("PVP6_TASK_PLAN,protocol=1,cells=20,arms=5,processes=10,warmups=5,repetitions=20");
+    for (cell, (density, kind, q, reuse)) in pvp6_timing_cells().into_iter().enumerate() {
+        println!(
+            "CELL,{cell},{density},{},{q},{reuse},output_words={}",
+            kind.name(),
+            q * reuse
+        );
+    }
+    println!("END,measured_per_process=2000,warmup_per_process=500");
+}
+
+fn pvp6_task_benchmark() {
+    let process = env::var("PVP6_PROCESS_ID")
+        .expect("required process ID")
+        .parse::<usize>()
+        .expect("integer process ID");
+    assert!((1..=10).contains(&process));
+    let source = env::var("PVP6_SOURCE_REV").expect("required pinned source revision");
+    assert!(
+        source.len() == 40
+            && source
+                .bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    );
+    println!("PVP6_TASK_BEGIN,protocol=1,process={process},source={source},arch={},cells=20,arms=5,warmups=5,repetitions=20,admission=shared_CPU_diagnostic", env::consts::ARCH);
+    let mut measured = 0;
+    let mut warmups = 0;
+    let mut words = 0_usize;
+    for (cell, (density, kind, q, reuse)) in pvp6_timing_cells().into_iter().enumerate() {
+        let gates = generate_bank(density);
+        let addresses = schedule(kind);
+        let expected = task_oracle(&gates, &addresses, q, reuse);
+        let mut times: [Vec<u128>; 5] =
+            std::array::from_fn(|_| Vec::with_capacity(PVP6_REPETITIONS));
+        for repetition in 0..PVP6_WARMUPS + PVP6_REPETITIONS {
+            let warmup = repetition < PVP6_WARMUPS;
+            let relative = if warmup {
+                repetition
+            } else {
+                repetition - PVP6_WARMUPS
+            };
+            for (position, arm) in pvp6_order(process, cell, relative).into_iter().enumerate() {
+                let start = Instant::now();
+                let actual = task_words(
+                    black_box(arm),
+                    black_box(&gates),
+                    black_box(&addresses),
+                    q,
+                    reuse,
+                );
+                black_box(&actual);
+                let elapsed = start.elapsed().as_nanos();
+                let exact = exact_words(&actual, &expected);
+                let mismatches = actual.iter().zip(&expected).filter(|(a, b)| a != b).count();
+                println!("PVP6_SAMPLE,process={process},cell={cell},density={density},schedule={},q={q},reuse={reuse},warmup={},repetition={relative},position={position},arm={},ns={elapsed},words={},mismatches={mismatches},exact={}",kind.name(),u8::from(warmup),arm.name(),actual.len(),u8::from(exact));
+                assert!(exact && elapsed > 0, "PVP6 timed output or clock failure");
+                words += actual.len();
+                if warmup {
+                    warmups += 1;
+                } else {
+                    measured += 1;
+                    times[arm.index()].push(elapsed);
+                }
+            }
+        }
+        for arm in Arm::ALL {
+            println!("PVP6_SUMMARY,process={process},cell={cell},arm={},samples={},median_ns={},p95_ns={},lifecycle={}",arm.name(),times[arm.index()].len(),median(&times[arm.index()]),percentile(&times[arm.index()],95,100),if arm == Arm::Resident { "resident_lookup" } else { "activation_plus_query" });
+        }
+    }
+    assert_eq!((measured, warmups), (2000, 500));
+    println!("PVP6_TASK_END,process={process},measured={measured},warmups={warmups},verified_words={words},mismatches=0");
+    println!("PROMOTION,BLOCKED,synthetic_shared_CPU_diagnostic_only");
+}
+
+#[cfg(test)]
+mod pvp6_timing_tests {
+    use super::*;
+
+    #[test]
+    fn panels_are_unique_and_preserve_negative_boundary() {
+        let cells = pvp6_timing_cells();
+        assert_eq!(cells.len(), 20);
+        let keys = cells
+            .iter()
+            .map(|(d, k, q, r)| (*d, k.name(), *q, *r))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(keys.len(), 20);
+        for kind in ScheduleKind::ALL {
+            assert!(keys.contains(&(4, kind.name(), 32, 1)));
+        }
+        assert!(keys.contains(&(1024, "AFFINE_UNIFORM", 2048, 16)));
+    }
+
+    #[test]
+    fn every_arm_occupies_every_position_four_times() {
+        for process in 1..=10 {
+            for cell in 0..20 {
+                let mut positions = [[0; 5]; 5];
+                for repetition in 0..20 {
+                    let order = pvp6_order(process, cell, repetition);
+                    assert_eq!(
+                        order
+                            .iter()
+                            .map(|a| a.index())
+                            .collect::<BTreeSet<_>>()
+                            .len(),
+                        5
+                    );
+                    for (position, arm) in order.into_iter().enumerate() {
+                        positions[arm.index()][position] += 1;
+                    }
+                }
+                assert!(positions.iter().flatten().all(|&count| count == 4));
+            }
+        }
     }
 }
