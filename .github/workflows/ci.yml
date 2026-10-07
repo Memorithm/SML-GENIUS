@@ -1,13 +1,19 @@
 name: CI
 
 on:
+  # The workflow definition comes from the protected base branch. Candidate
+  # changes cannot select a persistent runner for their own validation run.
+  # Transitional bootstrap trigger. A follow-up PR removes this entry after
+  # pull_request_target is installed on main and can validate that removal.
   pull_request:
+    branches: [main]
+  pull_request_target:
     branches: [main]
   push:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -20,9 +26,16 @@ env:
 
 jobs:
   rust:
-    runs-on: [self-hosted]
+    # PR code executes on a fresh GitHub-hosted VM. The persistent runner is
+    # reserved for trusted code already integrated into main.
+    runs-on: ${{ startsWith(github.event_name, 'pull_request') && 'ubuntu-24.04' || 'self-hosted' }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Checkout exact source revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Isolate Rust toolchain homes
         shell: bash
         run: |
