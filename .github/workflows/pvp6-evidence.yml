@@ -1,0 +1,21 @@
+name: PVP6 CPU evidence replay
+on:
+  pull_request:
+    paths: ['scripts/verify-pvp6-timing.rs', 'scripts/check-pvp6-cpu-evidence.sh', 'docs/research/PVP6_CPU_TASK_OBSERVATION_20261007.md', 'docs/research/evidence/pvp6-cpu-20261007/**', '.github/workflows/pvp6-evidence.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/verify-pvp6-timing.rs', 'scripts/check-pvp6-cpu-evidence.sh', 'docs/research/evidence/pvp6-cpu-20261007/**', '.github/workflows/pvp6-evidence.yml']
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt
+      - run: bash scripts/check-pvp6-cpu-evidence.sh
