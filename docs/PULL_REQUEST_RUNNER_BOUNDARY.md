@@ -40,3 +40,9 @@ claims are unchanged.
 Repository rulesets and runner-group administration are not available to the
 current GitHub App connection. This document does not claim that branch
 protection or selected-workflow runner-group restrictions are configured.
+
+At qualification time this repository is private. GitHub's announced
+November 2, 2026 default block for `pull_request_target` applies to public
+repositories. Before any future visibility change to public, maintainers must
+either install and verify an Actions policy exception for this event or restore
+an unprivileged GitHub-hosted `pull_request` validation path.
