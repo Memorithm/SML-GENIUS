@@ -3,10 +3,6 @@ name: CI
 on:
   # The workflow definition comes from the protected base branch. Candidate
   # changes cannot select a persistent runner for their own validation run.
-  # Transitional bootstrap trigger. A follow-up PR removes this entry after
-  # pull_request_target is installed on main and can validate that removal.
-  pull_request:
-    branches: [main]
   pull_request_target:
     branches: [main]
   push:
