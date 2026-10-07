@@ -1,5 +1,5 @@
 PVP6_next_model_aligned_slice_2026_10_07:
-  status: fixture_contract_merged_PR230_task_timing_not_executed
+  status: CPU_task_diagnostic_merged_PR232_native_backend_comparison_pending
   owner: SML_GENIUS
   objective: compare_activation_plus_query_cost_under_identical_ANF_gate_semantics
   existing_semantic_source: 013741325d02cd35eabc0086383b1d050c7ab1e8
@@ -19,7 +19,9 @@ PVP6_next_model_aligned_slice_2026_10_07:
     full_query_output_contract: Q_times_R_u64_repeat_major_gate_bits_0_to_15
     reference_exactness: 144_cells_720_arm_comparisons_3427200_words_zero_mismatches
     learned_model_bank_export: pending
-    timing_endpoint: pending_full_output_activation_plus_query_implementation
+    timing_endpoint: docs/SML-PVP6-CPU-TASK-TIMING-PROTOCOL.md
+    CPU_evidence: docs/research/PVP6_CPU_TASK_OBSERVATION_20261007.md
+    next_native_backend_task: .agent/PVP6_NATIVE_BACKEND_TASK_20261007.yaml
     architecture_decision_gates: docs/SML-ARCHITECTURE-DECISION-GATES.md
     larger_banks: separately_declared_after_original_reference_passes
   required_controls:
