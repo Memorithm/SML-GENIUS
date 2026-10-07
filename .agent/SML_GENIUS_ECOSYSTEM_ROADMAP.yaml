@@ -827,3 +827,49 @@ SML_architecture_freeze_program_2026_10_07:
     - frozen_PB8_benchmark_and_closed_PGF2_mixing_result_unchanged
     - Rust_CPU_WGPU_driver_only_vendor_layer
     - final_SML_self_sufficient_optional_partners_separate_harness
+
+PVP6_native_CPU_task_2026_10_07:
+  status: merged_shared_host_diagnostic_no_architecture_promotion
+  protocol_PR: 231
+  protocol_merge: 6d4620efe7037c41e270517a099904798ec99a87
+  execution_source: ffad90f795ccd806998efe07f347ba303def5cfa
+  control_PRs: [313, 314]
+  control_source: f3010810b542fd0290580e07d1afe537d8aaa790
+  evidence_PR: 232
+  evidence_head: cbe1bdbfac22996501236008df40e79dd429e94d
+  evidence_merge: 15576861eaae652d012b32abef4bd5dd3e651d5a
+  exact_head_CI: {rust: success, replay: success}
+  report: docs/research/PVP6_CPU_TASK_OBSERVATION_20261007.md
+  host: Thor_tarek_native_aarch64
+  compiler: Rust_1_89_0_release
+  campaign: campaign.s3aWvYit
+  processes: 10
+  unique_cells: 20
+  arms: 5
+  measured_samples: 20000
+  warmup_samples: 5000
+  complete_word_comparisons: 115160000
+  mismatches: 0
+  summaries_independently_recomputed: 1000
+  verifier_tests: 5
+  archive_original_files: 95
+  archive_SHA256: fc0e1f7c41c95d7df36762425f27840a57e927c6588cd2e718b7e13ac02003b7
+  observed_limits: {memory_max_bytes: 1073741824, cpu_max: "100000 100000", unprivileged: true}
+  cgroup_memory_peak_bytes: {min: 2129920, max: 2502656}
+  workload_surface:
+    Pascal_faster_than_best_activation_query_control_cells: 17
+    direct_faster_density4_Q32_R1_cells: 3
+    resident_lookup: separate_prepaid_lifecycle
+  setup_failure_retained:
+    campaign: campaign.3Yyr9L5q
+    cause: missing_external_usr_bin_time
+    exit: 127
+    measured_or_warmup_samples: 0
+    correction: RemoteOps_PR314_Bash_builtin_time
+  next_slice: .agent/PVP6_NATIVE_BACKEND_TASK_20261007.yaml
+  boundaries:
+    - shared_CPU_diagnostic_not_confirmed_exclusive_host_gain
+    - synthetic_PB8_banks_not_trained_model_banks
+    - no_default_route_autotuning_architecture_quality_or_tokens_per_second_promotion
+    - no_GPU_vendor_API_or_existing_service_changes
+    - Rust_CPU_WGPU_driver_only_vendor_layer_final_SML_self_sufficient_separate_harness
