@@ -160,6 +160,8 @@ jobs:
           set -euo pipefail
           echo "PB9_CI_ENV,runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),target=$(rustc -vV | awk '/^host:/{print $2}')"
           cargo run --locked --release -p sml-core --example pascal_boolean_pb9_large_width -- benchmark
+      - name: PVP6 fixture and complete task-output qualification
+        run: bash scripts/check-pvp6-fixture.sh
       - name: Native decision evidence
         run: cargo test --locked -p sml-decision -- --nocapture
       - name: Native RSI governance evidence

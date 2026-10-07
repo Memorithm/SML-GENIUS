@@ -976,6 +976,202 @@ fn main() {
             run_deterministic(true);
         }
         "benchmark" => benchmark(),
+        "pvp6-fixture" => pvp6_fixture(),
+        "pvp6-exact-task" => pvp6_exact_task(),
         other => panic!("unknown PB8 mode: {other}"),
+    }
+}
+
+// PVP6 v1 extends evidence modes only; the frozen PB8 timing endpoint is unchanged.
+// Output word i = repeat * Q + position, with gate g in bit g and bits 16..63 zero.
+fn task_words(arm: Arm, gates: &[Gate], addresses: &[usize], q: usize, reuse: usize) -> Vec<u64> {
+    assert!(Q_VALUES.contains(&q));
+    assert!(REUSE_VALUES.contains(&reuse));
+    assert_eq!(gates.len(), GATES);
+    assert!(addresses.len() >= q && addresses.iter().all(|&x| x < BITS));
+    let mut output = vec![0_u64; q * reuse];
+    for (gate_index, gate) in gates.iter().enumerate() {
+        let materialized = match arm {
+            Arm::Pascal => Some(materialize_pascal(&gate.coefficients)),
+            Arm::Generic => Some(materialize_generic(&gate.coefficients)),
+            _ => None,
+        };
+        for repeat in 0..reuse {
+            for (position, &x) in addresses.iter().take(q).enumerate() {
+                let value = match arm {
+                    Arm::Pascal | Arm::Generic => get_bit(materialized.as_ref().unwrap(), x),
+                    Arm::Sparse => sparse_eval(&gate.monomials, x),
+                    Arm::Submask => submask_eval(&gate.coefficients, x),
+                    Arm::Resident => get_bit(&gate.resident_truth, x),
+                };
+                output[repeat * q + position] |= u64::from(value) << gate_index;
+            }
+        }
+    }
+    output
+}
+
+// A separate output oracle evaluates each monomial rather than querying transformed tables.
+fn task_oracle(gates: &[Gate], addresses: &[usize], q: usize, reuse: usize) -> Vec<u64> {
+    let base = addresses
+        .iter()
+        .take(q)
+        .map(|&x| {
+            gates.iter().enumerate().fold(0_u64, |word, (g, gate)| {
+                word | (u64::from(oracle_eval(&gate.monomials, x)) << g)
+            })
+        })
+        .collect::<Vec<_>>();
+    (0..reuse).flat_map(|_| base.iter().copied()).collect()
+}
+
+fn exact_words(actual: &[u64], expected: &[u64]) -> bool {
+    actual.len() == expected.len() && actual == expected
+}
+
+fn pvp6_exact_task() {
+    let mut cells = 0;
+    let mut comparisons = 0;
+    let mut words = 0;
+    for density in DENSITIES {
+        let gates = generate_bank(density);
+        for kind in ScheduleKind::ALL {
+            let addresses = schedule(kind);
+            // Compute independent monomial values once outside every candidate.
+            let oracle = task_oracle(&gates, &addresses, BITS, 1);
+            for q in Q_VALUES {
+                for reuse in REUSE_VALUES {
+                    let expected = (0..reuse)
+                        .flat_map(|_| oracle[..q].iter().copied())
+                        .collect::<Vec<_>>();
+                    for arm in Arm::ALL {
+                        let actual = task_words(arm, &gates, &addresses, q, reuse);
+                        assert!(exact_words(&actual, &expected), "PVP6 full output mismatch");
+                        comparisons += 1;
+                        words += actual.len();
+                    }
+                    cells += 1;
+                }
+            }
+        }
+    }
+    println!("PVP6_EXACT_TASK,schema=1,cells={cells},arm_comparisons={comparisons},words={words},mismatches=0");
+    println!("PROMOTION,BLOCKED,pvp6_fixture_and_exact_task_only");
+}
+
+fn pvp6_fixture() {
+    use std::io::{self, Write};
+    let stdout = io::stdout();
+    let mut out = io::BufWriter::new(stdout.lock());
+    writeln!(
+        out,
+        "PVP6_FIXTURE,1,K,{BITS},G,{GATES},word_bits,64,bit_order,lsb0"
+    )
+    .unwrap();
+    for density in DENSITIES {
+        let gates = generate_bank(density);
+        for (g, gate) in gates.iter().enumerate() {
+            let truth = materialize_pascal(&gate.coefficients);
+            assert!(exact_words(&truth, &gate.resident_truth));
+            for (w, truth_word) in truth.iter().enumerate() {
+                writeln!(
+                    out,
+                    "BANK,{density},{g},{w},{:016x},{:016x}",
+                    gate.coefficients[w], truth_word
+                )
+                .unwrap();
+            }
+        }
+    }
+    for kind in ScheduleKind::ALL {
+        let addresses = schedule(kind);
+        for (position, x) in addresses.iter().enumerate() {
+            writeln!(out, "QUERY,{},{position},{x}", kind.name()).unwrap();
+        }
+        for density in DENSITIES {
+            let gates = generate_bank(density);
+            let expected = task_oracle(&gates, &addresses, BITS, 1);
+            for (position, word) in expected.iter().enumerate() {
+                writeln!(
+                    out,
+                    "OUTPUT,{density},{},{position},{word:016x}",
+                    kind.name()
+                )
+                .unwrap();
+            }
+        }
+    }
+    writeln!(
+        out,
+        "END,banks,4,bank_words,2048,query_rows,6144,output_rows,24576"
+    )
+    .unwrap();
+    out.flush().unwrap();
+}
+
+#[cfg(test)]
+mod pvp6_tests {
+    use super::*;
+
+    #[test]
+    fn full_words_reject_length_value_and_padding_corruption() {
+        assert!(exact_words(&[1, 2], &[1, 2]));
+        assert!(!exact_words(&[1], &[1, 2]));
+        assert!(!exact_words(&[1, 2, 0], &[1, 2]));
+        assert!(!exact_words(&[1, 3], &[1, 2]));
+        assert!(!exact_words(&[1 | (1_u64 << 63), 2], &[1, 2]));
+    }
+
+    #[test]
+    fn query_schedules_are_complete_unique_and_bounded() {
+        for kind in ScheduleKind::ALL {
+            let addresses = schedule(kind);
+            assert_eq!(addresses.len(), BITS);
+            assert_eq!(
+                addresses.iter().copied().collect::<BTreeSet<_>>(),
+                (0..BITS).collect()
+            );
+        }
+    }
+
+    #[test]
+    fn all_arms_match_complete_query_outputs_and_reuse_order() {
+        for density in DENSITIES {
+            let gates = generate_bank(density);
+            for kind in ScheduleKind::ALL {
+                let addresses = schedule(kind);
+                let expected = task_oracle(&gates, &addresses, 32, 4);
+                for arm in Arm::ALL {
+                    assert_eq!(task_words(arm, &gates, &addresses, 32, 4), expected);
+                }
+                assert_eq!(&expected[..32], &expected[32..64]);
+                assert!(expected.iter().all(|word| word >> GATES == 0));
+            }
+        }
+    }
+
+    #[test]
+    fn changed_coefficients_require_new_truth_and_corruption_is_detected() {
+        let mut gates = generate_bank(4);
+        let addresses = schedule(ScheduleKind::AffineUniform);
+        let before = task_words(Arm::Pascal, &gates, &addresses, 32, 1);
+        gates[0].coefficients[0] ^= 1;
+        if let Some(index) = gates[0].monomials.iter().position(|&mask| mask == 0) {
+            gates[0].monomials.remove(index);
+        } else {
+            gates[0].monomials.push(0);
+        }
+        let expected = task_oracle(&gates, &addresses, 32, 1);
+        assert!(!exact_words(&before, &expected));
+        assert_eq!(task_words(Arm::Pascal, &gates, &addresses, 32, 1), expected);
+        assert!(!exact_words(
+            &task_words(Arm::Resident, &gates, &addresses, 32, 1),
+            &expected
+        ));
+        gates[0].resident_truth = oracle_truth(&gates[0].monomials);
+        assert_eq!(
+            task_words(Arm::Resident, &gates, &addresses, 32, 1),
+            expected
+        );
     }
 }
