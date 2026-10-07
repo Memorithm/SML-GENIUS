@@ -22,3 +22,9 @@ test "$(wc -l < "$out/fixture-first.csv")" -eq 32770
 test "$(wc -c < "$out/fixture-first.csv")" -eq 1404649
 cat "$out/task-first.csv"
 printf 'PVP6_FIXTURE_SHA256,%s\n' "$expected_fixture"
+
+for pass in first second; do
+  cargo run --locked --release -p sml-core --example pascal_boolean_pb8_gate_bank -- pvp6-task-plan > "$out/plan-$pass.csv"
+done
+cmp "$out/plan-first.csv" "$out/plan-second.csv"
+test "$(wc -l < "$out/plan-first.csv")" -eq 22
