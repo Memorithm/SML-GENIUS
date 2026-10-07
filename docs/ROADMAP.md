@@ -704,3 +704,15 @@ This track follows retained PB-9 evidence and does not change the closed PGF2 re
 - [ ] **PVP-8** — freeze Model/Harness interface and create the separate `Memorithm/SML-HARNESS` repository.
 
 The PVP target path is CPU/SIMD/WGPU/open-GPU. No CUDA, NVRTC, cuDNN, TensorRT/TensorRT-LLM, NVML, CUTLASS or vendor SDK is a required dependency; only the installed GPU driver may be vendor-specific. A hardware microbenchmark cannot close PVP-6, and a model-quality result cannot be inferred from kernel throughput.
+
+
+## Architecture freeze programme — 2026-10-07
+
+The user-approved seven-gate validation sequence is recorded in
+[SML-ARCHITECTURE-DECISION-GATES.md](SML-ARCHITECTURE-DECISION-GATES.md).
+The first implementation is the
+[PVP6 ANF fixture and complete-output contract](SML-PVP6-ANF-FIXTURE-CONTRACT.md).
+This reference qualification does not close PVP-6 or select a model architecture.
+RemoteOps remains the physical execution control plane; trained-model export,
+native task comparisons, recurrent integration, learning, ablations and scaling
+remain separate evidence gates.
