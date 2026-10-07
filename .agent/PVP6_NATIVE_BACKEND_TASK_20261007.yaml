@@ -1,0 +1,43 @@
+PVP6_native_backend_followup_2026_10_07:
+  status: prospective_not_executed
+  owner: SML_GENIUS
+  prerequisite_evidence_PR: 232
+  scientific_protocol: docs/SML-PVP6-CPU-TASK-TIMING-PROTOCOL.md
+  canonical_fixture: docs/SML-PVP6-ANF-FIXTURE-CONTRACT.md
+  fixture_SHA256: feb1a144e23d9a29439b7cad6704f56637a7f7ead1a9b9abb39ad9c0ac5325fd
+  output: Q_times_R_u64_repeat_major_16_gate_bits_zero_upper_padding
+  first_scope: original_K2048_G16_twenty_unique_CPU_task_cells
+  comparison_endpoint: canonical_host_coefficients_plus_queries_to_complete_canonical_host_output
+  candidates:
+    - SciRust_native_scalar_NEON_on_Thor
+    - SciRust_native_scalar_AVX2_AVX512_when_available_on_Dell
+    - optional_FLAT_packed7_WGPU
+    - optional_NNIS_portable_CPU_WGPU_session
+  required_costs:
+    - physical_layout_conversion_and_padding
+    - materialization_activation
+    - candidate_resource_preparation_with_declared_lifecycle
+    - query_output_allocation_and_packing
+    - GPU_upload_wait_readback_and_query_when_applicable
+  rules:
+    - freeze_destination_adapter_sources_counts_order_resource_caps_before_timing
+    - independent_full_word_truth_and_query_oracle_in_every_destination
+    - same_source_scalar_sparse_submask_generic_controls
+    - resident_lookup_separate_lifecycle
+    - preserve_three_density4_Q32_R1_negative_boundaries
+    - native_SIMD_timing_only_QEMU_is_correctness
+    - no_backend_dispatch_or_automatic_fallback_inside_comparison
+    - RemoteOps_is_physical_control_plane
+    - GPU_confirmatory_gain_requires_controlled_admission
+    - separate_Thor_Dell_and_CPU_GPU_cohorts
+    - retain_all_failures_slower_rows_and_capability_rejections
+  later_scope:
+    - declared_integration_or_learned_bank_export
+    - larger_bank_geometries_after_original_reference_qualification
+    - coefficient_change_rebuild_lifecycle
+    - recurrent_model_and_training_gates
+  boundaries:
+    - synthetic_CPU_utility_does_not_select_model_architecture
+    - Rust_CPU_WGPU_driver_only_vendor_layer
+    - final_SML_self_sufficient_external_partners_optional
+    - future_harness_separate
