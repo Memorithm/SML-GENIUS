@@ -59,7 +59,7 @@ replace the ten measured processes. `campaign.8NV6sN5n` is the untimed adapter p
 
 ## Workload surface and arithmetic
 
-Cell IDs refer to the frozen [timing protocol](../../SML-PVP6-CPU-TASK-TIMING-PROTOCOL.md).
+Cell IDs refer to the frozen [timing protocol](../SML-PVP6-CPU-TASK-TIMING-PROTOCOL.md).
 K=2048, G=16; synthetic PB8 ANF coefficients, not trained-model banks.
 Times below are microseconds: the median of ten per-process medians, not a
 pooled median. Ratio is the median of ten per-process ratios:
