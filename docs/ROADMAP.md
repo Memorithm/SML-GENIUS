@@ -741,3 +741,20 @@ updates without mutating the initial bank. This does **not** yet integrate the
 actual SBG/MOR/Delta-KV loop, learned banks, memory, or measured latency. A4
 remains open pending complete routing/state/memory/output integration, varied
 sequence lengths and independently qualified end-to-end cost.
+
+## A4 SBG/ANF ten-slice functional integration
+
+Contract and limits: [SML-A4-SBG-INTEGRATION.md](SML-A4-SBG-INTEGRATION.md).
+The native SemanticRewriter path now feeds current V/M/A/R state into declared
+ANF wiring, with revisioned bank replacement, transactional stage composition,
+logical budgets, native MOR decisions and DKV-2b integration controls.
+The golden public-API panel and independent std-only replay are mandatory in
+the existing fixture CI step. They validate 192 cases and 720 complete cycles;
+the separate DKV/ANF/MOR integration matrix contains 48 trajectories.
+
+These close the declared synthetic execution checks, not the complete A4 gate.
+Next model work must qualify dynamic key/state coupling and actual selected
+expert-page execution, larger declared or learned integration banks, persistent
+full-pipeline checkpointing and controlled end-to-end cost. A5 learning, A6
+matched architectural ablations and A7 scaling remain open. Final SML remains
+self-contained and partner runtimes optional; RemoteOps retains physical control.

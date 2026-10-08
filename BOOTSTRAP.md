@@ -634,3 +634,16 @@ reference with explicit bank replacement and complete output comparison. It is a
 step toward A4, not the full recurrent model: the final state is the previous
 query-major output, not SBG/MOR/Delta-KV state. No learned utility or performance
 promotion is authorized. RemoteOps remains the physical control plane.
+
+## A4 state-fed SBG integration batch
+
+The sequence-only PR237 reference is no longer the active integration surface.
+`pvp6_sbg`, `pvp6_sbg_kernel`, `semantic::transactional`, `pvp6_sbg_routing`
+and `pvp6_sbg_trace` provide declared state feedback, checked coefficient updates,
+owned-stage rollback, logical budgets, native MOR routing and bounded trace exchange.
+The native DKV-2b/ANF/MOR test has 48 direct-control trajectories. The complete
+public-API panel has 192 cases, 720 cycles, owned ANF checkpoint continuation and
+full four-field trajectory replay. Read `docs/SML-A4-SBG-INTEGRATION.md` for exact
+contracts and remaining gates. These are synthetic functional results, not trained
+utility, physical speed or final architecture qualification. Checkpoint continuation
+is in-memory and ANF-only; expert-page execution and dynamic DKV keys remain open.
