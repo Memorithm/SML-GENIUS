@@ -59,9 +59,29 @@ Acceptance counts per complete execution:
 
 The mandatory `scripts/check-pvp6-fixture.sh` now executes this mode twice,
 requires byte-identical reports and checks the exact counts above in addition to
-its original frozen hash and five-arm exact-task checks. No CI workflow or
-runner-security boundary is relaxed. The pre-existing CI step already invokes
-this script on pull requests and on integrated main.
+its original frozen hash and five-arm exact-task checks. The pre-existing CI
+step invokes this script on fresh hosted PR workers and on integrated main
+through the managed self-hosted runner; it remains mandatory.
+
+## Native workflow provenance repair
+
+The previous native workflow automatically repeated timing on PB8 source changes,
+while recording a fixed historical source string rather than the actual checkout
+and invoking the benchmark without an explicit release profile. That job does
+not qualify the timing of the new executor. The initial automatically queued run
+for this PR was cancelled; no new timing evidence is admitted here.
+
+Automatic functional admission stays in the existing mandatory CI (fresh hosted
+PR execution, native integrated-main execution). The separate native workflow is
+now a main-only manual correctness/admission job: exact checkout SHA verification,
+Rust 1.89.0, isolated toolchain/build homes, locked release builds, full destination
+qualification and the pinned SciRust fixture consumer. Artifacts include the
+actual source and are labelled correctness-only. It cannot execute a PR ref or
+quietly launch a timing campaign. No existing CI gate is disabled or made optional.
+This manual workflow is not itself evidence of an executed native run; use the
+observed CI/run receipts. Future timing needs a separately qualified, source-pinned
+RemoteOps control and declared measurement protocol. Historical archives remain
+unchanged; this repair does not retrospectively upgrade their provenance.
 
 ## Independent boundary checks
 

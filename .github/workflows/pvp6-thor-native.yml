@@ -1,13 +1,9 @@
-name: PVP6 native Thor campaign
+name: PVP6 native Thor correctness
 
+# PR correctness is mandatory in ci.yml on a fresh hosted VM. The same fixture
+# script runs on integrated main on the managed self-hosted runner. Do not run
+# candidate PR code or silently repeat an old timing campaign on persistent hosts.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/pvp6-thor-native.yml"
-      - "scripts/verify-pvp6-timing.rs"
-      - "scripts/check-pvp6-cpu-evidence.sh"
-      - "crates/sml-core/examples/pascal_boolean_pb8_gate_bank.rs"
-      - "docs/SML-PVP6-ANF-FIXTURE-CONTRACT.md"
   workflow_dispatch:
 
 permissions:
@@ -19,16 +15,22 @@ concurrency:
 
 jobs:
   thor-native:
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Linux, ARM64]
-    timeout-minutes: 60
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: ""
     steps:
-      - name: Checkout SML-GENIUS
+      - name: Checkout exact integrated SML source without credentials
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: ${{ github.sha }}
           path: sml-genius
           persist-credentials: false
 
-      - name: Checkout SciRust consumer
+      - name: Checkout pinned SciRust consumer without credentials
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust
@@ -36,70 +38,77 @@ jobs:
           path: scirust
           persist-credentials: false
 
-      - name: Pin toolchain and host
-        working-directory: sml-genius
+      - name: Isolate toolchain and build homes
+        shell: bash
         run: |
-          rustc --version --verbose
-          cargo --version
-          uname -a
-          printf 'source=%s\narch=%s\n' \
-            '15576861eaae652d012b32abef4bd5dd3e651d5a' \
-            "$(uname -m)" | tee ../pvp6-thor-source.txt
+          set -euo pipefail
+          echo "RUSTUP_HOME=$RUNNER_TEMP/pvp6-rustup" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$RUNNER_TEMP/pvp6-cargo" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/pvp6-sml-target" >> "$GITHUB_ENV"
 
-      - name: Generate and admit frozen fixture
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+
+      - name: Record actual source and native host
         working-directory: sml-genius
+        shell: bash
         run: |
-          cargo run -p sml-core --example pascal_boolean_pb8_gate_bank -- pvp6-fixture \
-            > ../pvp6_fixture.csv
+          set -euo pipefail
+          source="$(git rev-parse HEAD)"
+          test "$source" = "$GITHUB_SHA"
+          test "$(uname -m)" = aarch64
+          {
+            printf 'source=%s\narch=%s\nmode=correctness_only\n' "$source" "$(uname -m)"
+            printf 'scirust_source=%s\n' "$(git -C ../scirust rev-parse HEAD)"
+            rustc +1.89.0 --version --verbose
+            cargo +1.89.0 --version
+          } | tee ../pvp6-thor-source.txt
+
+      - name: Generate and admit unchanged frozen fixture and model executor
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.89.0 run --locked --release -p sml-core \
+            --example pascal_boolean_pb8_gate_bank -- pvp6-fixture > ../pvp6_fixture.csv
           expected='feb1a144e23d9a29439b7cad6704f56637a7f7ead1a9b9abb39ad9c0ac5325fd'
           actual="$(sha256sum ../pvp6_fixture.csv | awk '{print $1}')"
           test "$actual" = "$expected"
           printf 'fixture_sha256=%s\n' "$actual" | tee ../pvp6-thor-admission.txt
-          bash scripts/check-pvp6-fixture.sh
+          bash scripts/check-pvp6-fixture.sh | tee ../pvp6-thor-executor.log
 
-      - name: Run SciRust structural admission
+      - name: Run pinned SciRust structural admission
         working-directory: scirust
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/pvp6-scirust-target
         run: |
           set -euo pipefail
-          export CARGO_HOME="$RUNNER_TEMP/pvp6-cargo-home"
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/pvp6-scirust-target"
-          mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR"
-          cargo run -p scirust-simd --example pvp6_fixture_check -- \
-            --fixture ../pvp6_fixture.csv | tee ../pvp6-scirust-admission.json
+          cargo +1.89.0 run --locked --release -p scirust-simd \
+            --example pvp6_fixture_check -- --fixture ../pvp6_fixture.csv \
+            | tee ../pvp6-scirust-admission.json
 
-      - name: Run ten-process native SML campaign
-        working-directory: sml-genius
-        run: |
-          set -euo pipefail
-          : > ../pvp6-thor-native.raw.log
-          for process in $(seq 1 10); do
-            PVP6_PROCESS_ID="$process" \
-            PVP6_SOURCE_REV='15576861eaae652d012b32abef4bd5dd3e651d5a' \
-            cargo run -p sml-core --example pascal_boolean_pb8_gate_bank -- \
-              pvp6-task-benchmark >> ../pvp6-thor-native.raw.log
-          done
-          grep -E '^(PVP6_TASK_BEGIN|PVP6_SUMMARY|PVP6_TASK_END|PROMOTION,)' \
-            ../pvp6-thor-native.raw.log | tee ../pvp6-thor-native.summary.log
-
-      - name: Publish native evidence summary
+      - name: Publish correctness evidence only
         if: always()
+        shell: bash
         run: |
-          echo "### PVP6 Thor native campaign" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          cat pvp6-thor-source.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
-          cat pvp6-thor-admission.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo 'PVP6 summary follows in the uploaded artifact.' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '### PVP6 native destination correctness — no timing campaign'
+            cat pvp6-thor-source.txt 2>/dev/null || true
+            cat pvp6-thor-admission.txt 2>/dev/null || true
+            cat pvp6-thor-executor.log 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload raw evidence
+      - name: Upload source-bound correctness evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pvp6-thor-native-evidence
+          name: pvp6-thor-correctness-${{ github.sha }}
           path: |
             pvp6-thor-source.txt
             pvp6-thor-admission.txt
+            pvp6-thor-executor.log
             pvp6-scirust-admission.json
-            pvp6-thor-native.raw.log
-            pvp6-thor-native.summary.log
           if-no-files-found: error
