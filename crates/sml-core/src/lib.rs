@@ -51,6 +51,7 @@ pub mod mor_temporal;
 pub mod mor_temporal_search;
 pub mod pascal_gf2;
 pub mod pascal_vector_projection;
+pub mod pvp6_executor;
 pub mod routing_train;
 pub mod semantic;
 pub mod task_loss;
