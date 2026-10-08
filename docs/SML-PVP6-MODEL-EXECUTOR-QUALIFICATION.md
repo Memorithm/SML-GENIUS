@@ -69,7 +69,9 @@ The previous native workflow automatically repeated timing on PB8 source changes
 while recording a fixed historical source string rather than the actual checkout
 and invoking the benchmark without an explicit release profile. That job does
 not qualify the timing of the new executor. The initial automatically queued run
-for this PR was cancelled; no new timing evidence is admitted here.
+for this PR was cancelled during its historical timing step, after fixture/model
+qualification and SciRust structural admission had succeeded. Its partial raw
+artifact is retained; no new timing evidence is admitted here.
 
 Automatic functional admission stays in the existing mandatory CI (fresh hosted
 PR execution, native integrated-main execution). The separate native workflow is
@@ -77,7 +79,8 @@ now a main-only manual correctness/admission job: exact checkout SHA verificatio
 Rust 1.89.0, isolated toolchain/build homes, locked release builds, full destination
 qualification and the pinned SciRust fixture consumer. Artifacts include the
 actual source and are labelled correctness-only. It cannot execute a PR ref or
-quietly launch a timing campaign. No existing CI gate is disabled or made optional.
+quietly launch a timing campaign. Core CI tests, fixture hash and complete-output
+checks stay mandatory; automatic historical re-timing is deliberately removed.
 This manual workflow is not itself evidence of an executed native run; use the
 observed CI/run receipts. Future timing needs a separately qualified, source-pinned
 RemoteOps control and declared measurement protocol. Historical archives remain
