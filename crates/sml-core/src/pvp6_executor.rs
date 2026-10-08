@@ -358,7 +358,8 @@ mod tests {
         assert_eq!(result.words_per_gate, 1);
         assert_eq!(result.packed_words().len(), 2);
         assert_eq!(result.value(0, 0), Some(true));
-        assert_eq!(result.value(0, 1), Some(true));
+        // At x=1, the constant and x0 monomials both fire and cancel in GF(2).
+        assert_eq!(result.value(0, 1), Some(false));
         assert_eq!(result.value(1, 0), Some(false));
     }
 }
