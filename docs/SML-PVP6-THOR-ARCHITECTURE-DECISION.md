@@ -1,7 +1,8 @@
 # PVP6 — Thor architecture decision
 
-Status: integrated selection policy, diagnostic-only. This document does not
-authorize an attention-replacement, model-quality or production-speed claim.
+Status: integrated model-owned selector and exact executor, diagnostic-only.
+This document does not authorize an attention-replacement, model-quality or
+production-speed claim.
 
 ## Evidence identity
 
@@ -53,6 +54,20 @@ that conservative rule:
 The policy does not require CUDA, NVRTC, cuDNN, TensorRT, NVML, CUTLASS or a
 vendor SDK. It is a model-owned Rust contract; SciRust, FLAT-ATTENTION, NNIS
 and RemoteOps remain qualification or control-plane partners.
+
+## Model-owned executor
+
+The merged follow-up executor is exposed by
+sml_core::pvp6_executor::Pvp6Bank. It accepts canonical ANF monomial masks,
+constructs the packed coefficient bitplane, applies the selected arm, and
+returns gate-major packed query outputs. Pascal materialization uses the
+existing scalar exact Pascal-GF(2) primitive; sparse and submask paths execute
+their direct Boolean definitions. All three paths are checked against an
+independent oracle in Rust unit tests.
+
+This is semantic internalization only. It does not introduce a mandatory
+SciRust, FLAT-ATTENTION or NNIS runtime dependency and it does not turn the
+Thor diagnostic into a production performance claim.
 
 ## Limits
 
