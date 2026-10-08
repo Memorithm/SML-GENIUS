@@ -25,6 +25,8 @@ pub struct SbgAnfKernel<const S: usize, const D: usize> {
     density: u32,
     max_cycles: u32,
     revision: u64,
+    budget: SbgAnfBudget,
+    usage: SbgAnfUsage,
     cycles: Vec<SbgAnfCycle>,
 }
 impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
@@ -38,6 +40,16 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             return Err(SbgAnfKernelError::Limit);
         }
         let density = validate_bank(&bank, &plan)?;
+        let (gate_queries, trace_payload_words) = cycle_cost(&plan)?;
+        let budget = SbgAnfBudget {
+            max_cycles,
+            max_gate_queries: gate_queries
+                .checked_mul(u64::from(max_cycles))
+                .ok_or(SbgAnfKernelError::Overflow)?,
+            max_trace_payload_words: trace_payload_words
+                .checked_mul(u64::from(max_cycles))
+                .ok_or(SbgAnfKernelError::Overflow)?,
+        };
         Ok(Self {
             bank,
             plan,
@@ -45,6 +57,8 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             density,
             max_cycles,
             revision: 0,
+            budget,
+            usage: SbgAnfUsage::default(),
             cycles: Vec::new(),
         })
     }
@@ -97,6 +111,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
         if depth > self.max_cycles {
             return Err(SbgAnfKernelError::Limit);
         }
+        let usage = self.next_usage()?;
         let queries = self
             .plan
             .queries(state)
@@ -126,6 +141,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
             .try_reserve(1)
             .map_err(|_| SbgAnfKernelError::Allocation)?;
         self.cycles.push(cycle);
+        self.usage = usage;
         Ok(SemanticRewriteStep {
             state: next,
             stability_blocked: false,
@@ -134,6 +150,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SbgAnfKernelError {
+    BudgetExceeded,
     Shape,
     Density,
     Depth,
@@ -310,5 +327,167 @@ mod revision_tests {
         let before = k.clone();
         assert_eq!(k.replace_bank(bank(&[1])), Err(SbgAnfKernelError::Overflow));
         assert_eq!(k, before);
+    }
+}
+
+/// Model-level logical-work caps, not host RAM/VRAM or time enforcement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SbgAnfBudget {
+    pub max_cycles: u32,
+    pub max_gate_queries: u64,
+    pub max_trace_payload_words: u64,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SbgAnfUsage {
+    pub cycles: u32,
+    pub gate_queries: u64,
+    pub trace_payload_words: u64,
+}
+fn cycle_cost<const S: usize, const D: usize>(
+    plan: &SbgAnfPlan<S, D>,
+) -> Result<(u64, u64), SbgAnfKernelError> {
+    let q = u64::try_from(plan.input_lanes().len()).map_err(|_| SbgAnfKernelError::Overflow)?;
+    let g = u64::try_from(plan.gate_count()).map_err(|_| SbgAnfKernelError::Overflow)?;
+    let gate_queries = q.checked_mul(g).ok_or(SbgAnfKernelError::Overflow)?;
+    let words = q
+        .checked_mul(g.div_ceil(64))
+        .and_then(|words| words.checked_add(q))
+        .ok_or(SbgAnfKernelError::Overflow)?;
+    Ok((gate_queries, words))
+}
+impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
+    pub fn with_budget(
+        bank: Pvp6Bank<D>,
+        plan: SbgAnfPlan<S, D>,
+        population: Pvp6PopulationProfile,
+        budget: SbgAnfBudget,
+    ) -> Result<Self, SbgAnfKernelError> {
+        let mut kernel = Self::new(bank, plan, population, budget.max_cycles)?;
+        kernel.budget = budget;
+        Ok(kernel)
+    }
+    #[must_use]
+    pub fn budget(&self) -> SbgAnfBudget {
+        self.budget
+    }
+    #[must_use]
+    pub fn usage(&self) -> SbgAnfUsage {
+        self.usage
+    }
+    fn next_usage(&self) -> Result<SbgAnfUsage, SbgAnfKernelError> {
+        let (gate_queries, words) = cycle_cost(&self.plan)?;
+        let next = SbgAnfUsage {
+            cycles: self
+                .usage
+                .cycles
+                .checked_add(1)
+                .ok_or(SbgAnfKernelError::Overflow)?,
+            gate_queries: self
+                .usage
+                .gate_queries
+                .checked_add(gate_queries)
+                .ok_or(SbgAnfKernelError::Overflow)?,
+            trace_payload_words: self
+                .usage
+                .trace_payload_words
+                .checked_add(words)
+                .ok_or(SbgAnfKernelError::Overflow)?,
+        };
+        if next.cycles > self.budget.max_cycles
+            || next.gate_queries > self.budget.max_gate_queries
+            || next.trace_payload_words > self.budget.max_trace_payload_words
+        {
+            return Err(SbgAnfKernelError::BudgetExceeded);
+        }
+        Ok(next)
+    }
+}
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    use crate::{
+        pvp6_executor::Pvp6Gate,
+        pvp6_sbg::{SbgCoordinate, SbgField},
+    };
+    fn kernel(budget: SbgAnfBudget) -> SbgAnfKernel<8, 64> {
+        let plan = SbgAnfPlan::new(
+            vec![(0..6)
+                .map(|bit| SbgCoordinate {
+                    field: SbgField::Value,
+                    bit,
+                })
+                .collect()],
+            vec![SbgCoordinate {
+                field: SbgField::Value,
+                bit: 0,
+            }],
+        )
+        .unwrap();
+        SbgAnfKernel::with_budget(
+            Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0, 1]).unwrap()]).unwrap(),
+            plan,
+            Pvp6PopulationProfile::AffineUniform,
+            budget,
+        )
+        .unwrap()
+    }
+    #[test]
+    fn exact_caps_are_inclusive_and_next_cycle_is_atomic() {
+        let mut k = kernel(SbgAnfBudget {
+            max_cycles: 8,
+            max_gate_queries: 2,
+            max_trace_payload_words: 4,
+        });
+        let state = SemanticState::zeroed().unwrap();
+        let first = k.rewrite(&state, 1).unwrap();
+        k.rewrite(&first.state, 2).unwrap();
+        assert_eq!(
+            k.usage(),
+            SbgAnfUsage {
+                cycles: 2,
+                gate_queries: 2,
+                trace_payload_words: 4
+            }
+        );
+        let before = k.clone();
+        assert_eq!(k.rewrite(&state, 3), Err(SbgAnfKernelError::BudgetExceeded));
+        assert_eq!(k, before);
+    }
+    #[test]
+    fn insufficient_work_or_trace_budget_rejects_before_mutation() {
+        for (work, words) in [(0, 2), (1, 1)] {
+            let mut k = kernel(SbgAnfBudget {
+                max_cycles: 1,
+                max_gate_queries: work,
+                max_trace_payload_words: words,
+            });
+            let before = k.clone();
+            assert_eq!(
+                k.rewrite(&SemanticState::zeroed().unwrap(), 1),
+                Err(SbgAnfKernelError::BudgetExceeded)
+            );
+            assert_eq!(k, before);
+        }
+    }
+    #[test]
+    fn logical_counters_match_retained_payload_and_survive_updates() {
+        let mut k = kernel(SbgAnfBudget {
+            max_cycles: 4,
+            max_gate_queries: 4,
+            max_trace_payload_words: 8,
+        });
+        let s = SemanticState::zeroed().unwrap();
+        k.rewrite(&s, 1).unwrap();
+        k.replace_bank(Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0]).unwrap()]).unwrap())
+            .unwrap();
+        k.rewrite(&s, 2).unwrap();
+        assert_eq!(
+            k.usage().trace_payload_words,
+            k.cycles()
+                .iter()
+                .map(|c| (c.queries.len() + c.outputs.len()) as u64)
+                .sum()
+        );
+        assert_eq!(k.usage().gate_queries, 2);
     }
 }
