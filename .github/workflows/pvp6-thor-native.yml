@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust
-          ref: 5ce3d5eef05d1191123e64010349f6b34ef79e6f
+          ref: 9f229f09f4cb8a0776fe0af3fcf3ef341daa51f1
           path: scirust
           persist-credentials: false
 
