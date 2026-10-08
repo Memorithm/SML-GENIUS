@@ -23,13 +23,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout SML-GENIUS
-        uses: actions/checkout@34e114876b0c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           path: sml-genius
           persist-credentials: false
 
       - name: Checkout SciRust consumer
-        uses: actions/checkout@34e114876b0c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust
           ref: 5ce3d5eef05d1191123e64010349f6b34ef79e6f
