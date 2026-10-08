@@ -295,7 +295,7 @@ mod tests {
                 } else {
                     [2_u16, 5, 9].iter().copied().fold(false, |value, mask| {
                         value ^ (usize::from(mask) & query == usize::from(mask))
-                    });
+                    })
                 };
                 assert_eq!(result.value(gate, query), Some(expected));
             }
