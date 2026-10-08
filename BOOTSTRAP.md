@@ -2,6 +2,16 @@
 
 This file is the durable re-entry point for continuing the SML-GENIUS research programme from the current repository state. Read it together with `README.md`, `docs/ROADMAP.md`, the latest merged pull requests, and the executable contracts in `sml-core`.
 
+## Current PVP6 validation slice — 2026-10-08
+
+After the model-owned selector and executor, validate the public executor on the
+unchanged frozen PVP6 corpus with `pvp6-model-executor` and the mandatory fixture
+script. The destination contract now includes Q*R reuse output, checked density,
+read-only result shape and lossless query-major projection. See
+[the qualification contract](docs/SML-PVP6-MODEL-EXECUTOR-QUALIFICATION.md).
+This is synthetic functional qualification only; architecture freeze, recurrent
+integration, learned utility and physical speed confirmation remain open.
+
 ## Current architectural direction
 
 SML is an independent, predominantly Boolean / low-bit autoregressive architecture. It is not defined by reference to Transformer internals. Its native mechanisms include direct routing, Mixture-of-Routers / sparse expert selection, bounded associative memory, recurrent depth, Elastic Weights, and Boolean-integral learning experiments.

@@ -978,6 +978,7 @@ fn main() {
         "benchmark" => benchmark(),
         "pvp6-fixture" => pvp6_fixture(),
         "pvp6-exact-task" => pvp6_exact_task(),
+        "pvp6-model-executor" => pvp6_model_executor(),
         "pvp6-task-plan" => pvp6_task_plan(),
         "pvp6-task-benchmark" => pvp6_task_benchmark(),
         other => panic!("unknown PB8 mode: {other}"),
@@ -1326,4 +1327,94 @@ mod pvp6_timing_tests {
             }
         }
     }
+}
+
+// Destination requalification of the public model executor, not a timing mode.
+// Uses the original generator and independent task oracle; old modes are unchanged.
+fn pvp6_model_executor() {
+    use sml_core::pascal_vector_projection::{
+        Pvp6Architecture, Pvp6PopulationProfile, Pvp6Workload,
+    };
+    use sml_core::pvp6_executor::{Pvp6Bank, Pvp6Gate};
+
+    let mut cells = 0;
+    let mut query_words = 0;
+    let mut packed_words = 0;
+    let mut coefficient_words = 0;
+    let mut arms = [0_usize; 3];
+    let mut measured_coordinates = 0;
+    for density in DENSITIES {
+        let gates = generate_bank(density);
+        let bank = Pvp6Bank::<BITS>::new(
+            gates
+                .iter()
+                .map(|gate| Pvp6Gate::from_monomials(&gate.monomials).expect("canonical gate"))
+                .collect(),
+        )
+        .expect("canonical bank");
+        for (actual, expected) in bank.gates().iter().zip(&gates) {
+            assert_eq!(actual.coefficients(), expected.coefficients);
+            coefficient_words += actual.coefficients().len();
+        }
+        for kind in ScheduleKind::ALL {
+            let profile = match kind {
+                ScheduleKind::AffineUniform => Pvp6PopulationProfile::AffineUniform,
+                ScheduleKind::LowPopcount => Pvp6PopulationProfile::LowPopcount,
+                ScheduleKind::HighPopcount => Pvp6PopulationProfile::HighPopcount,
+            };
+            let addresses = schedule(kind);
+            let oracle = task_oracle(&gates, &addresses, BITS, 1);
+            for q in Q_VALUES {
+                for reuse in REUSE_VALUES {
+                    let workload =
+                        Pvp6Workload::new(density as u32, q as u32, reuse as u32, profile);
+                    let result = bank
+                        .evaluate(workload, &addresses[..q])
+                        .expect("model evaluation");
+                    assert_eq!(result.gate_count(), GATES);
+                    assert_eq!(result.query_count(), q * reuse);
+                    assert_eq!(result.selection(), workload.select().unwrap());
+                    assert!(result.selection().diagnostic_only);
+                    measured_coordinates += usize::from(result.selection().measured_on_thor);
+                    arms[match result.selection().architecture {
+                        Pvp6Architecture::PascalAnfMaterialize => 0,
+                        Pvp6Architecture::SparseAnfScan => 1,
+                        Pvp6Architecture::SubmaskCoefficientQuery => 2,
+                    }] += 1;
+                    let expected = (0..reuse)
+                        .flat_map(|_| oracle[..q].iter().copied())
+                        .collect::<Vec<_>>();
+                    let actual = result.to_query_major_words().expect("canonical projection");
+                    assert!(
+                        exact_words(&actual, &expected),
+                        "model canonical output mismatch"
+                    );
+                    assert!(actual.iter().all(|word| word >> GATES == 0));
+                    let per_gate = (q * reuse).div_ceil(64);
+                    let mut expected_packed = vec![0_u64; GATES * per_gate];
+                    for (query, &word) in expected.iter().enumerate() {
+                        for gate in 0..GATES {
+                            if word & (1_u64 << gate) != 0 {
+                                expected_packed[gate * per_gate + query / 64] |=
+                                    1_u64 << (query % 64);
+                            }
+                        }
+                    }
+                    assert_eq!(
+                        result.packed_words(),
+                        expected_packed,
+                        "model packed output or padding mismatch"
+                    );
+                    query_words += actual.len();
+                    packed_words += result.packed_words().len();
+                    cells += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(arms, [141, 2, 1]);
+    assert_eq!(measured_coordinates, 20);
+    println!("PVP6_MODEL_EXECUTOR,schema=1,cells={cells},query_words={query_words},packed_words={packed_words},coefficient_words={coefficient_words},mismatches=0");
+    println!("PVP6_MODEL_SELECTION,pascal=141,sparse=2,submask=1,measured_coordinates=20,diagnostic_only=144");
+    println!("PROMOTION,BLOCKED,model_executor_synthetic_correctness_only");
 }
