@@ -510,6 +510,7 @@ pub struct SbgAnfResumed<const S: usize, const D: usize> {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SbgContinuationError {
+    PendingBankUpdate,
     NoState,
     Policy(crate::RecurrentError),
     Depth,
@@ -527,6 +528,15 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             .last_state
             .clone()
             .ok_or(SbgContinuationError::NoState)?;
+        // A new bank has not yet produced the retained state. Old stability
+        // evidence cannot authorize a no-work resume with different coefficients.
+        if self
+            .cycles
+            .last()
+            .is_some_and(|cycle| cycle.bank_revision != self.revision)
+        {
+            return Err(SbgContinuationError::PendingBankUpdate);
+        }
         let completed = self.cycles.len() as u32;
         if completed > policy.max_depth || policy.max_depth > self.max_cycles {
             return Err(SbgContinuationError::Depth);
@@ -729,5 +739,50 @@ mod checkpoint_tests {
             k.checkpoint(policy),
             Err(SbgContinuationError::WouldHaveHalted)
         );
+    }
+}
+
+#[cfg(test)]
+mod pending_checkpoint_update_tests {
+    use super::*;
+    use crate::{
+        pvp6_executor::Pvp6Gate,
+        pvp6_sbg::{SbgCoordinate, SbgField},
+        HaltingPolicy,
+    };
+    #[test]
+    fn pending_coefficient_change_cannot_reuse_old_stability() {
+        let plan = SbgAnfPlan::<8, 64>::new(
+            vec![(0..6)
+                .map(|bit| SbgCoordinate {
+                    field: SbgField::Value,
+                    bit,
+                })
+                .collect()],
+            vec![SbgCoordinate {
+                field: SbgField::Value,
+                bit: 0,
+            }],
+        )
+        .unwrap();
+        let bank = Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[1]).unwrap()]).unwrap();
+        let mut kernel =
+            SbgAnfKernel::new(bank, plan, Pvp6PopulationProfile::AffineUniform, 8).unwrap();
+        let state = SemanticState::zeroed().unwrap();
+        kernel.rewrite(&state, 1).unwrap();
+        assert!(kernel.cycles()[0].delta.is_zero());
+        kernel
+            .replace_bank(Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0, 1]).unwrap()]).unwrap())
+            .unwrap();
+        let before = kernel.clone();
+        assert_eq!(
+            kernel.checkpoint(HaltingPolicy {
+                min_depth: 1,
+                max_depth: 8,
+                stable_hamming_threshold: 0
+            }),
+            Err(SbgContinuationError::PendingBankUpdate)
+        );
+        assert_eq!(kernel, before);
     }
 }
