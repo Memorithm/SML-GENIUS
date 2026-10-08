@@ -716,3 +716,17 @@ This reference qualification does not close PVP-6 or select a model architecture
 RemoteOps remains the physical execution control plane; trained-model export,
 native task comparisons, recurrent integration, learning, ablations and scaling
 remain separate evidence gates.
+
+## PVP6 model-owned executor qualification — 2026-10-08
+
+Destination check: [SML-PVP6-MODEL-EXECUTOR-QUALIFICATION.md](SML-PVP6-MODEL-EXECUTOR-QUALIFICATION.md).
+The public model API is compared against the unchanged 144-cell synthetic corpus,
+with complete Q*R outputs, both layouts and padding. The seven executor tests
+also cover width/word boundaries, false density and changed coefficients.
+This narrows an implementation gap; it does not mark PVP-6/PVP-7, a recurrent
+model, learning or the architecture-freeze gate complete.
+
+Next slice: freeze the SML recurrent bank/state-update contract and direct-evaluation
+control, then compare full bounded-sequence trajectories with coefficient changes.
+RemoteOps controls physical runs; partner kernels remain optional. Do not infer
+new executor latency from the historical selector-coordinate measurements.

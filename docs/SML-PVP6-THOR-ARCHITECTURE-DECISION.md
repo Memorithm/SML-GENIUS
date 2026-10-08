@@ -69,6 +69,15 @@ This is semantic internalization only. It does not introduce a mandatory
 SciRust, FLAT-ATTENTION or NNIS runtime dependency and it does not turn the
 Thor diagnostic into a production performance claim.
 
+## Destination requalification
+
+The public executor now has a separate
+[complete frozen-corpus qualification](SML-PVP6-MODEL-EXECUTOR-QUALIFICATION.md):
+Q*R reuse outputs, declared-density validation, read-only result dimensions and
+lossless canonical query-major conversion. Its mandatory check covers all 144
+synthetic cells and both output layouts. Historical Thor timings apply to the
+historical benchmark, not to this new executor or its conversion cost.
+
 ## Limits
 
 This evidence is a synthetic shared-CPU diagnostic. It validates exact

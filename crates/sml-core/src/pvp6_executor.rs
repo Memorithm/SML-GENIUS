@@ -87,9 +87,13 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
 
     /// Evaluates all gates for the declared query workload.
     ///
-    /// Outputs are packed gate-major: each gate owns ceil(query_count / 64)
-    /// words, with query zero in the least-significant bit. The selected arm is
-    /// returned with the output so callers cannot lose the provenance decision.
+    /// `queries` contains one prefix of `workload.query_count` addresses. The
+    /// same prefix is evaluated `workload.reuse` times with unchanged gates;
+    /// Pascal materialization happens once per gate, outside the reuse loop.
+    /// Outputs are gate-major, with ceil(query_count * reuse / 64) words per
+    /// gate. Query index `repeat * query_count + position` is least-bit first.
+    /// The declared density must match every gate. Selection provenance labels
+    /// policy coordinates, not evidence that these particular inputs were timed.
     pub fn evaluate(
         &self,
         workload: Pvp6Workload,
@@ -110,7 +114,21 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
             }
         }
 
-        let words_per_gate = queries.len().div_ceil(64);
+        for (gate_index, gate) in self.gates.iter().enumerate() {
+            if u32::try_from(gate.monomials.len()).ok() != Some(workload.density) {
+                return Err(Pvp6ExecutionError::DensityMismatch {
+                    gate_index,
+                    declared: workload.density,
+                    actual: gate.monomials.len(),
+                });
+            }
+        }
+        let reuse = usize::try_from(workload.reuse).map_err(|_| Pvp6ExecutionError::Overflow)?;
+        let query_count = queries
+            .len()
+            .checked_mul(reuse)
+            .ok_or(Pvp6ExecutionError::Overflow)?;
+        let words_per_gate = query_count.div_ceil(64);
         let output_words = self
             .gates
             .len()
@@ -124,28 +142,33 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
 
         for (gate_index, gate) in self.gates.iter().enumerate() {
             let base = gate_index * words_per_gate;
-            match selection.architecture {
-                Pvp6Architecture::PascalAnfMaterialize => {
-                    let mut truth = gate.coefficients.clone();
-                    pascal_gf2_in_place(&mut truth).map_err(Pvp6ExecutionError::Pascal)?;
-                    for (query_index, &query) in queries.iter().enumerate() {
-                        if get_bit(&truth, query) {
-                            set_bit(&mut packed, base, words_per_gate, query_index);
+            let materialized = if selection.architecture == Pvp6Architecture::PascalAnfMaterialize {
+                let mut truth = zero_words(gate.coefficients.len())?;
+                truth.copy_from_slice(&gate.coefficients);
+                pascal_gf2_in_place(&mut truth).map_err(Pvp6ExecutionError::Pascal)?;
+                Some(truth)
+            } else {
+                None
+            };
+            for repeat in 0..reuse {
+                for (position, &query) in queries.iter().enumerate() {
+                    let value = match selection.architecture {
+                        Pvp6Architecture::PascalAnfMaterialize => get_bit(
+                            materialized.as_deref().expect("materialized Pascal arm"),
+                            query,
+                        ),
+                        Pvp6Architecture::SparseAnfScan => sparse_eval(&gate.monomials, query),
+                        Pvp6Architecture::SubmaskCoefficientQuery => {
+                            submask_eval(&gate.coefficients, query)
                         }
-                    }
-                }
-                Pvp6Architecture::SparseAnfScan => {
-                    for (query_index, &query) in queries.iter().enumerate() {
-                        if sparse_eval(&gate.monomials, query) {
-                            set_bit(&mut packed, base, words_per_gate, query_index);
-                        }
-                    }
-                }
-                Pvp6Architecture::SubmaskCoefficientQuery => {
-                    for (query_index, &query) in queries.iter().enumerate() {
-                        if submask_eval(&gate.coefficients, query) {
-                            set_bit(&mut packed, base, words_per_gate, query_index);
-                        }
+                    };
+                    if value {
+                        set_bit(
+                            &mut packed,
+                            base,
+                            words_per_gate,
+                            repeat * queries.len() + position,
+                        );
                     }
                 }
             }
@@ -154,7 +177,7 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         Ok(Pvp6BatchResult {
             selection,
             gate_count: self.gates.len(),
-            query_count: queries.len(),
+            query_count,
             words_per_gate,
             packed,
         })
@@ -164,14 +187,50 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
 /// Exact packed outputs of one PVP6 batch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pvp6BatchResult {
-    pub selection: Pvp6Selection,
-    pub gate_count: usize,
-    pub query_count: usize,
+    selection: Pvp6Selection,
+    gate_count: usize,
+    query_count: usize,
     words_per_gate: usize,
     packed: Vec<u64>,
 }
 
 impl Pvp6BatchResult {
+    #[must_use]
+    pub fn selection(&self) -> Pvp6Selection {
+        self.selection
+    }
+
+    #[must_use]
+    pub fn gate_count(&self) -> usize {
+        self.gate_count
+    }
+
+    /// Total queries, including all unchanged-prefix reuse rounds.
+    #[must_use]
+    pub fn query_count(&self) -> usize {
+        self.query_count
+    }
+
+    /// Converts to query-major gate words without truncating banks above 64 gates.
+    /// Each query owns ceil(gate_count / 64) words; unused high bits stay zero.
+    /// With 16 gates this is the canonical PVP6 v1 task-output layout.
+    pub fn to_query_major_words(&self) -> Result<Vec<u64>, Pvp6ExecutionError> {
+        let words_per_query = self.gate_count.div_ceil(64);
+        let len = self
+            .query_count
+            .checked_mul(words_per_query)
+            .ok_or(Pvp6ExecutionError::Overflow)?;
+        let mut output = zero_words(len)?;
+        for (query_index, words) in output.chunks_exact_mut(words_per_query).enumerate() {
+            for gate_index in 0..self.gate_count {
+                if self.value(gate_index, query_index) == Some(true) {
+                    words[gate_index / 64] |= 1_u64 << (gate_index % 64);
+                }
+            }
+        }
+        Ok(output)
+    }
+
     #[must_use]
     pub fn value(&self, gate_index: usize, query_index: usize) -> Option<bool> {
         if gate_index >= self.gate_count || query_index >= self.query_count {
@@ -188,6 +247,15 @@ impl Pvp6BatchResult {
     pub fn packed_words(&self) -> &[u64] {
         &self.packed
     }
+}
+
+fn zero_words(len: usize) -> Result<Vec<u64>, Pvp6ExecutionError> {
+    let mut words = Vec::new();
+    words
+        .try_reserve_exact(len)
+        .map_err(|_| Pvp6ExecutionError::Allocation)?;
+    words.resize(len, 0);
+    Ok(words)
 }
 
 fn validate_width<const BITS: usize>() -> Result<(), Pvp6ExecutionError> {
@@ -227,14 +295,30 @@ fn submask_eval(coefficients: &[u64], query: usize) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pvp6ExecutionError {
-    InvalidWidth { bits: usize },
+    InvalidWidth {
+        bits: usize,
+    },
     EmptyMonomials,
     DuplicateMonomial(u16),
-    MonomialOutOfRange { mask: u16, bits: usize },
+    MonomialOutOfRange {
+        mask: u16,
+        bits: usize,
+    },
     EmptyBank,
+    DensityMismatch {
+        gate_index: usize,
+        declared: u32,
+        actual: usize,
+    },
     Selection(Pvp6SelectionError),
-    QueryCountMismatch { expected: usize, actual: usize },
-    QueryOutOfRange { query: usize, bits: usize },
+    QueryCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    QueryOutOfRange {
+        query: usize,
+        bits: usize,
+    },
     Overflow,
     Allocation,
     Pascal(PascalGf2Error),
@@ -271,7 +355,7 @@ mod tests {
     fn bank() -> Pvp6Bank<BITS> {
         Pvp6Bank::new(vec![
             Pvp6Gate::from_monomials(&MONOMIALS).expect("gate"),
-            Pvp6Gate::from_monomials(&[2, 5, 9]).expect("gate"),
+            Pvp6Gate::from_monomials(&[2, 5, 9, 11]).expect("gate"),
         ])
         .expect("bank")
     }
@@ -293,9 +377,12 @@ mod tests {
                 let expected = if gate == 0 {
                     oracle(query)
                 } else {
-                    [2_u16, 5, 9].iter().copied().fold(false, |value, mask| {
-                        value ^ (usize::from(mask) & query == usize::from(mask))
-                    })
+                    [2_u16, 5, 9, 11]
+                        .iter()
+                        .copied()
+                        .fold(false, |value, mask| {
+                            value ^ (usize::from(mask) & query == usize::from(mask))
+                        })
                 };
                 assert_eq!(result.value(gate, query), Some(expected));
             }
@@ -361,5 +448,177 @@ mod tests {
         // At x=1, the constant and x0 monomials both fire and cancel in GF(2).
         assert_eq!(result.value(0, 1), Some(false));
         assert_eq!(result.value(1, 0), Some(false));
+    }
+
+    // Deliberately evaluates each input literal, without using subset masks,
+    // coefficient lookup, sparse_eval, submask_eval or the Pascal transform.
+    fn literal_oracle(monomials: &[u16], query: usize) -> bool {
+        monomials.iter().fold(false, |parity, &mask| {
+            let product = (0..u16::BITS)
+                .all(|bit| (mask & (1_u16 << bit)) == 0 || (query & (1_usize << bit)) != 0);
+            parity ^ product
+        })
+    }
+
+    fn qualify_width<const WIDTH: usize>() {
+        let monomials = [0, 1, (WIDTH / 2) as u16, (WIDTH - 1) as u16];
+        let bank = Pvp6Bank::<WIDTH>::new(vec![
+            Pvp6Gate::from_monomials(&monomials).unwrap(),
+            Pvp6Gate::from_monomials(&[2, 5, 9, 11]).unwrap(),
+        ])
+        .unwrap();
+        for count in [1, 31, 32, 63, 64, 65, 129] {
+            let queries = (0..count).map(|i| (i * 37 + 3) % WIDTH).collect::<Vec<_>>();
+            for reuse in [1, 4] {
+                for profile in [
+                    Pvp6PopulationProfile::AffineUniform,
+                    Pvp6PopulationProfile::LowPopcount,
+                    Pvp6PopulationProfile::HighPopcount,
+                ] {
+                    let workload = Pvp6Workload::new(4, count as u32, reuse, profile);
+                    let before = bank.clone();
+                    let result = bank.evaluate(workload, &queries).unwrap();
+                    let total = count * reuse as usize;
+                    assert_eq!(result.query_count(), total);
+                    assert_eq!(result.gate_count(), 2);
+                    assert_eq!(result.selection(), workload.select().unwrap());
+                    let canonical = result.to_query_major_words().unwrap();
+                    assert_eq!(canonical.len(), total);
+                    let mut expected_packed = vec![0_u64; 2 * total.div_ceil(64)];
+                    for (i, &word) in canonical.iter().enumerate() {
+                        let query = queries[i % count];
+                        let mut expected_word = 0;
+                        for (gate, terms) in
+                            [monomials.as_slice(), &[2, 5, 9, 11]].iter().enumerate()
+                        {
+                            let value = literal_oracle(terms, query);
+                            assert_eq!(result.value(gate, i), Some(value));
+                            if value {
+                                expected_word |= 1_u64 << gate;
+                                expected_packed[gate * total.div_ceil(64) + i / 64] |=
+                                    1_u64 << (i % 64);
+                            }
+                        }
+                        assert_eq!(word, expected_word);
+                    }
+                    assert_eq!(result.packed_words(), expected_packed);
+                    assert_eq!(result.value(2, 0), None);
+                    assert_eq!(result.value(0, total), None);
+                    assert_eq!(result.value(usize::MAX, usize::MAX), None);
+                    assert_eq!(bank, before);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn width_ladder_reuse_and_partial_words_match_literal_oracle() {
+        qualify_width::<64>();
+        qualify_width::<128>();
+        qualify_width::<256>();
+        qualify_width::<512>();
+        qualify_width::<1024>();
+        qualify_width::<2048>();
+    }
+
+    #[test]
+    fn query_major_projection_keeps_gate_64_and_zero_padding() {
+        let gate = Pvp6Gate::<128>::from_monomials(&[0]).unwrap();
+        let bank = Pvp6Bank::new(vec![gate; 65]).unwrap();
+        let result = bank
+            .evaluate(
+                Pvp6Workload::new(1, 65, 4, Pvp6PopulationProfile::AffineUniform),
+                &(0..65).collect::<Vec<_>>(),
+            )
+            .unwrap();
+        assert_eq!(result.query_count(), 260);
+        assert_eq!(result.packed_words().len(), 65 * 5);
+        for gate_words in result.packed_words().chunks_exact(5) {
+            assert_eq!(gate_words, &[u64::MAX, u64::MAX, u64::MAX, u64::MAX, 15]);
+        }
+        let canonical = result.to_query_major_words().unwrap();
+        assert_eq!(canonical.len(), 520);
+        for query_words in canonical.chunks_exact(2) {
+            assert_eq!(query_words, &[u64::MAX, 1]);
+        }
+    }
+
+    #[test]
+    fn false_density_and_empty_or_invalid_inputs_fail_closed() {
+        assert_eq!(
+            Pvp6Gate::<0>::from_monomials(&[0]),
+            Err(Pvp6ExecutionError::InvalidWidth { bits: 0 })
+        );
+        assert_eq!(
+            Pvp6Gate::<32>::from_monomials(&[0]),
+            Err(Pvp6ExecutionError::InvalidWidth { bits: 32 })
+        );
+        assert_eq!(
+            Pvp6Gate::<96>::from_monomials(&[0]),
+            Err(Pvp6ExecutionError::InvalidWidth { bits: 96 })
+        );
+        assert_eq!(
+            Pvp6Gate::<64>::from_monomials(&[]),
+            Err(Pvp6ExecutionError::EmptyMonomials)
+        );
+        assert_eq!(
+            Pvp6Bank::<64>::new(vec![]),
+            Err(Pvp6ExecutionError::EmptyBank)
+        );
+        let mismatched = Pvp6Bank::<64>::new(vec![
+            Pvp6Gate::from_monomials(&[0, 1, 3, 7]).unwrap(),
+            Pvp6Gate::from_monomials(&[2, 5, 9]).unwrap(),
+        ])
+        .unwrap();
+        assert_eq!(
+            mismatched.evaluate(
+                Pvp6Workload::new(4, 32, 1, Pvp6PopulationProfile::AffineUniform),
+                &queries(32)
+            ),
+            Err(Pvp6ExecutionError::DensityMismatch {
+                gate_index: 1,
+                declared: 4,
+                actual: 3
+            })
+        );
+        for (workload, error) in [
+            (
+                Pvp6Workload::new(0, 32, 1, Pvp6PopulationProfile::AffineUniform),
+                Pvp6SelectionError::ZeroDensity,
+            ),
+            (
+                Pvp6Workload::new(4, 0, 1, Pvp6PopulationProfile::AffineUniform),
+                Pvp6SelectionError::ZeroQueryCount,
+            ),
+            (
+                Pvp6Workload::new(4, 32, 0, Pvp6PopulationProfile::AffineUniform),
+                Pvp6SelectionError::ZeroReuse,
+            ),
+        ] {
+            assert_eq!(
+                bank().evaluate(workload, &queries(32)),
+                Err(Pvp6ExecutionError::Selection(error))
+            );
+        }
+    }
+
+    #[test]
+    fn coefficient_replacement_cannot_reuse_stale_materialization() {
+        let make_bank = |terms: &[u16]| {
+            Pvp6Bank::<64>::new(vec![Pvp6Gate::from_monomials(terms).unwrap()]).unwrap()
+        };
+        let old = make_bank(&[0, 1, 3, 7]);
+        let new = make_bank(&[1, 2, 3, 7]);
+        let workload = Pvp6Workload::new(4, 64, 4, Pvp6PopulationProfile::AffineUniform);
+        let old_result = old.evaluate(workload, &queries(64)).unwrap();
+        let new_result = new.evaluate(workload, &queries(64)).unwrap();
+        assert_ne!(old_result.packed_words(), new_result.packed_words());
+        for i in 0..256 {
+            assert_eq!(
+                new_result.value(0, i),
+                Some(literal_oracle(&[1, 2, 3, 7], i % 64))
+            );
+        }
+        assert_eq!(old.evaluate(workload, &queries(64)).unwrap(), old_result);
     }
 }
