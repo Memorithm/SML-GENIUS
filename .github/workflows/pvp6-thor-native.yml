@@ -1,0 +1,100 @@
+name: PVP6 native Thor campaign
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pvp6-thor-native.yml"
+      - "scripts/verify-pvp6-timing.rs"
+      - "scripts/check-pvp6-cpu-evidence.sh"
+      - "crates/sml-core/examples/pascal_boolean_pb8_gate_bank.rs"
+      - "docs/SML-PVP6-ANF-FIXTURE-CONTRACT.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pvp6-thor-native
+  cancel-in-progress: false
+
+jobs:
+  thor-native:
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout SML-GENIUS
+        uses: actions/checkout@34e114876b0c390a56381ad16ebd13914f8d5
+        with:
+          path: sml-genius
+          persist-credentials: false
+
+      - name: Checkout SciRust consumer
+        uses: actions/checkout@34e114876b0c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust
+          ref: 5ce3d5eef05d1191123e64010349f6b34ef79e6f
+          path: scirust
+          persist-credentials: false
+
+      - name: Pin toolchain and host
+        working-directory: sml-genius
+        run: |
+          rustc --version --verbose
+          cargo --version
+          uname -a
+          printf 'source=%s\narch=%s\n' \
+            '15576861eaae652d012b32abef4bd5dd3e651d5a' \
+            "$(uname -m)" | tee ../pvp6-thor-source.txt
+
+      - name: Generate and admit frozen fixture
+        working-directory: sml-genius
+        run: |
+          cargo run -p sml-core --example pascal_boolean_pb8_gate_bank -- pvp6-fixture \
+            > ../pvp6_fixture.csv
+          expected='feb1a144e23d9a29439b7cad6704f56637a7f7ead1a9b9abb39ad9c0ac5325fd'
+          actual="$(sha256sum ../pvp6_fixture.csv | awk '{print $1}')"
+          test "$actual" = "$expected"
+          printf 'fixture_sha256=%s\n' "$actual" | tee ../pvp6-thor-admission.txt
+          bash scripts/check-pvp6-fixture.sh
+
+      - name: Run SciRust structural admission
+        run: |
+          cargo run -p scirust-simd --example pvp6_fixture_check -- \
+            --fixture pvp6_fixture.csv | tee pvp6-scirust-admission.json
+
+      - name: Run ten-process native SML campaign
+        working-directory: sml-genius
+        run: |
+          set -euo pipefail
+          : > ../pvp6-thor-native.raw.log
+          for process in $(seq 1 10); do
+            PVP6_PROCESS_ID="$process" \
+            PVP6_SOURCE_REV='15576861eaae652d012b32abef4bd5dd3e651d5a' \
+            cargo run -p sml-core --example pascal_boolean_pb8_gate_bank -- \
+              pvp6-task-benchmark >> ../pvp6-thor-native.raw.log
+          done
+          grep -E '^(PVP6_TASK_BEGIN|PVP6_SUMMARY|PVP6_TASK_END|PROMOTION,)' \
+            ../pvp6-thor-native.raw.log | tee ../pvp6-thor-native.summary.log
+
+      - name: Publish native evidence summary
+        if: always()
+        run: |
+          echo "### PVP6 Thor native campaign" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          cat pvp6-thor-source.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
+          cat pvp6-thor-admission.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo 'PVP6 summary follows in the uploaded artifact.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload raw evidence
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: pvp6-thor-native-evidence
+          path: |
+            pvp6-thor-source.txt
+            pvp6-thor-admission.txt
+            pvp6-scirust-admission.json
+            pvp6-thor-native.raw.log
+            pvp6-thor-native.summary.log
+          if-no-files-found: error
