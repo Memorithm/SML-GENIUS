@@ -24,6 +24,7 @@ pub mod simd;
 pub mod state;
 pub mod store_format;
 pub mod structural_learning;
+pub mod transactional;
 
 pub use algebra::{
     bind, bundle_majority, inverse_rotate_permute, rotate_permute, unbind, SemanticAlgebraError,
