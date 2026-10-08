@@ -10,6 +10,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgAnfCycle {
     pub depth: u32,
+    pub bank_revision: u64,
     pub queries: Vec<usize>,
     pub outputs: Vec<u64>,
     pub delta: SemanticStateDelta,
@@ -23,6 +24,7 @@ pub struct SbgAnfKernel<const S: usize, const D: usize> {
     population: Pvp6PopulationProfile,
     density: u32,
     max_cycles: u32,
+    revision: u64,
     cycles: Vec<SbgAnfCycle>,
 }
 impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
@@ -42,6 +44,7 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             population,
             density,
             max_cycles,
+            revision: 0,
             cycles: Vec::new(),
         })
     }
@@ -113,6 +116,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
             .map_err(SbgAnfKernelError::Execution)?;
         let cycle = SbgAnfCycle {
             depth,
+            bank_revision: self.revision,
             queries,
             outputs,
             delta: SemanticStateDelta::between(state, &next),
@@ -228,5 +232,83 @@ mod tests {
         assert_eq!(kernel.rewrite(&state, 1), Err(SbgAnfKernelError::Depth));
         assert_eq!(kernel.rewrite(&state, 2), Err(SbgAnfKernelError::Limit));
         assert_eq!(kernel, before);
+    }
+}
+
+impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
+    /// Replaces coefficients only after validating the complete new bank.
+    /// Shape and wiring stay fixed. No cached truth survives an update.
+    /// The revision is a local monotonic counter, not a cryptographic identity.
+    pub fn replace_bank(&mut self, bank: Pvp6Bank<D>) -> Result<u64, SbgAnfKernelError> {
+        let density = validate_bank(&bank, &self.plan)?;
+        if bank == self.bank {
+            return Ok(self.revision);
+        }
+        let revision = self
+            .revision
+            .checked_add(1)
+            .ok_or(SbgAnfKernelError::Overflow)?;
+        self.bank = bank;
+        self.density = density;
+        self.revision = revision;
+        Ok(revision)
+    }
+    #[must_use]
+    pub fn bank_revision(&self) -> u64 {
+        self.revision
+    }
+}
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+    use crate::{
+        pvp6_executor::Pvp6Gate,
+        pvp6_sbg::{SbgCoordinate, SbgField},
+    };
+    fn bank(terms: &[u16]) -> Pvp6Bank<64> {
+        Pvp6Bank::new(vec![Pvp6Gate::from_monomials(terms).unwrap()]).unwrap()
+    }
+    fn kernel() -> SbgAnfKernel<8, 64> {
+        let plan = SbgAnfPlan::new(
+            vec![(0..6)
+                .map(|bit| SbgCoordinate {
+                    field: SbgField::Value,
+                    bit,
+                })
+                .collect()],
+            vec![SbgCoordinate {
+                field: SbgField::Value,
+                bit: 0,
+            }],
+        )
+        .unwrap();
+        SbgAnfKernel::new(bank(&[0]), plan, Pvp6PopulationProfile::AffineUniform, 8).unwrap()
+    }
+    #[test]
+    fn updated_coefficients_apply_on_next_cycle_and_keep_old_evidence() {
+        let mut k = kernel();
+        let s = SemanticState::zeroed().unwrap();
+        let first = k.rewrite(&s, 1).unwrap();
+        assert_eq!(first.state.value.get(0), Ok(true));
+        assert_eq!(k.replace_bank(bank(&[0, 1])), Ok(1));
+        let next = k.rewrite(&first.state, 2).unwrap();
+        assert_eq!(next.state.value.get(0), Ok(false));
+        assert_eq!(k.cycles()[0].bank_revision, 0);
+        assert_eq!(k.cycles()[1].bank_revision, 1);
+        assert_eq!(k.cycles()[0].outputs, vec![1]);
+        assert_eq!(k.cycles()[1].outputs, vec![0]);
+        assert_eq!(k.replace_bank(bank(&[0, 1])), Ok(1));
+    }
+    #[test]
+    fn invalid_shape_and_revision_overflow_are_atomic() {
+        let mut k = kernel();
+        let before = k.clone();
+        let wrong = Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0]).unwrap(); 2]).unwrap();
+        assert_eq!(k.replace_bank(wrong), Err(SbgAnfKernelError::Shape));
+        assert_eq!(k, before);
+        k.revision = u64::MAX;
+        let before = k.clone();
+        assert_eq!(k.replace_bank(bank(&[1])), Err(SbgAnfKernelError::Overflow));
+        assert_eq!(k, before);
     }
 }
