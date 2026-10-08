@@ -42,3 +42,22 @@ PROMOTION,BLOCKED,model_executor_synthetic_correctness_only
 EXPECTED
 cmp "$out/model-first.csv" "$out/model-expected.csv"
 cat "$out/model-first.csv"
+
+# A4 public SBG/ANF recurrence: complete golden trajectories, native runner,
+# literal control, owned checkpoint replay and bounded trace-codec roundtrip.
+# No historical fixture or timing endpoint is redefined by this extra gate.
+expected_a4=5d7ef8fb5ec5e574e1a32fe0c94b67a6aafc41c7a3a94d00a5c73c80e63b8346
+golden_a4=docs/research/evidence/a4-sbg-20261008/trajectory.csv
+printf '%s  %s\n' "$expected_a4" "$golden_a4" | sha256sum --check
+for pass in first second; do
+  cargo run --locked --release -p sml-core --example pvp6_sbg_qualification > "$out/a4-$pass.csv"
+done
+cmp "$out/a4-first.csv" "$out/a4-second.csv"
+cmp "$out/a4-first.csv" "$golden_a4"
+test "$(wc -l < "$out/a4-first.csv")" -eq 915
+grep '^A4_SBG_SUMMARY,' "$out/a4-first.csv"
+printf 'A4_SBG_TRAJECTORY_SHA256,%s\n' "$expected_a4"
+rustc --edition=2021 -D warnings scripts/verify-a4-sbg.rs -o "$out/verify-a4-sbg"
+rustc --edition=2021 -D warnings --test scripts/verify-a4-sbg.rs -o "$out/verify-a4-sbg-tests"
+"$out/verify-a4-sbg-tests"
+"$out/verify-a4-sbg" "$out/a4-first.csv"
