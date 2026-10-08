@@ -27,6 +27,7 @@ pub struct SbgAnfKernel<const S: usize, const D: usize> {
     revision: u64,
     budget: SbgAnfBudget,
     usage: SbgAnfUsage,
+    last_state: Option<SemanticState<S>>,
     cycles: Vec<SbgAnfCycle>,
 }
 impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
@@ -59,6 +60,7 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             revision: 0,
             budget,
             usage: SbgAnfUsage::default(),
+            last_state: None,
             cycles: Vec::new(),
         })
     }
@@ -142,6 +144,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
             .map_err(|_| SbgAnfKernelError::Allocation)?;
         self.cycles.push(cycle);
         self.usage = usage;
+        self.last_state = Some(next.clone());
         Ok(SemanticRewriteStep {
             state: next,
             stability_blocked: false,
@@ -489,5 +492,242 @@ mod budget_tests {
                 .sum()
         );
         assert_eq!(k.usage().gate_queries, 2);
+    }
+}
+
+/// Owned checkpoint of this ANF kernel and its exact last successful SBG state.
+/// The policy is frozen when capturing. This is not a Delta-KV/MOR checkpoint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SbgAnfCheckpoint<const S: usize, const D: usize> {
+    kernel: SbgAnfKernel<S, D>,
+    state: SemanticState<S>,
+    policy: crate::HaltingPolicy,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SbgAnfResumed<const S: usize, const D: usize> {
+    pub kernel: SbgAnfKernel<S, D>,
+    pub outcome: crate::semantic::SemanticRecurrentOutcome<S>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SbgContinuationError {
+    NoState,
+    Policy(crate::RecurrentError),
+    Depth,
+    WouldHaveHalted,
+    Identity,
+    Run(crate::semantic::SemanticRecurrentRunError<SbgAnfKernelError>),
+}
+impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
+    pub fn checkpoint(
+        &self,
+        policy: crate::HaltingPolicy,
+    ) -> Result<SbgAnfCheckpoint<S, D>, SbgContinuationError> {
+        let policy = policy.validate().map_err(SbgContinuationError::Policy)?;
+        let state = self
+            .last_state
+            .clone()
+            .ok_or(SbgContinuationError::NoState)?;
+        let completed = self.cycles.len() as u32;
+        if completed > policy.max_depth || policy.max_depth > self.max_cycles {
+            return Err(SbgContinuationError::Depth);
+        }
+        if self.cycles.iter().take(self.cycles.len() - 1).any(|c| {
+            c.depth >= policy.min_depth
+                && c.delta.total() <= u128::from(policy.stable_hamming_threshold)
+        }) {
+            return Err(SbgContinuationError::WouldHaveHalted);
+        }
+        Ok(SbgAnfCheckpoint {
+            kernel: self.clone(),
+            state,
+            policy,
+        })
+    }
+}
+struct OffsetKernel<'a, const S: usize, const D: usize> {
+    kernel: &'a mut SbgAnfKernel<S, D>,
+    offset: u32,
+}
+impl<const S: usize, const D: usize> SemanticRewriter<S> for OffsetKernel<'_, S, D> {
+    type Error = SbgAnfKernelError;
+    fn rewrite(
+        &mut self,
+        state: &SemanticState<S>,
+        depth: u32,
+    ) -> Result<SemanticRewriteStep<S>, Self::Error> {
+        self.kernel.rewrite(
+            state,
+            self.offset
+                .checked_add(depth)
+                .ok_or(SbgAnfKernelError::Overflow)?,
+        )
+    }
+}
+impl<const S: usize, const D: usize> SbgAnfCheckpoint<S, D> {
+    #[must_use]
+    pub fn state(&self) -> &SemanticState<S> {
+        &self.state
+    }
+    #[must_use]
+    pub fn completed_depth(&self) -> u32 {
+        self.kernel.cycles.len() as u32
+    }
+    pub fn resume_checked(
+        self,
+        expected_bank: &Pvp6Bank<D>,
+        expected_plan: &SbgAnfPlan<S, D>,
+    ) -> Result<SbgAnfResumed<S, D>, SbgContinuationError> {
+        if &self.kernel.bank != expected_bank || &self.kernel.plan != expected_plan {
+            return Err(SbgContinuationError::Identity);
+        }
+        self.resume()
+    }
+    pub fn resume(self) -> Result<SbgAnfResumed<S, D>, SbgContinuationError> {
+        use crate::semantic::{
+            run_semantic_recurrent, SemanticHaltReason, SemanticRecurrentOutcome,
+            SemanticRewriteTrace,
+        };
+        let offset = self.completed_depth();
+        let mut kernel = self.kernel;
+        let mut trace = kernel
+            .cycles
+            .iter()
+            .map(|c| SemanticRewriteTrace {
+                depth: c.depth,
+                delta: c.delta,
+                stability_blocked: false,
+            })
+            .collect::<Vec<_>>();
+        let last = kernel.cycles.last().ok_or(SbgContinuationError::NoState)?;
+        let stable = offset >= self.policy.min_depth
+            && last.delta.total() <= u128::from(self.policy.stable_hamming_threshold);
+        if stable || offset == self.policy.max_depth {
+            let outcome = SemanticRecurrentOutcome {
+                state: self.state,
+                depth: offset,
+                halt_reason: if stable {
+                    SemanticHaltReason::Stable
+                } else {
+                    SemanticHaltReason::MaxDepth
+                },
+                trace,
+            };
+            return Ok(SbgAnfResumed { kernel, outcome });
+        }
+        let remaining = crate::HaltingPolicy {
+            min_depth: self.policy.min_depth.saturating_sub(offset).max(1),
+            max_depth: self.policy.max_depth - offset,
+            stable_hamming_threshold: self.policy.stable_hamming_threshold,
+        };
+        let mut adapter = OffsetKernel {
+            kernel: &mut kernel,
+            offset,
+        };
+        let mut outcome = run_semantic_recurrent(self.state, &mut adapter, remaining)
+            .map_err(SbgContinuationError::Run)?;
+        for entry in &mut outcome.trace {
+            entry.depth += offset;
+        }
+        trace.extend(outcome.trace);
+        outcome.trace = trace;
+        outcome.depth += offset;
+        Ok(SbgAnfResumed { kernel, outcome })
+    }
+}
+#[cfg(test)]
+mod checkpoint_tests {
+    use super::*;
+    use crate::{
+        pvp6_executor::Pvp6Gate,
+        pvp6_sbg::{SbgCoordinate, SbgField},
+        semantic::run_semantic_recurrent,
+        HaltingPolicy,
+    };
+    fn kernel(terms: &[u16]) -> SbgAnfKernel<8, 64> {
+        let plan = SbgAnfPlan::new(
+            vec![(0..6)
+                .map(|bit| SbgCoordinate {
+                    field: SbgField::Value,
+                    bit,
+                })
+                .collect()],
+            vec![SbgCoordinate {
+                field: SbgField::Value,
+                bit: 0,
+            }],
+        )
+        .unwrap();
+        SbgAnfKernel::new(
+            Pvp6Bank::new(vec![Pvp6Gate::from_monomials(terms).unwrap()]).unwrap(),
+            plan,
+            Pvp6PopulationProfile::AffineUniform,
+            8,
+        )
+        .unwrap()
+    }
+    #[test]
+    fn split_run_retains_absolute_depth_full_trace_counters_and_state() {
+        let policy = HaltingPolicy {
+            min_depth: 1,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        for seed in 0..8 {
+            for split in 1..8 {
+                let mut state = SemanticState::zeroed().unwrap();
+                for bit in 0..3 {
+                    state.value.set(bit, seed & (1 << bit) != 0).unwrap();
+                }
+                let mut full = kernel(&[0, 1]);
+                let expected = run_semantic_recurrent(state.clone(), &mut full, policy).unwrap();
+                let mut partial = kernel(&[0, 1]);
+                for depth in 1..=split {
+                    state = partial.rewrite(&state, depth).unwrap().state;
+                }
+                let snapshot = partial.checkpoint(policy).unwrap();
+                assert_eq!(snapshot.state(), &state);
+                let resumed = snapshot.resume_checked(full.bank(), full.plan()).unwrap();
+                assert_eq!(resumed.outcome, expected);
+                assert_eq!(resumed.kernel, full);
+            }
+        }
+    }
+    #[test]
+    fn completed_stable_checkpoint_does_not_add_a_cycle() {
+        let policy = HaltingPolicy {
+            min_depth: 1,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let mut k = kernel(&[0]);
+        let expected =
+            run_semantic_recurrent(SemanticState::zeroed().unwrap(), &mut k, policy).unwrap();
+        let resumed = k.checkpoint(policy).unwrap().resume().unwrap();
+        assert_eq!(resumed.outcome, expected);
+        assert_eq!(resumed.kernel, k);
+    }
+    #[test]
+    fn invalid_context_policy_or_pre_stability_history_is_rejected() {
+        let policy = HaltingPolicy {
+            min_depth: 1,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let mut k = kernel(&[0]);
+        assert_eq!(k.checkpoint(policy), Err(SbgContinuationError::NoState));
+        let mut state = SemanticState::zeroed().unwrap();
+        state = k.rewrite(&state, 1).unwrap().state;
+        let snapshot = k.checkpoint(policy).unwrap();
+        let wrong = kernel(&[1]);
+        assert_eq!(
+            snapshot.resume_checked(wrong.bank(), wrong.plan()),
+            Err(SbgContinuationError::Identity)
+        );
+        state = k.rewrite(&state, 2).unwrap().state;
+        k.rewrite(&state, 3).unwrap();
+        assert_eq!(
+            k.checkpoint(policy),
+            Err(SbgContinuationError::WouldHaveHalted)
+        );
     }
 }
