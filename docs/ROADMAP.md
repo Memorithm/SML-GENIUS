@@ -730,3 +730,14 @@ Next slice: freeze the SML recurrent bank/state-update contract and direct-evalu
 control, then compare full bounded-sequence trajectories with coefficient changes.
 RemoteOps controls physical runs; partner kernels remain optional. Do not infer
 new executor latency from the historical selector-coordinate measurements.
+
+## A4 recurrent destination reference — 2026-10-08
+
+A bounded, model-owned `pvp6_recurrent` execution-only reference is introduced.
+It evaluates a sequence of canonical ANF banks with explicit replacements, bounded
+step count, complete query-major output per step, and deterministic final output
+state. It compares to an independent direct-monomial oracle and rejects malformed
+updates without mutating the initial bank. This does **not** yet integrate the
+actual SBG/MOR/Delta-KV loop, learned banks, memory, or measured latency. A4
+remains open pending complete routing/state/memory/output integration, varied
+sequence lengths and independently qualified end-to-end cost.

@@ -626,3 +626,11 @@ PB-9 establishes exact packed Pascal execution through K=268,435,456, but the ne
 The candidate CPU layout is `[K, ceil(G/64)] u64`; the portable GPU unit is `vec4<u32>`, representing 128 gates at one address. The hot path must not materialize the subset lattice as graph nodes or adjacency lists. SciRust qualifies reusable CPU/SIMD and layout primitives; FLAT qualifies portable WGPU kernels and autotuning; NNIS provides optional portable CPU/WGPU runtime qualification. None becomes a mandatory dependency of the final model.
 
 Hardware policy for this programme is vendor-neutral and ecosystem-first: the GPU driver is the only vendor-specific software layer admitted in the target path. The final SML model must be sufficient to itself; after its model interface is frozen, a distinct `SML-HARNESS` will own orchestration/training/evaluation/serving utilities without supplying hidden model semantics.
+
+## A4 recurrent reference (execution-only)
+
+`crates/sml-core/src/pvp6_recurrent.rs` introduces a bounded ANF-bank trajectory
+reference with explicit bank replacement and complete output comparison. It is a
+step toward A4, not the full recurrent model: the final state is the previous
+query-major output, not SBG/MOR/Delta-KV state. No learned utility or performance
+promotion is authorized. RemoteOps remains the physical control plane.
