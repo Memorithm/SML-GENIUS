@@ -9,9 +9,7 @@ use core::fmt;
 
 use crate::{
     pascal_gf2::{pascal_gf2_in_place, PascalGf2Error},
-    pascal_vector_projection::{
-        Pvp6Architecture, Pvp6Selection, Pvp6SelectionError, Pvp6Workload,
-    },
+    pascal_vector_projection::{Pvp6Architecture, Pvp6Selection, Pvp6SelectionError, Pvp6Workload},
 };
 
 /// One canonical ANF gate for a packed Boolean domain.
@@ -45,10 +43,7 @@ impl<const BITS: usize> Pvp6Gate<BITS> {
         for mask in sorted.iter().copied() {
             let index = usize::from(mask);
             if index >= BITS {
-                return Err(Pvp6ExecutionError::MonomialOutOfRange {
-                    mask,
-                    bits: BITS,
-                });
+                return Err(Pvp6ExecutionError::MonomialOutOfRange { mask, bits: BITS });
             }
             coefficients[index / 64] |= 1_u64 << (index % 64);
         }
@@ -132,8 +127,7 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
             match selection.architecture {
                 Pvp6Architecture::PascalAnfMaterialize => {
                     let mut truth = gate.coefficients.clone();
-                    pascal_gf2_in_place(&mut truth)
-                        .map_err(Pvp6ExecutionError::Pascal)?;
+                    pascal_gf2_in_place(&mut truth).map_err(Pvp6ExecutionError::Pascal)?;
                     for (query_index, &query) in queries.iter().enumerate() {
                         if get_bit(&truth, query) {
                             set_bit(&mut packed, base, words_per_gate, query_index);
@@ -325,7 +319,10 @@ mod tests {
         );
         assert_eq!(
             Pvp6Gate::<BITS>::from_monomials(&[64]),
-            Err(Pvp6ExecutionError::MonomialOutOfRange { mask: 64, bits: BITS })
+            Err(Pvp6ExecutionError::MonomialOutOfRange {
+                mask: 64,
+                bits: BITS
+            })
         );
         assert_eq!(
             bank().evaluate(
@@ -342,7 +339,10 @@ mod tests {
                 Pvp6Workload::new(4, 1, 1, Pvp6PopulationProfile::AffineUniform),
                 &[64],
             ),
-            Err(Pvp6ExecutionError::QueryOutOfRange { query: 64, bits: BITS })
+            Err(Pvp6ExecutionError::QueryOutOfRange {
+                query: 64,
+                bits: BITS
+            })
         );
     }
 
