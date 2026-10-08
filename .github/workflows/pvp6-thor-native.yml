@@ -58,9 +58,11 @@ jobs:
           bash scripts/check-pvp6-fixture.sh
 
       - name: Run SciRust structural admission
+        working-directory: scirust
         run: |
+          set -euo pipefail
           cargo run -p scirust-simd --example pvp6_fixture_check -- \
-            --fixture pvp6_fixture.csv | tee pvp6-scirust-admission.json
+            --fixture ../pvp6_fixture.csv | tee ../pvp6-scirust-admission.json
 
       - name: Run ten-process native SML campaign
         working-directory: sml-genius
