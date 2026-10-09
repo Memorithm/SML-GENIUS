@@ -105,6 +105,35 @@ impl<const BITS: usize, const KEY_DIM: usize> DeltaKvDynamicRekeyKernel<BITS, KE
         })
     }
 
+    /// Opt-in dynamic routing: project the current SBG state AND supplied MOR
+    /// decision. Failed projection/read leaves all owned memory/evidence intact.
+    /// The legacy SemanticRewriter path remains frozen-route when used alone.
+    pub fn rewrite_with_mor(
+        &mut self,
+        state: &SemanticState<BITS>,
+        depth: u32,
+        mor: &MorDecision,
+    ) -> Result<SemanticRewriteStep<BITS>, DeltaKvDynamicRekeyError> {
+        if usize::try_from(depth).ok() != self.cycles.len().checked_add(1) {
+            return Err(DeltaKvDynamicRekeyError::InvalidDepth);
+        }
+        let mut candidate = self.clone();
+        candidate.mor = mor.clone();
+        let result = candidate.rewrite(state, depth)?;
+        *self = candidate;
+        Ok(result)
+    }
+
+    #[must_use]
+    pub fn mor_decision(&self) -> &MorDecision {
+        &self.mor
+    }
+
+    #[must_use]
+    pub fn provenance(&self) -> Option<&DeltaKvSourceProvenance> {
+        self.provenance.as_ref()
+    }
+
     #[must_use]
     pub const fn counters(&self) -> DeltaKvCounters {
         self.counters
@@ -219,6 +248,7 @@ fn add_projection_counters(
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeltaKvDynamicRekeyError {
+    InvalidDepth,
     InvalidPolicy,
     KeyDimensionMismatch { expected: usize, actual: usize },
     ValueDimensionMismatch { expected: usize, actual: usize },
@@ -346,5 +376,102 @@ mod tests {
         assert_eq!(kernel.projection_counters().semantic_fields_read, 4);
         assert_eq!(kernel.projection_counters().semantic_coordinates_read, 32);
         assert_eq!(kernel.distinct_keys().len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod current_mor_tests {
+    use super::*;
+    use crate::{
+        delta_kv::DELTA_KV_SCALE, delta_kv_semantic::DeltaKvSemanticProjectionPolicy, PageId,
+    };
+    fn mor(page: u32) -> MorDecision {
+        MorDecision {
+            active_routers: vec![],
+            ranked_experts: vec![],
+            selected_experts: vec![PageId(page)],
+            noise_ppm: 0,
+            structural_disagreement_ppm: 0,
+            expert_mass_threshold_ppm: 0,
+            request_precision_escalation: false,
+            hysteresis_retained_previous_primary: false,
+        }
+    }
+    fn projector() -> DeltaKvSemanticProjector<8> {
+        DeltaKvSemanticProjector::new(
+            DeltaKvSemanticProjectionPolicy {
+                semantic_weight: 1,
+                mor_weight: 32,
+            },
+            17,
+        )
+        .unwrap()
+    }
+    fn kernel() -> DeltaKvDynamicRekeyKernel<8, 8> {
+        let state = SemanticState::<8>::zeroed().unwrap();
+        let key = projector().project(&state, &mor(0), None).unwrap();
+        let mut memory = DeltaKvMemory::new(8, 1).unwrap();
+        memory
+            .update(
+                &key.key_q12,
+                &[2000],
+                DELTA_KV_SCALE as u16,
+                &mut DeltaKvCounters::default(),
+            )
+            .unwrap();
+        DeltaKvDynamicRekeyKernel::new(
+            memory,
+            projector(),
+            mor(0),
+            Some(DeltaKvSourceProvenance::new(7, vec![11, 13]).unwrap()),
+            vec![0],
+            DeltaKvRecurrentPolicy::default(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn new_route_and_state_are_used_without_changing_legacy_frozen_route_control() {
+        let mut current = kernel();
+        let mut legacy = current.clone();
+        let state = SemanticState::<8>::zeroed().unwrap();
+        current.rewrite_with_mor(&state, 1, &mor(0)).unwrap();
+        legacy.rewrite(&state, 1).unwrap();
+        assert_eq!(current, legacy);
+        let mut changed = state.clone();
+        changed.value.set(1, true).unwrap();
+        changed.routing.set(7, true).unwrap();
+        current.rewrite_with_mor(&changed, 2, &mor(1)).unwrap();
+        legacy.rewrite(&changed, 2).unwrap();
+        let expected = projector().project(&changed, &mor(1), None).unwrap();
+        let frozen = projector().project(&changed, &mor(0), None).unwrap();
+        assert_ne!(expected.key_q12, frozen.key_q12);
+        assert_eq!(current.cycle_evidence()[1].key_q12, expected.key_q12);
+        assert_eq!(legacy.cycle_evidence()[1].key_q12, frozen.key_q12);
+        assert_eq!(current.mor_decision(), &mor(1));
+        assert_eq!(legacy.mor_decision(), &mor(0));
+        assert_eq!(current.counters().reads, 2);
+        assert_eq!(current.provenance().unwrap().raw_segment_ids, vec![11, 13]);
+    }
+    #[test]
+    fn invalid_route_and_depth_cannot_mutate_owned_memory_or_evidence() {
+        let mut k = kernel();
+        let state = SemanticState::<8>::zeroed().unwrap();
+        k.rewrite_with_mor(&state, 1, &mor(0)).unwrap();
+        let before = k.clone();
+        for depth in [0, 1, 3] {
+            assert_eq!(
+                k.rewrite_with_mor(&state, depth, &mor(1)),
+                Err(DeltaKvDynamicRekeyError::InvalidDepth)
+            );
+            assert_eq!(k, before);
+        }
+        let mut empty = mor(0);
+        empty.selected_experts.clear();
+        assert!(k.rewrite_with_mor(&state, 2, &empty).is_err());
+        assert_eq!(k, before);
+        let mut dup = mor(0);
+        dup.selected_experts.push(PageId(0));
+        assert!(k.rewrite_with_mor(&state, 2, &dup).is_err());
+        assert_eq!(k, before);
     }
 }
