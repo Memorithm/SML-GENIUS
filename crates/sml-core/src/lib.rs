@@ -11,6 +11,7 @@ use core::fmt;
 pub mod ablation;
 pub mod anf;
 pub mod anf_large;
+pub mod anf_large_bank;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
