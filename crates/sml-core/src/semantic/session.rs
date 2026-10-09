@@ -7,13 +7,14 @@ use super::{
     SemanticState,
 };
 use crate::{HaltingPolicy, RecurrentError};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticSession<K, const S: usize> {
     inner: K,
     state: SemanticState<S>,
     policy: HaltingPolicy,
-    trace: Vec<SemanticRewriteTrace>,
+    trace: Arc<Vec<SemanticRewriteTrace>>,
     halt: Option<SemanticHaltReason>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +57,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticSession<K, S> {
             state,
             inner,
             policy: policy.validate().map_err(SemanticSessionError::Policy)?,
-            trace: vec![],
+            trace: Arc::new(vec![]),
             halt: None,
         })
     }
@@ -96,7 +97,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticSession<K, S> {
             state: self.state.clone(),
             depth: self.depth(),
             halt_reason,
-            trace: self.trace.clone(),
+            trace: self.trace.as_ref().clone(),
         })
     }
     /// Advance at most `requested` cycles, using the existing native runner.
@@ -140,7 +141,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticSession<K, S> {
             .checked_add(next.depth)
             .ok_or(SemanticSessionError::Overflow)?;
         let mut trace = self.trace.clone();
-        trace
+        Arc::make_mut(&mut trace)
             .try_reserve(next.trace.len())
             .map_err(|_| SemanticSessionError::Allocation)?;
         for mut entry in next.trace {
@@ -148,7 +149,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticSession<K, S> {
                 .depth
                 .checked_add(offset)
                 .ok_or(SemanticSessionError::Overflow)?;
-            trace.push(entry);
+            Arc::make_mut(&mut trace).push(entry);
         }
         let last = trace.last().ok_or(SemanticSessionError::Overflow)?;
         let halt = if depth >= self.policy.min_depth
