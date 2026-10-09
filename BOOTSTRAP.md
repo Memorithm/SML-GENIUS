@@ -655,3 +655,13 @@ The next ten slices execute declared expert page bodies and feed their output
 plus the current native MOR decision into Delta-KV projection. Legacy frozen-key
 and frozen-route controls stay unchanged. Model-quality and performance gates
 remain separate; execution tests alone do not close A4.
+
+## A4 selected experts / dynamic memory qualification
+
+The active declared loop now executes native MOR-selected ANF page bodies and
+reprojects Delta-KV from their post-expert SBG output plus the current route.
+`semantic::session` resumes the complete owned pipeline in memory. Read
+`docs/SML-A4-EXPERT-DYNAMIC-LOOP.md` for API semantics, logical budget boundaries
+and the 108-case/456-cycle exact panel with independent std-only arithmetic replay.
+This does not qualify learned page quality, physical speed, persistent checkpoint
+storage, broader geometries or a final model architecture. Old fixtures remain.
