@@ -647,3 +647,11 @@ full four-field trajectory replay. Read `docs/SML-A4-SBG-INTEGRATION.md` for exa
 contracts and remaining gates. These are synthetic functional results, not trained
 utility, physical speed or final architecture qualification. Checkpoint continuation
 is in-memory and ANF-only; expert-page execution and dynamic DKV keys remain open.
+
+## Active next A4 slice — selected experts and dynamic state/route memory
+
+Read `docs/SML-A4-EXPERT-DYNAMIC-LOOP.md` before extending the PR238–247 path.
+The next ten slices execute declared expert page bodies and feed their output
+plus the current native MOR decision into Delta-KV projection. Legacy frozen-key
+and frozen-route controls stay unchanged. Model-quality and performance gates
+remain separate; execution tests alone do not close A4.

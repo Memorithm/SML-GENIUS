@@ -54,6 +54,7 @@ pub mod pascal_vector_projection;
 pub mod pvp6_executor;
 pub mod pvp6_recurrent;
 pub mod pvp6_sbg;
+pub mod pvp6_sbg_experts;
 pub mod pvp6_sbg_kernel;
 pub mod pvp6_sbg_routing;
 pub mod pvp6_sbg_trace;
