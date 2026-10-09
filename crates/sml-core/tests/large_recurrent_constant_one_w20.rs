@@ -33,7 +33,7 @@ fn recurrent_value_and_context_remain_consistent() {
     for depth in 1..=3 {
         state = engine.rewrite(&state, depth).unwrap().state;
         for i in 0..WIDTH {
-            assert_eq!(state.value.get(i).unwrap(), true);
+            assert!(state.value.get(i).unwrap());
         }
         assert_eq!(state.meaning_mask, original.meaning_mask);
         assert_eq!(state.ambiguity, original.ambiguity);
