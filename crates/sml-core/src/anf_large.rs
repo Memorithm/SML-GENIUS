@@ -17,6 +17,13 @@ pub enum LargeAnfError {
     QueryOutOfRange(u32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LargeAnfBatchError {
+    QueryBudgetExceeded,
+    QueryOutOfRange(u32),
+    Allocation,
+}
+
 impl LargeAnfGate {
     pub fn new(address_bits: u32, mut monomials: Vec<u32>) -> Result<Self, LargeAnfError> {
         if !(1..=31).contains(&address_bits) {
@@ -51,6 +58,36 @@ impl LargeAnfGate {
             .monomials
             .iter()
             .fold(false, |parity, &mask| parity ^ (query & mask == mask)))
+    }
+
+    /// Evaluate a bounded query batch into a caller-owned output vector.
+    /// Reject every invalid query before allocating or evaluating any result.
+    pub fn evaluate_batch(
+        &self,
+        queries: &[u32],
+        max_queries: usize,
+    ) -> Result<Vec<bool>, LargeAnfBatchError> {
+        if queries.len() > max_queries {
+            return Err(LargeAnfBatchError::QueryBudgetExceeded);
+        }
+        let domain = 1_u32 << self.address_bits;
+        for &query in queries {
+            if query >= domain {
+                return Err(LargeAnfBatchError::QueryOutOfRange(query));
+            }
+        }
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(queries.len())
+            .map_err(|_| LargeAnfBatchError::Allocation)?;
+        for &query in queries {
+            let parity = self
+                .monomials
+                .iter()
+                .fold(false, |value, &mask| value ^ (query & mask == mask));
+            values.push(parity);
+        }
+        Ok(values)
     }
 
     #[must_use]
@@ -109,5 +146,44 @@ mod tests {
             LargeAnfGate::new(20, vec![1_048_576]),
             Err(LargeAnfError::MonomialOutOfRange(1_048_576))
         );
+    }
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    #[test]
+    fn complete_batched_values_match_independent_literal_control() {
+        let terms = [0u32, 1, 3, 65536, 262145, 1_048_575];
+        let gate = LargeAnfGate::new(20, terms.to_vec()).unwrap();
+        let queries = [0, 1, 3, 65536, 262145, 524287, 1048575];
+        let expected = queries
+            .iter()
+            .map(|&query| {
+                terms.iter().fold(false, |parity, &mask| {
+                    let mut product = true;
+                    for bit in 0..20 {
+                        if mask & (1 << bit) != 0 {
+                            product &= query & (1 << bit) != 0;
+                        }
+                    }
+                    parity ^ product
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(gate.evaluate_batch(&queries, queries.len()), Ok(expected));
+    }
+    #[test]
+    fn invalid_queries_and_budget_fail_closed() {
+        let gate = LargeAnfGate::new(20, vec![0, 1]).unwrap();
+        assert_eq!(
+            gate.evaluate_batch(&[0, 1], 1),
+            Err(LargeAnfBatchError::QueryBudgetExceeded)
+        );
+        assert_eq!(
+            gate.evaluate_batch(&[0, 1_048_576], 2),
+            Err(LargeAnfBatchError::QueryOutOfRange(1_048_576))
+        );
+        assert_eq!(gate.evaluate_batch(&[], 0), Ok(vec![]));
     }
 }
