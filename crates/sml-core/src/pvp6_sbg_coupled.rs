@@ -9,6 +9,7 @@ use crate::{
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState, SemanticStateDelta},
     PageId,
 };
+use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgCoupledCycle<const S: usize> {
     pub depth: u32,
@@ -24,7 +25,7 @@ pub struct SbgCoupledCycle<const S: usize> {
 pub struct CoupledSbgLoop<K, const S: usize, const D: usize, const Q: usize> {
     experts: RoutedExpertSemantic<K, S, D>,
     memory: DeltaKvDynamicRekeyKernel<S, Q>,
-    cycles: Vec<SbgCoupledCycle<S>>,
+    cycles: Arc<Vec<SbgCoupledCycle<S>>>,
     budget: SbgMemoryWork,
     usage: SbgMemoryWork,
     per_cycle: SbgMemoryWork,
@@ -58,7 +59,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
         Ok(Self {
             experts,
             memory,
-            cycles: vec![],
+            cycles: Arc::new(vec![]),
             budget,
             usage: SbgMemoryWork::default(),
             per_cycle,
@@ -161,10 +162,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
         {
             return Err(CoupledSbgError::Accounting);
         }
-        self.cycles
+        Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| CoupledSbgError::Allocation)?;
-        self.cycles.push(evidence);
+        Arc::make_mut(&mut self.cycles).push(evidence);
         self.experts = experts;
         self.memory = memory;
         self.usage = usage;
