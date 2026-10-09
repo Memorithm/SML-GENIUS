@@ -17,6 +17,7 @@ use crate::{
     mor::MorDecision,
     semantic::{SemanticBitFieldError, SemanticRewriteStep, SemanticRewriter, SemanticState},
 };
+use std::sync::Arc;
 
 /// Per-cycle evidence from one dynamic re-key/read/rewrite step.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +42,7 @@ pub struct DeltaKvDynamicRekeyKernel<const BITS: usize, const KEY_DIM: usize> {
     policy: DeltaKvRecurrentPolicy,
     counters: DeltaKvCounters,
     projection_counters: DeltaKvSemanticProjectionCounters,
-    cycles: Vec<DeltaKvDynamicCycleEvidence>,
+    cycles: Arc<Vec<DeltaKvDynamicCycleEvidence>>,
     distinct_keys: Vec<Vec<i16>>,
 }
 
@@ -100,7 +101,7 @@ impl<const BITS: usize, const KEY_DIM: usize> DeltaKvDynamicRekeyKernel<BITS, KE
             policy,
             counters: DeltaKvCounters::default(),
             projection_counters: DeltaKvSemanticProjectionCounters::default(),
-            cycles: Vec::new(),
+            cycles: Arc::new(Vec::new()),
             distinct_keys: Vec::new(),
         })
     }
@@ -211,7 +212,7 @@ impl<const BITS: usize, const KEY_DIM: usize> SemanticRewriter<BITS>
             }
         }
 
-        self.cycles.push(DeltaKvDynamicCycleEvidence {
+        Arc::make_mut(&mut self.cycles).push(DeltaKvDynamicCycleEvidence {
             depth,
             key_q12: projection.key_q12,
             key_changed,
