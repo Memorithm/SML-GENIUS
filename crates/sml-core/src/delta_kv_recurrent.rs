@@ -6,7 +6,7 @@
 //! the query key frozen so memory effects can be isolated.
 
 use core::fmt;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
     delta_kv::{DeltaKvCounters, DeltaKvError, DeltaKvMemory, DELTA_KV_ONE},
@@ -59,7 +59,7 @@ pub struct DeltaKvRecurrentKernel<const BITS: usize> {
     value_coordinates: Vec<usize>,
     policy: DeltaKvRecurrentPolicy,
     counters: DeltaKvCounters,
-    cycles: Vec<DeltaKvRecurrentCycleEvidence>,
+    cycles: Arc<Vec<DeltaKvRecurrentCycleEvidence>>,
 }
 
 impl<const BITS: usize> DeltaKvRecurrentKernel<BITS> {
@@ -99,7 +99,7 @@ impl<const BITS: usize> DeltaKvRecurrentKernel<BITS> {
             value_coordinates,
             policy,
             counters: DeltaKvCounters::default(),
-            cycles: Vec::new(),
+            cycles: Arc::new(Vec::new()),
         })
     }
 
@@ -170,7 +170,7 @@ impl<const BITS: usize> SemanticRewriter<BITS> for DeltaKvRecurrentKernel<BITS> 
             }
         }
 
-        self.cycles.push(DeltaKvRecurrentCycleEvidence {
+        Arc::make_mut(&mut self.cycles).push(DeltaKvRecurrentCycleEvidence {
             depth,
             read_values_q12: values,
             ambiguous_values,
@@ -228,8 +228,8 @@ pub fn compare_delta_kv_recurrent<const BITS: usize>(
         adaptive,
         fixed_depth: fixed,
         no_delta,
-        adaptive_cycles: adaptive_kernel.cycles,
-        fixed_cycles: fixed_kernel.cycles,
+        adaptive_cycles: Arc::unwrap_or_clone(adaptive_kernel.cycles),
+        fixed_cycles: Arc::unwrap_or_clone(fixed_kernel.cycles),
     })
 }
 
