@@ -125,6 +125,11 @@ impl<const BITS: usize, const KEY_DIM: usize> DeltaKvDynamicRekeyKernel<BITS, KE
     }
 
     #[must_use]
+    pub fn value_dim(&self) -> usize {
+        self.memory.value_dim()
+    }
+
+    #[must_use]
     pub fn mor_decision(&self) -> &MorDecision {
         &self.mor
     }
