@@ -12,6 +12,7 @@ pub mod ablation;
 pub mod anf;
 pub mod anf_large;
 pub mod anf_large_bank;
+pub mod anf_large_recurrent;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
