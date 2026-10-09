@@ -55,6 +55,11 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
         })
     }
     #[must_use]
+    pub fn max_cycles(&self) -> u32 {
+        self.max_cycles
+    }
+
+    #[must_use]
     pub fn inner(&self) -> &K {
         &self.inner
     }

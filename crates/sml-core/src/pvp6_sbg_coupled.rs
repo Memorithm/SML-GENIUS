@@ -25,10 +25,16 @@ pub struct CoupledSbgLoop<K, const S: usize, const D: usize, const Q: usize> {
     experts: RoutedExpertSemantic<K, S, D>,
     memory: DeltaKvDynamicRekeyKernel<S, Q>,
     cycles: Vec<SbgCoupledCycle<S>>,
+    budget: SbgMemoryWork,
+    usage: SbgMemoryWork,
+    per_cycle: SbgMemoryWork,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoupledSbgError<E> {
     NotFresh,
+    Budget,
+    Overflow,
+    Accounting,
     Depth,
     Allocation,
     Experts(RoutedExpertError<E>),
@@ -44,11 +50,38 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
         if !experts.cycles().is_empty() || !memory.cycle_evidence().is_empty() {
             return Err(CoupledSbgError::NotFresh);
         }
+        let per_cycle = SbgMemoryWork::for_shape::<S, Q>(memory.value_dim())
+            .ok_or(CoupledSbgError::Overflow)?;
+        let budget = per_cycle
+            .times(experts.routed().max_cycles())
+            .ok_or(CoupledSbgError::Overflow)?;
         Ok(Self {
             experts,
             memory,
             cycles: vec![],
+            budget,
+            usage: SbgMemoryWork::default(),
+            per_cycle,
         })
+    }
+    /// Configure logical memory work before starting the trajectory.
+    pub fn with_memory_budget(
+        mut self,
+        budget: SbgMemoryWork,
+    ) -> Result<Self, CoupledSbgError<K::Error>> {
+        if !self.cycles.is_empty() {
+            return Err(CoupledSbgError::NotFresh);
+        }
+        self.budget = budget;
+        Ok(self)
+    }
+    #[must_use]
+    pub fn memory_usage(&self) -> SbgMemoryWork {
+        self.usage
+    }
+    #[must_use]
+    pub fn memory_budget(&self) -> SbgMemoryWork {
+        self.budget
     }
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
@@ -74,6 +107,13 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
     ) -> Result<SemanticRewriteStep<S>, Self::Error> {
         if usize::try_from(depth).ok() != self.cycles.len().checked_add(1) {
             return Err(CoupledSbgError::Depth);
+        }
+        let usage = self
+            .usage
+            .checked_add(self.per_cycle)
+            .ok_or(CoupledSbgError::Overflow)?;
+        if !usage.within(self.budget) {
+            return Err(CoupledSbgError::Budget);
         }
         let mut experts = self.experts.clone();
         let rewritten = experts
@@ -105,12 +145,19 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
             delta: SemanticStateDelta::between(state, &read.state),
             stability_blocked,
         };
+        if evidence.memory.read_macs_delta != self.per_cycle.read_macs
+            || evidence.memory.projection.semantic_coordinates_read
+                != self.per_cycle.projected_coordinates
+        {
+            return Err(CoupledSbgError::Accounting);
+        }
         self.cycles
             .try_reserve(1)
             .map_err(|_| CoupledSbgError::Allocation)?;
         self.cycles.push(evidence);
         self.experts = experts;
         self.memory = memory;
+        self.usage = usage;
         Ok(SemanticRewriteStep {
             state: read.state,
             stability_blocked,
@@ -265,6 +312,130 @@ mod tests {
             k.rewrite(&result.state, result.depth),
             Err(CoupledSbgError::Depth)
         ));
+        assert_eq!(k, before);
+    }
+}
+
+/// Logical memory work. Retained units charge one unit per state u64 word and
+/// one per key/read scalar, NOT bytes. Excludes route/provenance metadata, other
+/// stage logs and temporary clones. Host resource enforcement belongs to RemoteOps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SbgMemoryWork {
+    pub cycles: u32,
+    pub read_macs: u64,
+    pub projected_coordinates: u64,
+    pub retained_units: u64,
+}
+impl SbgMemoryWork {
+    fn for_shape<const S: usize, const Q: usize>(values: usize) -> Option<Self> {
+        let s = u64::try_from(S).ok()?;
+        let q = u64::try_from(Q).ok()?;
+        let v = u64::try_from(values).ok()?;
+        Some(Self {
+            cycles: 1,
+            read_macs: q.checked_mul(v)?,
+            projected_coordinates: s.checked_mul(4)?,
+            retained_units: s
+                .div_ceil(64)
+                .checked_mul(8)?
+                .checked_add(q)?
+                .checked_add(v)?,
+        })
+    }
+    fn times(self, n: u32) -> Option<Self> {
+        Some(Self {
+            cycles: self.cycles.checked_mul(n)?,
+            read_macs: self.read_macs.checked_mul(u64::from(n))?,
+            projected_coordinates: self.projected_coordinates.checked_mul(u64::from(n))?,
+            retained_units: self.retained_units.checked_mul(u64::from(n))?,
+        })
+    }
+    fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            cycles: self.cycles.checked_add(other.cycles)?,
+            read_macs: self.read_macs.checked_add(other.read_macs)?,
+            projected_coordinates: self
+                .projected_coordinates
+                .checked_add(other.projected_coordinates)?,
+            retained_units: self.retained_units.checked_add(other.retained_units)?,
+        })
+    }
+    fn within(self, cap: Self) -> bool {
+        self.cycles <= cap.cycles
+            && self.read_macs <= cap.read_macs
+            && self.projected_coordinates <= cap.projected_coordinates
+            && self.retained_units <= cap.retained_units
+    }
+}
+#[cfg(test)]
+mod memory_budget_tests {
+    use super::fixtures::coupled;
+    use super::*;
+    #[test]
+    fn inclusive_work_caps_match_actual_projection_and_reads() {
+        let cap = SbgMemoryWork {
+            cycles: 2,
+            read_macs: 16,
+            projected_coordinates: 64,
+            retained_units: 34,
+        };
+        let mut k = coupled().with_memory_budget(cap).unwrap();
+        let mut state = SemanticState::zeroed().unwrap();
+        for depth in 1..=2 {
+            state = k.rewrite(&state, depth).unwrap().state;
+        }
+        assert_eq!(k.memory_usage(), cap);
+        assert_eq!(k.memory().counters().read_macs, 16);
+        let before = k.clone();
+        assert_eq!(k.rewrite(&state, 3), Err(CoupledSbgError::Budget));
+        assert_eq!(k, before);
+        assert!(matches!(
+            k.clone().with_memory_budget(cap),
+            Err(CoupledSbgError::NotFresh)
+        ));
+    }
+    #[test]
+    fn every_insufficient_axis_rejects_before_inner_work() {
+        let valid = SbgMemoryWork {
+            cycles: 1,
+            read_macs: 8,
+            projected_coordinates: 32,
+            retained_units: 17,
+        };
+        for cap in [
+            SbgMemoryWork { cycles: 0, ..valid },
+            SbgMemoryWork {
+                read_macs: 7,
+                ..valid
+            },
+            SbgMemoryWork {
+                projected_coordinates: 31,
+                ..valid
+            },
+            SbgMemoryWork {
+                retained_units: 16,
+                ..valid
+            },
+        ] {
+            let mut k = coupled().with_memory_budget(cap).unwrap();
+            let before = k.clone();
+            assert_eq!(
+                k.rewrite(&SemanticState::zeroed().unwrap(), 1),
+                Err(CoupledSbgError::Budget)
+            );
+            assert_eq!(k, before);
+            assert_eq!(k.experts().routed().inner().calls, 0);
+        }
+    }
+    #[test]
+    fn checked_counter_overflow_is_not_silent_saturation() {
+        let mut k = coupled();
+        k.usage.read_macs = u64::MAX;
+        let before = k.clone();
+        assert_eq!(
+            k.rewrite(&SemanticState::zeroed().unwrap(), 1),
+            Err(CoupledSbgError::Overflow)
+        );
         assert_eq!(k, before);
     }
 }
