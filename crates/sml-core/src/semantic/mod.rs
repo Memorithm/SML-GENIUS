@@ -20,6 +20,7 @@ pub mod mor_hierarchy_majority;
 pub mod mor_hierarchy_train;
 pub mod mor_routing;
 pub mod recurrent;
+pub mod session;
 pub mod simd;
 pub mod state;
 pub mod store_format;
