@@ -11,7 +11,8 @@ fn constant_one_gate_updates_value_without_touching_context() {
         LargeAnfGate::new(20, vec![0]).unwrap(),
         LargeAnfGate::new(20, vec![0]).unwrap(),
         LargeAnfGate::new(20, vec![0]).unwrap(),
-    ]).unwrap();
+    ])
+    .unwrap();
     let mut recurrent = LargeBankRecurrent::<4>::new(bank, 3).unwrap();
     let mut state = SemanticState::<4>::zeroed().unwrap();
     state.meaning_mask.set(1, true).unwrap();
@@ -30,7 +31,10 @@ fn constant_one_gate_updates_value_without_touching_context() {
         assert_eq!(recurrent.history().len(), depth as usize);
     }
     let before = recurrent.clone();
-    assert_eq!(recurrent.rewrite(&state, 4), Err(LargeRecurrentError::Depth));
+    assert_eq!(
+        recurrent.rewrite(&state, 4),
+        Err(LargeRecurrentError::Depth)
+    );
     assert_eq!(recurrent, before);
 }
 
