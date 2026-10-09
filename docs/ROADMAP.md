@@ -758,3 +758,12 @@ expert-page execution, larger declared or learned integration banks, persistent
 full-pipeline checkpointing and controlled end-to-end cost. A5 learning, A6
 matched architectural ablations and A7 scaling remain open. Final SML remains
 self-contained and partner runtimes optional; RemoteOps retains physical control.
+
+## A4 next ten slices — 2026-10-09
+
+The [selected expert / dynamic memory contract](SML-A4-EXPERT-DYNAMIC-LOOP.md)
+freezes the next functional integration sequence: typed ANF pages, sparse selection,
+transactional execution, current-route dynamic keys, coupled state loop, logical
+budgets, coefficient revisions, full owned continuation and direct-control replay.
+These are declared model semantics, not a learned bank or physical performance
+promotion. Persisted checkpoints and full-scale training remain separate gates.
