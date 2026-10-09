@@ -6,6 +6,7 @@ use crate::{
     pvp6_sbg::{SbgAnfError, SbgAnfPlan},
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState, SemanticStateDelta},
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgAnfCycle {
@@ -28,7 +29,7 @@ pub struct SbgAnfKernel<const S: usize, const D: usize> {
     budget: SbgAnfBudget,
     usage: SbgAnfUsage,
     last_state: Option<SemanticState<S>>,
-    cycles: Vec<SbgAnfCycle>,
+    cycles: Arc<Vec<SbgAnfCycle>>,
 }
 impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
     pub fn new(
@@ -61,7 +62,7 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             budget,
             usage: SbgAnfUsage::default(),
             last_state: None,
-            cycles: Vec::new(),
+            cycles: Arc::new(Vec::new()),
         })
     }
     #[must_use]
@@ -139,10 +140,10 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
             delta: SemanticStateDelta::between(state, &next),
             selection: batch.selection(),
         };
-        self.cycles
+        Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| SbgAnfKernelError::Allocation)?;
-        self.cycles.push(cycle);
+        Arc::make_mut(&mut self.cycles).push(cycle);
         self.usage = usage;
         self.last_state = Some(next.clone());
         Ok(SemanticRewriteStep {
