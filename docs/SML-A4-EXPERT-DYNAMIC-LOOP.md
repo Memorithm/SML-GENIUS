@@ -141,3 +141,14 @@ this does NOT establish sparse physical traffic or low-cost rollback. Avoiding
 whole-atlas/history copies requires a separate immutable-sharing or transactional
 journal design with renewed isolation tests and physical measurement. The logical
 selected-work counters intentionally do not conceal this unmeasured clone cost.
+
+## A4 next performance-isolation slice — shared immutable atlas
+
+The expert atlas now uses Rust `Arc<Vec<SbgAnfExpert>>` for immutable bank sharing
+across cloned transactional candidates. `replace_bank` uses copy-on-write so
+coefficient changes in one candidate do not mutate the original or sibling
+snapshots. An exact pointer-identity and coefficient-change test covers sharing,
+separation, old-result preservation and rejected replacement. This is an
+implementation-level reduction of bank-clone work, not an observed latency or
+RSS/VRAM improvement. Other owned history/counter clones remain and must be
+measured or redesigned before a physical sparse-traffic claim.

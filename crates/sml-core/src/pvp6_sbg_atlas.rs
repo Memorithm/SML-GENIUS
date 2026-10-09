@@ -7,11 +7,11 @@ use crate::{
     semantic::SemanticState,
     PageId,
 };
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgExpertAtlas<const S: usize, const D: usize> {
-    pages: Vec<SbgAnfExpert<S, D>>,
+    pages: Arc<Vec<SbgAnfExpert<S, D>>>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SbgExpertWork {
@@ -55,7 +55,9 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
                 return Err(SbgAtlasError::DuplicatePage(pair[0].page()));
             }
         }
-        Ok(Self { pages })
+        Ok(Self {
+            pages: Arc::new(pages),
+        })
     }
     #[must_use]
     pub fn pages(&self) -> &[SbgAnfExpert<S, D>] {
@@ -101,7 +103,7 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
             .pages
             .binary_search_by_key(&id.0, |page| page.page().0)
             .map_err(|_| SbgAtlasError::MissingPage(id))?;
-        self.pages[index]
+        Arc::make_mut(&mut self.pages)[index]
             .replace_bank(expected_revision, bank)
             .map_err(SbgAtlasError::Page)
     }
@@ -268,5 +270,32 @@ mod tests {
             SbgExpertAtlas::new(vec![page(7, 0, &[0])], 0),
             Err(SbgAtlasError::Limit)
         ));
+    }
+    #[test]
+    fn clone_shares_immutable_banks_and_update_detaches_without_stale_results() {
+        let original = SbgExpertAtlas::new(vec![page(7, 0, &[0]), page(19, 1, &[1])], 2).unwrap();
+        let mut candidate = original.clone();
+        assert!(Arc::ptr_eq(&original.pages, &candidate.pages));
+        let input = SemanticState::zeroed().unwrap();
+        let old = original.execute(&input, &decision(&[7])).unwrap();
+        let revision = candidate.page(PageId(7)).unwrap().revision();
+        let bank = Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[1]).unwrap()]).unwrap();
+        assert_eq!(
+            candidate.replace_bank(PageId(7), revision, bank).unwrap(),
+            revision + 1
+        );
+        assert!(!Arc::ptr_eq(&original.pages, &candidate.pages));
+        assert_eq!(original.execute(&input, &decision(&[7])).unwrap(), old);
+        assert_ne!(
+            candidate.execute(&input, &decision(&[7])).unwrap().state,
+            old.state
+        );
+        let snapshot = candidate.clone();
+        assert!(Arc::ptr_eq(&snapshot.pages, &candidate.pages));
+        let invalid = Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0, 1]).unwrap()]).unwrap();
+        assert!(candidate
+            .replace_bank(PageId(7), revision, invalid)
+            .is_err());
+        assert_eq!(candidate, snapshot);
     }
 }
