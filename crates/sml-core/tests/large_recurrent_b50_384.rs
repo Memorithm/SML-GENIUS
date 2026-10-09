@@ -4,7 +4,7 @@ use sml_core::anf_large_bank::LargeAnfBank;
 use sml_core::anf_large_recurrent::{LargeBankRecurrent, LargeRecurrentError};
 use sml_core::semantic::{SemanticRewriter, SemanticState};
 const WIDTH: usize = 8;
-fn masks(i: usize) -> Vec<u32> {
+fn masks(_i: usize) -> Vec<u32> {
     vec![1_u32 << (WIDTH - 1)]
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>()
