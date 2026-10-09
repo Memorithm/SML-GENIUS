@@ -6,7 +6,11 @@ use sml_core::semantic::{SemanticRewriter, SemanticState};
 const WIDTH: usize = 8;
 fn masks(i: usize) -> Vec<u32> {
     let terms = vec![0, 1_u32 << i, (1_u32 << i) | (1_u32 << ((i + 1) % WIDTH))];
-    terms.into_iter().collect::<std::collections::BTreeSet<_>>().into_iter().collect()
+    terms
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 fn oracle(query: u32, i: usize) -> bool {
     masks(i).iter().fold(false, |parity, &mask| {
@@ -21,9 +25,12 @@ fn oracle(query: u32, i: usize) -> bool {
 }
 #[test]
 fn recurrent_transition_matches_literal_oracle_and_preserves_context() {
-    let bank = LargeAnfBank::new((0..WIDTH).map(|i| {
-        LargeAnfGate::new(20, masks(i)).unwrap()
-    }).collect()).unwrap();
+    let bank = LargeAnfBank::new(
+        (0..WIDTH)
+            .map(|i| LargeAnfGate::new(20, masks(i)).unwrap())
+            .collect(),
+    )
+    .unwrap();
     let mut engine = LargeBankRecurrent::<WIDTH>::new(bank, 3).unwrap();
     let mut state = SemanticState::<WIDTH>::zeroed().unwrap();
     for i in 0..WIDTH {
