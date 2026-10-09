@@ -55,6 +55,7 @@ pub mod pvp6_executor;
 pub mod pvp6_recurrent;
 pub mod pvp6_sbg;
 pub mod pvp6_sbg_atlas;
+pub mod pvp6_sbg_expert_loop;
 pub mod pvp6_sbg_experts;
 pub mod pvp6_sbg_kernel;
 pub mod pvp6_sbg_routing;
