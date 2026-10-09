@@ -767,3 +767,16 @@ transactional execution, current-route dynamic keys, coupled state loop, logical
 budgets, coefficient revisions, full owned continuation and direct-control replay.
 These are declared model semantics, not a learned bank or physical performance
 promotion. Persisted checkpoints and full-scale training remain separate gates.
+
+## A4 closed-loop functional evidence — 2026-10-09
+
+The selected expert / dynamic-memory ten-slice implementation adds actual page
+execution, post-expert/current-route key projection, revisioned updates and owned
+whole-pipeline continuation. The declared small-state panel has 108 cases and
+456 cycles with exact independent report replay. All adaptive panel cases hit
+their cap, so no stopping-efficiency or performance improvement is claimed.
+
+Next qualifications: broader declared SBG/domain/selection geometries; quality-
+gated learned page export; persistent authenticated whole-pipeline checkpoints;
+then separately admitted physical end-to-end cost and matched learning/ablation
+gates. Do not infer those results from the synthetic closed-loop equality checks.

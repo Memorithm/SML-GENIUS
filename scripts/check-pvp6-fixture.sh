@@ -61,3 +61,21 @@ rustc --edition=2021 -D warnings scripts/verify-a4-sbg.rs -o "$out/verify-a4-sbg
 rustc --edition=2021 -D warnings --test scripts/verify-a4-sbg.rs -o "$out/verify-a4-sbg-tests"
 "$out/verify-a4-sbg-tests"
 "$out/verify-a4-sbg" "$out/a4-first.csv"
+
+# Full selected-expert/current-route Delta-KV loop. Old frozen fixtures stay unchanged.
+closed_golden=docs/research/evidence/a4-closed-loop-20261009/trajectory.csv
+closed_hash=7ac9f94f1f98680e6d3789f5840433917d5bbeba0cd6dd8a8e0b61c9f5bcf0dc
+printf '%s  %s\n' "$closed_hash" "$closed_golden" | sha256sum --check
+for pass in first second; do
+  cargo run --locked --release -p sml-core --example pvp6_closed_loop_qualification > "$out/closed-$pass.csv"
+done
+cmp "$out/closed-first.csv" "$out/closed-second.csv"
+cmp "$out/closed-first.csv" "$closed_golden"
+test "$(wc -l < "$out/closed-first.csv")" -eq 675
+test "$(wc -c < "$out/closed-first.csv")" -eq 95452
+rustc --edition=2021 -D warnings scripts/verify-a4-closed-loop.rs -o "$out/verify-closed"
+rustc --edition=2021 -D warnings --test scripts/verify-a4-closed-loop.rs -o "$out/verify-closed-tests"
+"$out/verify-closed-tests"
+"$out/verify-closed" "$out/closed-first.csv"
+grep '^A4_CLOSED_SUMMARY,' "$out/closed-first.csv"
+printf 'A4_CLOSED_TRAJECTORY_SHA256,%s\n' "$closed_hash"
