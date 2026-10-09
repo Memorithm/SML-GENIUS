@@ -16,12 +16,12 @@ binary="${CARGO_TARGET_DIR:-target}/release/examples/pvp6_closed_loop_qualificat
 source_sha="$(git rev-parse HEAD)"
 for pass in 1 2 3 4 5; do
   out="$(mktemp)"; trap 'rm -f "$out"' EXIT
-  /usr/bin/env bash -c '"$1" > "$2"' bash "$binary" "$out" &
+  "$binary" > "$out" &
   pid=$!
   peak=0
   while kill -0 "$pid" 2>/dev/null; do
     if [[ -r "/proc/$pid/status" ]]; then
-      rss="$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" || true)"
+      rss="$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null || true)"
       if [[ "$rss" =~ ^[0-9]+$ && "$rss" -gt "$peak" ]]; then peak="$rss"; fi
     fi
     sleep 0.01
