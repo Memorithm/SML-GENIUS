@@ -49,6 +49,16 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> RoutedExper
             cycles: vec![],
         })
     }
+    pub fn replace_expert(
+        &mut self,
+        id: PageId,
+        expected_revision: u64,
+        bank: crate::pvp6_executor::Pvp6Bank<D>,
+    ) -> Result<u64, RoutedExpertError<K::Error>> {
+        self.atlas
+            .replace_bank(id, expected_revision, bank)
+            .map_err(RoutedExpertError::Expert)
+    }
     #[must_use]
     pub fn routed(&self) -> &RoutedSemantic<K, S> {
         &self.routed

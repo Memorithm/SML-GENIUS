@@ -36,6 +36,8 @@ pub struct SbgExpertResult<const S: usize> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SbgExpertError {
+    StaleRevision { expected: u64, actual: u64 },
+    RevisionOverflow,
     Shape,
     Density,
     Overflow,
@@ -88,6 +90,31 @@ impl<const S: usize, const D: usize> SbgAnfExpert<S, D> {
     #[must_use]
     pub fn plan(&self) -> &SbgAnfPlan<S, D> {
         &self.plan
+    }
+
+    /// Structural coefficient replacement, not acceptance of trained quality.
+    /// Wiring/PageId stay fixed; stale revisions or invalid banks do not mutate.
+    pub fn replace_bank(
+        &mut self,
+        expected_revision: u64,
+        bank: Pvp6Bank<D>,
+    ) -> Result<u64, SbgExpertError> {
+        if expected_revision != self.revision {
+            return Err(SbgExpertError::StaleRevision {
+                expected: self.revision,
+                actual: expected_revision,
+            });
+        }
+        let mut candidate = Self::new(self.page, bank, self.plan.clone(), self.population)?;
+        if candidate.bank == self.bank {
+            return Ok(self.revision);
+        }
+        candidate.revision = self
+            .revision
+            .checked_add(1)
+            .ok_or(SbgExpertError::RevisionOverflow)?;
+        *self = candidate;
+        Ok(self.revision)
     }
 
     /// Logical gate/query work only; excludes physical allocation and timing.
@@ -230,5 +257,53 @@ mod tests {
             ),
             Err(SbgExpertError::Density)
         );
+    }
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+    use crate::pvp6_executor::Pvp6Gate;
+    use crate::pvp6_sbg_expert_loop::fixtures::page;
+    fn bank(terms: &[u16]) -> Pvp6Bank<64> {
+        Pvp6Bank::new(vec![Pvp6Gate::from_monomials(terms).unwrap()]).unwrap()
+    }
+    #[test]
+    fn exact_revision_and_same_bank_noop_preserve_identity() {
+        let mut p = page(4, &[1]);
+        let initial = p.clone();
+        assert_eq!(p.replace_bank(0, bank(&[1])).unwrap(), 0);
+        assert_eq!(p, initial);
+        assert_eq!(p.replace_bank(0, bank(&[0, 1])).unwrap(), 1);
+        assert_eq!(p.page(), PageId(4));
+        assert_eq!(p.plan(), initial.plan());
+        assert_eq!(
+            p.execute(&SemanticState::zeroed().unwrap())
+                .unwrap()
+                .evidence
+                .outputs,
+            vec![1]
+        );
+        let before = p.clone();
+        assert!(matches!(
+            p.replace_bank(0, bank(&[0])),
+            Err(SbgExpertError::StaleRevision { .. })
+        ));
+        assert_eq!(p, before);
+    }
+    #[test]
+    fn malformed_bank_and_revision_overflow_are_atomic() {
+        let mut p = page(4, &[1]);
+        let before = p.clone();
+        let bad = Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0]).unwrap(); 2]).unwrap();
+        assert_eq!(p.replace_bank(0, bad), Err(SbgExpertError::Shape));
+        assert_eq!(p, before);
+        p.revision = u64::MAX;
+        let before = p.clone();
+        assert_eq!(
+            p.replace_bank(u64::MAX, bank(&[0])),
+            Err(SbgExpertError::RevisionOverflow)
+        );
+        assert_eq!(p, before);
     }
 }

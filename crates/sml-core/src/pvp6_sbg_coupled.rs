@@ -83,6 +83,16 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
     pub fn memory_budget(&self) -> SbgMemoryWork {
         self.budget
     }
+    pub fn replace_expert(
+        &mut self,
+        id: PageId,
+        expected_revision: u64,
+        bank: crate::pvp6_executor::Pvp6Bank<D>,
+    ) -> Result<u64, CoupledSbgError<K::Error>> {
+        self.experts
+            .replace_expert(id, expected_revision, bank)
+            .map_err(CoupledSbgError::Experts)
+    }
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
         &self.experts
@@ -436,6 +446,45 @@ mod memory_budget_tests {
             k.rewrite(&SemanticState::zeroed().unwrap(), 1),
             Err(CoupledSbgError::Overflow)
         );
+        assert_eq!(k, before);
+    }
+}
+
+#[cfg(test)]
+mod expert_update_tests {
+    use super::fixtures::coupled;
+    use super::*;
+    use crate::pvp6_executor::{Pvp6Bank, Pvp6Gate};
+    #[test]
+    fn next_cycle_executes_new_coefficients_without_rewriting_old_evidence() {
+        let mut k = coupled();
+        let state = k
+            .rewrite(&SemanticState::zeroed().unwrap(), 1)
+            .unwrap()
+            .state;
+        let old_cycle = k.cycles()[0].clone();
+        let old_expert = k.experts().cycles()[0].clone();
+        let old_work = k.memory_usage();
+        assert_eq!(
+            k.replace_expert(
+                PageId(0),
+                0,
+                Pvp6Bank::new(vec![Pvp6Gate::from_monomials(&[0, 1]).unwrap()]).unwrap()
+            )
+            .unwrap(),
+            1
+        );
+        assert_eq!(k.memory_usage(), old_work);
+        k.rewrite(&state, 2).unwrap();
+        assert_eq!(k.cycles()[0], old_cycle);
+        assert_eq!(k.experts().cycles()[0], old_expert);
+        assert_eq!(k.experts().cycles()[1].pages[0].revision, 1);
+        assert!(!k.cycles()[1].post_expert.value.get(0).unwrap());
+        let before = k.clone();
+        let bank = k.experts().atlas().page(PageId(0)).unwrap().bank().clone();
+        assert!(k.replace_expert(PageId(0), 0, bank.clone()).is_err());
+        assert_eq!(k, before);
+        assert!(k.replace_expert(PageId(99), 0, bank).is_err());
         assert_eq!(k, before);
     }
 }

@@ -91,6 +91,21 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
         }
         Ok(selected)
     }
+    pub fn replace_bank(
+        &mut self,
+        id: PageId,
+        expected_revision: u64,
+        bank: crate::pvp6_executor::Pvp6Bank<D>,
+    ) -> Result<u64, SbgAtlasError> {
+        let index = self
+            .pages
+            .binary_search_by_key(&id.0, |page| page.page().0)
+            .map_err(|_| SbgAtlasError::MissingPage(id))?;
+        self.pages[index]
+            .replace_bank(expected_revision, bank)
+            .map_err(SbgAtlasError::Page)
+    }
+
     /// Logical execution/retained query-output cost, validated before any body executes.
     pub fn work_for(&self, ids: &[PageId]) -> Result<SbgExpertWork, SbgAtlasError> {
         let selected = self.selected(ids)?;
