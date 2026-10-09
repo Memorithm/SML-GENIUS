@@ -8,6 +8,7 @@ use crate::{
         SemanticRewriter, SemanticState,
     },
 };
+use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgRoutingContext<const S: usize> {
     pub bridge: SemanticMorBridge<S>,
@@ -27,7 +28,7 @@ pub struct RoutedSemantic<K, const S: usize> {
     context: SbgRoutingContext<S>,
     previous: PreviousRoute,
     max_cycles: u32,
-    cycles: Vec<SbgRouteCycle>,
+    cycles: Arc<Vec<SbgRouteCycle>>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoutedSemanticError<E> {
@@ -51,7 +52,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
             context,
             previous: PreviousRoute::default(),
             max_cycles,
-            cycles: Vec::new(),
+            cycles: Arc::new(Vec::new()),
         })
     }
     #[must_use]
@@ -108,10 +109,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
             primary: route.decision.selected_experts.first().copied(),
             selected: route.decision.selected_experts.clone(),
         };
-        self.cycles
+        Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| RoutedSemanticError::Allocation)?;
-        self.cycles.push(SbgRouteCycle {
+        Arc::make_mut(&mut self.cycles).push(SbgRouteCycle {
             depth,
             previous: self.previous.clone(),
             route,
