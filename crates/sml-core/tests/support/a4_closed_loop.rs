@@ -28,7 +28,7 @@ use sml_core::{
     HaltingPolicy, PageId,
 };
 use std::fmt::Write as _;
-type Kernel = CoupledSbgLoop<SbgAnfKernel<8, 64>, 8, 64, 8>;
+pub(super) type Kernel = CoupledSbgLoop<SbgAnfKernel<8, 64>, 8, 64, 8>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Scheduled {
     kernel: Kernel,
@@ -56,7 +56,7 @@ fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
     x ^ (x >> 31)
 }
-fn initial(seed: u64) -> SemanticState<8> {
+pub(super) fn initial(seed: u64) -> SemanticState<8> {
     SemanticState {
         value: SemanticBitField::from_words(vec![mix(seed) & 255]).unwrap(),
         meaning_mask: SemanticBitField::from_words(vec![mix(seed ^ 1) & 255]).unwrap(),
@@ -190,7 +190,7 @@ fn memory(seed: u64, target: i16) -> DeltaKvMemory {
     }
     memory
 }
-fn kernel(seed: u64, target: i16, limit: u32) -> Kernel {
+pub(super) fn kernel(seed: u64, target: i16, limit: u32) -> Kernel {
     let plan = SbgAnfPlan::new(
         vec![sources()],
         (0..8)
