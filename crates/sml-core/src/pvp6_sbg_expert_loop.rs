@@ -7,6 +7,7 @@ use crate::{
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState, SemanticStateDelta},
     PageId,
 };
+use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgExecutedCycle {
     pub depth: u32,
@@ -21,7 +22,7 @@ pub struct RoutedExpertSemantic<K, const S: usize, const D: usize> {
     atlas: SbgExpertAtlas<S, D>,
     budget: SbgExpertWork,
     usage: SbgExpertWork,
-    cycles: Vec<SbgExecutedCycle>,
+    cycles: Arc<Vec<SbgExecutedCycle>>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoutedExpertError<E> {
@@ -46,7 +47,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> RoutedExper
             atlas,
             budget,
             usage: SbgExpertWork::default(),
-            cycles: vec![],
+            cycles: Arc::new(vec![]),
         })
     }
     pub fn replace_expert(
@@ -129,10 +130,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> SemanticRew
             .atlas
             .execute(&inner.state, decision)
             .map_err(RoutedExpertError::Expert)?;
-        self.cycles
+        Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| RoutedExpertError::Allocation)?;
-        self.cycles.push(SbgExecutedCycle {
+        Arc::make_mut(&mut self.cycles).push(SbgExecutedCycle {
             depth,
             selected: decision.selected_experts.clone(),
             pages: batch.pages,
@@ -348,5 +349,24 @@ mod tests {
         let before = k.clone();
         assert_eq!(k.rewrite(&state, 1), Err(RoutedExpertError::Depth));
         assert_eq!(k, before);
+    }
+    #[test]
+    fn cloned_history_is_shared_until_a_successful_new_cycle() {
+        let mut original = kernel(8, budget());
+        let state = SemanticState::zeroed().unwrap();
+        let first = original.rewrite(&state, 1).unwrap().state;
+        let mut fork = original.clone();
+        assert!(Arc::ptr_eq(&original.cycles, &fork.cycles));
+        fork.rewrite(&first, 2).unwrap();
+        assert!(!Arc::ptr_eq(&original.cycles, &fork.cycles));
+        assert_eq!(original.cycles().len(), 1);
+        assert_eq!(fork.cycles().len(), 2);
+        assert_eq!(original.cycles()[0], fork.cycles()[0]);
+        let before = fork.clone();
+        assert!(matches!(
+            fork.rewrite(&first, 2),
+            Err(RoutedExpertError::Depth)
+        ));
+        assert_eq!(fork, before);
     }
 }
