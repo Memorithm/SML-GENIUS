@@ -134,6 +134,16 @@ impl LargeAnfBank {
         if queries.len() > max_queries {
             return Err(LargeBankError::BudgetExceeded);
         }
+        let domain = 1_u32 << self.address_bits;
+        for &query in queries {
+            if query >= domain {
+                return Err(LargeBankError::QueryOutOfRange(query));
+            }
+        }
+        let _required_cells = queries
+            .len()
+            .checked_mul(self.gates.len())
+            .ok_or(LargeBankError::Overflow)?;
         let mut output = Vec::new();
         output
             .try_reserve_exact(queries.len())
