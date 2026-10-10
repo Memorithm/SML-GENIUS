@@ -63,7 +63,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> LargeRoutedExperts<K, S> {
         self.used_trace_words
     }
     /// Set a cumulative retained packed-output budget before the first cycle.
-    pub fn with_trace_word_budget(mut self, max_words: usize) -> Result<Self, LargeRoutedError<K::Error>> {
+    pub fn with_trace_word_budget(
+        mut self,
+        max_words: usize,
+    ) -> Result<Self, LargeRoutedError<K::Error>> {
         if !self.cycles.is_empty() || max_words == 0 {
             return Err(LargeRoutedError::Budget);
         }
@@ -108,7 +111,9 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S>
             .iter()
             .try_fold(0usize, |sum, trace| sum.checked_add(trace.packed.len()))
             .ok_or(LargeRoutedError::Budget)?;
-        let used_trace_words = self.used_trace_words.checked_add(count)
+        let used_trace_words = self
+            .used_trace_words
+            .checked_add(count)
             .ok_or(LargeRoutedError::Budget)?;
         if used_trace_words > self.max_trace_words {
             return Err(LargeRoutedError::Budget);
