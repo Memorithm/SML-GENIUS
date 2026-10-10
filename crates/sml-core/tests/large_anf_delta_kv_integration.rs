@@ -212,11 +212,16 @@ fn retained_trace_budget_rejects_second_cycle_without_partial_commit() {
     let mut kernel = make(false, 4);
     // The coupled loop owns the experts; verify the exact packed trace footprint
     // on the first successful cycle independently of the gate evaluation budget.
-    let first = kernel.rewrite(&SemanticState::zeroed().unwrap(), 1).unwrap();
+    let first = kernel
+        .rewrite(&SemanticState::zeroed().unwrap(), 1)
+        .unwrap();
     assert_eq!(kernel.experts().used_trace_words(), 1);
     assert_eq!(kernel.experts().cycles()[0].pages[0].packed.len(), 1);
     let before = kernel.clone();
     // Reusing a committed depth must never mutate retained ANF or DKV evidence.
-    assert!(matches!(kernel.rewrite(&first.state, 1), Err(LargeCoupledError::Depth)));
+    assert!(matches!(
+        kernel.rewrite(&first.state, 1),
+        Err(LargeCoupledError::Depth)
+    ));
     assert_eq!(kernel, before);
 }
