@@ -34,10 +34,10 @@ pub fn unified_anf_sbg_loop<const S: usize, const D: usize, const Q: usize>(
     max_cycles: u32,
     expert_budget: SbgExpertWork,
 ) -> Result<UnifiedAnfSbgLoop<S, D, Q>, UnifiedAnfSbgError> {
-    let recurrent = LargeBankRecurrent::<S>::new(anf, max_cycles as usize)
-        .map_err(UnifiedAnfSbgError::Anf)?;
-    let routed = RoutedSemantic::new(recurrent, routing, max_cycles)
-        .map_err(UnifiedAnfSbgError::Routing)?;
+    let recurrent =
+        LargeBankRecurrent::<S>::new(anf, max_cycles as usize).map_err(UnifiedAnfSbgError::Anf)?;
+    let routed =
+        RoutedSemantic::new(recurrent, routing, max_cycles).map_err(UnifiedAnfSbgError::Routing)?;
     let experts = RoutedExpertSemantic::new(routed, atlas, expert_budget)
         .map_err(UnifiedAnfSbgError::Experts)?;
     CoupledSbgLoop::new(experts, memory).map_err(UnifiedAnfSbgError::Coupled)
@@ -60,11 +60,8 @@ mod tests {
                 .collect(),
         )
         .unwrap();
-        let atlas = SbgExpertAtlas::new(
-            vec![expert::page(0, &[0]), expert::page(1, &[1])],
-            2,
-        )
-        .unwrap();
+        let atlas =
+            SbgExpertAtlas::new(vec![expert::page(0, &[0]), expert::page(1, &[1])], 2).unwrap();
         unified_anf_sbg_loop(
             bank,
             expert::context(),
