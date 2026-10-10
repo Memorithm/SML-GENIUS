@@ -19,7 +19,12 @@ pub enum LargeRecurrentError {
 }
 impl<const S: usize> LargeBankRecurrent<S> {
     pub fn new(bank: LargeAnfBank, max_depth: usize) -> Result<Self, LargeRecurrentError> {
-        if S == 0 || S > 31 || bank.address_bits() < S as u32 || bank.gate_count() < S || max_depth == 0 {
+        if S == 0
+            || S > 31
+            || bank.address_bits() < S as u32
+            || bank.gate_count() < S
+            || max_depth == 0
+        {
             return Err(LargeRecurrentError::Width);
         }
         Ok(Self {
