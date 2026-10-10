@@ -103,7 +103,8 @@ impl LargeAnfBank {
             }
         }
         let words_per_query = self.gates.len().div_ceil(64);
-        let required = queries.len()
+        let required = queries
+            .len()
             .checked_mul(words_per_query)
             .ok_or(LargeBankError::Overflow)?;
         if required > output.len() {
@@ -114,7 +115,10 @@ impl LargeAnfBank {
             let target = &mut output[start..start + words_per_query];
             target.fill(0);
             for (index, gate) in self.gates.iter().enumerate() {
-                if gate.evaluate(query).map_err(|_| LargeBankError::QueryOutOfRange(query))? {
+                if gate
+                    .evaluate(query)
+                    .map_err(|_| LargeBankError::QueryOutOfRange(query))?
+                {
                     target[index / 64] |= 1_u64 << (index % 64);
                 }
             }
