@@ -67,7 +67,9 @@ impl<const S: usize> LargeBankRecurrent<S> {
                 .iter()
                 .any(|&(_, previous)| previous == destination)
             {
-                return Err(LargeRoutingProjectionError::DuplicateDestination(destination));
+                return Err(LargeRoutingProjectionError::DuplicateDestination(
+                    destination,
+                ));
             }
         }
         self.routing_projection = projection;
