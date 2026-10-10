@@ -38,6 +38,7 @@ pub mod elastic_weights;
 pub mod forge_topology;
 pub mod gf2;
 pub mod large_anf_selected_pages;
+pub mod large_anf_routed;
 pub mod memory;
 pub mod mor;
 pub mod mor_affinity;
