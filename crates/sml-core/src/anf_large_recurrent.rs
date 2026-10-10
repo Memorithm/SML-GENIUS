@@ -32,6 +32,24 @@ impl<const S: usize> LargeBankRecurrent<S> {
     pub fn history(&self) -> &[Vec<u64>] {
         &self.history
     }
+    /// Rewind the committed cycle history to a previous checkpoint.
+    ///
+    /// The caller must supply the semantic state corresponding to this
+    /// checkpoint on the next rewrite; the history alone does not reconstruct
+    /// a prior semantic state. A rejected checkpoint leaves history untouched.
+    pub fn rewind_to(&mut self, completed_cycles: usize) -> Result<(), LargeRecurrentError> {
+        if completed_cycles > self.history.len() {
+            return Err(LargeRecurrentError::Depth);
+        }
+        if completed_cycles == self.history.len() {
+            return Ok(());
+        }
+        let mut history = self.history.clone();
+        Arc::make_mut(&mut history).truncate(completed_cycles);
+        self.history = history;
+        Ok(())
+    }
+
 }
 impl<const S: usize> SemanticRewriter<S> for LargeBankRecurrent<S> {
     type Error = LargeRecurrentError;
