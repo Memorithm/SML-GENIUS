@@ -49,7 +49,6 @@ impl<const S: usize> LargeBankRecurrent<S> {
         self.history = history;
         Ok(())
     }
-
 }
 impl<const S: usize> SemanticRewriter<S> for LargeBankRecurrent<S> {
     type Error = LargeRecurrentError;
