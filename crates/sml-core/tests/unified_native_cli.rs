@@ -45,8 +45,16 @@ fn cli_anf_control_changes_executed_first_stage() {
     assert!(toggle.status.success());
     let identity = String::from_utf8(identity.stdout).unwrap();
     let toggle = String::from_utf8(toggle.stdout).unwrap();
-    assert!(identity.lines().nth(1).unwrap().contains("\"anf_words\":[0]"));
-    assert!(toggle.lines().nth(1).unwrap().contains("\"anf_words\":[128]"));
+    assert!(identity
+        .lines()
+        .nth(1)
+        .unwrap()
+        .contains("\"anf_words\":[0]"));
+    assert!(toggle
+        .lines()
+        .nth(1)
+        .unwrap()
+        .contains("\"anf_words\":[128]"));
 }
 
 #[test]
