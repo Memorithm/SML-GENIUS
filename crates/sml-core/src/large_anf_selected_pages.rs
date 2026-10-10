@@ -49,7 +49,10 @@ pub struct LargeAnfPageAtlas<const S: usize> {
 }
 
 impl<const S: usize> LargeAnfPageAtlas<S> {
-    pub fn new(mut pages: Vec<LargeAnfPage<S>>, max_selected: usize) -> Result<Self, LargePageError> {
+    pub fn new(
+        mut pages: Vec<LargeAnfPage<S>>,
+        max_selected: usize,
+    ) -> Result<Self, LargePageError> {
         if pages.is_empty() || max_selected == 0 {
             return Err(LargePageError::Empty);
         }
@@ -61,7 +64,9 @@ impl<const S: usize> LargeAnfPageAtlas<S> {
             }
             previous = Some(page.id);
             let bits = page.bank.address_bits() as usize;
-            if bits == 0 || bits > 31 || page.inputs.len() != bits
+            if bits == 0
+                || bits > 31
+                || page.inputs.len() != bits
                 || page.outputs.len() != page.bank.gate_count()
                 || page.outputs.is_empty()
             {
@@ -80,7 +85,10 @@ impl<const S: usize> LargeAnfPageAtlas<S> {
                 }
             }
         }
-        Ok(Self { pages, max_selected })
+        Ok(Self {
+            pages,
+            max_selected,
+        })
     }
 
     pub fn execute(
@@ -101,10 +109,13 @@ impl<const S: usize> LargeAnfPageAtlas<S> {
             if !unique.insert(id.0) {
                 return Err(LargePageError::Duplicate(id));
             }
-            let index = self.pages.binary_search_by_key(&id.0, |p| p.id.0)
+            let index = self
+                .pages
+                .binary_search_by_key(&id.0, |p| p.id.0)
                 .map_err(|_| LargePageError::Missing(id))?;
             let page = &self.pages[index];
-            evaluations = evaluations.checked_add(page.bank.gate_count())
+            evaluations = evaluations
+                .checked_add(page.bank.gate_count())
                 .ok_or(LargePageError::Budget)?;
             if evaluations > max_gate_evaluations {
                 return Err(LargePageError::Budget);
@@ -125,16 +136,25 @@ impl<const S: usize> LargeAnfPageAtlas<S> {
                     address |= 1u32 << bit;
                 }
             }
-            let packed = page.bank.evaluate_packed(
-                &[address], 1, page.bank.gate_count().div_ceil(64),
-            ).map_err(LargePageError::Bank)?;
+            let packed = page
+                .bank
+                .evaluate_packed(&[address], 1, page.bank.gate_count().div_ceil(64))
+                .map_err(LargePageError::Bank)?;
             for (index, &coordinate) in page.outputs.iter().enumerate() {
-                coordinate.write(&mut next, (packed[index / 64] >> (index % 64)) & 1 != 0)
+                coordinate
+                    .write(&mut next, (packed[index / 64] >> (index % 64)) & 1 != 0)
                     .map_err(LargePageError::Projection)?;
             }
-            traces.push(LargePageTrace { id: page.id, address, packed });
+            traces.push(LargePageTrace {
+                id: page.id,
+                address,
+                packed,
+            });
         }
-        Ok(LargePageResult { state: next, traces })
+        Ok(LargePageResult {
+            state: next,
+            traces,
+        })
     }
 }
 
@@ -143,7 +163,10 @@ mod tests {
     use super::*;
     use crate::{anf_large::LargeAnfGate, pvp6_sbg::SbgField};
     fn coord(bit: usize) -> SbgCoordinate {
-        SbgCoordinate { field: SbgField::Value, bit }
+        SbgCoordinate {
+            field: SbgField::Value,
+            bit,
+        }
     }
     fn page(id: u32, destination: usize, terms: Vec<u32>) -> LargeAnfPage<24> {
         LargeAnfPage {
@@ -155,18 +178,21 @@ mod tests {
     }
     fn decision(ids: &[u32]) -> MorDecision {
         MorDecision {
-            active_routers: vec![], ranked_experts: vec![],
+            active_routers: vec![],
+            ranked_experts: vec![],
             selected_experts: ids.iter().copied().map(PageId).collect(),
-            noise_ppm: 0, structural_disagreement_ppm: 0,
-            expert_mass_threshold_ppm: 0, request_precision_escalation: false,
+            noise_ppm: 0,
+            structural_disagreement_ppm: 0,
+            expert_mass_threshold_ppm: 0,
+            request_precision_escalation: false,
             hysteresis_retained_previous_primary: false,
         }
     }
     #[test]
     fn selected_large_page_reads_full_twenty_bit_address_and_excludes_inactive() {
-        let atlas = LargeAnfPageAtlas::new(
-            vec![page(7, 21, vec![1 << 19]), page(19, 22, vec![0])], 2
-        ).unwrap();
+        let atlas =
+            LargeAnfPageAtlas::new(vec![page(7, 21, vec![1 << 19]), page(19, 22, vec![0])], 2)
+                .unwrap();
         let mut state = SemanticState::<24>::zeroed().unwrap();
         state.value.set(19, true).unwrap();
         let result = atlas.execute(&state, &decision(&[7]), 1).unwrap();
@@ -178,13 +204,16 @@ mod tests {
     }
     #[test]
     fn conflicts_missing_pages_and_budget_fail_without_state_changes() {
-        let atlas = LargeAnfPageAtlas::new(
-            vec![page(7, 21, vec![0]), page(19, 21, vec![0])], 2
-        ).unwrap();
+        let atlas =
+            LargeAnfPageAtlas::new(vec![page(7, 21, vec![0]), page(19, 21, vec![0])], 2).unwrap();
         let state = SemanticState::<24>::zeroed().unwrap();
         let before = atlas.clone();
-        for (ids, budget) in [(vec![7, 19], 2), (vec![7, 7], 2),
-            (vec![99], 2), (vec![7], 0)] {
+        for (ids, budget) in [
+            (vec![7, 19], 2),
+            (vec![7, 7], 2),
+            (vec![99], 2),
+            (vec![7], 0),
+        ] {
             assert!(atlas.execute(&state, &decision(&ids), budget).is_err());
             assert_eq!(atlas, before);
         }
