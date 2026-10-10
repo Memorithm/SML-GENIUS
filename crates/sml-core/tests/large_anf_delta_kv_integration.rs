@@ -24,7 +24,10 @@ use sml_core::{
 type Loop = LargeAnfDeltaKvLoop<LargeBankRecurrent<24>, 24, 8>;
 
 fn coord(bit: usize) -> SbgCoordinate {
-    SbgCoordinate { field: SbgField::Value, bit }
+    SbgCoordinate {
+        field: SbgField::Value,
+        bit,
+    }
 }
 
 fn make(fail_memory: bool, gate_budget: usize) -> Loop {
@@ -45,64 +48,104 @@ fn make(fail_memory: bool, gate_budget: usize) -> Loop {
                 },
             ],
             SemanticMorTopK::One,
-        ).unwrap(),
+        )
+        .unwrap(),
         registry: MorRouterRegistry::new(
             vec![RouterSpecialization {
                 router_id: RouterId(0),
                 experts: vec![PageId(0), PageId(1)],
             }],
             MorRegistryPolicy {
-                expert_count: 2, max_routers: 1, max_edges: 2,
-                max_fanout: 2, require_full_coverage: true,
+                expert_count: 2,
+                max_routers: 1,
+                max_edges: 2,
+                max_fanout: 2,
+                require_full_coverage: true,
             },
-        ).unwrap(),
+        )
+        .unwrap(),
         engine: MixtureOfRouters::new(MorPolicy::default()).unwrap(),
         runtime_hints: vec![],
     };
-    let anf = LargeAnfBank::new((0..24).map(|bit| {
-        let mut terms = vec![1u32 << bit];
-        if bit == 23 { terms.push(0); }
-        LargeAnfGate::new(24, terms).unwrap()
-    }).collect()).unwrap();
-    let recurrent = LargeBankRecurrent::<24>::new(anf, 4).unwrap()
+    let anf = LargeAnfBank::new(
+        (0..24)
+            .map(|bit| {
+                let mut terms = vec![1u32 << bit];
+                if bit == 23 {
+                    terms.push(0);
+                }
+                LargeAnfGate::new(24, terms).unwrap()
+            })
+            .collect(),
+    )
+    .unwrap();
+    let recurrent = LargeBankRecurrent::<24>::new(anf, 4)
+        .unwrap()
         .with_routing_projection((0..24).map(|destination| (23, destination)).collect())
         .unwrap();
     let routed = RoutedSemantic::new(recurrent, context.clone(), 4).unwrap();
-    let pages = (0..2).map(|id| LargeAnfPage {
-        id: PageId(id),
-        bank: LargeAnfBank::new(vec![
-            LargeAnfGate::new(20, vec![if id == 0 { 0 } else { 1 }]).unwrap()
-        ]).unwrap(),
-        inputs: (0..20).map(coord).collect(),
-        outputs: vec![coord(20)],
-    }).collect();
+    let pages = (0..2)
+        .map(|id| LargeAnfPage {
+            id: PageId(id),
+            bank: LargeAnfBank::new(vec![LargeAnfGate::new(
+                20,
+                vec![if id == 0 { 0 } else { 1 }],
+            )
+            .unwrap()])
+            .unwrap(),
+            inputs: (0..20).map(coord).collect(),
+            outputs: vec![coord(20)],
+        })
+        .collect();
     let atlas = LargeAnfPageAtlas::new(pages, 2).unwrap();
     let experts = LargeRoutedExperts::new(routed, atlas, gate_budget).unwrap();
     let state = SemanticState::<24>::zeroed().unwrap();
-    let route = context.bridge.route(
-        &state, &context.registry, &context.engine,
-        &[], &PreviousRoute::default(),
-    ).unwrap().decision;
+    let route = context
+        .bridge
+        .route(
+            &state,
+            &context.registry,
+            &context.engine,
+            &[],
+            &PreviousRoute::default(),
+        )
+        .unwrap()
+        .decision;
     let projector = DeltaKvSemanticProjector::new(
-        DeltaKvSemanticProjectionPolicy { semantic_weight: 1, mor_weight: 32 }, 17
-    ).unwrap();
+        DeltaKvSemanticProjectionPolicy {
+            semantic_weight: 1,
+            mor_weight: 32,
+        },
+        17,
+    )
+    .unwrap();
     let key = projector.project(&state, &route, None).unwrap();
     let mut memory = DeltaKvMemory::new(8, 1).unwrap();
-    memory.update(
-        &key.key_q12, &[2000], DELTA_KV_SCALE as u16,
-        &mut DeltaKvCounters::default(),
-    ).unwrap();
+    memory
+        .update(
+            &key.key_q12,
+            &[2000],
+            DELTA_KV_SCALE as u16,
+            &mut DeltaKvCounters::default(),
+        )
+        .unwrap();
     let provenance = if fail_memory {
         Some(sml_core::delta_kv_semantic::DeltaKvSourceProvenance {
-            semantic_record_id: 7, raw_segment_ids: vec![],
+            semantic_record_id: 7,
+            raw_segment_ids: vec![],
         })
     } else {
         None
     };
     let memory = DeltaKvDynamicRekeyKernel::new(
-        memory, projector, route, provenance,
-        vec![21], DeltaKvRecurrentPolicy::default(),
-    ).unwrap();
+        memory,
+        projector,
+        route,
+        provenance,
+        vec![21],
+        DeltaKvRecurrentPolicy::default(),
+    )
+    .unwrap();
     LargeAnfDeltaKvLoop::new(experts, memory, 4).unwrap()
 }
 
@@ -116,9 +159,15 @@ fn actual_anf_routing_expert_and_memory_cycles_are_deterministic() {
         let cycle = first.cycles().last().unwrap();
         let expected_page = PageId(u32::from(depth % 2 == 1));
         assert_eq!(cycle.selected, vec![expected_page]);
-        assert_eq!(first.experts().cycles().last().unwrap().pages[0].id, expected_page);
+        assert_eq!(
+            first.experts().cycles().last().unwrap().pages[0].id,
+            expected_page
+        );
         assert_eq!(cycle.post_expert.routing.get(0).unwrap(), depth % 2 == 1);
-        assert_eq!(first.memory().mor_decision().selected_experts, cycle.selected);
+        assert_eq!(
+            first.memory().mor_decision().selected_experts,
+            cycle.selected
+        );
         assert_eq!(first.memory().cycle_evidence().len(), depth as usize);
         assert_eq!(first.experts().used_gates(), depth as usize);
         assert_eq!(cycle.output, output.state);
@@ -145,7 +194,9 @@ fn failed_memory_projection_rolls_back_all_owned_stages() {
 #[test]
 fn exhausted_gate_budget_preserves_previous_committed_cycle() {
     let mut kernel = make(false, 1);
-    let first = kernel.rewrite(&SemanticState::zeroed().unwrap(), 1).unwrap();
+    let first = kernel
+        .rewrite(&SemanticState::zeroed().unwrap(), 1)
+        .unwrap();
     let before = kernel.clone();
     assert!(matches!(
         kernel.rewrite(&first.state, 2),
