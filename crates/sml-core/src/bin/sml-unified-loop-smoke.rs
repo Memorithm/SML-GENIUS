@@ -26,7 +26,8 @@ use sml_core::{
 use std::{fmt::Debug, fmt::Write, process::ExitCode};
 
 const MAX_CYCLES: u32 = 64;
-const USAGE: &str = "sml-unified-loop-smoke [cycles:1..64] [value:0..255] [routing:0..255] [identity|toggle]";
+const USAGE: &str =
+    "sml-unified-loop-smoke [cycles:1..64] [value:0..255] [routing:0..255] [identity|toggle]";
 type Kernel = UnifiedAnfSbgLoop<8, 64, 8>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,7 +359,8 @@ mod tests {
                     let atlas = reference.experts().atlas();
                     let mut state = initial(config).unwrap();
                     for (index, cycle) in actual.kernel.cycles().iter().enumerate() {
-                        let expected_anf = byte(&state.value).unwrap() ^ if toggle { 128 } else { 0 };
+                        let expected_anf =
+                            byte(&state.value).unwrap() ^ if toggle { 128 } else { 0 };
                         let rewritten = routed.rewrite(&state, cycle.depth).unwrap();
                         assert_eq!(byte(&rewritten.state.value).unwrap(), expected_anf);
                         assert_eq!(
