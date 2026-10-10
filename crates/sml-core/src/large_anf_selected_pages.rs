@@ -91,6 +91,14 @@ impl<const S: usize> LargeAnfPageAtlas<S> {
         })
     }
 
+    pub fn gate_count(&self, id: PageId) -> Result<usize, LargePageError> {
+        let index = self
+            .pages
+            .binary_search_by_key(&id.0, |page| page.id.0)
+            .map_err(|_| LargePageError::Missing(id))?;
+        Ok(self.pages[index].bank.gate_count())
+    }
+
     pub fn execute(
         &self,
         state: &SemanticState<S>,
