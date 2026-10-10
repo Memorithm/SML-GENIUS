@@ -9,6 +9,7 @@ pub struct LargeBankRecurrent<const S: usize> {
     bank: LargeAnfBank,
     max_depth: usize,
     history: Arc<Vec<Vec<u64>>>,
+    routing_projection: Vec<(usize, usize)>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LargeRecurrentError {
@@ -16,6 +17,14 @@ pub enum LargeRecurrentError {
     Width,
     Allocation,
     Bank(LargeBankError),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LargeRoutingProjectionError {
+    Empty,
+    Width,
+    TooManyDestinations,
+    DuplicateDestination(usize),
+    NotFresh,
 }
 impl<const S: usize> LargeBankRecurrent<S> {
     pub fn new(bank: LargeAnfBank, max_depth: usize) -> Result<Self, LargeRecurrentError> {
@@ -31,7 +40,42 @@ impl<const S: usize> LargeBankRecurrent<S> {
             bank,
             max_depth,
             history: Arc::new(Vec::new()),
+            routing_projection: Vec::new(),
         })
+    }
+    /// Opt in to post-ANF value-bit -> SBG routing-bit assignments.
+    /// Each destination is unique; broadcasting a source is allowed. Bits not
+    /// assigned remain unchanged. This does not infer or learn a routing plan.
+    pub fn with_routing_projection(
+        mut self,
+        projection: Vec<(usize, usize)>,
+    ) -> Result<Self, LargeRoutingProjectionError> {
+        if !self.history.is_empty() {
+            return Err(LargeRoutingProjectionError::NotFresh);
+        }
+        if projection.is_empty() {
+            return Err(LargeRoutingProjectionError::Empty);
+        }
+        if projection.len() > S {
+            return Err(LargeRoutingProjectionError::TooManyDestinations);
+        }
+        for (index, &(source, destination)) in projection.iter().enumerate() {
+            if source >= S || destination >= S {
+                return Err(LargeRoutingProjectionError::Width);
+            }
+            if projection[..index]
+                .iter()
+                .any(|&(_, previous)| previous == destination)
+            {
+                return Err(LargeRoutingProjectionError::DuplicateDestination(destination));
+            }
+        }
+        self.routing_projection = projection;
+        Ok(self)
+    }
+    #[must_use]
+    pub fn routing_projection(&self) -> &[(usize, usize)] {
+        &self.routing_projection
     }
     #[must_use]
     pub fn history(&self) -> &[Vec<u64>] {
@@ -42,6 +86,7 @@ impl<const S: usize> LargeBankRecurrent<S> {
     /// The caller must supply the semantic state corresponding to this
     /// checkpoint on the next rewrite; the history alone does not reconstruct
     /// a prior semantic state. A rejected checkpoint leaves history untouched.
+    /// The configured routing projection is preserved.
     pub fn rewind_to(&mut self, completed_cycles: usize) -> Result<(), LargeRecurrentError> {
         if completed_cycles > self.history.len() {
             return Err(LargeRecurrentError::Depth);
@@ -86,6 +131,15 @@ impl<const S: usize> SemanticRewriter<S> for LargeBankRecurrent<S> {
             let bit = (packed[index / 64] >> (index % 64)) & 1 != 0;
             next.value
                 .set(index, bit)
+                .map_err(|_| LargeRecurrentError::Width)?;
+        }
+        for &(source, destination) in &self.routing_projection {
+            let value = next
+                .value
+                .get(source)
+                .map_err(|_| LargeRecurrentError::Width)?;
+            next.routing
+                .set(destination, value)
                 .map_err(|_| LargeRecurrentError::Width)?;
         }
         let mut history = self.history.clone();
