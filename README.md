@@ -101,6 +101,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/SML-1.0-TASK-CANDIDATE.md**: first integrated learned-routing task pilot and evidence boundaries.
 - **docs/SML-1.1-TASK-LOSS-GATE.md**: first micro-operation learned from task answers with explicit semantic controls.
 - **docs/SML-1.2-STATE-UPDATE.md**: overwrite-state transition learned from task answers with complete state/input coverage.
+- **docs/RESULTS-A5-TOY.md**: first A5 learning prototype (local fan-in ANF recurrent model, gradient-free search) vs baselines on toy sequence tasks; diagnostic only.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/SML-DELTA-KV-BOOTSTRAP.md**: evidence-gated bounded rewritable-memory programme and matched controls.
 - **BOOTSTRAP.md**: durable project re-entry state, including the SBG roadmap and current implementation slice.
