@@ -108,6 +108,10 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 
 ## Build
 
+Enable the versioned git hooks once per clone (pre-commit: rustfmt check; pre-push: fmt, clippy `-D warnings`, tests); see [CONTRIBUTING.md](CONTRIBUTING.md):
+
+    bash scripts/install-hooks.sh
+
     cargo fmt --all -- --check
     cargo check --workspace --all-targets
     cargo clippy --workspace --all-targets -- -D warnings

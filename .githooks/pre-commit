@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Fast local guard: refuse commits that would fail the CI `Format` job.
+# Enable once per clone with: bash scripts/install-hooks.sh
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if ! cargo fmt --all -- --check >/dev/null 2>&1; then
+  echo "pre-commit: rustfmt differences found. Run 'cargo fmt --all' and re-stage." >&2
+  cargo fmt --all -- --check >&2 || true
+  exit 1
+fi

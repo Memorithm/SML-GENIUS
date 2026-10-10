@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Local mirror of the mandatory CI gates. A push is refused unless the exact
+# commands run by .github/workflows/ci.yml pass on this working tree:
+#   1. cargo fmt --all -- --check
+#   2. cargo clippy --locked --workspace --all-targets -- -D warnings
+#   3. cargo test --locked --workspace
+# Enable once per clone with: bash scripts/install-hooks.sh
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "pre-push: warning: uncommitted changes are present; the checks below" >&2
+  echo "pre-push: run on the working tree, not only on the pushed commits." >&2
+fi
+
+run() {
+  echo "pre-push: $*" >&2
+  if ! "$@"; then
+    echo "pre-push: FAILED: $*" >&2
+    echo "pre-push: fix the failure before pushing (CI runs the same gate)." >&2
+    exit 1
+  fi
+}
+
+run cargo fmt --all -- --check
+run cargo clippy --locked --workspace --all-targets -- -D warnings
+run cargo test --locked --workspace
+echo "pre-push: fmt, clippy and tests passed." >&2
