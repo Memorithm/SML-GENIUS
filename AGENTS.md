@@ -21,3 +21,7 @@ A supervised process is not a hostile-code sandbox. Task success does not upgrad
 Before any Pascal/ANF hardware-projection, massive Boolean-bank, SIMD/GPU execution or cross-repository kernel work, read `docs/SML-PASCAL-PVP-HARDWARE-ALIGNMENT-BOOTSTRAP.md` and the current off-main SML ecosystem roadmap.
 
 For the new SML/PVP path, only the installed GPU driver may be vendor-specific. CUDA, NVRTC, cuDNN, TensorRT/TensorRT-LLM, NVML, CUTLASS and vendor-SDK bridges are not required dependencies. SciRust, FLAT-ATTENTION and NNIS are qualification/reusable-primitive partners; the final SML model remains self-sufficient and the future SML-HARNESS remains a separate surface.
+
+## Local gates before every push
+
+Run `bash scripts/install-hooks.sh` once per clone. The versioned `.githooks/pre-push` hook runs `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings` and `cargo test --locked --workspace`; never push with `--no-verify`. See CONTRIBUTING.md.

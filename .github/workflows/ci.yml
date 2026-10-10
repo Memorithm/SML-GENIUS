@@ -1,15 +1,17 @@
 name: CI
 
 on:
-  # The workflow definition comes from the protected base branch. Candidate
-  # changes cannot select a persistent runner for their own validation run.
-  pull_request_target:
+  # Plain `pull_request`: PR code runs with a read-only token and without base
+  # repository secrets (no `pull_request_target`). PR runs always use a fresh
+  # GitHub-hosted VM (see `runs-on` below); the persistent self-hosted runner is
+  # only selected for `push` to main, i.e. code that is already integrated.
+  pull_request:
     branches: [main]
   push:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -21,7 +23,27 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
+  fmt:
+    # Fast, isolated formatting gate: a rustfmt failure is reported in ~1 min
+    # under its own check name, before any build/clippy/test work starts.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact source revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.89.0
+          components: rustfmt
+      - name: Format
+        run: cargo fmt --all -- --check
+
   rust:
+    needs: fmt
     # PR code executes on a fresh GitHub-hosted VM. The persistent runner is
     # reserved for trusted code already integrated into main.
     runs-on: ${{ startsWith(github.event_name, 'pull_request') && 'ubuntu-24.04' || 'self-hosted' }}
