@@ -14,6 +14,7 @@ pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
 pub mod anf_sbg_unified;
+pub mod large_anf_selected_pages;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
