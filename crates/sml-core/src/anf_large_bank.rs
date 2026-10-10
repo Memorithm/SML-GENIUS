@@ -82,6 +82,46 @@ impl LargeAnfBank {
         Ok(output)
     }
 
+    /// Evaluate into caller-owned storage without allocating an output vector.
+    ///
+    /// The output is query-major, with ceil(gates / 64) words per query.
+    /// Rejects every invalid query and insufficient buffer before writing.
+    /// On validation failure, the destination is unchanged.
+    pub fn evaluate_packed_into(
+        &self,
+        queries: &[u32],
+        max_queries: usize,
+        output: &mut [u64],
+    ) -> Result<usize, LargeBankError> {
+        if queries.len() > max_queries {
+            return Err(LargeBankError::BudgetExceeded);
+        }
+        let domain = 1_u32 << self.address_bits;
+        for &query in queries {
+            if query >= domain {
+                return Err(LargeBankError::QueryOutOfRange(query));
+            }
+        }
+        let words_per_query = self.gates.len().div_ceil(64);
+        let required = queries.len()
+            .checked_mul(words_per_query)
+            .ok_or(LargeBankError::Overflow)?;
+        if required > output.len() {
+            return Err(LargeBankError::BudgetExceeded);
+        }
+        for (row, &query) in queries.iter().enumerate() {
+            let start = row * words_per_query;
+            let target = &mut output[start..start + words_per_query];
+            target.fill(0);
+            for (index, gate) in self.gates.iter().enumerate() {
+                if gate.evaluate(query).map_err(|_| LargeBankError::QueryOutOfRange(query))? {
+                    target[index / 64] |= 1_u64 << (index % 64);
+                }
+            }
+        }
+        Ok(required)
+    }
+
     pub fn evaluate_bool(
         &self,
         queries: &[u32],
