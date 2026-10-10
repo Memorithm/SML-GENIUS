@@ -39,13 +39,22 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> LargeRoutedExperts<K, S> {
             return Err(LargeRoutedError::Budget);
         }
         Ok(Self {
-            routed, atlas, max_total_gates, used_gates: 0,
+            routed,
+            atlas,
+            max_total_gates,
+            used_gates: 0,
             cycles: Arc::new(Vec::new()),
         })
     }
-    pub fn routed(&self) -> &RoutedSemantic<K, S> { &self.routed }
-    pub fn cycles(&self) -> &[LargeRoutedCycle] { &self.cycles }
-    pub fn used_gates(&self) -> usize { self.used_gates }
+    pub fn routed(&self) -> &RoutedSemantic<K, S> {
+        &self.routed
+    }
+    pub fn cycles(&self) -> &[LargeRoutedCycle] {
+        &self.cycles
+    }
+    pub fn used_gates(&self) -> usize {
+        self.used_gates
+    }
 }
 
 impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S>
@@ -62,31 +71,55 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S>
             return Err(LargeRoutedError::Depth);
         }
         let mut candidate = self.routed.clone();
-        let inner = candidate.rewrite(state, depth).map_err(LargeRoutedError::Routing)?;
-        let decision = &candidate.cycles().last().ok_or(LargeRoutedError::Depth)?
-            .route.decision;
-        let remaining = self.max_total_gates.checked_sub(self.used_gates)
+        let inner = candidate
+            .rewrite(state, depth)
+            .map_err(LargeRoutedError::Routing)?;
+        let decision = &candidate
+            .cycles()
+            .last()
+            .ok_or(LargeRoutedError::Depth)?
+            .route
+            .decision;
+        let remaining = self
+            .max_total_gates
+            .checked_sub(self.used_gates)
             .ok_or(LargeRoutedError::Budget)?;
-        let batch = self.atlas.execute(&inner.state, decision, remaining)
+        let batch = self
+            .atlas
+            .execute(&inner.state, decision, remaining)
             .map_err(LargeRoutedError::Page)?;
-        let count = batch.traces.iter().try_fold(0usize, |sum, trace| {
-            sum.checked_add(trace.packed.len())
-        }).ok_or(LargeRoutedError::Budget)?;
+        let count = batch
+            .traces
+            .iter()
+            .try_fold(0usize, |sum, trace| sum.checked_add(trace.packed.len()))
+            .ok_or(LargeRoutedError::Budget)?;
         // The atlas enforces actual gate evaluations. Packed words are an
         // additional bounded accounting signal, not a substitute for gates.
         let _ = count;
-        let selected_gate_count = decision.selected_experts.iter()
+        let selected_gate_count = decision
+            .selected_experts
+            .iter()
             .try_fold(0usize, |sum, id| {
-                self.atlas.gate_count(*id).ok()
+                self.atlas
+                    .gate_count(*id)
+                    .ok()
                     .and_then(|gates| sum.checked_add(gates))
-            }).ok_or(LargeRoutedError::Budget)?;
-        let used = self.used_gates.checked_add(selected_gate_count)
+            })
             .ok_or(LargeRoutedError::Budget)?;
-        if used > self.max_total_gates { return Err(LargeRoutedError::Budget); }
+        let used = self
+            .used_gates
+            .checked_add(selected_gate_count)
+            .ok_or(LargeRoutedError::Budget)?;
+        if used > self.max_total_gates {
+            return Err(LargeRoutedError::Budget);
+        }
         let mut cycles = self.cycles.clone();
-        Arc::make_mut(&mut cycles).try_reserve(1).map_err(|_| LargeRoutedError::Budget)?;
+        Arc::make_mut(&mut cycles)
+            .try_reserve(1)
+            .map_err(|_| LargeRoutedError::Budget)?;
         Arc::make_mut(&mut cycles).push(LargeRoutedCycle {
-            depth, pages: batch.traces,
+            depth,
+            pages: batch.traces,
         });
         self.routed = candidate;
         self.cycles = cycles;
