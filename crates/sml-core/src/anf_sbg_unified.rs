@@ -202,7 +202,10 @@ mod projection_tests {
         assert_eq!(kernel.history(), &[vec![128]]);
         assert_eq!(kernel.routing_projection(), &[(7, 0), (7, 5)]);
         let before = kernel.clone();
-        assert_eq!(kernel.rewrite(&result.state, 1), Err(LargeRecurrentError::Depth));
+        assert_eq!(
+            kernel.rewrite(&result.state, 1),
+            Err(LargeRecurrentError::Depth)
+        );
         assert_eq!(kernel, before);
     }
 
@@ -228,7 +231,9 @@ mod projection_tests {
         assert!(fresh.history().is_empty());
         assert!(fresh.routing_projection().is_empty());
         let mut active = fresh.with_routing_projection(vec![(7, 0)]).unwrap();
-        active.rewrite(&SemanticState::zeroed().unwrap(), 1).unwrap();
+        active
+            .rewrite(&SemanticState::zeroed().unwrap(), 1)
+            .unwrap();
         assert_eq!(
             active.with_routing_projection(vec![(7, 1)]),
             Err(LargeRoutingProjectionError::NotFresh)
@@ -254,8 +259,22 @@ mod projection_tests {
             let control_output = control.rewrite(&control_state, depth).unwrap();
             let expected = PageId(u32::from(depth % 2 == 1));
             let cycle = kernel.cycles().last().unwrap();
-            let route = &kernel.experts().routed().cycles().last().unwrap().route.decision;
-            let control_route = &control.experts().routed().cycles().last().unwrap().route.decision;
+            let route = &kernel
+                .experts()
+                .routed()
+                .cycles()
+                .last()
+                .unwrap()
+                .route
+                .decision;
+            let control_route = &control
+                .experts()
+                .routed()
+                .cycles()
+                .last()
+                .unwrap()
+                .route
+                .decision;
             assert_eq!(cycle.selected, vec![expected]);
             assert_eq!(control_route.selected_experts, vec![PageId(0)]);
             let executed = kernel.experts().cycles().last().unwrap();
@@ -278,9 +297,15 @@ mod projection_tests {
                 SemanticBitField::zeroed().unwrap()
             };
             assert_eq!(output.state.routing, expected_routing);
-            assert_eq!(control_output.state.routing, SemanticBitField::zeroed().unwrap());
+            assert_eq!(
+                control_output.state.routing,
+                SemanticBitField::zeroed().unwrap()
+            );
             assert_eq!(cycle.output, output.state);
-            assert_eq!(kernel.experts().routed().inner().history().len(), depth as usize);
+            assert_eq!(
+                kernel.experts().routed().inner().history().len(),
+                depth as usize
+            );
             state = output.state;
             control_state = control_output.state;
         }
@@ -310,7 +335,9 @@ mod projection_tests {
             ..kernel.memory_budget()
         };
         let mut kernel = kernel.with_memory_budget(budget).unwrap();
-        let output = kernel.rewrite(&SemanticState::zeroed().unwrap(), 1).unwrap();
+        let output = kernel
+            .rewrite(&SemanticState::zeroed().unwrap(), 1)
+            .unwrap();
         let before = kernel.clone();
         assert!(matches!(
             kernel.rewrite(&output.state, 2),
