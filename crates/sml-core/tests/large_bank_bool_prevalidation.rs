@@ -20,6 +20,12 @@ fn boolean_batch_matches_packed_bits_and_rejects_invalid_queries() {
             assert_eq!(value, (packed[row * 2 + gate / 64] >> (gate % 64)) & 1 != 0);
         }
     }
-    assert_eq!(bank.evaluate_bool(&[0, 1048576], 2), Err(LargeBankError::QueryOutOfRange(1048576)));
-    assert_eq!(bank.evaluate_bool(&queries, 4), Err(LargeBankError::BudgetExceeded));
+    assert_eq!(
+        bank.evaluate_bool(&[0, 1048576], 2),
+        Err(LargeBankError::QueryOutOfRange(1048576))
+    );
+    assert_eq!(
+        bank.evaluate_bool(&queries, 4),
+        Err(LargeBankError::BudgetExceeded)
+    );
 }
