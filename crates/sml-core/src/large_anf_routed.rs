@@ -26,6 +26,8 @@ pub struct LargeRoutedExperts<K, const S: usize> {
     atlas: LargeAnfPageAtlas<S>,
     max_total_gates: usize,
     used_gates: usize,
+    max_trace_words: usize,
+    used_trace_words: usize,
     cycles: Arc<Vec<LargeRoutedCycle>>,
 }
 
@@ -43,6 +45,8 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> LargeRoutedExperts<K, S> {
             atlas,
             max_total_gates,
             used_gates: 0,
+            max_trace_words: usize::MAX,
+            used_trace_words: 0,
             cycles: Arc::new(Vec::new()),
         })
     }
@@ -54,6 +58,17 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> LargeRoutedExperts<K, S> {
     }
     pub fn used_gates(&self) -> usize {
         self.used_gates
+    }
+    pub fn used_trace_words(&self) -> usize {
+        self.used_trace_words
+    }
+    /// Set a cumulative retained packed-output budget before the first cycle.
+    pub fn with_trace_word_budget(mut self, max_words: usize) -> Result<Self, LargeRoutedError<K::Error>> {
+        if !self.cycles.is_empty() || max_words == 0 {
+            return Err(LargeRoutedError::Budget);
+        }
+        self.max_trace_words = max_words;
+        Ok(self)
     }
 }
 
@@ -93,9 +108,11 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S>
             .iter()
             .try_fold(0usize, |sum, trace| sum.checked_add(trace.packed.len()))
             .ok_or(LargeRoutedError::Budget)?;
-        // The atlas enforces actual gate evaluations. Packed words are an
-        // additional bounded accounting signal, not a substitute for gates.
-        let _ = count;
+        let used_trace_words = self.used_trace_words.checked_add(count)
+            .ok_or(LargeRoutedError::Budget)?;
+        if used_trace_words > self.max_trace_words {
+            return Err(LargeRoutedError::Budget);
+        }
         let selected_gate_count = decision
             .selected_experts
             .iter()
@@ -124,6 +141,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S>
         self.routed = candidate;
         self.cycles = cycles;
         self.used_gates = used;
+        self.used_trace_words = used_trace_words;
         Ok(SemanticRewriteStep {
             state: batch.state,
             stability_blocked: inner.stability_blocked,
