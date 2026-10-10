@@ -2,13 +2,13 @@
 use sml_core::{
     anf_large::LargeAnfGate,
     anf_large_bank::LargeAnfBank,
-    anf_large_recurrent::LargeBankRecurrent,
+    anf_large_recurrent::{LargeBankRecurrent, LargeRecurrentError},
     delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_SCALE},
     delta_kv_dynamic::DeltaKvDynamicRekeyKernel,
     delta_kv_recurrent::DeltaKvRecurrentPolicy,
     delta_kv_semantic::{DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector},
     large_anf_delta_kv::{LargeAnfDeltaKvLoop, LargeCoupledError},
-    large_anf_routed::LargeRoutedExperts,
+    large_anf_routed::{LargeRoutedError, LargeRoutedExperts},
     large_anf_selected_pages::{LargeAnfPage, LargeAnfPageAtlas},
     mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId},
     mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
@@ -31,6 +31,14 @@ fn coord(bit: usize) -> SbgCoordinate {
 }
 
 fn make(fail_memory: bool, gate_budget: usize) -> Loop {
+    make_with_trace_budget(fail_memory, gate_budget, None)
+}
+
+fn make_with_trace_budget(
+    fail_memory: bool,
+    gate_budget: usize,
+    trace_word_budget: Option<usize>,
+) -> Loop {
     let context = SbgRoutingContext {
         bridge: SemanticMorBridge::new(
             vec![SemanticRouterSignature {
@@ -98,7 +106,10 @@ fn make(fail_memory: bool, gate_budget: usize) -> Loop {
         })
         .collect();
     let atlas = LargeAnfPageAtlas::new(pages, 2).unwrap();
-    let experts = LargeRoutedExperts::new(routed, atlas, gate_budget).unwrap();
+    let mut experts = LargeRoutedExperts::new(routed, atlas, gate_budget).unwrap();
+    if let Some(words) = trace_word_budget {
+        experts = experts.with_trace_word_budget(words).unwrap();
+    }
     let state = SemanticState::<24>::zeroed().unwrap();
     let route = context
         .bridge
@@ -208,7 +219,7 @@ fn exhausted_gate_budget_preserves_previous_committed_cycle() {
 }
 
 #[test]
-fn retained_trace_budget_rejects_second_cycle_without_partial_commit() {
+fn first_cycle_trace_accounting_and_duplicate_depth_rejection_without_partial_commit() {
     let mut kernel = make(false, 4);
     // The coupled loop owns the experts; verify the exact packed trace footprint
     // on the first successful cycle independently of the gate evaluation budget.
@@ -224,4 +235,101 @@ fn retained_trace_budget_rejects_second_cycle_without_partial_commit() {
         Err(LargeCoupledError::Depth)
     ));
     assert_eq!(kernel, before);
+}
+
+/// Runs cycles 1..=4 and returns how many committed before the first error,
+/// plus that error. Every page in this fixture has one gate, so each committed
+/// cycle retains exactly one packed trace word and evaluates exactly one gate.
+fn run_until_rejected(kernel: &mut Loop) -> (u32, Option<LargeCoupledError<LargeRecurrentError>>) {
+    let mut state = SemanticState::<24>::zeroed().unwrap();
+    for depth in 1..=4 {
+        let before = kernel.clone();
+        match kernel.rewrite(&state, depth) {
+            Ok(step) => state = step.state,
+            Err(error) => {
+                // Fail-closed: the rejected cycle leaves every owned stage untouched.
+                assert_eq!(*kernel, before);
+                return (depth - 1, Some(error));
+            }
+        }
+    }
+    (4, None)
+}
+
+#[test]
+fn trace_word_budget_rejects_zero_and_late_configuration() {
+    // Budget 0 is refused at configuration time.
+    let fresh = make(false, 4);
+    assert!(matches!(
+        fresh.experts().clone().with_trace_word_budget(0),
+        Err(LargeRoutedError::Budget)
+    ));
+    // A budget cannot be installed once a cycle has been retained.
+    let mut kernel = make(false, 4);
+    kernel
+        .rewrite(&SemanticState::zeroed().unwrap(), 1)
+        .unwrap();
+    assert_eq!(kernel.experts().cycles().len(), 1);
+    assert!(matches!(
+        kernel.experts().clone().with_trace_word_budget(1_000),
+        Err(LargeRoutedError::Budget)
+    ));
+    // Before the first cycle, configuring a positive budget succeeds and does
+    // not consume any words.
+    let configured = fresh.experts().clone().with_trace_word_budget(1).unwrap();
+    assert_eq!(configured.used_trace_words(), 0);
+    assert!(configured.cycles().is_empty());
+}
+
+#[test]
+fn trace_word_budget_admits_exactly_budget_cycles_then_fails_closed() {
+    // Gate budget 4 and recurrent depth 4 leave room for four cycles, so any
+    // earlier rejection below can only come from the trace-word budget.
+    let (unbounded, error) = run_until_rejected(&mut make(false, 4));
+    assert_eq!((unbounded, error.is_none()), (4, true));
+    for budget in 1..=3_usize {
+        let mut kernel = make_with_trace_budget(false, 4, Some(budget));
+        let (committed, error) = run_until_rejected(&mut kernel);
+        assert_eq!(committed as usize, budget, "budget={budget}");
+        assert!(matches!(
+            error,
+            Some(LargeCoupledError::Experts(LargeRoutedError::Budget))
+        ));
+        // Boundary: the budget is fully used, never exceeded, and the gate
+        // counter / retained cycles stop at the same committed cycle.
+        assert_eq!(kernel.experts().used_trace_words(), budget);
+        assert_eq!(kernel.experts().used_gates(), budget);
+        assert_eq!(kernel.experts().cycles().len(), budget);
+        assert_eq!(kernel.cycles().len(), budget);
+        assert_eq!(kernel.memory().cycle_evidence().len(), budget);
+        let retained: usize = kernel
+            .experts()
+            .cycles()
+            .iter()
+            .flat_map(|cycle| &cycle.pages)
+            .map(|page| page.packed.len())
+            .sum();
+        assert_eq!(retained, budget);
+    }
+}
+
+#[test]
+fn sufficient_trace_word_budget_is_observationally_transparent() {
+    // Exactly-sufficient (4 words for 4 one-word cycles) and very large budgets
+    // must produce the same outputs and retained evidence as no budget at all.
+    for budget in [4_usize, usize::MAX] {
+        let mut bounded = make_with_trace_budget(false, 4, Some(budget));
+        let mut unbounded = make(false, 4);
+        let mut state = SemanticState::<24>::zeroed().unwrap();
+        for depth in 1..=4 {
+            let left = bounded.rewrite(&state, depth).unwrap();
+            let right = unbounded.rewrite(&state, depth).unwrap();
+            assert_eq!(left, right);
+            state = left.state;
+        }
+        assert_eq!(bounded.cycles(), unbounded.cycles());
+        assert_eq!(bounded.experts().cycles(), unbounded.experts().cycles());
+        assert_eq!(bounded.experts().used_trace_words(), 4);
+        assert_eq!(unbounded.experts().used_trace_words(), 4);
+    }
 }
