@@ -20,6 +20,7 @@ pub mod anf_local_incremental;
 pub mod anf_local_learn;
 pub mod anf_sbg_unified;
 pub mod anf_sparse_readout;
+pub mod anf_sparse_byte;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
