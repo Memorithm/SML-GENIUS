@@ -561,13 +561,9 @@ pub fn fit_three_gate_diagnostic(
         fitted.push(evaluate_budget(
             budget,
             width,
-            &structures,
-            &obs,
-            &bank,
-            train,
-            validation,
-            &reference,
-            baseline_validation_errors,
+            (&structures, &obs, &bank),
+            (train, validation),
+            (&reference, baseline_validation_errors),
             &mut ring,
         )?);
     }
