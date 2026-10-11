@@ -428,103 +428,99 @@ struct Frozen {
     seed: usize,
     n: usize,
     method: Method,
-    status: &'static str,
     proposals: usize,
-    rank_true: usize,
-    score_seconds: f64,
-    factor_seconds: f64,
     pair_rank: usize,
     full_pairs: usize,
     full_triples: usize,
+    w3_full_correlations: usize,
+    sketch: SketchStats,
+    screen_seconds: f64,
+    factor_seconds: f64,
     fit: Option<BudgetFit>,
 }
+
 fn freeze(
     identity: (Task, Panel, usize, usize),
     method: Method,
     train: &LaneData,
     validation: &LaneData,
-    o: &Observed,
+    observed: &Observed,
 ) -> Result<Frozen, Box<dyn Error>> {
-    let (task, panel, seed, n) = identity;
+    let (task, panel, seed_index, n) = identity;
     let expected = task.sources();
-    let (full_pairs, full_triples) = count_combinations(o);
-    let start = Instant::now();
-    let mut rank_true = 0usize;
+    let (full_pairs, full_triples) = count_combinations(observed);
     let mut pair_rank = 0usize;
-    let (status, proposed): (&'static str, Vec<[Source; 3]>) = match method {
-        Method::GaussExact => {
-            if panel == Panel::Noise {
-                ("SKIPPED_NOISY", Vec::new())
-            } else if let Some(found) = solve_gauss(o) {
-                if found.len() == 3 {
-                    let sources = triplet(o, [found[0], found[1], found[2]]);
-                    if sources[0].gate < sources[1].gate && sources[1].gate < sources[2].gate {
-                        ("SOLVED", vec![sources])
-                    } else {
-                        ("NO_THREE_DISTINCT_GATES", Vec::new())
-                    }
-                } else {
-                    ("NO_EXACT_THREE_SOURCE_SOLUTION", Vec::new())
-                }
-            } else {
-                ("NO_EXACT_GF2_SOLUTION", Vec::new())
-            }
-        }
-        Method::Walsh2Pair => {
-            let ranked = rank_pairs(o);
+    let mut stats = SketchStats::default();
+    let screen_start = Instant::now();
+    let mut hypotheses = BTreeSet::<[Source; 3]>::new();
+    match method {
+        Method::Walsh2Pair | Method::Hybrid => {
+            let pair_scores = rank_pairs(observed);
             if task == Task::AndXorXor {
-                pair_rank = ranked
-                    .iter()
+                pair_rank = pair_scores.iter()
                     .position(|pair| {
-                        o.sources[pair.ids[0]] == expected[1]
-                            && o.sources[pair.ids[1]] == expected[2]
+                        observed.sources[pair.ids[0]] == expected[1]
+                            && observed.sources[pair.ids[1]] == expected[2]
                     })
                     .map_or(0, |index| index + 1);
             }
-            ("SCREENED", pair_extension(o, &ranked))
+            hypotheses.extend(pair_extension(observed, &pair_scores));
+            if method == Method::Hybrid {
+                let (sketched, measured) = rank_sketch_triplets(observed);
+                stats = measured;
+                hypotheses.extend(sketched);
+            }
         }
-        Method::Walsh3Exhaustive => {
-            let ranked = rank_triples(o);
-            rank_true = ranked
-                .iter()
-                .position(|candidate| triplet(o, candidate.ids) == expected)
-                .map_or(0, |index| index + 1);
-            ("SCREENED", triplet_candidates(o, &ranked))
+        Method::SketchMitm => {
+            let (sketched, measured) = rank_sketch_triplets(observed);
+            stats = measured;
+            hypotheses.extend(sketched);
         }
-    };
-    let score_seconds = start.elapsed().as_secs_f64();
+        Method::Walsh3Stream => {
+            hypotheses.extend(rank_triples_stream(observed));
+        }
+    }
+    let true_structure_proposed = hypotheses.contains(&expected);
+    let proposed = hypotheses.into_iter().collect::<Vec<_>>();
+    let screen_seconds = screen_start.elapsed().as_secs_f64();
     let factor_start = Instant::now();
     let fit = if proposed.is_empty() {
         None
     } else {
-        Some(fit_three_gate_candidates(
-            train, validation, WIDTH, &proposed,
-        )?)
+        Some(fit_three_gate_candidates(train, validation, WIDTH, &proposed)?)
     };
     let factor_seconds = factor_start.elapsed().as_secs_f64();
+    let w3_full_correlations = if method == Method::Walsh3Stream {
+        full_triples
+    } else {
+        0
+    };
     println!(
-        "A6C12B_FROZEN,task={},panel={},seed={},n={},method={},status={},pair_rank={},triplet_rank={},true_triplet_proposed={},pair_screens={},triple_screens={},factorized_structures={},score_seconds={:.6},factor_seconds={:.6},proposal_sources={:?},proposal_truths={:?},accepted={}",
-        task.name(),panel.name(),seed,n,method.name(),status,pair_rank,rank_true,
-        proposed.contains(&expected),full_pairs,full_triples,
-        proposed.len(),score_seconds,factor_seconds,
-        fit.as_ref().map(|x|x.proposal_sources),
-        fit.as_ref().map(|x|x.proposal_rules.rules.map(|r| r.truth)),
-        fit.as_ref().map(|x|x.accepted).unwrap_or(false)
+        "A6C12C_FROZEN,task={},panel={},seed={},n={},method={},proposals={},true_structure_proposed={},pair_rank={},w2_full_pairs={},w3_full_correlations={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},sources={:?},truths={:?},accepted={}",
+        task.name(),panel.name(),seed_index,n,method.name(),proposed.len(),
+        true_structure_proposed,pair_rank,
+        if matches!(method, Method::Walsh2Pair | Method::Hybrid) {full_pairs} else {0},
+        w3_full_correlations,stats.pair_probes,stats.bucket_hits,
+        stats.unique,stats.coarse_scored,stats.full_scored,
+        screen_seconds,factor_seconds,
+        fit.as_ref().map(|x| x.proposal_sources),
+        fit.as_ref().map(|x| x.proposal_rules.rules.map(|r| r.truth)),
+        fit.as_ref().is_some_and(|x| x.accepted)
     );
     Ok(Frozen {
         task,
         panel,
-        seed,
+        seed: seed_index,
         n,
         method,
-        status,
         proposals: proposed.len(),
-        rank_true,
-        score_seconds,
-        factor_seconds,
         pair_rank,
         full_pairs,
         full_triples,
+        w3_full_correlations,
+        sketch: stats,
+        screen_seconds,
+        factor_seconds,
         fit,
     })
 }
@@ -532,19 +528,19 @@ fn freeze(
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() > 2 {
-        return Err("usage: sml-gf2-walsh23-bench [seeds:1..=3]".into());
+        return Err("usage: sml-sketch-mitm-bench [seeds:1..=3]".into());
     }
     let nseeds: usize = args.get(1).map_or(Ok(3), |arg| arg.parse())?;
     if !(1..=3).contains(&nseeds) {
         return Err("seed count must be 1..=3".into());
     }
     println!(
-        "A6C12B_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor;xor_and_xor;and_and_and,panels=clean;noise_1_in_16,n=32;64;128,train=512,val=512,test=4096,lanes=64,gauss_samples=1024,top_pairs=8,top_triples=16"
+        "A6C12C_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor;xor_and_xor;and_and_and,panels=clean;noise_1_in_16,n=32;128;508,train=512,val=512,test=4096,lanes=64,sketch_rounds={SKETCH_ROUNDS},sketch_bits={SKETCH_BITS},sketch_coarse_words={SKETCH_COARSE_WORDS},sketch_coarse_keep={SKETCH_COARSE_KEEP},sketch_full_keep={TOP_TRIPLES},top_w2_pairs={TOP_PAIRS}"
     );
     println!(
-        "A6C12B_PROTOCOL,native_oracle=true,teacher_rules_not_passed_to_screening=true,full_screen_counts=true,noise_gf2_skipped=true,all_frozen_before_test=true"
+        "A6C12C_PROTOCOL,teacher_rules_not_passed_to_screening=true,validation_gate_only=true,all_frozen_before_test=true,w3_n508_seed0_only=true,hash_seed_fixed=true"
     );
-    let mut frozen = Vec::with_capacity(4 * 2 * nseeds * 3 * 3);
+    let mut frozen = Vec::with_capacity(4 * 2 * nseeds * 3 * 4);
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
@@ -561,43 +557,49 @@ fn main() -> Result<(), Box<dyn Error>> {
                     VAL_STEPS,
                 );
                 for n in NS {
-                    let o = Observed::new(&train, grid(n));
-                    assert_eq!(o.p.len(), TRAIN_STEPS - WIDTH);
+                    let observed = Observed::new(&train, grid(n));
+                    assert_eq!(observed.p.len(), TRAIN_STEPS - WIDTH);
                     assert!(task
                         .sources()
                         .iter()
-                        .all(|source| o.sources.contains(source)));
-                    let (pairs, triples) = count_combinations(&o);
+                        .all(|source| observed.sources.contains(source)));
+                    let (pairs, triples) = count_combinations(&observed);
                     println!(
-                        "A6C12B_GRID,n={},pairs={},triples={},samples={},raw_candidates={}",
+                        "A6C12C_GRID,task={},panel={},seed={},n={},pairs={},triples={},samples={}",
+                        task.name(),
+                        panel.name(),
+                        index,
                         n,
                         pairs,
                         triples,
-                        o.p.len() * LANES,
-                        o.sources.len()
+                        observed.p.len() * LANES
                     );
                     for method in Method::ALL {
+                        if method == Method::Walsh3Stream && n == 508 && index != 0 {
+                            continue;
+                        }
                         frozen.push(freeze(
                             (task, panel, index, n),
                             method,
                             &train,
                             &validation,
-                            &o,
+                            &observed,
                         )?);
                     }
                 }
             }
         }
     }
-    let expected_attempts = 4 * 2 * nseeds * NS.len() * Method::ALL.len();
-    if frozen.len() != expected_attempts {
-        return Err("frozen attempt census mismatch".into());
+    let expected_frozen = 4 * 2 * (nseeds * 3 * 3 + nseeds * 2 + 1);
+    if frozen.len() != expected_frozen {
+        return Err("A6-C12c frozen cardinality violated".into());
     }
     println!(
-        "A6C12B_ALL_FROZEN,attempts={expected_attempts},streams={}",
+        "A6C12C_ALL_FROZEN,policies={},streams={}",
+        frozen.len(),
         4 * 2 * nseeds
     );
-    // Create independent TEST streams only after *every* policy is frozen.
+    // TEST generators are invoked only after every policy has been frozen.
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
@@ -608,36 +610,40 @@ fn main() -> Result<(), Box<dyn Error>> {
                     TEST_STEPS,
                 );
                 let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
-                let oracle_err = native_errors(&teacher, &test)?;
+                let oracle_errors = native_errors(&teacher, &test)?;
                 for result in frozen
                     .iter()
                     .filter(|r| r.task == task && r.panel == panel && r.seed == index)
                 {
-                    let (sources_exact, truth_exact, proposed_err, selected_err) =
+                    let (sources_exact, truths_exact, proposal_errors, selected_errors, accepted) =
                         if let Some(fit) = &result.fit {
                             (
                                 fit.proposal_sources == task.sources(),
-                                fit.proposal_rules.rules.map(|r| r.truth) == task.truths(),
+                                fit.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
                                 Some(native_errors(&fit.proposal, &test)?),
                                 Some(native_errors(&fit.committed, &test)?),
+                                fit.accepted,
                             )
                         } else {
-                            (false, false, None, None)
+                            (false, false, None, None, false)
                         };
                     println!(
-                        "A6C12B_TEST,task={},panel={},seed={},n={},method={},status={},samples={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},screened_pairs={},screened_triples={},triplet_rank={},pair_rank={},factor_structures={},screen_seconds={:.6},factor_seconds={:.6}",
-                        task.name(),panel.name(),index,result.n,result.method.name(),result.status,
-                        TEST_STEPS*LANES,oracle_err,proposed_err,selected_err,sources_exact,truth_exact,
-                        result.fit.as_ref().is_some_and(|x|x.accepted),
-                        result.full_pairs,result.full_triples,result.rank_true,result.pair_rank,
-                        result.proposals,result.score_seconds,result.factor_seconds
+                        "A6C12C_TEST,task={},panel={},seed={},n={},method={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},pair_rank={},factor_structures={},w2_full_pairs={},w3_full_correlations={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},samples={},triples_admissible={}",
+                        task.name(),panel.name(),index,result.n,result.method.name(),
+                        oracle_errors,proposal_errors,selected_errors,sources_exact,truths_exact,
+                        accepted,result.pair_rank,result.proposals,
+                        if matches!(result.method, Method::Walsh2Pair | Method::Hybrid) {result.full_pairs} else {0},
+                        result.w3_full_correlations,result.sketch.pair_probes,
+                        result.sketch.bucket_hits,result.sketch.unique,
+                        result.sketch.coarse_scored,result.sketch.full_scored,
+                        result.screen_seconds,result.factor_seconds,TEST_STEPS*LANES,result.full_triples
                     );
                 }
             }
         }
     }
     println!(
-        "A6C12B_COMPLETE,attempts={},independent_test_streams={},methods=3,grid_sizes=3",
+        "A6C12C_COMPLETE,policies={},independent_test_streams={},grid_sizes=3,methods=4",
         frozen.len(),
         4 * 2 * nseeds
     );
@@ -649,11 +655,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nested_grid_admissible_hypotheses_and_teacher_coverage() {
-        let expected = [(32, 448, 3_584), (64, 1_920, 35_840), (128, 7_936, 317_440)];
-        for (n, pairs, triples) in expected {
+    fn preregistered_grids_cover_native_sources() {
+        for (n, pairs, triples) in [
+            (32, 448, 3_584),
+            (128, 7_936, 317_440),
+            (508, 128_016, 21_336_000),
+        ] {
             let observed = Observed::new(
-                &data(21, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
+                &data(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
                 grid(n),
             );
             assert_eq!(count_combinations(&observed), (pairs, triples));
@@ -665,42 +674,48 @@ mod tests {
     }
 
     #[test]
-    fn clean_parity_is_exactly_solved_and_mixed_is_not_exactly_affine() {
-        for n in NS {
-            let o = Observed::new(
-                &data(24, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
-                grid(n),
-            );
-            let result = solve_gauss(&o).expect("exact clean XOR must be solvable");
-            assert_eq!(result.len(), 3);
-            let mut found = result.iter().map(|&i| o.sources[i]).collect::<Vec<_>>();
-            found.sort_unstable();
-            assert_eq!(found, Task::XorXorXor.sources());
-
-            let mixed = Observed::new(
-                &data(26, Task::AndXorXor, Panel::Clean, TRAIN_STEPS),
-                grid(n),
-            );
-            assert!(solve_gauss(&mixed).is_none());
-        }
+    fn sketch_key_is_stable_and_uses_requested_bits() {
+        let mut words = vec![0u64; 32];
+        words[1] = u64::MAX;
+        words[16] = 0b11;
+        let samples: [usize; SKETCH_BITS] = [
+            0, 1, 2, 3, 4, 5, 6, 64, 65, 66, 67, 1024, 1025, 1026,
+        ];
+        let key = sketch_key(&words, &samples);
+        assert_eq!(key, sketch_key(&words, &samples));
+        assert_eq!(key & (1 << 7), 1 << 7);
+        assert_eq!(key & (1 << 8), 1 << 8);
+        assert_eq!(key & (1 << 11), 1 << 11);
+        assert_eq!(key & (1 << 12), 1 << 12);
     }
 
     #[test]
-    fn both_orders_rank_true_adversarial_features_when_exhaustive() {
-        let o = Observed::new(
-            &data(27, Task::AndXorXor, Panel::Clean, TRAIN_STEPS),
+    fn clean_parity_is_found_deterministically_and_has_distinct_gates() {
+        let observed = Observed::new(
+            &data(91, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
             grid(32),
         );
-        let pairs = rank_pairs(&o);
-        assert_eq!(pairs.len(), 448);
-        assert!(pairs.iter().any(|pair| {
-            o.sources[pair.ids[0]] == Task::AndXorXor.sources()[1]
-                && o.sources[pair.ids[1]] == Task::AndXorXor.sources()[2]
+        let (candidates, stats) = rank_sketch_triplets(&observed);
+        assert!(candidates.contains(&Task::XorXorXor.sources()));
+        assert!(stats.full_scored <= SKETCH_COARSE_KEEP);
+        assert!(stats.coarse_scored >= stats.full_scored);
+        assert!(candidates.iter().all(|sources| {
+            sources[0].gate < sources[1].gate && sources[1].gate < sources[2].gate
         }));
-        let triples = rank_triples(&o);
-        assert_eq!(triples.len(), 3584);
-        assert!(triples
-            .iter()
-            .any(|x| triplet(&o, x.ids) == Task::AndXorXor.sources()));
+        assert!(rank_triples_stream(&observed).contains(&Task::XorXorXor.sources()));
+        let (again, repeated_stats) = rank_sketch_triplets(&observed);
+        assert_eq!(again, candidates);
+        assert_eq!(repeated_stats, stats);
+    }
+
+    #[test]
+    fn same_native_anf_factorizer_fits_screened_clean_parity() {
+        let train = data(94, Task::XorXorXor, Panel::Clean, TRAIN_STEPS);
+        let val = data(95, Task::XorXorXor, Panel::Clean, VAL_STEPS);
+        let observed = Observed::new(&train, grid(32));
+        let (candidates, _) = rank_sketch_triplets(&observed);
+        let fit = fit_three_gate_candidates(&train, &val, WIDTH, &candidates).unwrap();
+        assert_eq!(fit.autonomous_train_errors, 0);
+        assert_eq!(fit.proposal_sources, Task::XorXorXor.sources());
     }
 }
