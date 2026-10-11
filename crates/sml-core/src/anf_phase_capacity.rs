@@ -18,11 +18,11 @@
 //! Fixed ring scaffold means this is NOT unconstrained topology learning.
 //! Validation selects the smallest state width achieving minimum val errors.
 
-use std::fmt;
 use crate::{
     anf_local::{LocalAnfError, LocalAnfGate, LocalAnfNetwork},
     anf_local_incremental::{LaneData, Trajectory},
 };
+use std::fmt;
 
 pub const A6C5B_MAX_STATE_BITS: usize = 4;
 pub const A6C5B_INPUT_BITS: usize = 5;
@@ -94,9 +94,7 @@ pub struct PhaseReport {
     pub objective_evaluations: usize,
 }
 
-fn validate(
-    data: &LaneData, spec: &PhaseSpec, cap_train: bool,
-) -> Result<u64, PhaseError> {
+fn validate(data: &LaneData, spec: &PhaseSpec, cap_train: bool) -> Result<u64, PhaseError> {
     if data.input_bits != A6C5B_INPUT_BITS
         || spec.target_bit >= data.target_bits
         || spec.baseline_input >= data.input_bits
@@ -121,7 +119,9 @@ fn validate(
         {
             return Err(PhaseError::InvalidData);
         }
-        steps = steps.checked_add(block.steps).ok_or(PhaseError::InvalidData)?;
+        steps = steps
+            .checked_add(block.steps)
+            .ok_or(PhaseError::InvalidData)?;
         samples += u64::from(block.valid.count_ones()) * block.steps as u64;
     }
     if cap_train && steps > A6C5B_MAX_TRAIN_STEPS {
@@ -133,10 +133,18 @@ fn validate(
 #[inline]
 fn binary(truth: u8, a: u64, b: u64) -> u64 {
     let mut out = 0u64;
-    if truth & 1 != 0 { out |= !a & !b; }
-    if truth & 2 != 0 { out |= a & !b; }
-    if truth & 4 != 0 { out |= !a & b; }
-    if truth & 8 != 0 { out |= a & b; }
+    if truth & 1 != 0 {
+        out |= !a & !b;
+    }
+    if truth & 2 != 0 {
+        out |= a & !b;
+    }
+    if truth & 4 != 0 {
+        out |= !a & b;
+    }
+    if truth & 8 != 0 {
+        out |= a & b;
+    }
     out
 }
 #[inline]
@@ -150,13 +158,18 @@ fn unary(truth: u8, value: u64) -> u64 {
     }
 }
 fn baseline_loss(data: &LaneData, spec: &PhaseSpec) -> u64 {
-    data.blocks.iter().map(|block| {
-        (0..block.steps).map(|t| {
-            let residual = block.targets[t * data.target_bits + spec.target_bit]
-                ^ block.inputs[t * data.input_bits + spec.baseline_input];
-            u64::from((residual & block.valid).count_ones())
-        }).sum::<u64>()
-    }).sum()
+    data.blocks
+        .iter()
+        .map(|block| {
+            (0..block.steps)
+                .map(|t| {
+                    let residual = block.targets[t * data.target_bits + spec.target_bit]
+                        ^ block.inputs[t * data.input_bits + spec.baseline_input];
+                    u64::from((residual & block.valid).count_ones())
+                })
+                .sum::<u64>()
+        })
+        .sum()
 }
 
 fn train_loss(rule: PhaseRule, data: &LaneData, spec: &PhaseSpec) -> u64 {
@@ -187,8 +200,7 @@ fn monomials_binary(mask: u8) -> usize {
     let t1 = mask & 2 != 0;
     let t2 = mask & 4 != 0;
     let t3 = mask & 8 != 0;
-    usize::from(t0) + usize::from(t1 ^ t0)
-        + usize::from(t2 ^ t0) + usize::from(t3 ^ t2 ^ t1 ^ t0)
+    usize::from(t0) + usize::from(t1 ^ t0) + usize::from(t2 ^ t0) + usize::from(t3 ^ t2 ^ t1 ^ t0)
 }
 fn monomials_unary(mask: u8) -> usize {
     let t0 = mask & 1 != 0;
@@ -197,16 +209,19 @@ fn monomials_unary(mask: u8) -> usize {
 }
 fn anf_terms(rule: PhaseRule) -> usize {
     monomials_binary(rule.truth)
-        + rule.delays[..rule.width - 1].iter()
-            .map(|&mask| monomials_unary(mask)).sum::<usize>()
+        + rule.delays[..rule.width - 1]
+            .iter()
+            .map(|&mask| monomials_unary(mask))
+            .sum::<usize>()
 }
 fn root_uses_state(truth: u8) -> bool {
-    (truth & 1 != 0) != (truth & 2 != 0)
-        || (truth & 4 != 0) != (truth & 8 != 0)
+    (truth & 1 != 0) != (truth & 2 != 0) || (truth & 4 != 0) != (truth & 8 != 0)
 }
 fn effective_period(rule: PhaseRule) -> usize {
     if root_uses_state(rule.truth)
-        && rule.delays[..rule.feedback].iter().all(|&mask| mask == 1 || mask == 2)
+        && rule.delays[..rule.feedback]
+            .iter()
+            .all(|&mask| mask == 1 || mask == 2)
     {
         rule.feedback + 1
     } else {
@@ -216,11 +231,21 @@ fn effective_period(rule: PhaseRule) -> usize {
 fn better_train(rule: PhaseRule, errors: u64, prior: Option<(PhaseRule, u64)>) -> bool {
     prior.is_none_or(|(old, old_errors)| {
         (
-            errors, anf_terms(rule), effective_period(rule),
-            rule.feedback, rule.raw, rule.truth, rule.delays,
+            errors,
+            anf_terms(rule),
+            effective_period(rule),
+            rule.feedback,
+            rule.raw,
+            rule.truth,
+            rule.delays,
         ) < (
-            old_errors, anf_terms(old), effective_period(old),
-            old.feedback, old.raw, old.truth, old.delays,
+            old_errors,
+            anf_terms(old),
+            effective_period(old),
+            old.feedback,
+            old.raw,
+            old.truth,
+            old.delays,
         )
     })
 }
@@ -244,27 +269,37 @@ fn make_model(rule: PhaseRule, spec: &PhaseSpec) -> Result<LocalAnfNetwork, Phas
     let root: Vec<bool> = (0..4).map(|i| rule.truth & (1 << i) != 0).collect();
     let mut gates = Vec::with_capacity(rule.width);
     gates.push(LocalAnfGate::from_truth_table(
-        vec![rule.feedback, rule.width + rule.raw], &root, source_width,
+        vec![rule.feedback, rule.width + rule.raw],
+        &root,
+        source_width,
     )?);
     for i in 1..rule.width {
         let mask = rule.delays[i - 1];
         gates.push(LocalAnfGate::from_truth_table(
-            vec![i - 1], &[mask & 1 != 0, mask & 2 != 0], source_width,
+            vec![i - 1],
+            &[mask & 1 != 0, mask & 2 != 0],
+            source_width,
         )?);
     }
     let readout = LocalAnfGate::from_truth_table(
         vec![0, rule.width + spec.baseline_input],
-        &[false, true, true, false], source_width,
+        &[false, true, true, false],
+        source_width,
     )?;
     Ok(LocalAnfNetwork::with_input_bits(
-        rule.width, A6C5B_INPUT_BITS, gates, readout,
+        rule.width,
+        A6C5B_INPUT_BITS,
+        gates,
+        readout,
     )?)
 }
 
 /// Independently evaluate the actual native ANF network and frozen XOR
 /// readout, not the internal bit-mask training-score approximation.
 pub fn native_errors(
-    model: &LocalAnfNetwork, data: &LaneData, spec: &PhaseSpec,
+    model: &LocalAnfNetwork,
+    data: &LaneData,
+    spec: &PhaseSpec,
 ) -> Result<u64, PhaseError> {
     let samples = validate(data, spec, false)?;
     if model.input_bits() != A6C5B_INPUT_BITS {
@@ -275,9 +310,9 @@ pub fn native_errors(
     let mut errors = 0u64;
     for (bi, block) in data.blocks.iter().enumerate() {
         for t in 0..block.steps {
-            let prediction = model.readout().evaluate_lanes(
-                trajectory.row(bi, t), &mut scratch,
-            );
+            let prediction = model
+                .readout()
+                .evaluate_lanes(trajectory.row(bi, t), &mut scratch);
             let actual = block.targets[t * data.target_bits + spec.target_bit];
             errors += u64::from(((prediction ^ actual) & block.valid).count_ones());
         }
@@ -286,13 +321,16 @@ pub fn native_errors(
     Ok(errors)
 }
 fn zero_model(spec: &PhaseSpec) -> Result<LocalAnfNetwork, PhaseError> {
-    make_model(PhaseRule {
-        width: 1,
-        feedback: 0,
-        raw: spec.raw_candidates[0],
-        truth: 0,
-        delays: [0; A6C5B_MAX_STATE_BITS - 1],
-    }, spec)
+    make_model(
+        PhaseRule {
+            width: 1,
+            feedback: 0,
+            raw: spec.raw_candidates[0],
+            truth: 0,
+            delays: [0; A6C5B_MAX_STATE_BITS - 1],
+        },
+        spec,
+    )
 }
 
 /// Train each width using train ONLY. Width/commit decisions use val ONLY.
@@ -323,7 +361,10 @@ pub fn fit_phase_memory(
                 for truth in 0..16u8 {
                     for delay in 0..variants {
                         let rule = PhaseRule {
-                            width, feedback, raw, truth,
+                            width,
+                            feedback,
+                            raw,
+                            truth,
                             delays: delay_masks(width, delay),
                         };
                         let errors = train_loss(rule, train, spec);
@@ -376,7 +417,11 @@ pub fn fit_phase_memory(
     let best = &widths[chosen];
     let accepted = best.validation_errors < baseline_validation_errors;
     Ok(PhaseReport {
-        selected: if accepted { best.network.clone() } else { zero_model(spec)? },
+        selected: if accepted {
+            best.network.clone()
+        } else {
+            zero_model(spec)?
+        },
         selected_rule: best.rule,
         selected_width: if accepted { best.rule.width } else { 0 },
         selected_effective_period: if accepted { best.effective_period } else { 0 },
@@ -424,7 +469,12 @@ mod tests {
         LaneData {
             input_bits: A6C5B_INPUT_BITS,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -432,7 +482,11 @@ mod tests {
     fn all_root_truth_tables_match_native_anf_semantics() {
         for truth in 0..16u8 {
             let rule = PhaseRule {
-                width: 3, feedback: 2, raw: 1, truth, delays: [2, 2, 0],
+                width: 3,
+                feedback: 2,
+                raw: 1,
+                truth,
+                delays: [2, 2, 0],
             };
             let model = make_model(rule, &spec()).unwrap();
             let mut products = [0u64; 4];
@@ -454,36 +508,39 @@ mod tests {
 
     #[test]
     fn width_three_trains_terminal_parity_without_intermediate_labels() {
-        let fit = fit_phase_memory(
-            &dataset(10, 64, 3), &dataset(11, 64, 3), &spec(), 4,
-        ).unwrap();
+        let fit = fit_phase_memory(&dataset(10, 64, 3), &dataset(11, 64, 3), &spec(), 4).unwrap();
         assert_eq!(fit.selected_width, 3);
         assert_eq!(fit.selected_effective_period, 3);
         assert_eq!(fit.selected_train_errors, 0);
         assert_eq!(fit.selected_validation_errors, 0);
         assert!(fit.widths[1].train_errors > 0);
         assert_eq!(fit.objective_evaluations, 20_032);
-        assert_eq!(native_errors(&fit.selected, &dataset(12, 512, 3), &spec()).unwrap(), 0);
-        assert_eq!(native_errors(&fit.selected, &dataset(13, 4096, 3), &spec()).unwrap(), 0);
+        assert_eq!(
+            native_errors(&fit.selected, &dataset(12, 512, 3), &spec()).unwrap(),
+            0
+        );
+        assert_eq!(
+            native_errors(&fit.selected, &dataset(13, 4096, 3), &spec()).unwrap(),
+            0
+        );
     }
 
     #[test]
     fn width_four_recovers_stride_four_where_three_bits_fail() {
-        let fit = fit_phase_memory(
-            &dataset(20, 64, 4), &dataset(21, 64, 4), &spec(), 4,
-        ).unwrap();
+        let fit = fit_phase_memory(&dataset(20, 64, 4), &dataset(21, 64, 4), &spec(), 4).unwrap();
         assert_eq!(fit.selected_width, 4);
         assert_eq!(fit.selected_effective_period, 4);
         assert_eq!(fit.selected_train_errors, 0);
         assert!(fit.widths[2].train_errors > 0);
-        assert_eq!(native_errors(&fit.selected, &dataset(22, 512, 4), &spec()).unwrap(), 0);
+        assert_eq!(
+            native_errors(&fit.selected, &dataset(22, 512, 4), &spec()).unwrap(),
+            0
+        );
     }
 
     #[test]
     fn stride_five_remains_an_intentional_unrepresentable_control() {
-        let fit = fit_phase_memory(
-            &dataset(30, 64, 5), &dataset(31, 64, 5), &spec(), 4,
-        ).unwrap();
+        let fit = fit_phase_memory(&dataset(30, 64, 5), &dataset(31, 64, 5), &spec(), 4).unwrap();
         assert!(fit.widths.iter().all(|w| w.train_errors > 0));
         assert!(native_errors(&fit.selected, &dataset(32, 512, 5), &spec()).unwrap() > 0);
     }
@@ -510,7 +567,8 @@ mod tests {
     #[test]
     fn incorrect_source_pool_or_malformed_data_are_rejected() {
         let bad = PhaseSpec {
-            raw_candidates: vec![1, 1, 3, 4], ..spec()
+            raw_candidates: vec![1, 1, 3, 4],
+            ..spec()
         };
         let train = dataset(50, 16, 3);
         assert_eq!(
