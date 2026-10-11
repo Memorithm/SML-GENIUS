@@ -21,8 +21,8 @@ use std::fmt;
 
 use crate::{
     anf_dual_hidden_credit::{
-        fit_dual_hidden_credit, make_multi_gate_native,
-        native_errors as native_dual_errors, DualCreditError, DualCreditReport,
+        fit_dual_hidden_credit, make_multi_gate_native, native_errors as native_dual_errors,
+        DualCreditError, DualCreditReport,
     },
     anf_intermediate_credit::{
         fit_intermediate_gate, IntermediateError, IntermediateReport, IntermediateRule,
@@ -54,10 +54,14 @@ impl fmt::Display for NonlinearError {
 }
 impl std::error::Error for NonlinearError {}
 impl From<IntermediateError> for NonlinearError {
-    fn from(e: IntermediateError) -> Self { Self::PriorSingle(e) }
+    fn from(e: IntermediateError) -> Self {
+        Self::PriorSingle(e)
+    }
 }
 impl From<DualCreditError> for NonlinearError {
-    fn from(e: DualCreditError) -> Self { Self::PriorAffine(e) }
+    fn from(e: DualCreditError) -> Self {
+        Self::PriorAffine(e)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,11 +108,7 @@ pub struct NonlinearReport {
     pub ring_payload_bytes: usize,
 }
 
-fn validate(
-    width: usize,
-    data: &LaneData,
-    capped_train: bool,
-) -> Result<u64, NonlinearError> {
+fn validate(width: usize, data: &LaneData, capped_train: bool) -> Result<u64, NonlinearError> {
     if !(3..=A6C9_MAX_WIDTH).contains(&width) {
         return Err(NonlinearError::InvalidWidth);
     }
@@ -118,13 +118,16 @@ fn validate(
     let mut samples = 0u64;
     let mut total_steps = 0usize;
     for block in &data.blocks {
-        if block.steps == 0 || block.valid == 0
+        if block.steps == 0
+            || block.valid == 0
             || block.inputs.len() != block.steps * A6C9_INPUT_BITS
             || block.targets.len() != block.steps
         {
             return Err(NonlinearError::InvalidData);
         }
-        total_steps = total_steps.checked_add(block.steps).ok_or(NonlinearError::InvalidData)?;
+        total_steps = total_steps
+            .checked_add(block.steps)
+            .ok_or(NonlinearError::InvalidData)?;
         samples += u64::from(block.valid.count_ones()) * block.steps as u64;
     }
     if capped_train && total_steps > A6C9_TRAIN_MAX_STEPS {
@@ -136,10 +139,18 @@ fn validate(
 #[inline]
 fn apply_truth(mask: u8, a: u64, b: u64) -> u64 {
     let mut v = 0u64;
-    if mask & 1 != 0 { v |= !a & !b; }
-    if mask & 2 != 0 { v |= a & !b; }
-    if mask & 4 != 0 { v |= !a & b; }
-    if mask & 8 != 0 { v |= a & b; }
+    if mask & 1 != 0 {
+        v |= !a & !b;
+    }
+    if mask & 2 != 0 {
+        v |= a & !b;
+    }
+    if mask & 4 != 0 {
+        v |= !a & b;
+    }
+    if mask & 8 != 0 {
+        v |= a & b;
+    }
     v
 }
 
@@ -148,15 +159,19 @@ fn sorted_pair(
     a: IntermediateRule,
     b: IntermediateRule,
 ) -> Result<[IntermediateRule; 2], NonlinearError> {
-    if a.gate == b.gate || a.gate == 0 || b.gate == 0
-        || a.gate >= width || b.gate >= width
-        || a.truth >= 16 || b.truth >= 16
+    if a.gate == b.gate
+        || a.gate == 0
+        || b.gate == 0
+        || a.gate >= width
+        || b.gate >= width
+        || a.truth >= 16
+        || b.truth >= 16
         || !A6C9_RAW_CHOICES.contains(&a.raw)
         || !A6C9_RAW_CHOICES.contains(&b.raw)
     {
         return Err(NonlinearError::InvalidRule);
     }
-    Ok(if a.gate < b.gate { [a,b] } else { [b,a] })
+    Ok(if a.gate < b.gate { [a, b] } else { [b, a] })
 }
 
 /// O(T) exact paired recurrence oracle. Three disjoint circular regions of
@@ -172,7 +187,7 @@ fn score_two(
     scratch: &mut [u64],
 ) -> u64 {
     debug_assert!(scratch.len() >= width);
-    let [a,b] = pair;
+    let [a, b] = pair;
     debug_assert!(a.gate > 0 && a.gate < b.gate && b.gate < width);
     let len0 = a.gate;
     let len1 = b.gate - a.gate;
@@ -220,19 +235,26 @@ pub fn score_pair(
 }
 
 pub fn second_candidate_count(width: usize) -> Option<usize> {
-    (3..=A6C9_MAX_WIDTH).contains(&width)
+    (3..=A6C9_MAX_WIDTH)
+        .contains(&width)
         .then_some((width - 2) * A6C9_RAW_CHOICES.len() * A6C9_TRUTH_TABLES)
 }
 
 fn trained_better(
     trial: [IntermediateRule; 2],
     loss: u64,
-    incumbent: Option<([IntermediateRule; 2],u64)>,
+    incumbent: Option<([IntermediateRule; 2], u64)>,
 ) -> bool {
-    incumbent.is_none_or(|(old,old_loss)| {
-        let fields = |pair: [IntermediateRule;2]| {
-            (pair[0].gate, pair[0].raw, pair[0].truth,
-             pair[1].gate, pair[1].raw, pair[1].truth)
+    incumbent.is_none_or(|(old, old_loss)| {
+        let fields = |pair: [IntermediateRule; 2]| {
+            (
+                pair[0].gate,
+                pair[0].raw,
+                pair[0].truth,
+                pair[1].gate,
+                pair[1].raw,
+                pair[1].truth,
+            )
         };
         (loss, fields(trial)) < (old_loss, fields(old))
     })
@@ -245,7 +267,7 @@ struct TrainContext<'a> {
     evaluations: &'a mut usize,
 }
 impl TrainContext<'_> {
-    fn errors(&mut self, pair: [IntermediateRule;2]) -> u64 {
+    fn errors(&mut self, pair: [IntermediateRule; 2]) -> u64 {
         *self.evaluations += 1;
         score_two(self.width, pair, self.data, self.scratch)
     }
@@ -256,17 +278,19 @@ impl TrainContext<'_> {
 fn conditional(
     first: IntermediateRule,
     ctx: &mut TrainContext<'_>,
-) -> Result<([IntermediateRule;2],u64), NonlinearError> {
-    let mut best: Option<([IntermediateRule;2],u64)> = None;
+) -> Result<([IntermediateRule; 2], u64), NonlinearError> {
+    let mut best: Option<([IntermediateRule; 2], u64)> = None;
     for gate in 1..ctx.width {
-        if gate == first.gate { continue; }
+        if gate == first.gate {
+            continue;
+        }
         for raw in A6C9_RAW_CHOICES {
             for truth in 0..16u8 {
                 let next = IntermediateRule { gate, raw, truth };
                 let pair = sorted_pair(ctx.width, first, next)?;
                 let loss = ctx.errors(pair);
                 if trained_better(pair, loss, best) {
-                    best = Some((pair,loss));
+                    best = Some((pair, loss));
                 }
             }
         }
@@ -277,23 +301,25 @@ fn conditional(
 /// One preregistered complete coordinate pass (both hidden gate axes), with
 /// only STRICT TRAIN error improvements accepted. No validation labels enter.
 fn coordinate_pass(
-    mut pair: [IntermediateRule;2],
+    mut pair: [IntermediateRule; 2],
     mut current_loss: u64,
     ctx: &mut TrainContext<'_>,
-) -> Result<([IntermediateRule;2],u64,usize), NonlinearError> {
+) -> Result<([IntermediateRule; 2], u64, usize), NonlinearError> {
     let mut commits = 0usize;
     for axis in 0..2 {
-        let fixed = pair[1-axis];
-        let mut best: Option<([IntermediateRule;2],u64)> = None;
+        let fixed = pair[1 - axis];
+        let mut best: Option<([IntermediateRule; 2], u64)> = None;
         for gate in 1..ctx.width {
-            if gate == fixed.gate { continue; }
+            if gate == fixed.gate {
+                continue;
+            }
             for raw in A6C9_RAW_CHOICES {
                 for truth in 0..16u8 {
                     let candidate = IntermediateRule { gate, raw, truth };
                     let other = sorted_pair(ctx.width, fixed, candidate)?;
                     let loss = ctx.errors(other);
                     if trained_better(other, loss, best) {
-                        best = Some((other,loss));
+                        best = Some((other, loss));
                     }
                 }
             }
@@ -306,7 +332,7 @@ fn coordinate_pass(
             }
         }
     }
-    Ok((pair,current_loss,commits))
+    Ok((pair, current_loss, commits))
 }
 
 /// Experimental terminal-only nonlinear conditional learner. Both A6-C7 and
@@ -335,7 +361,7 @@ pub fn fit_nonlinear_credit(
 
     let mut scratch = vec![0u64; width];
     let mut conditional_evaluations = 0usize;
-    let mut conditional_best: Option<([IntermediateRule;2],u64)> = None;
+    let mut conditional_best: Option<([IntermediateRule; 2], u64)> = None;
     let mut ctx = TrainContext {
         width,
         data: train,
@@ -344,38 +370,33 @@ pub fn fit_nonlinear_credit(
     };
     if let Some(anchor) = old_one.proposed_rule {
         let (pair, loss) = conditional(anchor, &mut ctx)?;
-        conditional_best = Some((pair,loss));
+        conditional_best = Some((pair, loss));
     }
     // The A6-C8 joint TRAIN proposal handles 2 XOR/XNOR with no measurable
     // marginal single-gate credit. It is never learned from held-out data.
-    let affine_pair = sorted_pair(
-        width, old_affine.joint_rules[0], old_affine.joint_rules[1],
-    )?;
+    let affine_pair = sorted_pair(width, old_affine.joint_rules[0], old_affine.joint_rules[1])?;
     let affine_score = ctx.errors(affine_pair);
     if affine_score != old_affine.joint_train_errors {
         return Err(NonlinearError::NativeOracle);
     }
-    if trained_better(affine_pair,affine_score,conditional_best) {
-        conditional_best = Some((affine_pair,affine_score));
+    if trained_better(affine_pair, affine_score, conditional_best) {
+        conditional_best = Some((affine_pair, affine_score));
     }
-    let (initial_pair,initial_loss) =
-        conditional_best.ok_or(NonlinearError::InvalidData)?;
+    let (initial_pair, initial_loss) = conditional_best.ok_or(NonlinearError::InvalidData)?;
 
     let before = *ctx.evaluations;
-    let (pair, loss, committed_updates) =
-        coordinate_pass(initial_pair, initial_loss, &mut ctx)?;
+    let (pair, loss, committed_updates) = coordinate_pass(initial_pair, initial_loss, &mut ctx)?;
     let coordinate_evaluations = *ctx.evaluations - before;
     if committed_updates > A6C9_COORDINATE_PASSES * 2 {
         return Err(NonlinearError::NativeOracle);
     }
     let conditional_proposed = make_multi_gate_native(width, &pair)?;
-    if score_two(width,pair,train,&mut scratch) != loss
-        || native_dual_errors(&conditional_proposed,train)? != loss
+    if score_two(width, pair, train, &mut scratch) != loss
+        || native_dual_errors(&conditional_proposed, train)? != loss
     {
         return Err(NonlinearError::NativeOracle);
     }
-    let conditional_validation_errors =
-        native_dual_errors(&conditional_proposed,validation)?;
+    let conditional_validation_errors = native_dual_errors(&conditional_proposed, validation)?;
     let single_training = old_one.proposed_train_errors;
     let single_validation = old_one.proposed_validation_errors;
     let affine_training = old_affine.joint_train_errors;
@@ -389,11 +410,15 @@ pub fn fit_nonlinear_credit(
     let mut selected_loss = baseline_validation_errors;
     let proposals = [
         (CreditOrigin::OneGate, 1usize, single_validation),
-        (CreditOrigin::AffinePair,2usize, affine_validation),
-        (CreditOrigin::NonlinearPair,2usize, conditional_validation_errors),
+        (CreditOrigin::AffinePair, 2usize, affine_validation),
+        (
+            CreditOrigin::NonlinearPair,
+            2usize,
+            conditional_validation_errors,
+        ),
     ];
-    for (kind,count,val) in proposals {
-        if (val,count) < (selected_loss,selected_count) {
+    for (kind, count, val) in proposals {
+        if (val, count) < (selected_loss, selected_count) {
             selected_origin = kind;
             selected_count = count;
             selected_loss = val;
@@ -417,22 +442,29 @@ pub fn fit_nonlinear_credit(
         CreditOrigin::AffinePair => affine_training,
         CreditOrigin::NonlinearPair => loss,
     };
-    if native_dual_errors(&selected,train)? != selected_train_errors
-        || native_dual_errors(&selected,validation)? != selected_loss
+    if native_dual_errors(&selected, train)? != selected_train_errors
+        || native_dual_errors(&selected, validation)? != selected_loss
     {
         return Err(NonlinearError::NativeOracle);
     }
     Ok(NonlinearReport {
-        width, old_one, old_affine,
+        width,
+        old_one,
+        old_affine,
         conditional_rules: Some(pair),
         conditional_proposed: Some(conditional_proposed),
-        selected, selected_rules, selected_origin, selected_count,
-        baseline_train_errors, baseline_validation_errors,
+        selected,
+        selected_rules,
+        selected_origin,
+        selected_count,
+        baseline_train_errors,
+        baseline_validation_errors,
         conditional_train_errors: Some(loss),
         conditional_validation_errors: Some(conditional_validation_errors),
         selected_train_errors,
         selected_validation_errors: selected_loss,
-        train_samples, validation_samples,
+        train_samples,
+        validation_samples,
         conditional_evaluations,
         coordinate_evaluations,
         conditional_accepted_updates: committed_updates,
@@ -444,112 +476,160 @@ pub fn fit_nonlinear_credit(
 mod tests {
     use super::*;
     use crate::{
-        anf_dual_hidden_credit::make_multi_gate_native,
-        anf_local_incremental::LaneBlock,
+        anf_dual_hidden_credit::make_multi_gate_native, anf_local_incremental::LaneBlock,
         toy_tasks::SplitMix64,
     };
 
-    fn dataset(
-        seed: u64, width: usize, steps: usize, rules: &[IntermediateRule],
-    ) -> LaneData {
-        let teacher = make_multi_gate_native(width,rules).unwrap();
+    fn dataset(seed: u64, width: usize, steps: usize, rules: &[IntermediateRule]) -> LaneData {
+        let teacher = make_multi_gate_native(width, rules).unwrap();
         let mut rng = SplitMix64::new(seed);
-        let mut inputs = vec![0u64;steps*A6C9_INPUT_BITS];
-        for word in &mut inputs { *word = rng.next_u64(); }
-        let mut state = vec![0u64;teacher.source_width()];
-        let mut next = vec![0u64;width];
-        let mut scratch = vec![0u64;teacher.scratch_len()];
-        let mut targets = vec![0u64;steps];
-        for (t,target) in targets.iter_mut().enumerate() {
-            let offset = t*A6C9_INPUT_BITS;
-            state[width..].copy_from_slice(&inputs[offset..offset+A6C9_INPUT_BITS]);
-            teacher.step_lanes(&mut state,&mut next,&mut scratch);
-            *target = teacher.readout().evaluate_lanes(&state,&mut scratch);
+        let mut inputs = vec![0u64; steps * A6C9_INPUT_BITS];
+        for word in &mut inputs {
+            *word = rng.next_u64();
+        }
+        let mut state = vec![0u64; teacher.source_width()];
+        let mut next = vec![0u64; width];
+        let mut scratch = vec![0u64; teacher.scratch_len()];
+        let mut targets = vec![0u64; steps];
+        for (t, target) in targets.iter_mut().enumerate() {
+            let offset = t * A6C9_INPUT_BITS;
+            state[width..].copy_from_slice(&inputs[offset..offset + A6C9_INPUT_BITS]);
+            teacher.step_lanes(&mut state, &mut next, &mut scratch);
+            *target = teacher.readout().evaluate_lanes(&state, &mut scratch);
         }
         LaneData {
-            input_bits: A6C9_INPUT_BITS,target_bits:1,
-            blocks: vec![LaneBlock {steps,inputs,targets,valid:u64::MAX}],
+            input_bits: A6C9_INPUT_BITS,
+            target_bits: 1,
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
     #[test]
     fn segmented_circular_score_matches_native_every_binary_truth_pair() {
-        let width=16;
-        let mut ring=vec![0u64;width];
+        let width = 16;
+        let mut ring = vec![0u64; width];
         for truth_a in 0..16u8 {
             for truth_b in 0..16u8 {
-                let a=IntermediateRule {gate:4,raw:2,truth:truth_a};
-                let b=IntermediateRule {gate:11,raw:3,truth:truth_b};
-                let sample=dataset(777+u64::from(truth_a)*16+u64::from(truth_b),
-                                   width,80,&[a,b]);
-                let oracle=score_pair(width,[a,b],&sample,&mut ring).unwrap();
-                let native=native_dual_errors(&make_multi_gate_native(width,&[a,b]).unwrap(),&sample).unwrap();
-                assert_eq!(oracle,native,"masks {truth_a},{truth_b}");
-                assert_eq!(native,0);
+                let a = IntermediateRule {
+                    gate: 4,
+                    raw: 2,
+                    truth: truth_a,
+                };
+                let b = IntermediateRule {
+                    gate: 11,
+                    raw: 3,
+                    truth: truth_b,
+                };
+                let sample = dataset(
+                    777 + u64::from(truth_a) * 16 + u64::from(truth_b),
+                    width,
+                    80,
+                    &[a, b],
+                );
+                let oracle = score_pair(width, [a, b], &sample, &mut ring).unwrap();
+                let native =
+                    native_dual_errors(&make_multi_gate_native(width, &[a, b]).unwrap(), &sample)
+                        .unwrap();
+                assert_eq!(oracle, native, "masks {truth_a},{truth_b}");
+                assert_eq!(native, 0);
             }
         }
     }
 
     #[test]
     fn learn_xor_and_pair_from_terminal_labels_only() {
-        let width=32;
-        let rules=[
-            IntermediateRule {gate:7,raw:2,truth:6},
-            IntermediateRule {gate:23,raw:3,truth:8},
+        let width = 32;
+        let rules = [
+            IntermediateRule {
+                gate: 7,
+                raw: 2,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 23,
+                raw: 3,
+                truth: 8,
+            },
         ];
-        let train=dataset(101,width,256,&rules);
-        let validation=dataset(102,width,256,&rules);
-        let report=fit_nonlinear_credit(&train,&validation,width).unwrap();
-        assert_eq!(report.selected_count,2);
-        assert_eq!(report.selected_train_errors,0);
-        assert_eq!(report.selected_validation_errors,0);
-        let test=dataset(103,width,512,&rules);
-        assert_eq!(native_dual_errors(&report.selected,&test).unwrap(),0);
-        assert_eq!(report.conditional_evaluations,
-                   second_candidate_count(width).unwrap()+1+2*second_candidate_count(width).unwrap());
+        let train = dataset(101, width, 256, &rules);
+        let validation = dataset(102, width, 256, &rules);
+        let report = fit_nonlinear_credit(&train, &validation, width).unwrap();
+        assert_eq!(report.selected_count, 2);
+        assert_eq!(report.selected_train_errors, 0);
+        assert_eq!(report.selected_validation_errors, 0);
+        let test = dataset(103, width, 512, &rules);
+        assert_eq!(native_dual_errors(&report.selected, &test).unwrap(), 0);
+        assert_eq!(
+            report.conditional_evaluations,
+            second_candidate_count(width).unwrap() + 1 + 2 * second_candidate_count(width).unwrap()
+        );
     }
 
     #[test]
     fn no_mutation_preserves_identity_without_hidden_supervision() {
-        let width=32;
-        let train=dataset(104,width,256,&[]);
-        let validation=dataset(105,width,256,&[]);
-        let report=fit_nonlinear_credit(&train,&validation,width).unwrap();
-        assert_eq!(report.selected_count,0);
-        assert_eq!(report.selected,report.old_one.reference);
-        assert_eq!(report.selected_train_errors,0);
+        let width = 32;
+        let train = dataset(104, width, 256, &[]);
+        let validation = dataset(105, width, 256, &[]);
+        let report = fit_nonlinear_credit(&train, &validation, width).unwrap();
+        assert_eq!(report.selected_count, 0);
+        assert_eq!(report.selected, report.old_one.reference);
+        assert_eq!(report.selected_train_errors, 0);
     }
 
     #[test]
     fn validation_flip_does_not_rewrite_train_selected_gate_hypotheses() {
-        let width=24;
-        let rules=[
-            IntermediateRule {gate:4,raw:2,truth:6},
-            IntermediateRule {gate:16,raw:3,truth:8},
+        let width = 24;
+        let rules = [
+            IntermediateRule {
+                gate: 4,
+                raw: 2,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 16,
+                raw: 3,
+                truth: 8,
+            },
         ];
-        let train=dataset(107,width,160,&rules);
-        let val=dataset(108,width,160,&rules);
-        let a=fit_nonlinear_credit(&train,&val,width).unwrap();
-        let mut flipped=val.clone();
+        let train = dataset(107, width, 160, &rules);
+        let val = dataset(108, width, 160, &rules);
+        let a = fit_nonlinear_credit(&train, &val, width).unwrap();
+        let mut flipped = val.clone();
         for block in &mut flipped.blocks {
-            for label in &mut block.targets { *label=!*label; }
+            for label in &mut block.targets {
+                *label = !*label;
+            }
         }
-        let b=fit_nonlinear_credit(&train,&flipped,width).unwrap();
-        assert_eq!(a.conditional_rules,b.conditional_rules);
-        assert_eq!(a.conditional_train_errors,b.conditional_train_errors);
-        assert_eq!(a.old_one.proposed_rule,b.old_one.proposed_rule);
-        assert_eq!(a.old_affine.joint_rules,b.old_affine.joint_rules);
+        let b = fit_nonlinear_credit(&train, &flipped, width).unwrap();
+        assert_eq!(a.conditional_rules, b.conditional_rules);
+        assert_eq!(a.conditional_train_errors, b.conditional_train_errors);
+        assert_eq!(a.old_one.proposed_rule, b.old_one.proposed_rule);
+        assert_eq!(a.old_affine.joint_rules, b.old_affine.joint_rules);
     }
 
     #[test]
     fn rejects_malformed_split_and_duplicate_circuit_slots() {
-        let width=16;
-        let data=dataset(109,width,100,&[]);
-        let same=IntermediateRule {gate:5,raw:2,truth:6};
-        assert_eq!(sorted_pair(width,same,same),Err(NonlinearError::InvalidRule));
-        let mut malformed=data.clone();
+        let width = 16;
+        let data = dataset(109, width, 100, &[]);
+        let same = IntermediateRule {
+            gate: 5,
+            raw: 2,
+            truth: 6,
+        };
+        assert_eq!(
+            sorted_pair(width, same, same),
+            Err(NonlinearError::InvalidRule)
+        );
+        let mut malformed = data.clone();
         malformed.blocks[0].targets.clear();
-        assert_eq!(fit_nonlinear_credit(&malformed,&data,width),
-                   Err(NonlinearError::InvalidData));
+        assert_eq!(
+            fit_nonlinear_credit(&malformed, &data, width),
+            Err(NonlinearError::InvalidData)
+        );
     }
 }
