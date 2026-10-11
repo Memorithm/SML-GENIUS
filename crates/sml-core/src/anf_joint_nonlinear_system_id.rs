@@ -31,7 +31,7 @@ use crate::{
     anf_dual_hidden_credit::{make_multi_gate_native, native_errors as native_dual_errors},
     anf_intermediate_credit::IntermediateRule,
     anf_local::LocalAnfNetwork,
-    anf_local_incremental::{LaneBlock, LaneData},
+    anf_local_incremental::LaneData,
     anf_nonlinear_joint_credit::{
         fit_nonlinear_credit, score_pair, NonlinearError, NonlinearReport,
     },
