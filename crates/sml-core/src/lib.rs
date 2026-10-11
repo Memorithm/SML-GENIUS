@@ -19,6 +19,7 @@ pub mod anf_credit_topology;
 pub mod anf_dual_hidden_credit;
 pub mod anf_elastic_capacity;
 pub mod anf_intermediate_credit;
+pub mod anf_joint_nonlinear_system_id;
 pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
