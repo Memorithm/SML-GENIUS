@@ -72,9 +72,6 @@ impl Task {
             Self::NegativeFour => vec![r(17, 2, 6), r(47, 3, 8), r(81, 4, 6), r(109, 1, 8)],
         }
     }
-    fn representable(self) -> bool {
-        self != Self::NegativeFour
-    }
     fn triple(self) -> Option<TripleRules> {
         let rules = self.rules();
         if rules.len() == 3 {
@@ -439,6 +436,6 @@ mod tests {
     fn negative_teacher_has_four_hidden_gates() {
         assert_eq!(Task::NegativeFour.rules().len(), 4);
         assert!(Task::NegativeFour.triple().is_none());
-        assert!(Task::HistoricalXorAndXor.representable());
+        assert!(Task::HistoricalXorAndXor.triple().is_some());
     }
 }
