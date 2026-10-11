@@ -616,6 +616,62 @@ fn evaluate_budget(
         accepted,
     })
 }
+/// A6-C12b: independently proposed source triples, scored by the existing
+/// three-gate ANF factorizer. The input contains hypotheses from TRAIN-only
+/// screening, NEVER teacher gate rules or TEST labels. All 520 composite
+/// Boolean functions are evaluated; the best 16 factorized native circuits
+/// are validated by autonomous recurrence, identical to A6-C11D.
+/// This provides a common downstream factorizer for GF(2), Walsh-2 and
+/// exhaustive Walsh-3 proposals, without changing the incumbent learner.
+pub fn fit_three_gate_candidates(
+    train: &LaneData,
+    validation: &LaneData,
+    width: usize,
+    triples: &[[Source; 3]],
+) -> Result<BudgetFit, TripleDiagError> {
+    validate(width, train, true)?;
+    validate(width, validation, false)?;
+    if triples.is_empty() || triples.len() > 8_192 {
+        return Err(TripleDiagError::InvalidBudget);
+    }
+    let mut unique = std::collections::BTreeSet::new();
+    for &triple in triples {
+        for source in triple {
+            if source.gate == 0
+                || source.gate >= width
+                || !DIAG_RAW_POOL.contains(&source.raw)
+            {
+                return Err(TripleDiagError::InvalidSplit);
+            }
+        }
+        let sorted = sort_sources(triple).ok_or(TripleDiagError::InvalidSplit)?;
+        unique.insert(sorted);
+    }
+    let candidates = unique
+        .into_iter()
+        .map(|sources| Candidate {
+            sources,
+            spectral_sum: 0,
+        })
+        .collect::<Vec<_>>();
+    let obs = observed(train);
+    let bank = factor_bank();
+    if bank.is_empty() {
+        return Err(TripleDiagError::FactorizationEmpty);
+    }
+    let reference = make_multi_gate_native(width, &[])?;
+    let baseline_validation_errors = native_errors(&reference, validation)?;
+    let mut ring = vec![0u64; width];
+    evaluate_budget(
+        candidates.len(),
+        width,
+        (&candidates, &obs, &bank),
+        (train, validation),
+        (&reference, baseline_validation_errors),
+        &mut ring,
+    )
+}
+
 /// Learner API: no oracle hidden state parameters and no held-out tests.
 pub fn fit_three_gate_diagnostic(
     train: &LaneData,
@@ -852,6 +908,18 @@ mod tests {
         assert_eq!(ranks.len(), 3);
         assert!(ranks.iter().all(Option::is_some));
         assert!(retrospective_structure_rank(&full, truth).is_none_or(|rank| rank >= 1));
+    }
+    #[test]
+    fn independently_screened_truth_uses_same_native_three_gate_factorizer() {
+        let train = data(91, 32, 512, rules());
+        let validation = data(92, 32, 512, rules());
+        let fit =
+            fit_three_gate_candidates(&train, &validation, 32, &[rules().sources()]).unwrap();
+        assert_eq!(fit.proposal_sources, rules().sources());
+        assert_eq!(fit.autonomous_train_errors, 0);
+        assert_eq!(fit.autonomous_validation_errors, 0);
+        assert!(fit.accepted);
+        assert_eq!(fit.structures_full_train_scored, 1);
     }
     #[test]
     fn invalid_data_and_budget_are_rejected() {
