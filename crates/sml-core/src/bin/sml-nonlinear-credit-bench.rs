@@ -21,8 +21,8 @@ use sml_core::{
     anf_intermediate_credit::IntermediateRule,
     anf_local_incremental::{LaneBlock, LaneData},
     anf_nonlinear_joint_credit::{
-        fit_nonlinear_credit, CreditOrigin, NonlinearReport,
-        A6C9_INPUT_BITS, second_candidate_count,
+        fit_nonlinear_credit, second_candidate_count, CreditOrigin, NonlinearReport,
+        A6C9_INPUT_BITS,
     },
     toy_tasks::SplitMix64,
 };
@@ -50,9 +50,15 @@ enum Task {
 }
 impl Task {
     const ALL: [Self; NUM_TASKS] = [
-        Self::Identity128, Self::SingleAnd128, Self::XorAnd128,
-        Self::AndXor128, Self::AndAnd128, Self::XorOr128,
-        Self::XorAnd256, Self::AndAnd256, Self::XorXor256,
+        Self::Identity128,
+        Self::SingleAnd128,
+        Self::XorAnd128,
+        Self::AndXor128,
+        Self::AndAnd128,
+        Self::XorOr128,
+        Self::XorAnd256,
+        Self::AndAnd256,
+        Self::XorXor256,
         Self::NegativeThree128,
     ];
     fn name(self) -> &'static str {
@@ -91,21 +97,21 @@ impl Task {
     }
     fn teacher(self) -> Vec<IntermediateRule> {
         let gate = |position, raw, truth| IntermediateRule {
-            gate: position, raw, truth,
+            gate: position,
+            raw,
+            truth,
         };
         match self {
             Self::Identity128 => vec![],
-            Self::SingleAnd128 => vec![gate(92,3,8)],
-            Self::XorAnd128 => vec![gate(31,2,6), gate(88,3,8)],
-            Self::AndXor128 => vec![gate(33,2,8), gate(94,3,6)],
-            Self::AndAnd128 => vec![gate(41,2,8), gate(87,3,8)],
-            Self::XorOr128 => vec![gate(29,2,6), gate(105,3,14)],
-            Self::XorAnd256 => vec![gate(1,2,6), gate(190,3,8)],
-            Self::AndAnd256 => vec![gate(51,2,8), gate(181,3,8)],
-            Self::XorXor256 => vec![gate(1,2,6), gate(191,3,6)],
-            Self::NegativeThree128 => vec![
-                gate(19,2,6), gate(67,3,8), gate(108,4,6),
-            ],
+            Self::SingleAnd128 => vec![gate(92, 3, 8)],
+            Self::XorAnd128 => vec![gate(31, 2, 6), gate(88, 3, 8)],
+            Self::AndXor128 => vec![gate(33, 2, 8), gate(94, 3, 6)],
+            Self::AndAnd128 => vec![gate(41, 2, 8), gate(87, 3, 8)],
+            Self::XorOr128 => vec![gate(29, 2, 6), gate(105, 3, 14)],
+            Self::XorAnd256 => vec![gate(1, 2, 6), gate(190, 3, 8)],
+            Self::AndAnd256 => vec![gate(51, 2, 8), gate(181, 3, 8)],
+            Self::XorXor256 => vec![gate(1, 2, 6), gate(191, 3, 6)],
+            Self::NegativeThree128 => vec![gate(19, 2, 6), gate(67, 3, 8), gate(108, 4, 6)],
         }
     }
     fn representable(self) -> bool {
@@ -121,10 +127,16 @@ enum Panel {
 impl Panel {
     const ALL: [Self; NUM_PANELS] = [Self::Clean, Self::LabelNoise];
     fn name(self) -> &'static str {
-        match self { Self::Clean => "clean", Self::LabelNoise => "noise_1_in_16" }
+        match self {
+            Self::Clean => "clean",
+            Self::LabelNoise => "noise_1_in_16",
+        }
     }
     fn index(self) -> usize {
-        match self { Self::Clean => 0, Self::LabelNoise => 1 }
+        match self {
+            Self::Clean => 0,
+            Self::LabelNoise => 1,
+        }
     }
 }
 fn seed(index: usize, task: Task, panel: Panel, stage: u64) -> u64 {
@@ -139,7 +151,9 @@ fn dataset(seed: u64, task: Task, panel: Panel, steps: usize) -> LaneData {
     let teacher = make_multi_gate_native(width, &task.teacher()).unwrap();
     let mut rng = SplitMix64::new(seed);
     let mut inputs = vec![0u64; steps * A6C9_INPUT_BITS];
-    for word in &mut inputs { *word = rng.next_u64(); }
+    for word in &mut inputs {
+        *word = rng.next_u64();
+    }
     let mut source = vec![0u64; teacher.source_width()];
     let mut next = vec![0u64; width];
     let mut scratch = vec![0u64; teacher.scratch_len()];
@@ -151,14 +165,19 @@ fn dataset(seed: u64, task: Task, panel: Panel, steps: usize) -> LaneData {
         let exact = teacher.readout().evaluate_lanes(&source, &mut scratch);
         let noise = if panel == Panel::LabelNoise {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         *target = exact ^ noise;
     }
     LaneData {
         input_bits: A6C9_INPUT_BITS,
         target_bits: 1,
         blocks: vec![LaneBlock {
-            steps, inputs, targets, valid: u64::MAX,
+            steps,
+            inputs,
+            targets,
+            valid: u64::MAX,
         }],
     }
 }
@@ -198,20 +217,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         for panel in Panel::ALL {
             for index in 0..seeds {
                 let train = dataset(
-                    seed(index,task,panel,0xa6c9_1001),
-                    task,panel,TRAIN_STEPS,
+                    seed(index, task, panel, 0xa6c9_1001),
+                    task,
+                    panel,
+                    TRAIN_STEPS,
                 );
                 let validation = dataset(
-                    seed(index,task,panel,0xa6c9_2002),
-                    task,panel,VALIDATION_STEPS,
+                    seed(index, task, panel, 0xa6c9_2002),
+                    task,
+                    panel,
+                    VALIDATION_STEPS,
                 );
                 let start = Instant::now();
-                let report = fit_nonlinear_credit(&train,&validation,task.width())?;
+                let report = fit_nonlinear_credit(&train, &validation, task.width())?;
                 let fit_seconds = start.elapsed().as_secs_f64();
-                if report.train_samples != (TRAIN_STEPS*LANES) as u64
-                    || report.validation_samples != (VALIDATION_STEPS*LANES) as u64
+                if report.train_samples != (TRAIN_STEPS * LANES) as u64
+                    || report.validation_samples != (VALIDATION_STEPS * LANES) as u64
                     || report.width != task.width()
-                    || report.coordinate_evaluations != 2 * second_candidate_count(task.width()).unwrap()
+                    || report.coordinate_evaluations
+                        != 2 * second_candidate_count(task.width()).unwrap()
                     || report.ring_payload_bytes != task.width() * 8
                 {
                     return Err("A6-C9 frozen protocol/count disagreement".into());
@@ -237,7 +261,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     fit_seconds
                 );
                 frozen.push(Frozen {
-                    seed:index, task, panel, report, fit_seconds,
+                    seed: index,
+                    task,
+                    panel,
+                    report,
+                    fit_seconds,
                 });
             }
         }
@@ -249,77 +277,103 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let mut totals = [[[[0u64; ERROR_METRICS]; 2]; NUM_PANELS]; NUM_TASKS];
-    let mut exact_matches = [[0usize;NUM_PANELS]; NUM_TASKS];
-    let mut selected_counts = [[[0usize;3];NUM_PANELS];NUM_TASKS];
-    let mut origins = [[[0usize;4];NUM_PANELS];NUM_TASKS];
-    let mut fit_totals = [[0.0f64;NUM_PANELS];NUM_TASKS];
-    let mut native_seconds = [[[0.0f64;2];NUM_PANELS];NUM_TASKS];
+    let mut exact_matches = [[0usize; NUM_PANELS]; NUM_TASKS];
+    let mut selected_counts = [[[0usize; 3]; NUM_PANELS]; NUM_TASKS];
+    let mut origins = [[[0usize; 4]; NUM_PANELS]; NUM_TASKS];
+    let mut fit_totals = [[0.0f64; NUM_PANELS]; NUM_TASKS];
+    let mut native_seconds = [[[0.0f64; 2]; NUM_PANELS]; NUM_TASKS];
     for item in &frozen {
-        let t=item.task.index();
-        let p=item.panel.index();
+        let t = item.task.index();
+        let p = item.panel.index();
         if item.task.representable() && item.report.selected_rules == item.task.teacher() {
-            exact_matches[t][p]+=1;
+            exact_matches[t][p] += 1;
         }
-        selected_counts[t][p][item.report.selected_count]+=1;
-        let origin_index=match item.report.selected_origin {
-            CreditOrigin::Identity=>0,
-            CreditOrigin::OneGate=>1,
-            CreditOrigin::AffinePair=>2,
-            CreditOrigin::NonlinearPair=>3,
+        selected_counts[t][p][item.report.selected_count] += 1;
+        let origin_index = match item.report.selected_origin {
+            CreditOrigin::Identity => 0,
+            CreditOrigin::OneGate => 1,
+            CreditOrigin::AffinePair => 2,
+            CreditOrigin::NonlinearPair => 3,
         };
-        origins[t][p][origin_index]+=1;
-        fit_totals[t][p]+=item.fit_seconds;
+        origins[t][p][origin_index] += 1;
+        fit_totals[t][p] += item.fit_seconds;
         for (h, steps) in HORIZONS.iter().copied().enumerate() {
-            let test=dataset(
-                seed(item.seed,item.task,item.panel,0xa6c9_3003+steps as u64),
-                item.task,item.panel,steps
+            let test = dataset(
+                seed(item.seed, item.task, item.panel, 0xa6c9_3003 + steps as u64),
+                item.task,
+                item.panel,
+                steps,
             );
-            let baseline=native_errors(&item.report.old_one.reference,&test)?;
-            let old_one=native_errors(&item.report.old_one.committed,&test)?;
-            let old_affine=native_errors(&item.report.old_affine.selected,&test)?;
-            let conditional=if let Some(ref model)=item.report.conditional_proposed {
-                native_errors(model,&test)?
-            } else { baseline };
-            let start=Instant::now();
-            let chosen=native_errors(&item.report.selected,&test)?;
-            let secs=start.elapsed().as_secs_f64().max(f64::EPSILON);
-            native_seconds[t][p][h]+=secs;
-            let mut ablate=[chosen;2];
+            let baseline = native_errors(&item.report.old_one.reference, &test)?;
+            let old_one = native_errors(&item.report.old_one.committed, &test)?;
+            let old_affine = native_errors(&item.report.old_affine.selected, &test)?;
+            let conditional = if let Some(ref model) = item.report.conditional_proposed {
+                native_errors(model, &test)?
+            } else {
+                baseline
+            };
+            let start = Instant::now();
+            let chosen = native_errors(&item.report.selected, &test)?;
+            let secs = start.elapsed().as_secs_f64().max(f64::EPSILON);
+            native_seconds[t][p][h] += secs;
+            let mut ablate = [chosen; 2];
             for (axis, count) in ablate.iter_mut().enumerate() {
-                if item.report.selected_rules.len()>axis {
-                    let rest=item.report.selected_rules.iter().enumerate()
-                        .filter(|(idx,_)| *idx!=axis)
-                        .map(|(_,rule)| *rule)
+                if item.report.selected_rules.len() > axis {
+                    let rest = item
+                        .report
+                        .selected_rules
+                        .iter()
+                        .enumerate()
+                        .filter(|(idx, _)| *idx != axis)
+                        .map(|(_, rule)| *rule)
                         .collect::<Vec<_>>();
-                    let model=make_multi_gate_native(item.task.width(),&rest)?;
-                    *count=native_errors(&model,&test)?;
+                    let model = make_multi_gate_native(item.task.width(), &rest)?;
+                    *count = native_errors(&model, &test)?;
                 }
             }
-            let data=[
-                baseline,old_one,old_affine,conditional,chosen,
-                ablate[0],ablate[1]
+            let data = [
+                baseline,
+                old_one,
+                old_affine,
+                conditional,
+                chosen,
+                ablate[0],
+                ablate[1],
             ];
-            for (total,val) in totals[t][p][h].iter_mut().zip(data) {
-                *total+=val;
+            for (total, val) in totals[t][p][h].iter_mut().zip(data) {
+                *total += val;
             }
             println!(
                 "A6C9_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.2},{:.6}",
-                item.task.name(),item.panel.name(),item.seed,item.task.width(),
-                steps,steps*LANES,baseline,old_one,old_affine,conditional,chosen,
-                ablate[0],ablate[1],item.report.selected_origin.name(),
-                item.report.selected_count,(steps*LANES) as f64/secs,item.fit_seconds
+                item.task.name(),
+                item.panel.name(),
+                item.seed,
+                item.task.width(),
+                steps,
+                steps * LANES,
+                baseline,
+                old_one,
+                old_affine,
+                conditional,
+                chosen,
+                ablate[0],
+                ablate[1],
+                item.report.selected_origin.name(),
+                item.report.selected_count,
+                (steps * LANES) as f64 / secs,
+                item.fit_seconds
             );
         }
     }
 
     for task in Task::ALL {
         for panel in Panel::ALL {
-            let t=task.index();
-            let p=panel.index();
-            for (h,steps) in HORIZONS.iter().copied().enumerate() {
-                let sum=totals[t][p][h];
-                let n=(seeds*steps*LANES) as f64;
-                let rate=|v:u64|v as f64/n;
+            let t = task.index();
+            let p = panel.index();
+            for (h, steps) in HORIZONS.iter().copied().enumerate() {
+                let sum = totals[t][p][h];
+                let n = (seeds * steps * LANES) as f64;
+                let rate = |v: u64| v as f64 / n;
                 println!(
                     "A6C9_SUMMARY,task={},panel={},width={},steps={},seeds={},baseline_error_rate={:.8},old_one_error_rate={:.8},old_affine_error_rate={:.8},conditional_error_rate={:.8},selected_error_rate={:.8},ablate0_error_rate={:.8},ablate1_error_rate={:.8},exact_matches={},selected_zero={},selected_one={},selected_two={},origin_zero={},origin_one={},origin_affine_two={},origin_nonlinear_two={},mean_fit_seconds={:.6},native_bitlane_per_second={:.2}",
                     task.name(),panel.name(),task.width(),steps,seeds,
@@ -345,32 +399,32 @@ mod tests {
     #[test]
     fn native_teacher_outputs_are_self_consistent_for_every_task() {
         for task in Task::ALL {
-            let input=dataset(123,task,Panel::Clean,300);
-            let true_model=make_multi_gate_native(task.width(),&task.teacher()).unwrap();
-            assert_eq!(native_errors(&true_model,&input).unwrap(),0);
+            let input = dataset(123, task, Panel::Clean, 300);
+            let true_model = make_multi_gate_native(task.width(), &task.teacher()).unwrap();
+            assert_eq!(native_errors(&true_model, &input).unwrap(), 0);
         }
     }
 
     #[test]
     fn label_noise_does_not_modify_raw_inputs() {
         for task in Task::ALL {
-            let clean=dataset(234,task,Panel::Clean,512);
-            let noisy=dataset(234,task,Panel::LabelNoise,512);
-            assert_eq!(clean.blocks[0].inputs,noisy.blocks[0].inputs);
-            assert_ne!(clean.blocks[0].targets,noisy.blocks[0].targets);
+            let clean = dataset(234, task, Panel::Clean, 512);
+            let noisy = dataset(234, task, Panel::LabelNoise, 512);
+            assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
+            assert_ne!(clean.blocks[0].targets, noisy.blocks[0].targets);
         }
     }
 
     #[test]
     fn affine_prior_is_retained_when_single_gate_has_zero_marginal_credit() {
-        let task=Task::XorXor256;
-        let train=dataset(345,task,Panel::Clean,512);
-        let val=dataset(456,task,Panel::Clean,512);
-        let fit=fit_nonlinear_credit(&train,&val,256).unwrap();
-        assert_eq!(fit.selected_count,2);
-        assert_eq!(fit.selected_train_errors,0);
-        assert_eq!(fit.selected_validation_errors,0);
-        let test=dataset(567,task,Panel::Clean,1024);
-        assert_eq!(native_errors(&fit.selected,&test).unwrap(),0);
+        let task = Task::XorXor256;
+        let train = dataset(345, task, Panel::Clean, 512);
+        let val = dataset(456, task, Panel::Clean, 512);
+        let fit = fit_nonlinear_credit(&train, &val, 256).unwrap();
+        assert_eq!(fit.selected_count, 2);
+        assert_eq!(fit.selected_train_errors, 0);
+        assert_eq!(fit.selected_validation_errors, 0);
+        let test = dataset(567, task, Panel::Clean, 1024);
+        assert_eq!(native_errors(&fit.selected, &test).unwrap(), 0);
     }
 }
