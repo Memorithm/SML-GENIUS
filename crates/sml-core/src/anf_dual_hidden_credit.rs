@@ -348,8 +348,8 @@ pub fn fit_dual_hidden_credit(
             }
             let mut error = 0u32;
             for (t, &observed) in target.iter().enumerate() {
-                error += ((observed ^ features[a][t] ^ features[b][t]) & probe_block.valid)
-                    .count_ones();
+                error +=
+                    ((observed ^ features[a][t] ^ features[b][t]) & probe_block.valid).count_ones();
             }
             pair_evaluations += 1;
             let item = (error, a, b);
