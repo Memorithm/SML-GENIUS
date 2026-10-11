@@ -29,7 +29,6 @@ use sml_core::{
         ElasticPhaseReport, ElasticPhaseSpec, ELASTIC_REGISTERED_WIDTHS,
         ELASTIC_UNIQUE_CANDIDATES,
     },
-    anf_local::LocalAnfNetwork,
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
 };
