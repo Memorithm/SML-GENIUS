@@ -330,31 +330,49 @@ fn actual_errors(
     Ok(residual_output_errors(network, data, 2, spec.target_bit, spec.baseline_input)?.0)
 }
 
+/// Shared immutable train-only search context for coordinate controls.
+struct SearchSpace<'a> {
+    cache: &'a TrainCache,
+    first: &'a [GateRule],
+    second: &'a [GateRule],
+    third: &'a [GateRule],
+    data: &'a LaneData,
+    spec: &'a MultiHopSpec,
+    n: usize,
+}
+
+impl SearchSpace<'_> {
+    fn score(&self, selected: Triple) -> u64 {
+        score(
+            selected,
+            self.cache,
+            self.third,
+            self.data,
+            self.spec,
+            self.n,
+        )
+    }
+}
+
 /// One-gate-at-a-time strictly improving moves; no neutral temporary credit.
 /// Restarted control uses different initial triples but exactly this method.
 fn descent(
     start: Triple,
     budget: usize,
     evaluations: &mut usize,
-    cache: &TrainCache,
-    first: &[GateRule],
-    second: &[GateRule],
-    third: &[GateRule],
-    data: &LaneData,
-    spec: &MultiHopSpec,
-    n: usize,
+    search: &SearchSpace<'_>,
 ) -> (Triple, u64) {
     debug_assert!(*evaluations < budget);
     let mut selected = start;
-    let mut current = score(selected, cache, third, data, spec, n);
+    let mut current = search.score(selected);
     *evaluations += 1;
     for _ in 0..3 {
         let mut improved = false;
         for axis in 0..3 {
             let choices = match axis {
-                0 => first.len(),
-                1 => second.len(),
-                _ => third.len(),
+                0 => search.first.len(),
+                1 => search.second.len(),
+                _ => search.third.len(),
             };
             let mut best = selected;
             let mut best_loss = current;
@@ -368,7 +386,7 @@ fn descent(
                     1 => candidate.second = position,
                     _ => candidate.third = position,
                 }
-                let trial = score(candidate, cache, third, data, spec, n);
+                let trial = search.score(candidate);
                 *evaluations += 1;
                 if trial < best_loss {
                     best_loss = trial;
@@ -463,19 +481,18 @@ pub fn fit_three_gate_credit(
         baseline_validation_errors,
     )?;
 
-    let mut coordinate_evaluations = 0usize;
-    let (coordinate_choice, coordinate_train_errors) = descent(
-        initial,
-        joint_evaluations,
-        &mut coordinate_evaluations,
-        &cache,
-        &first,
-        &second,
-        &third,
-        train,
+    let search = SearchSpace {
+        cache: &cache,
+        first: &first,
+        second: &second,
+        third: &third,
+        data: train,
         spec,
         n,
-    );
+    };
+    let mut coordinate_evaluations = 0usize;
+    let (coordinate_choice, coordinate_train_errors) =
+        descent(initial, joint_evaluations, &mut coordinate_evaluations, &search);
     let coordinate_candidate = build_model(network, coordinate_choice, &first, &second, &third)?;
     if actual_errors(&coordinate_candidate, train, spec)? != coordinate_train_errors {
         return Err(MultiHopError::ScoreMismatch);
@@ -502,18 +519,8 @@ pub fn fit_three_gate_credit(
             second: rng.below(second.len()),
             third: rng.below(third.len()),
         };
-        let (choice, loss) = descent(
-            start,
-            joint_evaluations,
-            &mut restart_evaluations,
-            &cache,
-            &first,
-            &second,
-            &third,
-            train,
-            spec,
-            n,
-        );
+        let (choice, loss) =
+            descent(start, joint_evaluations, &mut restart_evaluations, &search);
         if loss < restarted_train_errors {
             restarted_choice = choice;
             restarted_train_errors = loss;
