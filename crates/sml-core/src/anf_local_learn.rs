@@ -24,16 +24,16 @@ use crate::toy_tasks::{SplitMix64, ToySequence};
 
 /// Up to 64 equal-length sequences packed into lane words.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct LaneGroup {
-    inputs: Vec<u64>,
-    targets: Vec<u64>,
-    valid: u64,
+pub(crate) struct LaneGroup {
+    pub(crate) inputs: Vec<u64>,
+    pub(crate) targets: Vec<u64>,
+    pub(crate) valid: u64,
 }
 
 /// A split packed for bit-sliced evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackedSplit {
-    groups: Vec<LaneGroup>,
+    pub(crate) groups: Vec<LaneGroup>,
     total: u64,
 }
 
@@ -216,15 +216,21 @@ pub struct LocalAnfLearnReport {
     pub accepted: u64,
 }
 
-/// Applies one random move; returns whether an equal-loss result may be kept.
+/// Applies one random move to the first `mutable` state gates or the readout;
+/// returns whether an equal-loss result may be kept.
 ///
 /// Move mix: 40% one coefficient flip, 20% two coefficient flips in one gate,
 /// 25% replace a gate by a random sparse low-degree ANF (one or two monomials
 /// of degree <= 2), 15% rewire one non-input readout position to a random
 /// state bit. Neutral (equal-loss) moves are kept so plateaus can be crossed.
-fn propose(network: &mut LocalAnfNetwork, rng: &mut SplitMix64) -> Result<bool, LocalAnfError> {
+/// With `mutable == 0` only readout rewiring is proposed.
+fn propose(
+    network: &mut LocalAnfNetwork,
+    mutable: usize,
+    rng: &mut SplitMix64,
+) -> Result<bool, LocalAnfError> {
     let n = network.state_bits();
-    let roll = rng.below(100);
+    let roll = if mutable == 0 { 99 } else { rng.below(100) };
     if roll >= 85 && network.readout().fan_in() > 1 {
         let readout = network.readout();
         let slot = 1 + rng.below(readout.fan_in() - 1);
@@ -238,7 +244,10 @@ fn propose(network: &mut LocalAnfNetwork, rng: &mut SplitMix64) -> Result<bool, 
         network.set_readout(gate)?;
         return Ok(true);
     }
-    let g = rng.below(n);
+    if mutable == 0 {
+        return Ok(false);
+    }
+    let g = rng.below(mutable.min(n));
     let gate = &mut network.gates_mut()[g];
     let count = gate.monomial_count();
     let k = gate.fan_in();
@@ -278,7 +287,20 @@ pub fn train(
     train_split: &PackedSplit,
     val_split: &PackedSplit,
 ) -> Result<LocalAnfLearnReport, LocalAnfError> {
-    let mut network = LocalAnfNetwork::random(config.shape, config.seed)?;
+    let network = LocalAnfNetwork::random(config.shape, config.seed)?;
+    let mutable = network.state_bits();
+    search(network, mutable, config, train_split, val_split)
+}
+
+/// Local search over the first `mutable` state gates and the readout (the other
+/// gates stay frozen), with exact readout fitting and validation early stopping.
+pub(crate) fn search(
+    mut network: LocalAnfNetwork,
+    mutable: usize,
+    config: LocalAnfLearnConfig,
+    train_split: &PackedSplit,
+    val_split: &PackedSplit,
+) -> Result<LocalAnfLearnReport, LocalAnfError> {
     let mut rng = SplitMix64::new(config.seed ^ 0x5eed_a5a5_0000_0001);
     let mut scratch = Scratch::new(&network);
     let mut current = best_readout_errors(&network, train_split, &mut scratch);
@@ -295,7 +317,7 @@ pub fn train(
                 break;
             }
             let before = network.clone();
-            let neutral_allowed = propose(&mut network, &mut rng)?;
+            let neutral_allowed = propose(&mut network, mutable, &mut rng)?;
             let loss = best_readout_errors(&network, train_split, &mut scratch);
             evaluations += 1;
             if loss < current || (loss == current && neutral_allowed) {
