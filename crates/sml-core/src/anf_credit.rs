@@ -66,7 +66,11 @@ pub struct CoupledCreditReport {
     pub committed_coordinate: bool,
 }
 
-fn check_data(network: &LocalAnfNetwork, data: &LaneData, spec: &CoupledCreditSpec) -> Result<u64, CreditError> {
+fn check_data(
+    network: &LocalAnfNetwork,
+    data: &LaneData,
+    spec: &CoupledCreditSpec,
+) -> Result<u64, CreditError> {
     if data.input_bits != network.input_bits()
         || spec.target_bit >= data.target_bits
         || data.blocks.is_empty()
@@ -75,7 +79,8 @@ fn check_data(network: &LocalAnfNetwork, data: &LaneData, spec: &CoupledCreditSp
     }
     let mut samples = 0u64;
     for block in &data.blocks {
-        if block.steps == 0 || block.valid == 0
+        if block.steps == 0
+            || block.valid == 0
             || block.inputs.len() != block.steps * data.input_bits
             || block.targets.len() != block.steps * data.target_bits
         {
@@ -89,10 +94,14 @@ fn check_data(network: &LocalAnfNetwork, data: &LaneData, spec: &CoupledCreditSp
 fn check_spec(network: &LocalAnfNetwork, spec: &CoupledCreditSpec) -> Result<(), CreditError> {
     let n = network.state_bits();
     let w = network.input_bits();
-    if n != 2 || spec.intermediate_gate >= n || spec.downstream_gate >= n
+    if n != 2
+        || spec.intermediate_gate >= n
+        || spec.downstream_gate >= n
         || spec.intermediate_gate == spec.downstream_gate
-        || spec.baseline_input >= w || w > MAX_CREDIT_INPUT_BITS
-        || spec.raw_inputs.len() < 2 || spec.raw_inputs.len() > w
+        || spec.baseline_input >= w
+        || w > MAX_CREDIT_INPUT_BITS
+        || spec.raw_inputs.len() < 2
+        || spec.raw_inputs.len() > w
     {
         return Err(CreditError::InvalidSpec);
     }
@@ -101,8 +110,14 @@ fn check_spec(network: &LocalAnfNetwork, spec: &CoupledCreditSpec) -> Result<(),
             return Err(CreditError::InvalidSpec);
         }
     }
-    if network.gates()[spec.intermediate_gate].truth_table().iter().any(|&v| v)
-        || network.gates()[spec.downstream_gate].truth_table().iter().any(|&v| v)
+    if network.gates()[spec.intermediate_gate]
+        .truth_table()
+        .iter()
+        .any(|&v| v)
+        || network.gates()[spec.downstream_gate]
+            .truth_table()
+            .iter()
+            .any(|&v| v)
     {
         return Err(CreditError::InvalidSpec);
     }
@@ -114,14 +129,21 @@ fn gate_from_mask(inputs: Vec<usize>, mask: u8, width: usize) -> Result<LocalAnf
     Ok(LocalAnfGate::from_truth_table(inputs, &table, width)?)
 }
 
-fn grammar(network: &LocalAnfNetwork, spec: &CoupledCreditSpec) -> Result<(Vec<LocalAnfGate>, Vec<LocalAnfGate>), CreditError> {
+fn grammar(
+    network: &LocalAnfNetwork,
+    spec: &CoupledCreditSpec,
+) -> Result<(Vec<LocalAnfGate>, Vec<LocalAnfGate>), CreditError> {
     let n = network.state_bits();
     let mut upstream = Vec::new();
     let mut downstream = Vec::new();
     for (i, &a) in spec.raw_inputs.iter().enumerate() {
         for &b in &spec.raw_inputs[i + 1..] {
             for mask in 0..16u8 {
-                upstream.push(gate_from_mask(vec![n + a, n + b], mask, network.source_width())?);
+                upstream.push(gate_from_mask(
+                    vec![n + a, n + b],
+                    mask,
+                    network.source_width(),
+                )?);
             }
         }
     }
@@ -170,29 +192,44 @@ fn end_task_errors(
     let mut values = [0u64; 2];
     for (bi, block) in data.blocks.iter().enumerate() {
         for t in 0..block.steps {
-            values[0] = if t == 0 { 0 } else { previous_gate_words[bi][t - 1] };
+            values[0] = if t == 0 {
+                0
+            } else {
+                previous_gate_words[bi][t - 1]
+            };
             values[1] = block.inputs[t * data.input_bits + raw];
             let predicted_residual = downstream.evaluate_gathered(&values, &mut products);
             let actual_residual = block.targets[t * data.target_bits + spec.target_bit]
                 ^ block.inputs[t * data.input_bits + spec.baseline_input];
-            errors += u64::from(((predicted_residual ^ actual_residual) & block.valid).count_ones());
+            errors +=
+                u64::from(((predicted_residual ^ actual_residual) & block.valid).count_ones());
         }
     }
     errors
 }
 
 /// Independent oracle using the actual shared native recurrent execution.
-fn actual_errors(network: &LocalAnfNetwork, data: &LaneData, spec: &CoupledCreditSpec) -> Result<u64, CreditError> {
+fn actual_errors(
+    network: &LocalAnfNetwork,
+    data: &LaneData,
+    spec: &CoupledCreditSpec,
+) -> Result<u64, CreditError> {
     Ok(residual_output_errors(
         network,
         data,
         spec.downstream_gate,
         spec.target_bit,
         spec.baseline_input,
-    )?.0)
+    )?
+    .0)
 }
 
-fn with_pair(network: &LocalAnfNetwork, spec: &CoupledCreditSpec, first: &LocalAnfGate, second: &LocalAnfGate) -> LocalAnfNetwork {
+fn with_pair(
+    network: &LocalAnfNetwork,
+    spec: &CoupledCreditSpec,
+    first: &LocalAnfGate,
+    second: &LocalAnfGate,
+) -> LocalAnfNetwork {
     let mut updated = network.clone();
     updated.gates_mut()[spec.intermediate_gate] = first.clone();
     updated.gates_mut()[spec.downstream_gate] = second.clone();
@@ -236,13 +273,22 @@ pub fn fit_coupled_credit(
             }
         }
     }
-    let proposed = with_pair(network, spec, &first_bank[best_pair.0], &second_bank[best_pair.1]);
+    let proposed = with_pair(
+        network,
+        spec,
+        &first_bank[best_pair.0],
+        &second_bank[best_pair.1],
+    );
     if actual_errors(&proposed, train, spec)? != best_error {
         return Err(CreditError::ScoreMismatch);
     }
     let joint_validation_errors = actual_errors(&proposed, validation, spec)?;
     let committed_joint = joint_validation_errors < baseline_validation_errors;
-    let committed = if committed_joint { proposed.clone() } else { network.clone() };
+    let committed = if committed_joint {
+        proposed.clone()
+    } else {
+        network.clone()
+    };
 
     // Coordinate baseline starts from exactly the same zero-gate model.
     // Strict objective reductions only; neutral changes do not earn credit.
@@ -264,7 +310,8 @@ pub fn fit_coupled_credit(
         if let Some(a) = best_first {
             coordinate.gates_mut()[spec.intermediate_gate] = first_bank[a].clone();
         }
-        let current_words = intermediate_words(&coordinate.gates()[spec.intermediate_gate], train, n);
+        let current_words =
+            intermediate_words(&coordinate.gates()[spec.intermediate_gate], train, n);
         let mut best_second = None;
         for (b, gate) in second_bank.iter().enumerate() {
             coordinate_proposals += 1;
@@ -373,7 +420,10 @@ mod tests {
         assert_eq!(report.searched_pairs, 6 * 16 * 4 * 16);
         assert_eq!(report.proposed.gates()[0].inputs(), &[4, 5]);
         assert_eq!(report.proposed.gates()[1].inputs(), &[0, 3]);
-        assert_eq!(actual_errors(&report.committed, &fixture(3, 32), &spec()).unwrap(), 0);
+        assert_eq!(
+            actual_errors(&report.committed, &fixture(3, 32), &spec()).unwrap(),
+            0
+        );
     }
 
     #[test]
@@ -405,9 +455,15 @@ mod tests {
         let data = fixture(3, 8);
         let mut invalid = spec();
         invalid.raw_inputs = vec![0, 1, 1, 3];
-        assert_eq!(fit_coupled_credit(&model, &data, &data, &invalid), Err(CreditError::InvalidSpec));
+        assert_eq!(
+            fit_coupled_credit(&model, &data, &data, &invalid),
+            Err(CreditError::InvalidSpec)
+        );
         let mut malformed = data.clone();
         malformed.blocks[0].targets.clear();
-        assert_eq!(fit_coupled_credit(&model, &malformed, &data, &spec()), Err(CreditError::InvalidShape));
+        assert_eq!(
+            fit_coupled_credit(&model, &malformed, &data, &spec()),
+            Err(CreditError::InvalidShape)
+        );
     }
 }
