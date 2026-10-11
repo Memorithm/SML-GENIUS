@@ -29,8 +29,7 @@ fn better_alpha(candidate: f64, candidate_loss: f64, best: f64, best_loss: f64) 
     }
     let candidate_distance = (candidate / REFERENCE).log2().abs();
     let best_distance = (best / REFERENCE).log2().abs();
-    candidate_distance < best_distance
-        || (candidate_distance == best_distance && candidate < best)
+    candidate_distance < best_distance || (candidate_distance == best_distance && candidate < best)
 }
 
 struct Selected {
@@ -112,12 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("non-finite validation loss".into());
         }
         let default = sparse.evaluate(&report.model, &validation, false)?;
-        let explicit = sparse.evaluate_with_alpha(
-            &report.model,
-            &validation,
-            false,
-            REFERENCE,
-        )?;
+        let explicit = sparse.evaluate_with_alpha(&report.model, &validation, false, REFERENCE)?;
         if default.bits_per_byte.to_bits() != explicit.bits_per_byte.to_bits() {
             return Err("alpha=4 regression failed".into());
         }
@@ -145,7 +139,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_accuracy_change = 0.0;
     let mut improved_test_seeds = 0usize;
     for run in &selected_runs {
-        let candidate = run.sparse.evaluate_with_alpha(&run.model, &test, true, run.alpha)?;
+        let candidate = run
+            .sparse
+            .evaluate_with_alpha(&run.model, &test, true, run.alpha)?;
         let reference = if run.alpha == REFERENCE {
             candidate
         } else {
@@ -214,7 +210,10 @@ mod tests {
     #[test]
     fn frozen_candidates_are_unique_and_contain_reference() {
         assert_eq!(ALPHAS, [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]);
-        assert_eq!(ALPHAS.iter().filter(|&&alpha| alpha == REFERENCE).count(), 1);
+        assert_eq!(
+            ALPHAS.iter().filter(|&&alpha| alpha == REFERENCE).count(),
+            1
+        );
         assert!(ALPHAS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }
