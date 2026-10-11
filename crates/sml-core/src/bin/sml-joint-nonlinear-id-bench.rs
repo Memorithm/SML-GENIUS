@@ -33,7 +33,7 @@ const HORIZONS: [usize; 2] = [4096, 16384];
 const LANES: usize = 64;
 const NUM_TASKS: usize = 10;
 const NUM_PANELS: usize = 2;
-const ERRORS: usize = 9;
+const ERRORS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Task {
