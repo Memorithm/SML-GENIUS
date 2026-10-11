@@ -59,7 +59,9 @@ impl fmt::Display for JointIdError {
 }
 impl std::error::Error for JointIdError {}
 impl From<NonlinearError> for JointIdError {
-    fn from(err: NonlinearError) -> Self { Self::Prior(err) }
+    fn from(err: NonlinearError) -> Self {
+        Self::Prior(err)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,7 +160,8 @@ fn validate(width: usize, data: &LaneData, train: bool) -> Result<u64, JointIdEr
     let mut samples = 0u64;
     let mut steps = 0usize;
     for block in &data.blocks {
-        if block.steps == 0 || block.valid == 0
+        if block.steps == 0
+            || block.valid == 0
             || block.inputs.len() != 5 * block.steps
             || block.targets.len() != block.steps
         {
@@ -167,7 +170,9 @@ fn validate(width: usize, data: &LaneData, train: bool) -> Result<u64, JointIdEr
         if train && block.steps < width + A6C10_PROBE_STEPS {
             return Err(JointIdError::InvalidData);
         }
-        steps = steps.checked_add(block.steps).ok_or(JointIdError::InvalidData)?;
+        steps = steps
+            .checked_add(block.steps)
+            .ok_or(JointIdError::InvalidData)?;
         samples += u64::from(block.valid.count_ones()) * block.steps as u64;
     }
     if train && steps > A6C10_TRAIN_MAX_STEPS {
@@ -177,22 +182,25 @@ fn validate(width: usize, data: &LaneData, train: bool) -> Result<u64, JointIdEr
 }
 
 fn observed<'a>(data: &'a LaneData) -> Vec<ObservedBlock<'a>> {
-    data.blocks.iter().map(|block| {
-        let mut root = Vec::with_capacity(block.steps);
-        let mut target = Vec::with_capacity(block.steps);
-        for t in 0..block.steps {
-            let r = block.targets[t] ^ block.inputs[t * 5];
-            root.push(r);
-            target.push(r ^ block.inputs[t * 5 + 1]);
-        }
-        ObservedBlock {
-            inputs: &block.inputs,
-            steps: block.steps,
-            valid: block.valid,
-            root,
-            target,
-        }
-    }).collect()
+    data.blocks
+        .iter()
+        .map(|block| {
+            let mut root = Vec::with_capacity(block.steps);
+            let mut target = Vec::with_capacity(block.steps);
+            for t in 0..block.steps {
+                let r = block.targets[t] ^ block.inputs[t * 5];
+                root.push(r);
+                target.push(r ^ block.inputs[t * 5 + 1]);
+            }
+            ObservedBlock {
+                inputs: &block.inputs,
+                steps: block.steps,
+                valid: block.valid,
+                root,
+                target,
+            }
+        })
+        .collect()
 }
 
 /// 3-input empirical counts on final output ONLY. Address bits:
@@ -260,8 +268,7 @@ fn composed_mask(first: u8, second: u8) -> u8 {
 
 fn anf_terms(mask: u8) -> usize {
     let [a, b, c, d] = [0, 1, 2, 3].map(|i| mask & (1 << i) != 0);
-    usize::from(a) + usize::from(b ^ a) +
-        usize::from(c ^ a) + usize::from(d ^ c ^ b ^ a)
+    usize::from(a) + usize::from(b ^ a) + usize::from(c ^ a) + usize::from(d ^ c ^ b ^ a)
 }
 
 /// Canonical native factorization for each representable 3-input truth mask.
@@ -290,23 +297,23 @@ fn all_compositions() -> Vec<Factorization> {
 }
 
 fn mask_loss(mask: u8, counts: &Histograms) -> u64 {
-    counts.iter().enumerate().map(|(i, c)| {
-        if mask & (1 << i) == 0 { c[1] } else { c[0] }
-    }).sum()
+    counts
+        .iter()
+        .enumerate()
+        .map(|(i, c)| if mask & (1 << i) == 0 { c[1] } else { c[0] })
+        .sum()
 }
 
 pub fn structure_count(width: usize) -> Option<usize> {
-    (3..=A6C10_MAX_WIDTH).contains(&width)
+    (3..=A6C10_MAX_WIDTH)
+        .contains(&width)
         .then_some((width - 1) * (width - 2) / 2 * 16)
 }
 
 /// Probe ALL position/source pairs jointly, not one gate at a time.
 /// One empirical lower bound for the unrestricted 3-input conditional
 /// table ranks structures; retain the 64 lowest TRAIN-only results.
-fn search_structures(
-    width: usize,
-    blocks: &[ObservedBlock<'_>],
-) -> (Vec<Structure>, usize) {
+fn search_structures(width: usize, blocks: &[ObservedBlock<'_>]) -> (Vec<Structure>, usize) {
     let mut queue: BinaryHeap<Structure> = BinaryHeap::with_capacity(A6C10_STRUCTURAL_BEAM + 1);
     let mut total = 0usize;
     for first_gate in 1..width {
@@ -314,8 +321,13 @@ fn search_structures(
             for first_raw in A6C10_RAW_POOL {
                 for second_raw in A6C10_RAW_POOL {
                     let counts = histograms(
-                        width, first_gate, second_gate,
-                        first_raw, second_raw, blocks, true,
+                        width,
+                        first_gate,
+                        second_gate,
+                        first_raw,
+                        second_raw,
+                        blocks,
+                        true,
                     );
                     let candidate = Structure {
                         lower_bound: unrestricted_lower_bound(&counts),
@@ -391,12 +403,21 @@ pub fn fit_joint_system_id(
             &observed,
             false,
         );
-        let mut factors = compositions.iter().copied().map(|f| {
-            (mask_loss(f.mask, &counts), f.terms, f.first_truth, f.second_truth, f)
-        }).collect::<Vec<_>>();
+        let mut factors = compositions
+            .iter()
+            .copied()
+            .map(|f| {
+                (
+                    mask_loss(f.mask, &counts),
+                    f.terms,
+                    f.first_truth,
+                    f.second_truth,
+                    f,
+                )
+            })
+            .collect::<Vec<_>>();
         factors.sort_unstable_by_key(|f| (f.0, f.1, f.2, f.3));
-        for (teacher_loss, _, _, _, factor) in
-            factors.into_iter().take(A6C10_FACTORS_PER_STRUCTURE)
+        for (teacher_loss, _, _, _, factor) in factors.into_iter().take(A6C10_FACTORS_PER_STRUCTURE)
         {
             let pair = structure.rules(factor.first_truth, factor.second_truth);
             let full_train_errors = score_pair(width, pair, train, &mut ring)?;
@@ -407,7 +428,10 @@ pub fn fit_joint_system_id(
                 teacher_forced_errors: teacher_loss,
                 total_anf_terms: factor.terms,
             };
-            if best.as_ref().is_none_or(|old| best_key(&candidate) < best_key(old)) {
+            if best
+                .as_ref()
+                .is_none_or(|old| best_key(&candidate) < best_key(old))
+            {
                 best = Some(candidate);
             }
         }
@@ -420,7 +444,11 @@ pub fn fit_joint_system_id(
     }
     let validation_errors = native_dual_errors(&proposed, validation)?;
     let use_new = validation_errors < previous.selected_validation_errors;
-    let selected = if use_new { proposed.clone() } else { previous.selected.clone() };
+    let selected = if use_new {
+        proposed.clone()
+    } else {
+        previous.selected.clone()
+    };
     let selected_rules = if use_new {
         best.pair.to_vec()
     } else {
@@ -448,7 +476,11 @@ pub fn fit_joint_system_id(
         proposed_rules: best.pair,
         selected,
         selected_rules,
-        origin: if use_new { JointOrigin::JointA6C10 } else { JointOrigin::PriorA6C9 },
+        origin: if use_new {
+            JointOrigin::JointA6C10
+        } else {
+            JointOrigin::PriorA6C9
+        },
         train_errors: best.full_train_errors,
         validation_errors,
         teacher_forced_errors: best.teacher_forced_errors,
@@ -475,20 +507,28 @@ mod tests {
         let teacher = make_multi_gate_native(width, rules).unwrap();
         let mut rng = SplitMix64::new(seed);
         let mut inputs = vec![0u64; steps * 5];
-        for word in &mut inputs { *word = rng.next_u64(); }
+        for word in &mut inputs {
+            *word = rng.next_u64();
+        }
         let mut source = vec![0u64; teacher.source_width()];
         let mut next = vec![0u64; width];
         let mut scratch = vec![0u64; teacher.scratch_len()];
         let mut targets = vec![0u64; steps];
         for (t, label) in targets.iter_mut().enumerate() {
             let start = t * 5;
-            source[width..].copy_from_slice(&inputs[start..start+5]);
+            source[width..].copy_from_slice(&inputs[start..start + 5]);
             teacher.step_lanes(&mut source, &mut next, &mut scratch);
             *label = teacher.readout().evaluate_lanes(&source, &mut scratch);
         }
         LaneData {
-            input_bits: 5, target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid:u64::MAX }],
+            input_bits: 5,
+            target_bits: 1,
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -500,9 +540,9 @@ mod tests {
                 for r in 0..2usize {
                     for a in 0..2usize {
                         for b in 0..2usize {
-                            let inner = (f >> (r + 2*a)) & 1;
-                            let expected = (g >> (usize::from(inner) + 2*b)) & 1;
-                            assert_eq!((mask >> (r + 2*a + 4*b)) & 1, expected);
+                            let inner = (f >> (r + 2 * a)) & 1;
+                            let expected = (g >> (usize::from(inner) + 2 * b)) & 1;
+                            assert_eq!((mask >> (r + 2 * a + 4 * b)) & 1, expected);
                         }
                     }
                 }
@@ -514,13 +554,21 @@ mod tests {
     fn exact_two_gate_teacher_forced_and_and_has_zero_proxy_error() {
         let width = 16;
         let rules = [
-            IntermediateRule { gate: 5, raw: 2, truth: 8 },
-            IntermediateRule { gate: 11, raw: 3, truth: 8 },
+            IntermediateRule {
+                gate: 5,
+                raw: 2,
+                truth: 8,
+            },
+            IntermediateRule {
+                gate: 11,
+                raw: 3,
+                truth: 8,
+            },
         ];
         let data = fixture(10, width, 112, &rules);
         let obs = observed(&data);
         let counts = histograms(width, 5, 11, 2, 3, &obs, false);
-        assert_eq!(mask_loss(composed_mask(8,8), &counts), 0);
+        assert_eq!(mask_loss(composed_mask(8, 8), &counts), 0);
         assert_eq!(unrestricted_lower_bound(&counts), 0);
         assert_eq!(structure_count(width), Some(1680));
     }
@@ -529,8 +577,16 @@ mod tests {
     fn joint_recovers_and_and_on_unseen_causal_rollout() {
         let width = 24;
         let rules = [
-            IntermediateRule { gate: 7, raw: 2, truth: 8 },
-            IntermediateRule { gate: 17, raw: 3, truth: 8 },
+            IntermediateRule {
+                gate: 7,
+                raw: 2,
+                truth: 8,
+            },
+            IntermediateRule {
+                gate: 17,
+                raw: 3,
+                truth: 8,
+            },
         ];
         let train = fixture(77, width, 160, &rules);
         let validation = fixture(78, width, 160, &rules);
@@ -547,15 +603,25 @@ mod tests {
     fn validation_labels_cannot_change_train_proposed_hidden_functions() {
         let width = 16;
         let rules = [
-            IntermediateRule { gate: 4, raw: 2, truth: 6 },
-            IntermediateRule { gate: 12, raw: 3, truth: 8 },
+            IntermediateRule {
+                gate: 4,
+                raw: 2,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 12,
+                raw: 3,
+                truth: 8,
+            },
         ];
         let train = fixture(81, width, 120, &rules);
         let val = fixture(82, width, 120, &rules);
         let x = fit_joint_system_id(&train, &val, width).unwrap();
         let mut flipped = val.clone();
         for b in &mut flipped.blocks {
-            for target in &mut b.targets { *target = !*target; }
+            for target in &mut b.targets {
+                *target = !*target;
+            }
         }
         let y = fit_joint_system_id(&train, &flipped, width).unwrap();
         assert_eq!(x.proposed_rules, y.proposed_rules);
@@ -567,8 +633,14 @@ mod tests {
     fn missing_probe_and_bad_width_are_rejected() {
         let small = fixture(91, 16, 20, &[]);
         let valid = fixture(92, 16, 120, &[]);
-        assert_eq!(fit_joint_system_id(&small, &valid, 16), Err(JointIdError::InvalidData));
-        assert_eq!(fit_joint_system_id(&valid, &valid, 2), Err(JointIdError::InvalidWidth));
+        assert_eq!(
+            fit_joint_system_id(&small, &valid, 16),
+            Err(JointIdError::InvalidData)
+        );
+        assert_eq!(
+            fit_joint_system_id(&valid, &valid, 2),
+            Err(JointIdError::InvalidWidth)
+        );
         assert_eq!(structure_count(128), Some(128_016));
         assert_eq!(structure_count(256), Some(518_160));
     }
