@@ -20,7 +20,7 @@ use sml_core::{
     anf_intermediate_credit::IntermediateRule,
     anf_joint_nonlinear_system_id::{
         fit_joint_system_id, structure_count, JointIdReport, JointOrigin,
-        A6C10_PROBE_STEPS, A6C10_STRUCTURAL_BEAM, A6C10_FACTORS_PER_STRUCTURE,
+        A6C10_FACTORS_PER_STRUCTURE, A6C10_PROBE_STEPS, A6C10_STRUCTURAL_BEAM,
     },
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
@@ -108,14 +108,12 @@ impl Task {
             Self::XorAnd256 => vec![rule(1, 2, 6), rule(190, 3, 8)],
             Self::AndAnd256 => vec![rule(51, 2, 8), rule(181, 3, 8)],
             Self::XorXor256 => vec![rule(1, 2, 6), rule(191, 3, 6)],
-            Self::NegativeThree128 => vec![
-                rule(19, 2, 6),
-                rule(67, 3, 8),
-                rule(108, 4, 6),
-            ],
+            Self::NegativeThree128 => vec![rule(19, 2, 6), rule(67, 3, 8), rule(108, 4, 6)],
         }
     }
-    fn representable(self) -> bool { self != Self::NegativeThree128 }
+    fn representable(self) -> bool {
+        self != Self::NegativeThree128
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,7 +158,7 @@ fn dataset(seed: u64, task: Task, panel: Panel, steps: usize) -> LaneData {
     let mut targets = vec![0u64; steps];
     for (t, label) in targets.iter_mut().enumerate() {
         let offset = t * INPUT_BITS;
-        source[width..].copy_from_slice(&inputs[offset..offset+INPUT_BITS]);
+        source[width..].copy_from_slice(&inputs[offset..offset + INPUT_BITS]);
         teacher.step_lanes(&mut source, &mut next, &mut scratch);
         let exact = teacher.readout().evaluate_lanes(&source, &mut scratch);
         let noise = if panel == Panel::LabelNoise {
@@ -222,18 +220,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             for index in 0..seeds {
                 let train = dataset(
                     derive_seed(index, task, panel, 0xa6c1_0101),
-                    task, panel, TRAIN_STEPS,
+                    task,
+                    panel,
+                    TRAIN_STEPS,
                 );
                 let val = dataset(
                     derive_seed(index, task, panel, 0xa6c1_0202),
-                    task, panel, VALIDATION_STEPS,
+                    task,
+                    panel,
+                    VALIDATION_STEPS,
                 );
                 let start = Instant::now();
                 let report = fit_joint_system_id(&train, &val, task.width())?;
                 let fit_seconds = start.elapsed().as_secs_f64();
                 if report.probed_structures != structure_count(task.width()).unwrap()
                     || report.beam_count != A6C10_STRUCTURAL_BEAM
-                    || report.native_train_rescores != A6C10_STRUCTURAL_BEAM * A6C10_FACTORS_PER_STRUCTURE
+                    || report.native_train_rescores
+                        != A6C10_STRUCTURAL_BEAM * A6C10_FACTORS_PER_STRUCTURE
                     || report.train_samples != (TRAIN_STEPS * LANES) as u64
                     || report.validation_samples != (VALIDATION_STEPS * LANES) as u64
                     || report.ring_payload_bytes != task.width() * 8
@@ -259,7 +262,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report.native_train_rescores, report.ring_payload_bytes,
                     report.beam_heap_payload_bytes, fit_seconds,
                 );
-                frozen.push(Frozen { seed: index, task, panel, report, fit_seconds });
+                frozen.push(Frozen {
+                    seed: index,
+                    task,
+                    panel,
+                    report,
+                    fit_seconds,
+                });
             }
         }
     }
@@ -283,12 +292,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ti = case.task.index();
         let pi = case.panel.index();
         let rules = case.task.teacher_gates();
-        exacts[ti][pi] += usize::from(
-            case.task.representable() && case.report.selected_rules == rules
-        );
-        proposal_exacts[ti][pi] += usize::from(
-            rules.len() == 2 && case.report.proposed_rules.as_slice() == rules
-        );
+        exacts[ti][pi] +=
+            usize::from(case.task.representable() && case.report.selected_rules == rules);
+        proposal_exacts[ti][pi] +=
+            usize::from(rules.len() == 2 && case.report.proposed_rules.as_slice() == rules);
         new_wins[ti][pi] += usize::from(case.report.origin == JointOrigin::JointA6C10);
         selected_two[ti][pi] += usize::from(case.report.selected_rules.len() == 2);
         fit_totals[ti][pi] += case.fit_seconds;
@@ -296,7 +303,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         for (h, steps) in HORIZONS.iter().copied().enumerate() {
             let test = dataset(
                 derive_seed(case.seed, case.task, case.panel, 0xa6c1_0303 + steps as u64),
-                case.task, case.panel, steps,
+                case.task,
+                case.panel,
+                steps,
             );
             let prior = &case.report.previous;
             let baseline = native_errors(&prior.old_one.reference, &test)?;
@@ -311,29 +320,43 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut ablated = [chosen; 2];
             for (gate_index, errors_out) in ablated.iter_mut().enumerate() {
                 if case.report.selected_rules.len() > gate_index {
-                    let remaining = case.report.selected_rules.iter()
+                    let remaining = case
+                        .report
+                        .selected_rules
+                        .iter()
                         .enumerate()
-                        .filter(|(i,_)| *i != gate_index)
-                        .map(|(_,rule)| *rule)
+                        .filter(|(i, _)| *i != gate_index)
+                        .map(|(_, rule)| *rule)
                         .collect::<Vec<_>>();
                     let model = make_multi_gate_native(case.task.width(), &remaining)?;
                     *errors_out = native_errors(&model, &test)?;
                 }
             }
             let measures = [
-                baseline, old_one, old_affine, old, joint,
-                chosen, ablated[0], ablated[1],
+                baseline, old_one, old_affine, old, joint, chosen, ablated[0], ablated[1],
             ];
             for (sum, value) in totals[ti][pi][h].iter_mut().zip(measures) {
                 *sum += value;
             }
             println!(
                 "A6C10_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.2},{:.6}",
-                case.task.name(), case.panel.name(), case.seed,
-                case.task.width(), steps, steps * LANES,
-                baseline, old_one, old_affine, old, joint, chosen,
-                ablated[0], ablated[1], case.report.origin.name(),
-                case.report.selected_rules.len(), (steps * LANES) as f64 / secs,
+                case.task.name(),
+                case.panel.name(),
+                case.seed,
+                case.task.width(),
+                steps,
+                steps * LANES,
+                baseline,
+                old_one,
+                old_affine,
+                old,
+                joint,
+                chosen,
+                ablated[0],
+                ablated[1],
+                case.report.origin.name(),
+                case.report.selected_rules.len(),
+                (steps * LANES) as f64 / secs,
                 case.fit_seconds
             );
         }
