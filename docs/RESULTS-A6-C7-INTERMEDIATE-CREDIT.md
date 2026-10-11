@@ -196,7 +196,7 @@ native exécute bien les **N portes**.
 - Première révision complète **mesurée** :
   `81b498e1e83b644a94a19011cea32a409dda8654`.
 - Banc autonome :
-  [GitHub Actions — A6-C7 Intermediate Credit](https://github.com/Memorithm/SML-GENIUS/actions/runs/38170200000).
+  [GitHub Actions — A6-C7 Intermediate Credit](https://github.com/Memorithm/SML-GENIUS/actions/runs/38170094334/job/114560710858).
   La source de vérité des mesures est le job
   `intermediate-credit` rattaché à ce SHA.
 - Les tests de format, compilation, Clippy
