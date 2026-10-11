@@ -28,7 +28,7 @@
 use std::{collections::BinaryHeap, fmt};
 
 use crate::{
-    anf_dual_hidden_credit::{make_multi_gate_native, native_errors as native_dual_errors},
+    anf_dual_hidden_credit::{make_multi_gate_native, native_errors as native_dual_errors, DualCreditError},
     anf_intermediate_credit::IntermediateRule,
     anf_local::LocalAnfNetwork,
     anf_local_incremental::LaneData,
@@ -51,6 +51,7 @@ pub enum JointIdError {
     InvalidSpec,
     ScoreMismatch,
     Prior(NonlinearError),
+    Native(DualCreditError),
 }
 impl fmt::Display for JointIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -61,6 +62,11 @@ impl std::error::Error for JointIdError {}
 impl From<NonlinearError> for JointIdError {
     fn from(err: NonlinearError) -> Self {
         Self::Prior(err)
+    }
+}
+impl From<DualCreditError> for JointIdError {
+    fn from(err: DualCreditError) -> Self {
+        Self::Native(err)
     }
 }
 
