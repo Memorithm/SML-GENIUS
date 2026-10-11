@@ -211,7 +211,11 @@ impl Observed {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        Self { p, columns, sources }
+        Self {
+            p,
+            columns,
+            sources,
+        }
     }
     fn same_gate(&self, i: usize, j: usize) -> bool {
         self.sources[i].gate == self.sources[j].gate
@@ -273,13 +277,12 @@ fn rank_triples(o: &Observed) -> Vec<TripleScore> {
                 continue;
             }
             // Share the first two XORs across all candidate third sources.
-            let paired = o
-                .p
-                .iter()
-                .zip(&o.columns[i])
-                .zip(&o.columns[j])
-                .map(|((&p, &a), &b)| p ^ a ^ b)
-                .collect::<Vec<_>>();
+            let paired =
+                o.p.iter()
+                    .zip(&o.columns[i])
+                    .zip(&o.columns[j])
+                    .map(|((&p, &a), &b)| p ^ a ^ b)
+                    .collect::<Vec<_>>();
             for k in j + 1..o.sources.len() {
                 if o.same_gate(i, k) || o.same_gate(j, k) {
                     continue;
@@ -355,9 +358,11 @@ fn solve_gauss(o: &Observed) -> Option<Vec<usize>> {
         .collect::<Vec<_>>();
     // Postsolve verification using *all* proxy observations, not just 1024
     // equations. This rejects coincidental affine solutions or nonlinear tasks.
-    if o.p.iter().enumerate().any(|(t, &p)| {
-        selected.iter().fold(p, |value, &i| value ^ o.columns[i][t]) != 0
-    }) {
+    if o.p
+        .iter()
+        .enumerate()
+        .any(|(t, &p)| selected.iter().fold(p, |value, &i| value ^ o.columns[i][t]) != 0)
+    {
         return None;
     }
     Some(selected)
@@ -429,9 +434,7 @@ fn freeze(
             } else if let Some(found) = solve_gauss(o) {
                 if found.len() == 3 {
                     let sources = triplet(o, [found[0], found[1], found[2]]);
-                    if sources[0].gate < sources[1].gate
-                        && sources[1].gate < sources[2].gate
-                    {
+                    if sources[0].gate < sources[1].gate && sources[1].gate < sources[2].gate {
                         ("SOLVED", vec![sources])
                     } else {
                         ("NO_THREE_DISTINCT_GATES", Vec::new())
@@ -471,10 +474,7 @@ fn freeze(
         None
     } else {
         Some(fit_three_gate_candidates(
-            train,
-            validation,
-            WIDTH,
-            &proposed,
+            train, validation, WIDTH, &proposed,
         )?)
     };
     let factor_seconds = factor_start.elapsed().as_secs_f64();
@@ -524,19 +524,45 @@ fn main() -> Result<(), Box<dyn Error>> {
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                let train = data(seed(index, task, panel, 0xa6c1_2b11), task, panel, TRAIN_STEPS);
-                let validation = data(seed(index, task, panel, 0xa6c1_2b22), task, panel, VAL_STEPS);
+                let train = data(
+                    seed(index, task, panel, 0xa6c1_2b11),
+                    task,
+                    panel,
+                    TRAIN_STEPS,
+                );
+                let validation = data(
+                    seed(index, task, panel, 0xa6c1_2b22),
+                    task,
+                    panel,
+                    VAL_STEPS,
+                );
                 for n in NS {
                     let o = Observed::new(&train, grid(n));
                     assert_eq!(o.p.len(), TRAIN_STEPS - WIDTH);
-                    assert!(task.sources().iter().all(|source| o.sources.contains(source)));
+                    assert!(task
+                        .sources()
+                        .iter()
+                        .all(|source| o.sources.contains(source)));
                     let (pairs, triples) = count_combinations(&o);
                     println!(
                         "A6C12B_GRID,n={},pairs={},triples={},samples={},raw_candidates={}",
-                        n,pairs,triples,o.p.len()*LANES,o.sources.len()
+                        n,
+                        pairs,
+                        triples,
+                        o.p.len() * LANES,
+                        o.sources.len()
                     );
                     for method in Method::ALL {
-                        frozen.push(freeze(task, panel, index, n, method, &train, &validation, &o)?);
+                        frozen.push(freeze(
+                            task,
+                            panel,
+                            index,
+                            n,
+                            method,
+                            &train,
+                            &validation,
+                            &o,
+                        )?);
                     }
                 }
             }
@@ -546,12 +572,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     if frozen.len() != expected_attempts {
         return Err("frozen attempt census mismatch".into());
     }
-    println!("A6C12B_ALL_FROZEN,attempts={expected_attempts},streams={}", 4*2*nseeds);
+    println!(
+        "A6C12B_ALL_FROZEN,attempts={expected_attempts},streams={}",
+        4 * 2 * nseeds
+    );
     // Create independent TEST streams only after *every* policy is frozen.
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                let test = data(seed(index, task, panel, 0xa6c1_2b33), task, panel, TEST_STEPS);
+                let test = data(
+                    seed(index, task, panel, 0xa6c1_2b33),
+                    task,
+                    panel,
+                    TEST_STEPS,
+                );
                 let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
                 let oracle_err = native_errors(&teacher, &test)?;
                 for result in frozen
@@ -583,7 +617,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     println!(
         "A6C12B_COMPLETE,attempts={},independent_test_streams={},methods=3,grid_sizes=3",
-        frozen.len(),4*2*nseeds
+        frozen.len(),
+        4 * 2 * nseeds
     );
     Ok(())
 }
@@ -643,6 +678,8 @@ mod tests {
         }));
         let triples = rank_triples(&o);
         assert_eq!(triples.len(), 3584);
-        assert!(triples.iter().any(|x| triplet(&o, x.ids) == Task::AndXorXor.sources()));
+        assert!(triples
+            .iter()
+            .any(|x| triplet(&o, x.ids) == Task::AndXorXor.sources()));
     }
 }
