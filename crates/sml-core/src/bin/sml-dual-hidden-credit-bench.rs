@@ -19,12 +19,10 @@ use std::{error::Error, time::Instant};
 
 use sml_core::{
     anf_dual_hidden_credit::{
-        fit_dual_hidden_credit, make_multi_gate_native, native_errors,
-        DualCreditReport, A6C8_INPUT_BITS, A6C8_BEAM_WIDTH, A6C8_PROBE_STEPS,
+        fit_dual_hidden_credit, make_multi_gate_native, native_errors, DualCreditReport,
+        A6C8_BEAM_WIDTH, A6C8_INPUT_BITS, A6C8_PROBE_STEPS,
     },
-    anf_intermediate_credit::{
-        fit_intermediate_gate, IntermediateReport, IntermediateRule,
-    },
+    anf_intermediate_credit::{fit_intermediate_gate, IntermediateReport, IntermediateRule},
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
 };
@@ -103,19 +101,23 @@ impl Task {
             Self::DualXor256Middle => vec![rule(57, 2, 6), rule(127, 3, 6)],
             Self::DualXorXnor128 => vec![rule(37, 2, 6), rule(93, 3, 9)],
             Self::DualXorXnor256 => vec![rule(1, 2, 6), rule(190, 3, 9)],
-            Self::TripleXor128Negative => vec![
-                rule(19, 2, 6), rule(67, 3, 6), rule(108, 4, 6),
-            ],
+            Self::TripleXor128Negative => vec![rule(19, 2, 6), rule(67, 3, 6), rule(108, 4, 6)],
             Self::MixedXorAnd128Negative => vec![rule(31, 2, 6), rule(88, 3, 8)],
         }
     }
     fn positive(self) -> bool {
-        !matches!(self, Self::TripleXor128Negative | Self::MixedXorAnd128Negative)
+        !matches!(
+            self,
+            Self::TripleXor128Negative | Self::MixedXorAnd128Negative
+        )
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Panel { Clean, LabelNoise }
+enum Panel {
+    Clean,
+    LabelNoise,
+}
 impl Panel {
     const ALL: [Self; PANEL_COUNT] = [Self::Clean, Self::LabelNoise];
     fn name(self) -> &'static str {
@@ -160,13 +162,20 @@ fn dataset(seed: u64, task: Task, panel: Panel, steps: usize) -> LaneData {
         let exact = teacher.readout().evaluate_lanes(&state, &mut scratch);
         let noise = if panel == Panel::LabelNoise {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         *label = exact ^ noise;
     }
     LaneData {
         input_bits: A6C8_INPUT_BITS,
         target_bits: 1,
-        blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+        blocks: vec![LaneBlock {
+            steps,
+            inputs,
+            targets,
+            valid: u64::MAX,
+        }],
     }
 }
 
@@ -214,11 +223,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             for index in 0..seeds {
                 let training = dataset(
                     derive_seed(index, task, panel, 0xa6c8_1001),
-                    task, panel, TRAIN_STEPS,
+                    task,
+                    panel,
+                    TRAIN_STEPS,
                 );
                 let validation = dataset(
                     derive_seed(index, task, panel, 0xa6c8_2002),
-                    task, panel, VALIDATION_STEPS,
+                    task,
+                    panel,
+                    VALIDATION_STEPS,
                 );
                 let start = Instant::now();
                 let new = fit_dual_hidden_credit(&training, &validation, task.width())?;
@@ -227,7 +240,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let old = fit_intermediate_gate(&training, &validation, task.width())?;
                 let old_fit_seconds = start.elapsed().as_secs_f64();
 
-                let expected_pairs = if task.width() == 128 { 512_064 } else { 2_072_640 };
+                let expected_pairs = if task.width() == 128 {
+                    512_064
+                } else {
+                    2_072_640
+                };
                 let expected_singles = if task.width() == 128 { 1016 } else { 2040 };
                 if new.two_gate_pairs_probed != expected_pairs
                     || new.one_gate_candidates != expected_singles
@@ -239,11 +256,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 let correct_count = if task.positive() {
                     new.selected_count == task.teacher_gates().len()
-                } else { false };
-                let exact_two = expected_two_rules(task)
-                    .is_some_and(|rules| new.selected_rules == rules);
-                let exact_one = task == Task::SingleXor128
-                    && new.selected_rules == task.teacher_gates();
+                } else {
+                    false
+                };
+                let exact_two =
+                    expected_two_rules(task).is_some_and(|rules| new.selected_rules == rules);
+                let exact_one =
+                    task == Task::SingleXor128 && new.selected_rules == task.teacher_gates();
                 println!(
                     "A6C8_FROZEN,task={},panel={},seed={},width={},representable={},selected_count={},selected_rules={:?},correct_count={},exact_two={},exact_one={},baseline_train_errors={},baseline_val_errors={},single_train_errors={},single_val_errors={},joint_train_errors={},joint_val_errors={},selected_train_errors={},selected_val_errors={},old_a6c7_train_errors={},old_a6c7_val_errors={},pair_probe_evaluations={},beam_rescores={},one_gate_candidates={},probe_payload_bytes={},fit_seconds={:.6},old_fit_seconds={:.6}",
                     task.name(), panel.name(), index, task.width(),
@@ -259,8 +278,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     new_fit_seconds, old_fit_seconds
                 );
                 frozen.push(Frozen {
-                    task, panel, seed: index, new, old,
-                    new_fit_seconds, old_fit_seconds,
+                    task,
+                    panel,
+                    seed: index,
+                    new,
+                    old,
+                    new_fit_seconds,
+                    old_fit_seconds,
                 });
             }
         }
@@ -283,19 +307,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         let p = case.panel.index();
         selected_two[t][p] += usize::from(case.new.selected_count == 2);
         pair_exact[t][p] += usize::from(
-            expected_two_rules(case.task)
-                .is_some_and(|rules| case.new.selected_rules == rules),
+            expected_two_rules(case.task).is_some_and(|rules| case.new.selected_rules == rules),
         );
         chosen_exact[t][p] += usize::from(
-            case.task.positive()
-                && case.new.selected_rules == case.task.teacher_gates(),
+            case.task.positive() && case.new.selected_rules == case.task.teacher_gates(),
         );
         sum_new[t][p] += case.new_fit_seconds;
         sum_old[t][p] += case.old_fit_seconds;
         for (h, steps) in HORIZONS.iter().copied().enumerate() {
             let test = dataset(
                 derive_seed(case.seed, case.task, case.panel, 0xa6c8_3003 + steps as u64),
-                case.task, case.panel, steps,
+                case.task,
+                case.panel,
+                steps,
             );
             let reference = native_errors(&case.new.reference, &test)?;
             let old = native_errors(&case.old.committed, &test)?;
@@ -306,7 +330,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut ablations = [selected; 2];
             for (i, count) in ablations.iter_mut().enumerate() {
                 if case.new.selected_rules.len() > i {
-                    let remaining = case.new.selected_rules.iter().enumerate()
+                    let remaining = case
+                        .new
+                        .selected_rules
+                        .iter()
+                        .enumerate()
                         .filter(|(idx, _)| *idx != i)
                         .map(|(_, rule)| *rule)
                         .collect::<Vec<_>>();
@@ -314,17 +342,36 @@ fn main() -> Result<(), Box<dyn Error>> {
                     *count = native_errors(&ablated, &test)?;
                 }
             }
-            let rates = [reference, old, single, joint, selected, ablations[0], ablations[1]];
+            let rates = [
+                reference,
+                old,
+                single,
+                joint,
+                selected,
+                ablations[0],
+                ablations[1],
+            ];
             for (total, value) in totals[t][p][h].iter_mut().zip(rates) {
                 *total += value;
             }
             println!(
                 "A6C8_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6},{:.6}",
-                case.task.name(), case.panel.name(), case.seed, case.task.width(),
-                steps, steps * LANES,
-                reference, old, single, joint, selected,
-                ablations[0], ablations[1], case.new.selected_count,
-                case.new_fit_seconds, case.old_fit_seconds
+                case.task.name(),
+                case.panel.name(),
+                case.seed,
+                case.task.width(),
+                steps,
+                steps * LANES,
+                reference,
+                old,
+                single,
+                joint,
+                selected,
+                ablations[0],
+                ablations[1],
+                case.new.selected_count,
+                case.new_fit_seconds,
+                case.old_fit_seconds
             );
         }
     }
