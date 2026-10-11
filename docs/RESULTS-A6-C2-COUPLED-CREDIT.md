@@ -83,6 +83,15 @@ dans ce protocole. Il serait faux de dire qu'un apprentissage porte par
 porte est intrinsèquement impossible ; cette expérience montre surtout que
 les propositions conjointes évitent la barrière du crédit initial.
 
+**Limite comparative importante :** la recherche conjointe examine
+**6 144 couples** par essai, tandis que la descente coordonnée vérifie
+**160 à 480 modifications individuelles**. Les budgets de recherche ne sont
+donc **pas égalisés**. Le résultat valide l'utilité opérationnelle des
+propositions conjointes, mais ne permet pas d'attribuer quantitativement
+tout le gain à la seule stratégie d'attribution du crédit, indépendamment
+du budget d'évaluations. Une comparaison à budget égal devra faire l'objet
+d'une expérience distincte, non lancée ici.
+
 Mettre à zéro **l'une ou l'autre des deux portes après entraînement**
 réinstalle exactement l'erreur de référence (25,30599 % / 27,94271 %),
 ce qui prouve que la sortie observée dépend causalement des deux portes
