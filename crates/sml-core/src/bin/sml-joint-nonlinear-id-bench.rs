@@ -322,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let measures = [
                 baseline, old_one, old_affine, old, joint,
-                chosen, ablated[0], ablated[1], chosen,
+                chosen, ablated[0], ablated[1],
             ];
             for (sum, value) in totals[ti][pi][h].iter_mut().zip(measures) {
                 *sum += value;
