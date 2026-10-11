@@ -25,9 +25,8 @@ use std::{error::Error, time::Instant};
 
 use sml_core::{
     anf_elastic_capacity::{
-        fit_elastic_phase, native_errors, reference_errors, score_rule,
-        ElasticPhaseReport, ElasticPhaseSpec, ELASTIC_REGISTERED_WIDTHS,
-        ELASTIC_UNIQUE_CANDIDATES,
+        fit_elastic_phase, native_errors, reference_errors, score_rule, ElasticPhaseReport,
+        ElasticPhaseSpec, ELASTIC_REGISTERED_WIDTHS, ELASTIC_UNIQUE_CANDIDATES,
     },
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
@@ -55,9 +54,15 @@ enum Task {
 }
 impl Task {
     const ALL: [Self; 9] = [
-        Self::Direct, Self::Stride4, Self::Stride8, Self::Stride16,
-        Self::Stride32, Self::Stride64, Self::Stride128,
-        Self::Stride256, Self::Stride257Negative,
+        Self::Direct,
+        Self::Stride4,
+        Self::Stride8,
+        Self::Stride16,
+        Self::Stride32,
+        Self::Stride64,
+        Self::Stride128,
+        Self::Stride256,
+        Self::Stride257Negative,
     ];
     fn name(self) -> &'static str {
         match self {
@@ -74,9 +79,14 @@ impl Task {
     }
     fn index(self) -> usize {
         match self {
-            Self::Direct => 0, Self::Stride4 => 1, Self::Stride8 => 2,
-            Self::Stride16 => 3, Self::Stride32 => 4, Self::Stride64 => 5,
-            Self::Stride128 => 6, Self::Stride256 => 7,
+            Self::Direct => 0,
+            Self::Stride4 => 1,
+            Self::Stride8 => 2,
+            Self::Stride16 => 3,
+            Self::Stride32 => 4,
+            Self::Stride64 => 5,
+            Self::Stride128 => 6,
+            Self::Stride256 => 7,
             Self::Stride257Negative => 8,
         }
     }
@@ -105,9 +115,17 @@ enum Panel {
 }
 impl Panel {
     const ALL: [Self; 2] = [Self::Clean, Self::LabelNoise];
-    fn index(self) -> usize { match self { Self::Clean => 0, Self::LabelNoise => 1 } }
+    fn index(self) -> usize {
+        match self {
+            Self::Clean => 0,
+            Self::LabelNoise => 1,
+        }
+    }
     fn name(self) -> &'static str {
-        match self { Self::Clean => "clean", Self::LabelNoise => "noise_1_in_16" }
+        match self {
+            Self::Clean => "clean",
+            Self::LabelNoise => "noise_1_in_16",
+        }
     }
 }
 
@@ -189,9 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "A6C6_BUDGET,unique_training_hypotheses_per_case={ELASTIC_UNIQUE_CANDIDATES},feedback_taps=256,raw_choices=4,binary_truth_tables=16,expected_free_state_payload_256_bits_bytes=2048"
     );
-    println!(
-        "A6C6_MEM_HEADER,width,logical_state_words_64_lanes,logical_state_bytes_64_lanes"
-    );
+    println!("A6C6_MEM_HEADER,width,logical_state_words_64_lanes,logical_state_bytes_64_lanes");
     for &width in &ELASTIC_REGISTERED_WIDTHS {
         println!("A6C6_MEM,{width},{width},{}", width * 8);
     }
@@ -201,15 +217,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         for panel in Panel::ALL {
             for index in 0..seeds {
                 let train = dataset(
-                    seed(index, task, panel, 0xa6c6_1001), TRAIN_STEPS, task, panel,
+                    seed(index, task, panel, 0xa6c6_1001),
+                    TRAIN_STEPS,
+                    task,
+                    panel,
                 );
                 let val = dataset(
-                    seed(index, task, panel, 0xa6c6_2002), VALIDATION_STEPS, task, panel,
+                    seed(index, task, panel, 0xa6c6_2002),
+                    VALIDATION_STEPS,
+                    task,
+                    panel,
                 );
                 let start = Instant::now();
-                let model = fit_elastic_phase(
-                    &train, &val, &spec(), &ELASTIC_REGISTERED_WIDTHS,
-                )?;
+                let model = fit_elastic_phase(&train, &val, &spec(), &ELASTIC_REGISTERED_WIDTHS)?;
                 let training_seconds = start.elapsed().as_secs_f64();
                 if model.unique_train_evaluations != ELASTIC_UNIQUE_CANDIDATES
                     || model.train_samples != (TRAIN_STEPS * LANES) as u64
@@ -218,10 +238,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 {
                     return Err("A6-C6 preregistered train protocol violation".into());
                 }
-                let train_counts = model.families.iter()
-                    .map(|w| w.train_errors.to_string()).collect::<Vec<_>>().join(";");
-                let val_counts = model.families.iter()
-                    .map(|w| w.validation_errors.to_string()).collect::<Vec<_>>().join(";");
+                let train_counts = model
+                    .families
+                    .iter()
+                    .map(|w| w.train_errors.to_string())
+                    .collect::<Vec<_>>()
+                    .join(";");
+                let val_counts = model
+                    .families
+                    .iter()
+                    .map(|w| w.validation_errors.to_string())
+                    .collect::<Vec<_>>()
+                    .join(";");
                 let selected_gate = model.selected.gates()[0].clone();
                 println!(
                     "A6C6_FROZEN,task={},panel={},seed={},accepted={},selected_width={},selected_active_memory_bits={},expected_width={},width_match={},tap={},raw={},root_truth={},root_monomials={},train_errors={},val_errors={},baseline_train_errors={},baseline_val_errors={},train_errors_by_width={},val_errors_by_width={},evaluations={},search_ring_payload_bytes={},selected_gate_inputs={:?},selected_anf_coefficient_bits={},selected_bits_read_per_step={},fit_seconds={:.6}",
@@ -264,16 +292,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     for case in &frozen {
         let ti = case.task.index();
         let pi = case.panel.index();
-        hits[ti][pi] += usize::from(
-            case.task.expected_width() == Some(case.model.selected_width)
-        );
+        hits[ti][pi] += usize::from(case.task.expected_width() == Some(case.model.selected_width));
         accepts[ti][pi] += usize::from(case.model.accepted);
         durations[ti][pi] += case.training_seconds;
 
         for (hi, steps) in HORIZONS.iter().copied().enumerate() {
             let test = dataset(
                 seed(case.seed, case.task, case.panel, 0xa6c6_3003 + steps as u64),
-                steps, case.task, case.panel,
+                steps,
+                case.task,
+                case.panel,
             );
 
             // Families use bit-exact circular inference; the selected
@@ -302,12 +330,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             let throughput = (steps * LANES) as f64 / native_seconds;
             println!(
                 "A6C6_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6},{:.2}",
-                case.task.name(), case.panel.name(), case.seed, steps,
+                case.task.name(),
+                case.panel.name(),
+                case.seed,
+                steps,
                 steps * LANES,
-                measured[0], measured[1], measured[2], measured[3],
-                measured[4], measured[5], measured[6], measured[7],
-                measured[8], case.model.selected_width,
-                case.model.selected_active_memory_bits, native_seconds, throughput
+                measured[0],
+                measured[1],
+                measured[2],
+                measured[3],
+                measured[4],
+                measured[5],
+                measured[6],
+                measured[7],
+                measured[8],
+                case.model.selected_width,
+                case.model.selected_active_memory_bits,
+                native_seconds,
+                throughput
             );
         }
     }
@@ -359,7 +399,9 @@ mod tests {
         let clean = dataset(55, 512, Task::Stride128, Panel::Clean);
         let noisy = dataset(55, 512, Task::Stride128, Panel::LabelNoise);
         assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
-        let flips = clean.blocks[0].targets.iter()
+        let flips = clean.blocks[0]
+            .targets
+            .iter()
             .zip(&noisy.blocks[0].targets)
             .map(|(a, b)| (a ^ b).count_ones() as u64)
             .sum::<u64>();
