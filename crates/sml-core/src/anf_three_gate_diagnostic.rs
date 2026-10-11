@@ -536,10 +536,7 @@ pub fn fit_three_gate_diagnostic(
 ) -> Result<TripleDiagReport, TripleDiagError> {
     let train_samples = validate(width, train, true)?;
     let validation_samples = validate(width, validation, false)?;
-    if budgets.is_empty()
-        || budgets.windows(2).any(|v| v[0] >= v[1])
-        || budgets.contains(&0)
-    {
+    if budgets.is_empty() || budgets.windows(2).any(|v| v[0] >= v[1]) || budgets.contains(&0) {
         return Err(TripleDiagError::InvalidBudget);
     }
     let obs = observed(train);
