@@ -18,6 +18,9 @@ const REFERENCE: f64 = 4.0;
 const EPSILON: f64 = 1e-12;
 
 fn better_alpha(candidate: f64, candidate_loss: f64, best: f64, best_loss: f64) -> bool {
+    if !best_loss.is_finite() {
+        return candidate_loss.is_finite();
+    }
     if candidate_loss < best_loss - EPSILON {
         return true;
     }
@@ -201,6 +204,7 @@ mod tests {
 
     #[test]
     fn alpha_tie_prefers_reference_without_looking_at_test() {
+        assert!(better_alpha(4.0, 2.0, 2.0, f64::INFINITY));
         assert!(better_alpha(4.0, 2.0, 2.0, 2.0));
         assert!(!better_alpha(8.0, 2.0, 4.0, 2.0));
         assert!(!better_alpha(1.0, 2.01, 4.0, 2.0));
