@@ -20,6 +20,9 @@
 use crate::anf_local::{
     LocalAnfError, LocalAnfGate, LocalAnfNetwork, LocalAnfShape, LocalAnfWiring,
 };
+use crate::anf_local_incremental::{
+    full_loss, IncrementalEvaluator, LaneBlock, LaneData, LossKind, ReadoutInput, ReadoutSpec,
+};
 use crate::toy_tasks::{SplitMix64, ToySequence};
 
 /// Up to 64 equal-length sequences packed into lane words.
@@ -67,6 +70,23 @@ impl PackedSplit {
     /// Number of (sequence, step) predictions in the split.
     pub fn total(&self) -> u64 {
         self.total
+    }
+    /// The same split in the generic lane layout of [`crate::anf_local_incremental`].
+    pub fn lane_data(&self) -> LaneData {
+        LaneData {
+            input_bits: 1,
+            target_bits: 1,
+            blocks: self
+                .groups
+                .iter()
+                .map(|g| LaneBlock {
+                    steps: g.inputs.len(),
+                    inputs: g.inputs.clone(),
+                    targets: g.targets.clone(),
+                    valid: g.valid,
+                })
+                .collect(),
+        }
     }
 }
 
@@ -185,6 +205,10 @@ pub struct LocalAnfLearnConfig {
     pub proposals_per_epoch: u32,
     pub patience: u32,
     pub seed: u64,
+    /// Evaluate proposals incrementally (cached trajectory, downstream cone
+    /// only) instead of by full re-simulation. Both give bit-identical losses,
+    /// hence identical search trajectories.
+    pub incremental: bool,
 }
 
 impl Default for LocalAnfLearnConfig {
@@ -200,6 +224,7 @@ impl Default for LocalAnfLearnConfig {
             proposals_per_epoch: 256,
             patience: 60,
             seed: 0,
+            incremental: true,
         }
     }
 }
@@ -216,8 +241,41 @@ pub struct LocalAnfLearnReport {
     pub accepted: u64,
 }
 
+/// What a proposal changed, with the previous value for rejection.
+#[derive(Debug, Clone)]
+enum Undo {
+    None,
+    Gate(usize, LocalAnfGate),
+    Readout(LocalAnfGate),
+}
+
+impl Undo {
+    fn restore(self, network: &mut LocalAnfNetwork) -> Result<(), LocalAnfError> {
+        match self {
+            Self::None => Ok(()),
+            Self::Gate(g, gate) => {
+                network.gates_mut()[g] = gate;
+                Ok(())
+            }
+            Self::Readout(gate) => network.set_readout(gate),
+        }
+    }
+}
+
+fn readout_spec(network: &LocalAnfNetwork) -> ReadoutSpec {
+    ReadoutSpec {
+        inputs: network
+            .readout()
+            .inputs()
+            .iter()
+            .map(|&p| ReadoutInput::Source(p))
+            .collect(),
+        target: 0,
+    }
+}
+
 /// Applies one random move to the first `mutable` state gates or the readout;
-/// returns whether an equal-loss result may be kept.
+/// returns whether an equal-loss result may be kept, and how to undo it.
 ///
 /// Move mix: 40% one coefficient flip, 20% two coefficient flips in one gate,
 /// 25% replace a gate by a random sparse low-degree ANF (one or two monomials
@@ -228,7 +286,7 @@ fn propose(
     network: &mut LocalAnfNetwork,
     mutable: usize,
     rng: &mut SplitMix64,
-) -> Result<bool, LocalAnfError> {
+) -> Result<(bool, Undo), LocalAnfError> {
     let n = network.state_bits();
     let roll = if mutable == 0 { 99 } else { rng.below(100) };
     if roll >= 85 && network.readout().fan_in() > 1 {
@@ -236,18 +294,20 @@ fn propose(
         let slot = 1 + rng.below(readout.fan_in() - 1);
         let candidate = rng.below(n);
         if readout.inputs().contains(&candidate) {
-            return Ok(false);
+            return Ok((false, Undo::None));
         }
+        let old = readout.clone();
         let mut inputs = readout.inputs().to_vec();
         inputs[slot] = candidate;
         let gate = LocalAnfGate::zero(inputs, n + 1)?;
         network.set_readout(gate)?;
-        return Ok(true);
+        return Ok((true, Undo::Readout(old)));
     }
     if mutable == 0 {
-        return Ok(false);
+        return Ok((false, Undo::None));
     }
     let g = rng.below(mutable.min(n));
+    let undo = Undo::Gate(g, network.gates()[g].clone());
     let gate = &mut network.gates_mut()[g];
     let count = gate.monomial_count();
     let k = gate.fan_in();
@@ -278,7 +338,7 @@ fn propose(
             }
         }
     }
-    Ok(true)
+    Ok((true, undo))
 }
 
 /// Learns state-gate coefficients by local search and fits the readout exactly.
@@ -304,6 +364,17 @@ pub(crate) fn search(
     let mut rng = SplitMix64::new(config.seed ^ 0x5eed_a5a5_0000_0001);
     let mut scratch = Scratch::new(&network);
     let mut current = best_readout_errors(&network, train_split, &mut scratch);
+    let data = train_split.lane_data();
+    let mut evaluator = if config.incremental {
+        Some(IncrementalEvaluator::new(
+            &network,
+            &data,
+            vec![readout_spec(&network)],
+            LossKind::Errors,
+        )?)
+    } else {
+        None
+    };
     let mut evaluations = 1u64;
     let mut accepted = 0u64;
     fit_readout(&mut network, train_split)?;
@@ -316,17 +387,29 @@ pub(crate) fn search(
             if current == 0 {
                 break;
             }
-            let before = network.clone();
-            let neutral_allowed = propose(&mut network, mutable, &mut rng)?;
-            let loss = best_readout_errors(&network, train_split, &mut scratch);
+            let (neutral_allowed, undo) = propose(&mut network, mutable, &mut rng)?;
+            let loss = match (&mut evaluator, &undo) {
+                (Some(ev), Undo::Gate(g, _)) => ev.try_gate(&network, &data, *g)?,
+                (Some(ev), Undo::Readout(_)) => ev.try_readout(&data, 0, readout_spec(&network))?,
+                (Some(ev), Undo::None) => ev.loss(),
+                (None, _) => {
+                    full_loss(&network, &data, &[readout_spec(&network)], LossKind::Errors)?
+                }
+            } as u64;
             evaluations += 1;
             if loss < current || (loss == current && neutral_allowed) {
                 if loss < current {
                     accepted += 1;
                 }
                 current = loss;
+                if let Some(ev) = &mut evaluator {
+                    ev.commit();
+                }
             } else {
-                network = before;
+                if let Some(ev) = &mut evaluator {
+                    ev.discard();
+                }
+                undo.restore(&mut network)?;
             }
         }
         fit_readout(&mut network, train_split)?;
@@ -424,6 +507,33 @@ mod tests {
             a.network,
             super::train(other, &train, &val).unwrap().network
         );
+    }
+
+    #[test]
+    fn incremental_search_is_identical_to_full_resimulation_search() {
+        for (task, seed) in [
+            (ToyTask::WindowParity(3), 1),
+            (ToyTask::DelayedRecall(4), 2),
+        ] {
+            let (_, train, val) = splits(task, seed);
+            let config = LocalAnfLearnConfig {
+                max_epochs: 6,
+                proposals_per_epoch: 128,
+                seed,
+                ..LocalAnfLearnConfig::default()
+            };
+            let incremental = super::train(config, &train, &val).unwrap();
+            let full = super::train(
+                LocalAnfLearnConfig {
+                    incremental: false,
+                    ..config
+                },
+                &train,
+                &val,
+            )
+            .unwrap();
+            assert_eq!(incremental, full);
+        }
     }
 
     #[test]

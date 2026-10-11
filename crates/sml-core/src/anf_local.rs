@@ -158,6 +158,21 @@ impl LocalAnfGate {
         }
         acc
     }
+    /// Bit-sliced evaluation where `values[j]` is the lane word of local input
+    /// `j` (already gathered by the caller); same result as [`Self::evaluate_lanes`].
+    pub fn evaluate_gathered(&self, values: &[u64], products: &mut [u64]) -> u64 {
+        let count = self.monomial_count();
+        products[0] = u64::MAX;
+        let mut acc = if self.coefficient(0) { u64::MAX } else { 0 };
+        for m in 1..count {
+            let low = m.trailing_zeros() as usize;
+            products[m] = products[m & (m - 1)] & values[low];
+            if self.coefficient(m) {
+                acc ^= products[m];
+            }
+        }
+        acc
+    }
     /// Truth table `table[u]` for every local address `u` (Möbius transform).
     pub fn truth_table(&self) -> Vec<bool> {
         let coefficients: Vec<bool> = (0..self.monomial_count())
@@ -209,6 +224,8 @@ pub enum LocalAnfWiring {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalAnfNetwork {
     state_bits: usize,
+    /// Input bits per step, at source positions `N..N + input_bits` (1 for the toy tasks).
+    input_bits: usize,
     gates: Vec<LocalAnfGate>,
     readout: LocalAnfGate,
 }
@@ -219,10 +236,21 @@ impl LocalAnfNetwork {
         gates: Vec<LocalAnfGate>,
         readout: LocalAnfGate,
     ) -> Result<Self, LocalAnfError> {
-        if state_bits == 0 || gates.len() != state_bits {
+        Self::with_input_bits(state_bits, 1, gates, readout)
+    }
+
+    /// Network whose source vector is `[s_0..s_{N-1}, x_0..x_{W-1}]` with
+    /// `W = input_bits` input bits per step (e.g. 8 bit-planes for bytes).
+    pub fn with_input_bits(
+        state_bits: usize,
+        input_bits: usize,
+        gates: Vec<LocalAnfGate>,
+        readout: LocalAnfGate,
+    ) -> Result<Self, LocalAnfError> {
+        if state_bits == 0 || gates.len() != state_bits || input_bits == 0 {
             return Err(LocalAnfError::Width(state_bits));
         }
-        let width = state_bits + 1;
+        let width = state_bits + input_bits;
         for gate in gates.iter().chain(core::iter::once(&readout)) {
             if let Some(&bad) = gate.inputs.iter().find(|&&i| i >= width) {
                 return Err(LocalAnfError::Input(bad));
@@ -230,6 +258,7 @@ impl LocalAnfNetwork {
         }
         Ok(Self {
             state_bits,
+            input_bits,
             gates,
             readout,
         })
@@ -279,6 +308,14 @@ impl LocalAnfNetwork {
     pub fn state_bits(&self) -> usize {
         self.state_bits
     }
+    /// Input bits per step (`W`); source positions `N..N + W`.
+    pub fn input_bits(&self) -> usize {
+        self.input_bits
+    }
+    /// Source vector width `N + W`.
+    pub fn source_width(&self) -> usize {
+        self.state_bits + self.input_bits
+    }
     pub fn gates(&self) -> &[LocalAnfGate] {
         &self.gates
     }
@@ -289,8 +326,9 @@ impl LocalAnfNetwork {
         &self.readout
     }
     pub fn set_readout(&mut self, readout: LocalAnfGate) -> Result<(), LocalAnfError> {
-        if readout.inputs.iter().any(|&i| i > self.state_bits) {
-            return Err(LocalAnfError::Input(self.state_bits + 1));
+        let width = self.source_width();
+        if let Some(&bad) = readout.inputs.iter().find(|&&i| i >= width) {
+            return Err(LocalAnfError::Input(bad));
         }
         self.readout = readout;
         Ok(())
@@ -324,6 +362,7 @@ impl LocalAnfNetwork {
     /// Scalar reference step: returns `(s_{t+1}, y_t)`.
     pub fn step(&self, state: &[bool], x: bool) -> (Vec<bool>, bool) {
         assert_eq!(state.len(), self.state_bits);
+        assert_eq!(self.input_bits, 1, "scalar reference step is single-input");
         let mut source = state.to_vec();
         source.push(x);
         let mut next: Vec<bool> = self.gates.iter().map(|g| g.evaluate(&source)).collect();
@@ -344,8 +383,8 @@ impl LocalAnfNetwork {
             })
             .collect()
     }
-    /// Bit-sliced step: `source` holds `N` state words followed by the input
-    /// word; it is overwritten with `s_{t+1}` (input word kept).
+    /// Bit-sliced step: `source` holds `N` state words followed by the `W`
+    /// input words; it is overwritten with `s_{t+1}` (input words kept).
     pub fn step_lanes(&self, source: &mut [u64], next: &mut [u64], products: &mut [u64]) {
         for (slot, gate) in next.iter_mut().zip(&self.gates) {
             *slot = gate.evaluate_lanes(source, products);
