@@ -75,10 +75,14 @@ impl fmt::Display for TopologyError {
 }
 impl std::error::Error for TopologyError {}
 impl From<LocalAnfError> for TopologyError {
-    fn from(value: LocalAnfError) -> Self { Self::Network(value) }
+    fn from(value: LocalAnfError) -> Self {
+        Self::Network(value)
+    }
 }
 impl From<ConstructiveError> for TopologyError {
-    fn from(value: ConstructiveError) -> Self { Self::Constructive(value) }
+    fn from(value: ConstructiveError) -> Self {
+        Self::Constructive(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,10 +201,18 @@ fn validate_setup(
 #[inline]
 fn apply_truth(truth: u8, a: u64, b: u64) -> u64 {
     let mut out = 0u64;
-    if truth & 1 != 0 { out |= !a & !b; }
-    if truth & 2 != 0 { out |= a & !b; }
-    if truth & 4 != 0 { out |= !a & b; }
-    if truth & 8 != 0 { out |= a & b; }
+    if truth & 1 != 0 {
+        out |= !a & !b;
+    }
+    if truth & 2 != 0 {
+        out |= a & !b;
+    }
+    if truth & 4 != 0 {
+        out |= !a & b;
+    }
+    if truth & 8 != 0 {
+        out |= a & b;
+    }
     out
 }
 
@@ -209,7 +221,10 @@ fn first_rules(spec: &TopologySpec) -> Vec<GateRule> {
     for (i, &a) in spec.raw_candidates.iter().enumerate() {
         for &b in &spec.raw_candidates[i + 1..] {
             for truth in 0..16u8 {
-                out.push(GateRule { inputs: [STATES + a, STATES + b], truth });
+                out.push(GateRule {
+                    inputs: [STATES + a, STATES + b],
+                    truth,
+                });
             }
         }
     }
@@ -224,7 +239,10 @@ fn middle_rules(spec: &TopologySpec) -> Vec<GateRule> {
     for (i, &a) in inputs.iter().enumerate() {
         for &b in &inputs[i + 1..] {
             for truth in 0..16u8 {
-                out.push(GateRule { inputs: [a, b], truth });
+                out.push(GateRule {
+                    inputs: [a, b],
+                    truth,
+                });
             }
         }
     }
@@ -232,12 +250,15 @@ fn middle_rules(spec: &TopologySpec) -> Vec<GateRule> {
 }
 
 fn output_pairs(spec: &TopologySpec) -> Vec<[usize; 2]> {
-    let options: Vec<usize> = [0, 1].into_iter()
+    let options: Vec<usize> = [0, 1]
+        .into_iter()
         .chain(spec.raw_candidates.iter().map(|&raw| STATES + raw))
         .collect();
     let mut pairs = Vec::with_capacity(15);
     for (i, &a) in options.iter().enumerate() {
-        for &b in &options[i + 1..] { pairs.push([a, b]); }
+        for &b in &options[i + 1..] {
+            pairs.push([a, b]);
+        }
     }
     pairs
 }
@@ -245,30 +266,45 @@ fn output_pairs(spec: &TopologySpec) -> Vec<[usize; 2]> {
 fn first_series(rule: &GateRule, data: &LaneData) -> Series {
     let a = rule.inputs[0] - STATES;
     let b = rule.inputs[1] - STATES;
-    data.blocks.iter().map(|block| {
-        (0..block.steps).map(|t| {
-            apply_truth(
-                rule.truth,
-                block.inputs[t * INPUT_BITS + a],
-                block.inputs[t * INPUT_BITS + b],
-            )
-        }).collect()
-    }).collect()
+    data.blocks
+        .iter()
+        .map(|block| {
+            (0..block.steps)
+                .map(|t| {
+                    apply_truth(
+                        rule.truth,
+                        block.inputs[t * INPUT_BITS + a],
+                        block.inputs[t * INPUT_BITS + b],
+                    )
+                })
+                .collect()
+        })
+        .collect()
 }
 
 fn middle_series(rule: &GateRule, first: &Series, data: &LaneData) -> Series {
-    data.blocks.iter().enumerate().map(|(bi, block)| {
-        (0..block.steps).map(|t| {
-            let word = |source: usize| {
-                if source == 0 {
-                    if t == 0 { 0 } else { first[bi][t - 1] }
-                } else {
-                    block.inputs[t * INPUT_BITS + source - STATES]
-                }
-            };
-            apply_truth(rule.truth, word(rule.inputs[0]), word(rule.inputs[1]))
-        }).collect()
-    }).collect()
+    data.blocks
+        .iter()
+        .enumerate()
+        .map(|(bi, block)| {
+            (0..block.steps)
+                .map(|t| {
+                    let word = |source: usize| {
+                        if source == 0 {
+                            if t == 0 {
+                                0
+                            } else {
+                                first[bi][t - 1]
+                            }
+                        } else {
+                            block.inputs[t * INPUT_BITS + source - STATES]
+                        }
+                    };
+                    apply_truth(rule.truth, word(rule.inputs[0]), word(rule.inputs[1]))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Derive the exact minimum TRAIN errors of a two-input Boolean final gate.
@@ -304,23 +340,34 @@ fn fit_output(
     let mut truth = 0u8;
     let mut loss = 0u64;
     for (i, c) in counts.iter().enumerate() {
-        if c[1] > c[0] { truth |= 1 << i; }
+        if c[1] > c[0] {
+            truth |= 1 << i;
+        }
         loss += c[0].min(c[1]);
     }
     (truth, loss)
 }
 
 fn input_matters(truth: u8, pos: usize) -> bool {
-    (0..4).any(|address| address & (1 << pos) == 0
-        && ((truth >> address) & 1) != ((truth >> (address | (1 << pos))) & 1))
+    (0..4).any(|address| {
+        address & (1 << pos) == 0
+            && ((truth >> address) & 1) != ((truth >> (address | (1 << pos))) & 1)
+    })
 }
 fn matters(rule: &GateRule, source: usize) -> bool {
-    rule.inputs.iter().enumerate().any(|(i, &s)| s == source && input_matters(rule.truth, i))
+    rule.inputs
+        .iter()
+        .enumerate()
+        .any(|(i, &s)| s == source && input_matters(rule.truth, i))
 }
 fn monomials(truth: u8) -> usize {
     let mut a: [bool; 4] = std::array::from_fn(|i| truth & (1 << i) != 0);
     for step in [1, 2] {
-        for i in 0..4 { if i & step != 0 { a[i] ^= a[i ^ step]; } }
+        for i in 0..4 {
+            if i & step != 0 {
+                a[i] ^= a[i ^ step];
+            }
+        }
     }
     a.iter().filter(|&&v| v).count()
 }
@@ -335,29 +382,47 @@ fn structure(gates: &[GateRule; 3]) -> Structure {
         2
     } else if output_from_first || output_from_middle {
         1
-    } else { 0 };
+    } else {
+        0
+    };
     let topology = if output_from_first && output_from_middle {
-        if middle_from_first { DiscoveredTopology::BranchChain }
-        else { DiscoveredTopology::Parallel }
+        if middle_from_first {
+            DiscoveredTopology::BranchChain
+        } else {
+            DiscoveredTopology::Parallel
+        }
     } else if output_from_middle {
-        if middle_from_first { DiscoveredTopology::Chain }
-        else { DiscoveredTopology::ViaMiddle }
+        if middle_from_first {
+            DiscoveredTopology::Chain
+        } else {
+            DiscoveredTopology::ViaMiddle
+        }
     } else if output_from_first {
         DiscoveredTopology::Skip
-    } else { DiscoveredTopology::Direct };
+    } else {
+        DiscoveredTopology::Direct
+    };
     let active = [active_first, active_middle, true];
     Structure {
         topology,
         depth,
         live_gates: active.iter().filter(|&&live| live).count(),
-        monomials: gates.iter().zip(active).filter(|(_, live)| *live)
-            .map(|(gate, _)| monomials(gate.truth)).sum(),
+        monomials: gates
+            .iter()
+            .zip(active)
+            .filter(|(_, live)| *live)
+            .map(|(gate, _)| monomials(gate.truth))
+            .sum(),
         active,
     }
 }
 
 fn consider(best: &mut Option<Trained>, gates: [GateRule; 3], errors: u64) {
-    let candidate = Trained { structure: structure(&gates), gates, errors };
+    let candidate = Trained {
+        structure: structure(&gates),
+        gates,
+        errors,
+    };
     let better = best.as_ref().is_none_or(|prior| {
         let a = (
             candidate.errors,
@@ -373,7 +438,9 @@ fn consider(best: &mut Option<Trained>, gates: [GateRule; 3], errors: u64) {
         );
         a < b
     });
-    if better { *best = Some(candidate); }
+    if better {
+        *best = Some(candidate);
+    }
 }
 
 fn materialize(
@@ -384,28 +451,38 @@ fn materialize(
     for (i, rule) in trained.gates.iter().enumerate() {
         if trained.structure.active[i] {
             let table: Vec<bool> = (0..4).map(|a| rule.truth & (1 << a) != 0).collect();
-            model.gates_mut()[i] =
-                LocalAnfGate::from_truth_table(rule.inputs.to_vec(), &table, reference.source_width())?;
+            model.gates_mut()[i] = LocalAnfGate::from_truth_table(
+                rule.inputs.to_vec(),
+                &table,
+                reference.source_width(),
+            )?;
         }
     }
     Ok(model)
 }
 
 fn native_errors(
-    network: &LocalAnfNetwork, data: &LaneData, spec: &TopologySpec,
+    network: &LocalAnfNetwork,
+    data: &LaneData,
+    spec: &TopologySpec,
 ) -> Result<u64, TopologyError> {
-    Ok(residual_output_errors(
-        network, data, 2, spec.target_bit, spec.baseline_input,
-    )?.0)
+    Ok(residual_output_errors(network, data, 2, spec.target_bit, spec.baseline_input)?.0)
 }
 
 fn validate_commit(
-    original: &LocalAnfNetwork, model: LocalAnfNetwork,
-    validation: &LaneData, spec: &TopologySpec, baseline_errors: u64,
+    original: &LocalAnfNetwork,
+    model: LocalAnfNetwork,
+    validation: &LaneData,
+    spec: &TopologySpec,
+    baseline_errors: u64,
 ) -> Result<(LocalAnfNetwork, u64, bool), TopologyError> {
     let val = native_errors(&model, validation, spec)?;
     let accepted = val < baseline_errors;
-    Ok((if accepted { model } else { original.clone() }, val, accepted))
+    Ok((
+        if accepted { model } else { original.clone() },
+        val,
+        accepted,
+    ))
 }
 
 /// Learn sources, topology and 3 Boolean functions solely from terminal
@@ -429,8 +506,14 @@ pub fn fit_adaptive_topology(
     if first.len() != 96 || middle.len() != 160 || pairs.len() != 15 {
         return Err(TopologyError::Spec);
     }
-    let empty_first = GateRule { inputs: first[0].inputs, truth: 0 };
-    let empty_middle = GateRule { inputs: middle[0].inputs, truth: 0 };
+    let empty_first = GateRule {
+        inputs: first[0].inputs,
+        truth: 0,
+    };
+    let empty_middle = GateRule {
+        inputs: middle[0].inputs,
+        truth: 0,
+    };
     let mut adaptive: Option<Trained> = None;
     let mut direct: Option<Trained> = None;
     let mut chain: Option<Trained> = None;
@@ -440,7 +523,14 @@ pub fn fit_adaptive_topology(
     // Direct, structurally independent of all state-gate parameter choices.
     for &pair in pairs.iter().filter(|p| p[0] >= STATES) {
         let (truth, loss) = fit_output(pair, None, None, train, spec);
-        let gates = [empty_first, empty_middle, GateRule { inputs: pair, truth }];
+        let gates = [
+            empty_first,
+            empty_middle,
+            GateRule {
+                inputs: pair,
+                truth,
+            },
+        ];
         consider(&mut direct, gates, loss);
         consider(&mut adaptive, gates, loss);
         evals += 1;
@@ -452,9 +542,18 @@ pub fn fit_adaptive_topology(
         // One-hop skip topology: output sees previous gate 0, no gate 1.
         for &pair in pairs.iter().filter(|p| p[0] == 0 && p[1] >= STATES) {
             let (truth, loss) = fit_output(pair, Some(&s0), None, train, spec);
-            consider(&mut adaptive, [
-                rule0, empty_middle, GateRule { inputs: pair, truth },
-            ], loss);
+            consider(
+                &mut adaptive,
+                [
+                    rule0,
+                    empty_middle,
+                    GateRule {
+                        inputs: pair,
+                        truth,
+                    },
+                ],
+                loss,
+            );
             evals += 1;
         }
 
@@ -464,7 +563,14 @@ pub fn fit_adaptive_topology(
             for &pair in pairs.iter().filter(|p| p[1] == 1 || p[0] == 1) {
                 // Cases: [old_s0, old_s1], [old_s1, current_raw].
                 let (truth, loss) = fit_output(pair, Some(&s0), Some(&s1), train, spec);
-                let gates = [rule0, rule1, GateRule { inputs: pair, truth }];
+                let gates = [
+                    rule0,
+                    rule1,
+                    GateRule {
+                        inputs: pair,
+                        truth,
+                    },
+                ];
                 consider(&mut adaptive, gates, loss);
                 evals += 1;
                 // Strict C3 reference topology: 0 -> 1 -> 2, one hop per
@@ -486,7 +592,8 @@ pub fn fit_adaptive_topology(
     let direct_candidate = materialize(reference, &direct)?;
     let chain_candidate = materialize(reference, &chain)?;
     for (candidate, expected_loss) in [
-        (&proposed, adaptive.errors), (&direct_candidate, direct.errors),
+        (&proposed, adaptive.errors),
+        (&direct_candidate, direct.errors),
         (&chain_candidate, chain.errors),
     ] {
         if native_errors(candidate, train, spec)? != expected_loss {
@@ -496,13 +603,25 @@ pub fn fit_adaptive_topology(
     let baseline_train_errors = native_errors(reference, train, spec)?;
     let baseline_validation_errors = native_errors(reference, validation, spec)?;
     let (selected, validation_errors, accepted) = validate_commit(
-        reference, proposed.clone(), validation, spec, baseline_validation_errors,
+        reference,
+        proposed.clone(),
+        validation,
+        spec,
+        baseline_validation_errors,
     )?;
     let (direct_control, direct_validation_errors, direct_accepted) = validate_commit(
-        reference, direct_candidate, validation, spec, baseline_validation_errors,
+        reference,
+        direct_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
     )?;
     let (chain_control, chain_validation_errors, chain_accepted) = validate_commit(
-        reference, chain_candidate, validation, spec, baseline_validation_errors,
+        reference,
+        chain_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
     )?;
     let train_words = train.blocks.iter().map(|b| b.steps).sum::<usize>();
     Ok(TopologyReport {
@@ -550,33 +669,50 @@ mod tests {
         LocalAnfNetwork::with_input_bits(n, INPUT_BITS, gates, readout).unwrap()
     }
     fn spec() -> TopologySpec {
-        TopologySpec { raw_candidates: vec![1, 2, 3, 4], baseline_input: 0, target_bit: 0 }
+        TopologySpec {
+            raw_candidates: vec![1, 2, 3, 4],
+            baseline_input: 0,
+            target_bit: 0,
+        }
     }
     #[derive(Clone, Copy)]
-    enum Task { Direct, Skip, Serial, Parallel }
+    enum Task {
+        Direct,
+        Skip,
+        Serial,
+        Parallel,
+    }
     fn fixture(seed: u64, steps: usize, task: Task) -> LaneData {
         let mut rng = SplitMix64::new(seed);
         let mut inputs = vec![0u64; steps * INPUT_BITS];
-        for word in &mut inputs { *word = rng.next_u64(); }
+        for word in &mut inputs {
+            *word = rng.next_u64();
+        }
         let mut targets = vec![0u64; steps];
         let x = |t: usize, p: usize| inputs[t * INPUT_BITS + p];
         for t in 0..steps {
             let residual = match task {
                 Task::Direct => x(t, 1) & x(t, 2),
                 Task::Skip => {
-                    if t == 0 { 0 } else {
+                    if t == 0 {
+                        0
+                    } else {
                         (x(t - 1, 1) ^ x(t - 1, 2)) & x(t, 3)
                     }
                 }
                 Task::Serial => {
-                    x(t, 4) ^ if t < 2 { 0 } else {
-                        x(t - 1, 3) & (x(t - 2, 1) ^ x(t - 2, 2))
-                    }
+                    x(t, 4)
+                        ^ if t < 2 {
+                            0
+                        } else {
+                            x(t - 1, 3) & (x(t - 2, 1) ^ x(t - 2, 2))
+                        }
                 }
                 Task::Parallel => {
-                    if t == 0 { 0 } else {
-                        (x(t - 1, 1) & x(t - 1, 2))
-                            ^ (x(t - 1, 3) & x(t - 1, 4))
+                    if t == 0 {
+                        0
+                    } else {
+                        (x(t - 1, 1) & x(t - 1, 2)) ^ (x(t - 1, 3) & x(t - 1, 4))
                     }
                 }
             };
@@ -585,7 +721,12 @@ mod tests {
         LaneData {
             input_bits: INPUT_BITS,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -597,7 +738,10 @@ mod tests {
             let mut products = [0u64; 4];
             for a in [0, u64::MAX] {
                 for b in [0, u64::MAX] {
-                    assert_eq!(gate.evaluate_gathered(&[a, b], &mut products), apply_truth(mask, a, b));
+                    assert_eq!(
+                        gate.evaluate_gathered(&[a, b], &mut products),
+                        apply_truth(mask, a, b)
+                    );
                 }
             }
         }
@@ -606,7 +750,9 @@ mod tests {
     #[test]
     fn finds_multiple_topologies_using_only_output_labels() {
         for (task, depth) in [
-            (Task::Direct, 0), (Task::Skip, 1), (Task::Serial, 2),
+            (Task::Direct, 0),
+            (Task::Skip, 1),
+            (Task::Serial, 2),
             (Task::Parallel, 1),
         ] {
             let train = fixture(21, 48, task);
@@ -633,7 +779,9 @@ mod tests {
         let a = fit_adaptive_topology(&original, &data, &val, &spec()).unwrap();
         let mut inverted = val.clone();
         for block in &mut inverted.blocks {
-            for target in &mut block.targets { *target = !*target; }
+            for target in &mut block.targets {
+                *target = !*target;
+            }
         }
         let b = fit_adaptive_topology(&original, &data, &inverted, &spec()).unwrap();
         assert_eq!(a.proposed, b.proposed);
