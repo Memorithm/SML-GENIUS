@@ -26,6 +26,7 @@ pub mod anf_local;
 pub mod anf_local_history;
 pub mod anf_local_incremental;
 pub mod anf_local_learn;
+pub mod anf_nonlinear_joint_credit;
 pub mod anf_phase_capacity;
 pub mod anf_sbg_unified;
 pub mod anf_sparse_byte;

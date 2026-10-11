@@ -1,0 +1,53 @@
+name: A6-C9 nonlinear dual ANF terminal credit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c9-nonlinear-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  nonlinear-joint-credit:
+    if: startsWith(github.head_ref, 'research/a6-c9-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89 formatter and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify format, compilation, strict lint and nonlinear oracle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_nonlinear_joint_credit
+          cargo test --locked -p sml-core --bin sml-nonlinear-credit-bench
+      - name: A6-C9 100 TRAIN/VAL-frozen models and 200 independent tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C9_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --release --locked -p sml-core --bin sml-nonlinear-credit-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c9-nonlinear.log"
+          grep -q '^A6C9_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c9-nonlinear.log"
+          test "$(grep -c '^A6C9_FROZEN,' "$RUNNER_TEMP/a6c9-nonlinear.log")" -eq 100
+          test "$(grep -c '^A6C9_TEST_RESULT,' "$RUNNER_TEMP/a6c9-nonlinear.log")" -eq 200
+          test "$(grep -c '^A6C9_SUMMARY,' "$RUNNER_TEMP/a6c9-nonlinear.log")" -eq 40
+          grep '^A6C9_SUMMARY,' "$RUNNER_TEMP/a6c9-nonlinear.log"
