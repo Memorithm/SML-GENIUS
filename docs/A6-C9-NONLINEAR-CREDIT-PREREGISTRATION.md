@@ -52,12 +52,35 @@ Pour le meilleur modèle à une porte TRAIN :
 canaux et ses 16 tables de vérité. Évaluer chaque couple par sortie
 terminale sur TRAIN complet (N128: 8064 candidats ; N256: 16256).
 
-Retenir la meilleure paire TRAIN parmi cette exploration et la
-paire affine A6-C8, puis autoriser **un balayage coordonné complet
-des deux axes** : remplacer une porte à la fois parmi les positions
-distinctes, canaux et 16 fonctions ; accepter UNIQUEMENT une baisse
-stricte de l'erreur TRAIN. Tous les meilleurs circuits sont
-reconstruits et vérifiés bit-exacts contre LocalAnfNetwork.
+**Amendement technique avant l'exécution du banc complet :**
+le tout premier test unitaire XOR+AND a révélé que le meilleur
+candidat isolé était une porte constante à zéro, qui effaçait
+le signal de la seconde porte. Conserver uniquement le
+meilleur minimum de départ détruisait donc une amorce
+affine utile. Les deux amorces TRAIN (conditionnelle A6-C7
+et affine A6-C8) sont dorénavant **raffinées séparément**.
+
+Pour chaque amorce, tester **les deux ordres de
+balayage des axes** (porte0→porte1, puis
+porte1→porte0) avec l'ensemble des positions
+distinctes, canaux et 16 fonctions. Ne conserver
+que des améliorations strictes d'erreur TRAIN.
+Retenir ensuite la meilleure paire selon TRAIN,
+sans consulter VAL/TEST. Les réseaux gagnants
+sont reconstruits et vérifiés bit-exacts contre
+LocalAnfNetwork.
+
+Nombre de scores de raffinement : **8×(N−2)×64**
+si l'amorce A6-C7 est disponible (2 amorces ×2 ordres
+×2 axes), ou **4×(N−2)×64** si seul
+le contrôle affine est admissible. La recherche
+conditionnelle initiale ajoute (N−2)×64 scores
+et la paire affine est scorée une fois.
+Cette modification algorithmique est fixée
+**avant la campagne de 100 entraînements et
+avant la génération d'un quelconque TEST** ;
+les dix tâches, graines et critères préenregistrés
+ne changent pas.
 
 **La validation ne sert qu'au choix final** entre référence,
 modèle A6-C7 à une porte, modèle A6-C8 affine à deux portes et
