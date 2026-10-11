@@ -28,7 +28,9 @@
 use std::{collections::BinaryHeap, fmt};
 
 use crate::{
-    anf_dual_hidden_credit::{make_multi_gate_native, native_errors as native_dual_errors, DualCreditError},
+    anf_dual_hidden_credit::{
+        make_multi_gate_native, native_errors as native_dual_errors, DualCreditError,
+    },
     anf_intermediate_credit::IntermediateRule,
     anf_local::LocalAnfNetwork,
     anf_local_incremental::LaneData,
