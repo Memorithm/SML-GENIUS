@@ -460,7 +460,7 @@ mod tests{
         }
     }
     #[test]
-    fn 4096_factorizations_have_520_distinct_four_input_masks(){
+    fn four_thousand_ninety_six_factorizations_have_520_distinct_masks(){
         let bank=factor_bank();
         assert_eq!(bank.len(),520);
         assert!(bank.iter().any(|f|f.mask==composed_mask([6,8,6])));
