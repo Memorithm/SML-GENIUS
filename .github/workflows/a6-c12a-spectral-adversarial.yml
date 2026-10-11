@@ -1,0 +1,56 @@
+name: A6-C12a adversarial spectral screening ablations
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12a-adversarial-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spectral-ablation:
+    if: startsWith(github.head_ref, 'research/a6-c12a-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatting, compilation, strict lint and native oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_three_gate_diagnostic -- --nocapture
+          cargo test --locked -p sml-core --bin sml-spectral-adversarial-bench
+      - name: Run frozen adversarial ranking and held-out benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12A_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-spectral-adversarial-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
+          grep -q '^A6C12A_ALL_FROZEN,rank_observations=240,policies=80$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
+          test "$(grep -c '^A6C12A_RANK,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 240
+          test "$(grep -c '^A6C12A_FROZEN,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 80
+          test "$(grep -c '^A6C12A_TEST,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 80
+          test "$(grep -c '^A6C12A_RANK_SUMMARY,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 48
+          grep -q '^A6C12A_COMPLETE,rank_observations=240,frozen=80,independent_test_streams=40,summaries=48$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
+          grep '^A6C12A_RANK_SUMMARY,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
