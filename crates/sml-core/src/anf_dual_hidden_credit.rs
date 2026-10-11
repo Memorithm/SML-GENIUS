@@ -29,7 +29,7 @@ use std::{collections::BinaryHeap, fmt};
 
 use crate::{
     anf_intermediate_credit::{
-        native_errors as native_output_errors, native_model as identity_native_model,
+        native_model as identity_native_model,
         IntermediateRule, A6C7_INPUT_BITS, A6C7_MAX_WIDTH,
     },
     anf_local::{LocalAnfError, LocalAnfGate, LocalAnfNetwork},
