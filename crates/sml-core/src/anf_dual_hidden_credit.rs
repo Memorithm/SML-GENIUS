@@ -29,8 +29,7 @@ use std::{collections::BinaryHeap, fmt};
 
 use crate::{
     anf_intermediate_credit::{
-        native_model as identity_native_model,
-        IntermediateRule, A6C7_INPUT_BITS, A6C7_MAX_WIDTH,
+        native_model as identity_native_model, IntermediateRule, A6C7_INPUT_BITS, A6C7_MAX_WIDTH,
     },
     anf_local::{LocalAnfError, LocalAnfGate, LocalAnfNetwork},
     anf_local_incremental::LaneData,
