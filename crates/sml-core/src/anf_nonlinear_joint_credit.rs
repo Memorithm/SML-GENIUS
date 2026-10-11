@@ -303,10 +303,11 @@ fn conditional(
 fn coordinate_pass(
     mut pair: [IntermediateRule; 2],
     mut current_loss: u64,
+    order: [usize; 2],
     ctx: &mut TrainContext<'_>,
 ) -> Result<([IntermediateRule; 2], u64, usize), NonlinearError> {
     let mut commits = 0usize;
-    for axis in 0..2 {
+    for axis in order {
         let fixed = pair[1 - axis];
         let mut best: Option<([IntermediateRule; 2], u64)> = None;
         for gate in 1..ctx.width {
@@ -361,31 +362,45 @@ pub fn fit_nonlinear_credit(
 
     let mut scratch = vec![0u64; width];
     let mut conditional_evaluations = 0usize;
-    let mut conditional_best: Option<([IntermediateRule; 2], u64)> = None;
     let mut ctx = TrainContext {
         width,
         data: train,
         scratch: &mut scratch,
         evaluations: &mut conditional_evaluations,
     };
+    let mut initializations = Vec::with_capacity(2);
     if let Some(anchor) = old_one.proposed_rule {
-        let (pair, loss) = conditional(anchor, &mut ctx)?;
-        conditional_best = Some((pair, loss));
+        // A6-C7's general Boolean single-gate TRAIN-only proposal may have
+        // partial nonlinear credit (or be a degenerate constant). Keep it
+        // as its own search basin rather than discarding another initializer.
+        initializations.push(conditional(anchor, &mut ctx)?);
     }
-    // The A6-C8 joint TRAIN proposal handles 2 XOR/XNOR with no measurable
-    // marginal single-gate credit. It is never learned from held-out data.
+    // A6-C8's affine pair is a second, INDEPENDENT train-only basin. Even
+    // if its current loss is worse than the single-gate basin, replacing
+    // one affine function with AND/OR can uncover a zero-loss composition.
     let affine_pair = sorted_pair(width, old_affine.joint_rules[0], old_affine.joint_rules[1])?;
     let affine_score = ctx.errors(affine_pair);
     if affine_score != old_affine.joint_train_errors {
         return Err(NonlinearError::NativeOracle);
     }
-    if trained_better(affine_pair, affine_score, conditional_best) {
-        conditional_best = Some((affine_pair, affine_score));
-    }
-    let (initial_pair, initial_loss) = conditional_best.ok_or(NonlinearError::InvalidData)?;
+    initializations.push((affine_pair, affine_score));
 
+    // Two coordinate orders matter in nonconvex Boolean function search:
+    // first-f then second-g can collapse a useful affine basin into a
+    // constant function before AND/OR has a chance to be fitted.
+    // Both orders, from both TRAIN initializers, are explored without VAL.
     let before = *ctx.evaluations;
-    let (pair, loss, committed_updates) = coordinate_pass(initial_pair, initial_loss, &mut ctx)?;
+    let mut refined: Option<([IntermediateRule; 2], u64, usize)> = None;
+    for (start_pair, start_loss) in initializations {
+        for order in [[0usize, 1usize], [1usize, 0usize]] {
+            let (candidate, loss, commits) =
+                coordinate_pass(start_pair, start_loss, order, &mut ctx)?;
+            if trained_better(candidate, loss, refined.map(|(p, l, _)| (p, l))) {
+                refined = Some((candidate, loss, commits));
+            }
+        }
+    }
+    let (pair, loss, committed_updates) = refined.ok_or(NonlinearError::InvalidData)?;
     let coordinate_evaluations = *ctx.evaluations - before;
     if committed_updates > A6C9_COORDINATE_PASSES * 2 {
         return Err(NonlinearError::NativeOracle);
