@@ -218,14 +218,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 let teacher = task.teacher();
                 let exact = task.representable() && report.selected_rules == teacher;
-                let equivalent = task.representable()
-                    && report.selected_train_errors == if panel == Panel::Clean { 0 } else { report.selected_train_errors };
+                let train_zero = report.selected_train_errors == 0;
                 println!(
                     "A6C9_FROZEN,task={},panel={},seed={},width={},representable={},selected_origin={},selected_count={},selected_rules={:?},exact_rule_match={},train_zero_if_clean={},baseline_train_errors={},baseline_val_errors={},old_one_train_errors={},old_one_val_errors={},old_affine_train_errors={},old_affine_val_errors={},conditional_train_errors={:?},conditional_val_errors={:?},selected_train_errors={},selected_val_errors={},conditional_evaluations={},coordinate_evaluations={},coordinate_commits={},ring_payload_bytes={},fit_seconds={:.6}",
                     task.name(), panel.name(), index, task.width(),
                     task.representable(), report.selected_origin.name(),
                     report.selected_count, report.selected_rules, exact,
-                    equivalent, report.baseline_train_errors,
+                    train_zero, report.baseline_train_errors,
                     report.baseline_validation_errors,
                     report.old_one.proposed_train_errors,
                     report.old_one.proposed_validation_errors,
