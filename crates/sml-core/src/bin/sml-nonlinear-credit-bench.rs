@@ -231,7 +231,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let start = Instant::now();
                 let report = fit_nonlinear_credit(&train, &validation, task.width())?;
                 let fit_seconds = start.elapsed().as_secs_f64();
-                let axes = if report.old_one.proposed_rule.is_some() { 8 } else { 4 };
+                let axes = if report.old_one.proposed_rule.is_some() {
+                    8
+                } else {
+                    4
+                };
                 if report.train_samples != (TRAIN_STEPS * LANES) as u64
                     || report.validation_samples != (VALIDATION_STEPS * LANES) as u64
                     || report.width != task.width()
