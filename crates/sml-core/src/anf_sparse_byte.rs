@@ -99,12 +99,28 @@ impl SparseByteReadouts {
             .sum()
     }
 
+    /// Fixed alpha=4.0 reference retained for backward compatibility.
     pub fn evaluate(
         &self,
         model: &CharAnfModel,
         data: &LaneData,
         argmax: bool,
     ) -> Result<CharMetrics, SparseByteError> {
+        self.evaluate_with_alpha(model, data, argmax, 4.0)
+    }
+
+    /// Evaluate a frozen ANF network and train-fitted sparse counts.
+    /// Callers select alpha on validation, not by inspecting the test result.
+    pub fn evaluate_with_alpha(
+        &self,
+        model: &CharAnfModel,
+        data: &LaneData,
+        argmax: bool,
+        alpha: f64,
+    ) -> Result<CharMetrics, SparseByteError> {
+        if !alpha.is_finite() || alpha <= 0.0 {
+            return Err(SparseByteError::Shape);
+        }
         if self.bits.len() != BYTE_BITS
             || model.readouts.len() != BYTE_BITS
             || data.target_bits != BYTE_BITS
@@ -127,7 +143,7 @@ impl SparseByteReadouts {
                     for b in 0..BYTE_BITS {
                         actual[b] = ((target_words[b] >> lane) & 1) as usize;
                         let a = address(&model.readouts[b], sources, lane, &actual);
-                        let p = self.bits[b].predict_one(a)?;
+                        let p = self.bits[b].predict_with_alpha(a, alpha)?;
                         bits -= if actual[b] == 1 { p } else { 1.0 - p }.log2();
                     }
                     if argmax {
@@ -138,7 +154,7 @@ impl SparseByteReadouts {
                             for b in 0..BYTE_BITS {
                                 prefix[b] = (candidate >> (7 - b)) & 1;
                                 let a = address(&model.readouts[b], sources, lane, &prefix);
-                                let p = self.bits[b].predict_one(a)?;
+                                let p = self.bits[b].predict_with_alpha(a, alpha)?;
                                 lp += if prefix[b] == 1 { p } else { 1.0 - p }.log2();
                             }
                             if lp > best.1 {
@@ -212,7 +228,22 @@ mod tests {
         let sparse = SparseByteReadouts::fit(&report.model, &training).unwrap();
         let a = sparse.evaluate(&report.model, &held_out, true).unwrap();
         let b = sparse.evaluate(&report.model, &held_out, true).unwrap();
+        let alpha_four = sparse
+            .evaluate_with_alpha(&report.model, &held_out, true, 4.0)
+            .unwrap();
         assert_eq!(a, b);
+        assert_eq!(a, alpha_four);
+        for alpha in [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0] {
+            let scored = sparse
+                .evaluate_with_alpha(&report.model, &held_out, false, alpha)
+                .unwrap();
+            assert!(scored.bits_per_byte.is_finite());
+            assert_eq!(scored.tokens, a.tokens);
+        }
+        assert!(matches!(
+            sparse.evaluate_with_alpha(&report.model, &held_out, false, 0.0),
+            Err(SparseByteError::Shape)
+        ));
         assert!(a.bits_per_byte.is_finite());
         assert!(a.bits_per_byte > 0.0);
         assert!(sparse.stored_contexts() > 0);
