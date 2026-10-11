@@ -368,7 +368,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         time[t][p][li][bi] += f.fit_seconds;
         println!(
-            "A6C11D_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6}",
+            "A6C11D_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6}",
             f.task.name(),
             f.panel.name(),
             f.seed,
