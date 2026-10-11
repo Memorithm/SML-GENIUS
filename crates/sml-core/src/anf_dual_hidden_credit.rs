@@ -112,42 +112,40 @@ pub fn make_multi_gate_native(
         return Err(DualCreditError::InvalidWidth);
     }
     let mut seen = vec![false; width];
-    let mut net = identity_native_model(width, None)
-        .map_err(|e| match e {
-            crate::anf_intermediate_credit::IntermediateError::Network(inner) => {
-                DualCreditError::Network(inner)
-            }
-            _ => DualCreditError::InvalidSpec,
-        })?;
+    let mut net = identity_native_model(width, None).map_err(|e| match e {
+        crate::anf_intermediate_credit::IntermediateError::Network(inner) => {
+            DualCreditError::Network(inner)
+        }
+        _ => DualCreditError::InvalidSpec,
+    })?;
     let source_width = net.source_width();
     for rule in mutations {
-        if rule.gate == 0 || rule.gate >= width
+        if rule.gate == 0
+            || rule.gate >= width
             || !A6C8_RAW_CHOICES.contains(&rule.raw)
-            || rule.truth >= 16 || seen[rule.gate]
+            || rule.truth >= 16
+            || seen[rule.gate]
         {
             return Err(DualCreditError::InvalidSpec);
         }
         seen[rule.gate] = true;
         net.gates_mut()[rule.gate] = LocalAnfGate::from_truth_table(
             vec![rule.gate - 1, width + rule.raw],
-            &bool_truth(rule.truth), source_width,
+            &bool_truth(rule.truth),
+            source_width,
         )?;
     }
     Ok(net)
 }
 
 /// The native evaluator is independent of the innovation scorer.
-pub fn native_errors(
-    model: &LocalAnfNetwork,
-    data: &LaneData,
-) -> Result<u64, DualCreditError> {
-    crate::anf_intermediate_credit::native_errors(model, data)
-        .map_err(|e| match e {
-            crate::anf_intermediate_credit::IntermediateError::Network(inner) => {
-                DualCreditError::Network(inner)
-            }
-            _ => DualCreditError::InvalidData,
-        })
+pub fn native_errors(model: &LocalAnfNetwork, data: &LaneData) -> Result<u64, DualCreditError> {
+    crate::anf_intermediate_credit::native_errors(model, data).map_err(|e| match e {
+        crate::anf_intermediate_credit::IntermediateError::Network(inner) => {
+            DualCreditError::Network(inner)
+        }
+        _ => DualCreditError::InvalidData,
+    })
 }
 
 fn validate_data(
@@ -158,29 +156,30 @@ fn validate_data(
     if !(2..=A6C8_MAX_WIDTH).contains(&width) {
         return Err(DualCreditError::InvalidWidth);
     }
-    if data.input_bits != A6C8_INPUT_BITS
-        || data.target_bits != 1
-        || data.blocks.is_empty()
-    {
+    if data.input_bits != A6C8_INPUT_BITS || data.target_bits != 1 || data.blocks.is_empty() {
         return Err(DualCreditError::InvalidData);
     }
     let mut total_steps = 0usize;
     let mut samples = 0u64;
     for block in &data.blocks {
-        if block.steps == 0 || block.valid == 0
+        if block.steps == 0
+            || block.valid == 0
             || block.inputs.len() != block.steps * data.input_bits
             || block.targets.len() != block.steps * data.target_bits
         {
             return Err(DualCreditError::InvalidData);
         }
-        total_steps = total_steps.checked_add(block.steps)
+        total_steps = total_steps
+            .checked_add(block.steps)
             .ok_or(DualCreditError::InvalidData)?;
         samples += u64::from(block.valid.count_ones()) * block.steps as u64;
     }
     if capped_train
         && (total_steps > A6C8_MAX_TRAIN_STEPS
-            || data.blocks.last().is_none_or(|block|
-                block.steps < width + A6C8_PROBE_STEPS))
+            || data
+                .blocks
+                .last()
+                .is_none_or(|block| block.steps < width + A6C8_PROBE_STEPS))
     {
         return Err(DualCreditError::InvalidData);
     }
@@ -188,7 +187,8 @@ fn validate_data(
 }
 
 pub fn candidate_count(width: usize) -> Option<usize> {
-    (2..=A6C8_MAX_WIDTH).contains(&width)
+    (2..=A6C8_MAX_WIDTH)
+        .contains(&width)
         .then_some((width - 1) * A6C8_RAW_CHOICES.len() * A6C8_AFFINE_TRUTHS.len())
 }
 pub fn pair_count(width: usize) -> Option<usize> {
@@ -210,41 +210,38 @@ fn candidates(width: usize) -> Vec<IntermediateRule> {
 }
 
 fn innovation_from_labels(width: usize, data: &LaneData) -> Vec<Vec<u64>> {
-    data.blocks.iter().map(|block| {
-        let mut ring = vec![0u64; width];
-        let mut residual = vec![0u64; block.steps];
-        for (t, target) in block.targets.iter().enumerate() {
-            let position = t % width;
-            let current_root = ring[position]
-                ^ block.inputs[t * A6C8_INPUT_BITS + 1];
-            ring[position] = current_root;
-            residual[t] = *target
-                ^ block.inputs[t * A6C8_INPUT_BITS]
-                ^ current_root;
-        }
-        let mut innovation = vec![0u64; block.steps];
-        for t in 0..block.steps {
-            innovation[t] = residual[t] ^ if t >= width {
-                residual[t - width]
-            } else { 0 };
-        }
-        innovation
-    }).collect()
+    data.blocks
+        .iter()
+        .map(|block| {
+            let mut ring = vec![0u64; width];
+            let mut residual = vec![0u64; block.steps];
+            for (t, target) in block.targets.iter().enumerate() {
+                let position = t % width;
+                let current_root = ring[position] ^ block.inputs[t * A6C8_INPUT_BITS + 1];
+                ring[position] = current_root;
+                residual[t] = *target ^ block.inputs[t * A6C8_INPUT_BITS] ^ current_root;
+            }
+            let mut innovation = vec![0u64; block.steps];
+            for t in 0..block.steps {
+                innovation[t] = residual[t] ^ if t >= width { residual[t - width] } else { 0 };
+            }
+            innovation
+        })
+        .collect()
 }
 
 #[inline]
-fn feature(
-    width: usize,
-    rule: IntermediateRule,
-    block_inputs: &[u64],
-    t: usize,
-) -> u64 {
+fn feature(width: usize, rule: IntermediateRule, block_inputs: &[u64], t: usize) -> u64 {
     let lag = width - rule.gate;
     if t < lag {
         return 0;
     }
     let raw = block_inputs[(t - lag) * A6C8_INPUT_BITS + rule.raw];
-    if rule.truth == 9 { !raw } else { raw }
+    if rule.truth == 9 {
+        !raw
+    } else {
+        raw
+    }
 }
 
 fn train_innovation_errors(
@@ -260,9 +257,7 @@ fn train_innovation_errors(
             for &rule in rules {
                 predicted ^= feature(width, rule, &block.inputs, t);
             }
-            errors += u64::from(
-                ((innovations[bi][t] ^ predicted) & block.valid).count_ones(),
-            );
+            errors += u64::from(((innovations[bi][t] ^ predicted) & block.valid).count_ones());
         }
     }
     errors
@@ -348,11 +343,13 @@ pub fn fit_dual_hidden_credit(
     let mut pair_evaluations = 0usize;
     for a in 0..bank.len() {
         for b in a + 1..bank.len() {
-            if bank[a].gate == bank[b].gate { continue; }
+            if bank[a].gate == bank[b].gate {
+                continue;
+            }
             let mut error = 0u32;
             for t in 0..A6C8_PROBE_STEPS {
-                error += ((target[t] ^ features[a][t] ^ features[b][t])
-                    & probe_block.valid).count_ones();
+                error += ((target[t] ^ features[a][t] ^ features[b][t]) & probe_block.valid)
+                    .count_ones();
             }
             pair_evaluations += 1;
             let item = (error, a, b);
@@ -395,10 +392,7 @@ pub fn fit_dual_hidden_credit(
     // Identity is the default on exact ties; never tune gates on test.
     let mut selected_count = 0usize;
     let mut selected_validation_errors = baseline_validation_errors;
-    for (count, loss) in [
-        (1, single_validation_errors),
-        (2, joint_validation_errors),
-    ] {
+    for (count, loss) in [(1, single_validation_errors), (2, joint_validation_errors)] {
         if (loss, count) < (selected_validation_errors, selected_count) {
             selected_count = count;
             selected_validation_errors = loss;
@@ -447,8 +441,7 @@ pub fn fit_dual_hidden_credit(
         pairs_full_train_rescored: full_pairs,
         probe_steps: A6C8_PROBE_STEPS,
         beam_width: A6C8_BEAM_WIDTH,
-        feature_probe_payload_bytes:
-            features.len() * A6C8_PROBE_STEPS * std::mem::size_of::<u64>(),
+        feature_probe_payload_bytes: features.len() * A6C8_PROBE_STEPS * std::mem::size_of::<u64>(),
     })
 }
 
@@ -457,16 +450,13 @@ mod tests {
     use super::*;
     use crate::{anf_local_incremental::LaneBlock, toy_tasks::SplitMix64};
 
-    fn dataset(
-        seed: u64,
-        width: usize,
-        steps: usize,
-        rules: &[IntermediateRule],
-    ) -> LaneData {
+    fn dataset(seed: u64, width: usize, steps: usize, rules: &[IntermediateRule]) -> LaneData {
         let model = make_multi_gate_native(width, rules).unwrap();
         let mut rng = SplitMix64::new(seed);
         let mut inputs = vec![0u64; steps * A6C8_INPUT_BITS];
-        for word in &mut inputs { *word = rng.next_u64(); }
+        for word in &mut inputs {
+            *word = rng.next_u64();
+        }
         let mut state = vec![0u64; model.source_width()];
         let mut next = vec![0u64; width];
         let mut scratch = vec![0u64; model.scratch_len()];
@@ -480,7 +470,12 @@ mod tests {
         LaneData {
             input_bits: A6C8_INPUT_BITS,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -492,8 +487,16 @@ mod tests {
         assert_eq!(pair_count(256), Some(2_072_640));
         for width in [16, 32] {
             let rules = [
-                IntermediateRule { gate: 3, raw: 2, truth: 6 },
-                IntermediateRule { gate: width - 2, raw: 3, truth: 9 },
+                IntermediateRule {
+                    gate: 3,
+                    raw: 2,
+                    truth: 6,
+                },
+                IntermediateRule {
+                    gate: width - 2,
+                    raw: 3,
+                    truth: 9,
+                },
             ];
             let test = dataset(19, width, 128, &rules);
             oracle_affine_native(width, &test, &rules).unwrap();
@@ -506,8 +509,16 @@ mod tests {
     fn jointly_fits_two_zero_marginal_hidden_gates_without_auxiliary_labels() {
         let width = 32;
         let rules = [
-            IntermediateRule { gate: 7, raw: 2, truth: 6 },
-            IntermediateRule { gate: 21, raw: 3, truth: 6 },
+            IntermediateRule {
+                gate: 7,
+                raw: 2,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 21,
+                raw: 3,
+                truth: 6,
+            },
         ];
         let train = dataset(100, width, 160, &rules);
         let validation = dataset(200, width, 160, &rules);
@@ -536,9 +547,21 @@ mod tests {
     fn triple_mutation_is_not_misrepresented_as_exactly_two() {
         let width = 32;
         let rules = [
-            IntermediateRule { gate: 4, raw: 2, truth: 6 },
-            IntermediateRule { gate: 13, raw: 3, truth: 6 },
-            IntermediateRule { gate: 25, raw: 4, truth: 6 },
+            IntermediateRule {
+                gate: 4,
+                raw: 2,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 13,
+                raw: 3,
+                truth: 6,
+            },
+            IntermediateRule {
+                gate: 25,
+                raw: 4,
+                truth: 6,
+            },
         ];
         let train = dataset(103, width, 160, &rules);
         let val = dataset(104, width, 160, &rules);
@@ -551,10 +574,21 @@ mod tests {
     #[test]
     fn duplicate_physical_gates_and_too_short_training_are_rejected() {
         assert_eq!(
-            make_multi_gate_native(32, &[
-                IntermediateRule { gate: 3, raw: 2, truth: 6 },
-                IntermediateRule { gate: 3, raw: 3, truth: 9 },
-            ]),
+            make_multi_gate_native(
+                32,
+                &[
+                    IntermediateRule {
+                        gate: 3,
+                        raw: 2,
+                        truth: 6
+                    },
+                    IntermediateRule {
+                        gate: 3,
+                        raw: 3,
+                        truth: 9
+                    },
+                ]
+            ),
             Err(DualCreditError::InvalidSpec),
         );
         let short = dataset(106, 32, 16, &[]);
