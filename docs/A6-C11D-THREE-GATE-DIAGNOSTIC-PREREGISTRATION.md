@@ -1,9 +1,14 @@
 # A6-C11D — Diagnostic préenregistré : crédit de trois portes ANF
 
 **Protocole établi avant la première exécution de ce banc.**
-Dépendance effective : PR #490 (A6-C10), actuellement OPEN/DRAFT ;
-cette contribution est donc **empilée** sur sa branche et ne prétend
-pas qu'A6-C10 a déjà été fusionné.
+**Historique de dépendance :** au moment du préenregistrement
+initial, la PR #490 (A6-C10) était OPEN/DRAFT et cette
+contribution a été créée comme PR empilée. La PR #490 a
+**ensuite été fusionnée** au commit
+`baf671324aa097f54d3c766e24cc4be3b2dd6c54` ;
+la PR #491 a été repositionnée vers `main` avant
+publication de ce résultat. Cet amendement de provenance
+ne modifie aucun critère expérimental.
 
 ## Question : capacité, données ou classement des hypothèses ?
 
