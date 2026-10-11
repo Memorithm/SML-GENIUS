@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     || report.validation_samples != (VALIDATION_STEPS * LANES) as u64
                     || report.width != task.width()
                     || report.coordinate_evaluations
-                        != if report.old_one.proposed_rule.is_some() { 8 } else { 4 }
+                        != (if report.old_one.proposed_rule.is_some() { 8 } else { 4 })
                             * second_candidate_count(task.width()).unwrap()
                     || report.ring_payload_bytes != task.width() * 8
                 {
