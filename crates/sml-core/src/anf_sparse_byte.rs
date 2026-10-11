@@ -1,6 +1,8 @@
 //! Matched ANF byte-level dense-KT versus sparse hierarchical-backoff scoring.
 //! Both models consume exactly the same frozen recurrent trajectory and readout
 //! wiring; sparse fitting sees training targets only.
+use std::fmt;
+
 use crate::{
     anf_char::{CharAnfModel, CharMetrics, BYTE_BITS},
     anf_local::LocalAnfError,
@@ -14,11 +16,22 @@ pub enum SparseByteError {
     Sparse(SparseReadoutError),
     Shape,
 }
+impl fmt::Display for SparseByteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for SparseByteError {}
+
 impl From<LocalAnfError> for SparseByteError {
-    fn from(value: LocalAnfError) -> Self { Self::Network(value) }
+    fn from(value: LocalAnfError) -> Self {
+        Self::Network(value)
+    }
 }
 impl From<SparseReadoutError> for SparseByteError {
-    fn from(value: SparseReadoutError) -> Self { Self::Sparse(value) }
+    fn from(value: SparseReadoutError) -> Self {
+        Self::Sparse(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,21 +84,31 @@ impl SparseByteReadouts {
         let mut bits = Vec::with_capacity(BYTE_BITS);
         for b in 0..BYTE_BITS {
             bits.push(SparseBinaryReadout::fit(
-                &rows[b], &targets[b], model.readouts[b].inputs.len(),
+                &rows[b],
+                &targets[b],
+                model.readouts[b].inputs.len(),
             )?);
         }
         Ok(Self { bits })
     }
 
     pub fn stored_contexts(&self) -> usize {
-        self.bits.iter().map(SparseBinaryReadout::stored_contexts).sum()
+        self.bits
+            .iter()
+            .map(SparseBinaryReadout::stored_contexts)
+            .sum()
     }
 
     pub fn evaluate(
-        &self, model: &CharAnfModel, data: &LaneData, argmax: bool,
+        &self,
+        model: &CharAnfModel,
+        data: &LaneData,
+        argmax: bool,
     ) -> Result<CharMetrics, SparseByteError> {
-        if self.bits.len() != BYTE_BITS || model.readouts.len() != BYTE_BITS
-            || data.target_bits != BYTE_BITS {
+        if self.bits.len() != BYTE_BITS
+            || model.readouts.len() != BYTE_BITS
+            || data.target_bits != BYTE_BITS
+        {
             return Err(SparseByteError::Shape);
         }
         let traj = Trajectory::simulate(&model.network, data)?;
@@ -118,7 +141,9 @@ impl SparseByteReadouts {
                                 let p = self.bits[b].predict_one(a)?;
                                 lp += if prefix[b] == 1 { p } else { 1.0 - p }.log2();
                             }
-                            if lp > best.1 { best = (candidate, lp); }
+                            if lp > best.1 {
+                                best = (candidate, lp);
+                            }
                         }
                         let truth = actual.iter().fold(0usize, |a, &b| (a << 1) | b);
                         correct += u64::from(best.0 == truth);
@@ -130,8 +155,11 @@ impl SparseByteReadouts {
         Ok(CharMetrics {
             tokens,
             bits_per_byte: bits / tokens.max(1) as f64,
-            accuracy: if argmax { correct as f64 / tokens.max(1) as f64 }
-                else { f64::NAN },
+            accuracy: if argmax {
+                correct as f64 / tokens.max(1) as f64
+            } else {
+                f64::NAN
+            },
         })
     }
 }
@@ -144,8 +172,13 @@ mod tests {
     #[test]
     fn sparse_byte_scoring_is_finite_deterministic_and_train_only() {
         let config = CharAnfConfig {
-            free_gates: 8, lags: 1, fan_in: 4, context_bits: 4,
-            max_readout_fan_in: 12, max_epochs: 0, ..CharAnfConfig::default()
+            free_gates: 8,
+            lags: 1,
+            fan_in: 4,
+            context_bits: 4,
+            max_readout_fan_in: 12,
+            max_epochs: 0,
+            ..CharAnfConfig::default()
         };
         let make = |shift: usize| {
             let steps = 32;
@@ -162,8 +195,14 @@ mod tests {
                 }
             }
             LaneData {
-                input_bits: 8, target_bits: 8,
-                blocks: vec![LaneBlock { steps, inputs, targets, valid: 255 }],
+                input_bits: 8,
+                target_bits: 8,
+                blocks: vec![LaneBlock {
+                    steps,
+                    inputs,
+                    targets,
+                    valid: 255,
+                }],
             }
         };
         let training = make(0);
