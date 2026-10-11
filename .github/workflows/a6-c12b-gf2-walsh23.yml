@@ -1,0 +1,55 @@
+name: A6-C12b exact GF2 and Walsh order-two/three benchmark
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12b-gf2-walsh-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spectral-order-23:
+    if: startsWith(github.head_ref, 'research/a6-c12b-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA with no stored GitHub credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatting, Rust, Clippy and source recovery controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_three_gate_diagnostic
+          cargo test --locked -p sml-core --bin sml-gf2-walsh23-bench
+      - name: Frozen 24-stream GF2 and Walsh n32/64/128 benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12B_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-gf2-walsh23-bench -- 3 2>&1 | tee "$RUNNER_TEMP/a6c12b-gf2-walsh23.log"
+          grep -q '^A6C12B_ALL_FROZEN,attempts=216,streams=24$' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log"
+          test "$(grep -c '^A6C12B_GRID,' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log")" -eq 72
+          test "$(grep -c '^A6C12B_FROZEN,' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log")" -eq 216
+          test "$(grep -c '^A6C12B_TEST,' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log")" -eq 216
+          grep -q '^A6C12B_COMPLETE,attempts=216,independent_test_streams=24,methods=3,grid_sizes=3$' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log"
+          grep '^A6C12B_TEST,' "$RUNNER_TEMP/a6c12b-gf2-walsh23.log" | grep 'n=128' | head -12 || true
