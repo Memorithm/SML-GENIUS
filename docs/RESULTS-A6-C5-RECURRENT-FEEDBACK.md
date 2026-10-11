@@ -189,7 +189,7 @@ possibilités du système SML-GENIUS.
 
 - Révision initiale mesurée :
   `62f8919b6f9be3597fc4fbd54049d4ff84364729`.
-- [Journal A6-C5 et mesures brutes](https://github.com/Memorithm/SML-GENIUS/actions/runs/38155400000).
+- [Journal A6-C5 et mesures brutes](https://github.com/Memorithm/SML-GENIUS/actions/runs/38155462070/job/114517412291).
 - Matériel : **runner GitHub Actions Ubuntu x86_64, 4 processeurs
   logiques**, Rust **1.89.0**. **Pas une mesure Dell.**
 - CI expérimentale : formatage, compilation, Clippy, tests
