@@ -1,0 +1,58 @@
+name: A5-5 alpha validation evidence
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a5-alpha-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  alpha-validation:
+    if: startsWith(github.head_ref, 'research/a5-alpha-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact source revision without saved credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatting, types, lints and alpha tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-alpha-validation-bench
+          cargo test --locked -p sml-core anf_sparse
+      - name: Fetch only the pinned public-domain corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-char-corpus.sh
+          test "$(wc -c < data/char/verne-tour-du-monde.txt)" -eq 433036
+      - name: Run fixed seven-alpha, ten-seed experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A5_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpu=$(nproc)"
+          sha256sum data/char/verne-tour-du-monde.txt
+          cargo run --release --locked -p sml-core --bin sml-alpha-validation-bench -- data/char/verne-tour-du-monde.txt 10 2>&1 | tee "$RUNNER_TEMP/a5-alpha-validation.log"
+          test "$(grep -c '^A5_ALPHA_VALIDATION_RESULT,' "$RUNNER_TEMP/a5-alpha-validation.log")" -eq 70
+          test "$(grep -c '^A5_ALPHA_TEST_RESULT,' "$RUNNER_TEMP/a5-alpha-validation.log")" -eq 10
+          grep '^A5_ALPHA_SUMMARY,' "$RUNNER_TEMP/a5-alpha-validation.log"
