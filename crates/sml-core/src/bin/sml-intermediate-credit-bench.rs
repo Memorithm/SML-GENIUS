@@ -23,9 +23,8 @@ use std::{error::Error, time::Instant};
 
 use sml_core::{
     anf_intermediate_credit::{
-        fit_intermediate_gate, native_errors, native_model, score_rule,
-        IntermediateReport, IntermediateRule,
-        A6C7_INPUT_BITS, A6C7_MAX_WIDTH,
+        fit_intermediate_gate, native_errors, native_model, score_rule, IntermediateReport,
+        IntermediateRule, A6C7_INPUT_BITS, A6C7_MAX_WIDTH,
     },
     anf_local::{LocalAnfGate, LocalAnfNetwork},
     anf_local_incremental::{LaneBlock, LaneData},
@@ -52,8 +51,12 @@ enum Task {
 
 impl Task {
     const ALL: [Self; TASKS] = [
-        Self::Identity128, Self::Xor128Mid, Self::And128Late,
-        Self::Xor256Deep, Self::Xor256Mid, Self::And256Late,
+        Self::Identity128,
+        Self::Xor128Mid,
+        Self::And128Late,
+        Self::Xor256Deep,
+        Self::Xor256Mid,
+        Self::And256Late,
         Self::DoubleXor128Negative,
     ];
     fn name(self) -> &'static str {
@@ -88,17 +91,45 @@ impl Task {
     fn teacher_first(self) -> Option<IntermediateRule> {
         match self {
             Self::Identity128 => None,
-            Self::Xor128Mid => Some(IntermediateRule { gate: 45, raw: 2, truth: 6 }),
-            Self::And128Late => Some(IntermediateRule { gate: 92, raw: 3, truth: 8 }),
-            Self::Xor256Deep => Some(IntermediateRule { gate: 1, raw: 2, truth: 6 }),
-            Self::Xor256Mid => Some(IntermediateRule { gate: 127, raw: 2, truth: 6 }),
-            Self::And256Late => Some(IntermediateRule { gate: 192, raw: 3, truth: 8 }),
-            Self::DoubleXor128Negative => Some(IntermediateRule { gate: 31, raw: 2, truth: 6 }),
+            Self::Xor128Mid => Some(IntermediateRule {
+                gate: 45,
+                raw: 2,
+                truth: 6,
+            }),
+            Self::And128Late => Some(IntermediateRule {
+                gate: 92,
+                raw: 3,
+                truth: 8,
+            }),
+            Self::Xor256Deep => Some(IntermediateRule {
+                gate: 1,
+                raw: 2,
+                truth: 6,
+            }),
+            Self::Xor256Mid => Some(IntermediateRule {
+                gate: 127,
+                raw: 2,
+                truth: 6,
+            }),
+            Self::And256Late => Some(IntermediateRule {
+                gate: 192,
+                raw: 3,
+                truth: 8,
+            }),
+            Self::DoubleXor128Negative => Some(IntermediateRule {
+                gate: 31,
+                raw: 2,
+                truth: 6,
+            }),
         }
     }
     fn teacher_second(self) -> Option<IntermediateRule> {
         match self {
-            Self::DoubleXor128Negative => Some(IntermediateRule { gate: 88, raw: 3, truth: 6 }),
+            Self::DoubleXor128Negative => Some(IntermediateRule {
+                gate: 88,
+                raw: 3,
+                truth: 6,
+            }),
             _ => None,
         }
     }
@@ -108,14 +139,23 @@ impl Task {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Panel { Clean, LabelNoise }
+enum Panel {
+    Clean,
+    LabelNoise,
+}
 impl Panel {
     const ALL: [Self; PANELS] = [Self::Clean, Self::LabelNoise];
     fn name(self) -> &'static str {
-        match self { Self::Clean => "clean", Self::LabelNoise => "noise_1_in_16" }
+        match self {
+            Self::Clean => "clean",
+            Self::LabelNoise => "noise_1_in_16",
+        }
     }
     fn index(self) -> usize {
-        match self { Self::Clean => 0, Self::LabelNoise => 1 }
+        match self {
+            Self::Clean => 0,
+            Self::LabelNoise => 1,
+        }
     }
 }
 
@@ -131,12 +171,12 @@ fn teacher_network(task: Task) -> LocalAnfNetwork {
     let mut network = native_model(width, task.teacher_first()).unwrap();
     if let Some(extra) = task.teacher_second() {
         let truth: [bool; 4] = std::array::from_fn(|i| extra.truth & (1 << i) != 0);
-        network.gates_mut()[extra.gate] =
-            LocalAnfGate::from_truth_table(
-                vec![extra.gate - 1, width + extra.raw],
-                &truth,
-                width + A6C7_INPUT_BITS,
-            ).unwrap();
+        network.gates_mut()[extra.gate] = LocalAnfGate::from_truth_table(
+            vec![extra.gate - 1, width + extra.raw],
+            &truth,
+            width + A6C7_INPUT_BITS,
+        )
+        .unwrap();
     }
     network
 }
@@ -160,7 +200,9 @@ fn dataset(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
         let exact = teacher.readout().evaluate_lanes(&state, &mut products);
         let noise = if panel == Panel::LabelNoise {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         *target = exact ^ noise;
     }
     LaneData {
@@ -210,11 +252,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             for seed in 0..seeds {
                 let train = dataset(
                     derive_seed(seed, task, panel, 0xa6c7_1001),
-                    TRAIN_STEPS, task, panel,
+                    TRAIN_STEPS,
+                    task,
+                    panel,
                 );
                 let val = dataset(
                     derive_seed(seed, task, panel, 0xa6c7_2002),
-                    VALIDATION_STEPS, task, panel,
+                    VALIDATION_STEPS,
+                    task,
+                    panel,
                 );
                 let start = Instant::now();
                 let report = fit_intermediate_gate(&train, &val, task.width())?;
@@ -246,7 +292,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     fit_seconds
                 );
                 frozen.push(Frozen {
-                    task, panel, seed, report, fit_seconds,
+                    task,
+                    panel,
+                    seed,
+                    report,
+                    fit_seconds,
                 });
             }
         }
@@ -266,8 +316,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for entry in &frozen {
         let t = entry.task.index();
         let p = entry.panel.index();
-        if entry.task.is_representable()
-            && entry.report.proposed_rule == entry.task.teacher_first()
+        if entry.task.is_representable() && entry.report.proposed_rule == entry.task.teacher_first()
         {
             hits[t][p] += 1;
         }
@@ -275,8 +324,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         training_times[t][p] += entry.fit_seconds;
         for (h, steps) in HORIZONS.iter().copied().enumerate() {
             let test = dataset(
-                derive_seed(entry.seed, entry.task, entry.panel, 0xa6c7_3003 + steps as u64),
-                steps, entry.task, entry.panel,
+                derive_seed(
+                    entry.seed,
+                    entry.task,
+                    entry.panel,
+                    0xa6c7_3003 + steps as u64,
+                ),
+                steps,
+                entry.task,
+                entry.panel,
             );
             let baseline = native_errors(&entry.report.reference, &test)?;
             let proposed = native_errors(&entry.report.proposed, &test)?;
@@ -288,8 +344,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut scratch = vec![0u64; entry.task.width().min(A6C7_MAX_WIDTH)];
             let expected = score_rule(
                 entry.task.width(),
-                if entry.report.accepted { entry.report.proposed_rule } else { None },
-                &test, &mut scratch,
+                if entry.report.accepted {
+                    entry.report.proposed_rule
+                } else {
+                    None
+                },
+                &test,
+                &mut scratch,
             )?;
             if expected != committed {
                 return Err("native ANF vs split-ring test loss mismatch".into());
@@ -302,10 +363,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             let throughput = (steps * LANES) as f64 / elapsed;
             println!(
                 "A6C7_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{:.2},{:.6}",
-                entry.task.name(), entry.panel.name(), entry.seed,
-                entry.task.width(), steps, steps * LANES,
-                baseline, proposed, committed, baseline,
-                throughput, entry.fit_seconds,
+                entry.task.name(),
+                entry.panel.name(),
+                entry.seed,
+                entry.task.width(),
+                steps,
+                steps * LANES,
+                baseline,
+                proposed,
+                committed,
+                baseline,
+                throughput,
+                entry.fit_seconds,
             );
         }
     }
@@ -338,8 +407,11 @@ mod tests {
     #[test]
     fn teacher_and_learner_native_network_agree_on_a_known_single_gate() {
         for task in [
-            Task::Xor128Mid, Task::And128Late, Task::Xor256Deep,
-            Task::Xor256Mid, Task::And256Late,
+            Task::Xor128Mid,
+            Task::And128Late,
+            Task::Xor256Deep,
+            Task::Xor256Mid,
+            Task::And256Late,
         ] {
             let teacher = teacher_network(task);
             let expected = native_model(task.width(), task.teacher_first()).unwrap();
@@ -355,8 +427,12 @@ mod tests {
             let a = dataset(33, 512, task, Panel::Clean);
             let b = dataset(33, 512, task, Panel::LabelNoise);
             assert_eq!(a.blocks[0].inputs, b.blocks[0].inputs);
-            let flips = a.blocks[0].targets.iter().zip(&b.blocks[0].targets)
-                .map(|(&x, &y)| (x ^ y).count_ones() as u64).sum::<u64>();
+            let flips = a.blocks[0]
+                .targets
+                .iter()
+                .zip(&b.blocks[0].targets)
+                .map(|(&x, &y)| (x ^ y).count_ones() as u64)
+                .sum::<u64>();
             assert!(flips > 1_000 && flips < 3_300);
         }
     }
