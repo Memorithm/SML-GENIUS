@@ -181,6 +181,26 @@ fn apply_truth(mask: u8, state: u64, raw: u64) -> u64 {
     if mask & 8 != 0 { out |= state & raw; }
     out
 }
+/// Independent scored bit-sliced reference used for post-freeze evaluation.
+pub fn score_rule(
+    rule: ElasticPhaseRule,
+    data: &LaneData,
+    spec: &ElasticPhaseSpec,
+    ring: &mut [u64],
+) -> Result<u64, ElasticPhaseError> {
+    validate(data, spec, false)?;
+    if rule.width == 0
+        || rule.width > ELASTIC_MAX_WIDTH
+        || rule.tap >= rule.width
+        || rule.truth >= 16
+        || ring.len() < rule.width
+        || !spec.raw_candidates.contains(&rule.raw)
+    {
+        return Err(ElasticPhaseError::InvalidSpec);
+    }
+    Ok(score_ring(rule, data, spec, ring))
+}
+
 fn truth_uses_previous_state(mask: u8) -> bool {
     (mask & 1 != 0) != (mask & 2 != 0)
         || (mask & 4 != 0) != (mask & 8 != 0)
