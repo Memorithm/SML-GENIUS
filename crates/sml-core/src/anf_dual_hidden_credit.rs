@@ -17,6 +17,7 @@
 //! Pair discovery is a fixed-cost, two-stage HEURISTIC:
 //! 1. ALL distinct-position pairs scored on the LAST 32 TRAIN timesteps;
 //! 2. top 64 pairs rescored on COMPLETE TRAIN innovation, no validation/test.
+//!
 //! An independent real LocalAnfNetwork simulation MUST be bit-exact with
 //! additive innovation for selected pairs before their validation decision.
 //! Finally only VALIDATION chooses between 0, 1 and 2 candidate gates,
@@ -346,8 +347,8 @@ pub fn fit_dual_hidden_credit(
                 continue;
             }
             let mut error = 0u32;
-            for t in 0..A6C8_PROBE_STEPS {
-                error += ((target[t] ^ features[a][t] ^ features[b][t]) & probe_block.valid)
+            for (t, &observed) in target.iter().enumerate() {
+                error += ((observed ^ features[a][t] ^ features[b][t]) & probe_block.valid)
                     .count_ones();
             }
             pair_evaluations += 1;
