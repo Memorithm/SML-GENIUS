@@ -24,9 +24,7 @@ use std::{error::Error, time::Instant};
 
 use sml_core::{
     anf_constructive::residual_output_errors,
-    anf_credit_cycles::{
-        fit_recurrent_cycles, CycleReport, CycleSpec, FeedbackClass, A6C5_PAIRS,
-    },
+    anf_credit_cycles::{fit_recurrent_cycles, CycleReport, CycleSpec, FeedbackClass, A6C5_PAIRS},
     anf_local::{LocalAnfGate, LocalAnfNetwork},
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
@@ -123,7 +121,9 @@ fn derive_seed(seed: usize, task: Task, panel: Panel, stage: u64) -> u64 {
 fn dataset(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
     let mut rng = SplitMix64::new(seed);
     let mut inputs = vec![0u64; steps * INPUT_BITS];
-    for word in &mut inputs { *word = rng.next_u64(); }
+    for word in &mut inputs {
+        *word = rng.next_u64();
+    }
     let mut targets = vec![0u64; steps];
     let mut p1 = 0u64;
     let mut p2 = [0u64; 2];
@@ -135,14 +135,22 @@ fn dataset(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
         p3[t % 3] ^= x1;
         let residual = match task {
             Task::Direct => x1 & inputs[t * INPUT_BITS + 2],
-            Task::Lag1 => if t == 0 { 0 } else { inputs[(t - 1) * INPUT_BITS + 1] },
+            Task::Lag1 => {
+                if t == 0 {
+                    0
+                } else {
+                    inputs[(t - 1) * INPUT_BITS + 1]
+                }
+            }
             Task::RunningParity => p1,
             Task::Stride2Parity => p2[t % 2],
             Task::Stride3Negative => p3[t % 3],
         };
         let noise = if matches!(panel, Panel::Noisy) {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         *label = inputs[t * INPUT_BITS] ^ residual ^ noise;
     }
     LaneData {
@@ -169,15 +177,17 @@ fn no_recurrent_edges(model: &LocalAnfNetwork) -> LocalAnfNetwork {
         let gate = &model.gates()[i];
         let inputs = gate.inputs().to_vec();
         let reference = gate.truth_table();
-        let table: Vec<bool> = (0..reference.len()).map(|address| {
-            let mut reset = address;
-            for (bit, &source) in inputs.iter().enumerate() {
-                if source < STATE_BITS {
-                    reset &= !(1 << bit);
+        let table: Vec<bool> = (0..reference.len())
+            .map(|address| {
+                let mut reset = address;
+                for (bit, &source) in inputs.iter().enumerate() {
+                    if source < STATE_BITS {
+                        reset &= !(1 << bit);
+                    }
                 }
-            }
-            reference[reset]
-        }).collect();
+                reference[reset]
+            })
+            .collect();
         changed.gates_mut()[i] =
             LocalAnfGate::from_truth_table(inputs, &table, model.source_width()).unwrap();
     }
@@ -237,11 +247,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             for seed in 0..seeds {
                 let train = dataset(
                     derive_seed(seed, task, panel, 0xa6c5_1001),
-                    TRAIN_STEPS, task, panel,
+                    TRAIN_STEPS,
+                    task,
+                    panel,
                 );
                 let validation = dataset(
                     derive_seed(seed, task, panel, 0xa6c5_2002),
-                    VALIDATION_STEPS, task, panel,
+                    VALIDATION_STEPS,
+                    task,
+                    panel,
                 );
                 let clock = Instant::now();
                 let result = fit_recurrent_cycles(
@@ -281,7 +295,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     result.proposed.gates()[0].inputs(),
                     result.proposed.gates()[1].inputs(), fit_seconds
                 );
-                frozen.push(Frozen { seed, task, panel, fit_seconds, result });
+                frozen.push(Frozen {
+                    seed,
+                    task,
+                    panel,
+                    fit_seconds,
+                    result,
+                });
             }
         }
     }
@@ -298,14 +318,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     for entry in &frozen {
         let t = entry.task.index();
         let p = entry.panel.index();
-        class_hits[t][p] += usize::from(entry.task.expected_class() == Some(entry.result.proposed_class));
+        class_hits[t][p] +=
+            usize::from(entry.task.expected_class() == Some(entry.result.proposed_class));
         joint_accepts[t][p] += usize::from(entry.result.accepted_joint);
-        restart_wins[t][p] += usize::from(entry.result.restarted_train_errors == entry.result.joint_train_errors);
+        restart_wins[t][p] +=
+            usize::from(entry.result.restarted_train_errors == entry.result.joint_train_errors);
         fit_time[t][p] += entry.fit_seconds;
         for (horizon, steps) in TEST_STEPS.iter().copied().enumerate() {
             let test = dataset(
-                derive_seed(entry.seed, entry.task, entry.panel, 0xa6c5_4004 + steps as u64),
-                steps, entry.task, entry.panel,
+                derive_seed(
+                    entry.seed,
+                    entry.task,
+                    entry.panel,
+                    0xa6c5_4004 + steps as u64,
+                ),
+                steps,
+                entry.task,
+                entry.panel,
             );
             let zero = base_network();
             let error_values = [
@@ -323,10 +352,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             println!(
                 "A6C5_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6}",
-                entry.task.name(), entry.panel.name(), entry.seed, steps,
-                steps * LANES, error_values[0], error_values[1], error_values[2],
-                error_values[3], error_values[4], error_values[5],
-                error_values[6], upstream_disabled, entry.fit_seconds
+                entry.task.name(),
+                entry.panel.name(),
+                entry.seed,
+                steps,
+                steps * LANES,
+                error_values[0],
+                error_values[1],
+                error_values[2],
+                error_values[3],
+                error_values[4],
+                error_values[5],
+                error_values[6],
+                upstream_disabled,
+                entry.fit_seconds
             );
         }
     }
@@ -360,8 +399,11 @@ mod tests {
     #[test]
     fn known_generators_preserve_clean_and_independent_noisy_inputs() {
         for task in [
-            Task::Direct, Task::Lag1, Task::RunningParity,
-            Task::Stride2Parity, Task::Stride3Negative,
+            Task::Direct,
+            Task::Lag1,
+            Task::RunningParity,
+            Task::Stride2Parity,
+            Task::Stride3Negative,
         ] {
             let clean = dataset(19, 64, task, Panel::Clean);
             let noisy = dataset(19, 64, task, Panel::Noisy);
@@ -389,7 +431,8 @@ mod tests {
             &dataset(32, 32, task, Panel::Clean),
             &spec(),
             333,
-        ).unwrap();
+        )
+        .unwrap();
         let test = dataset(33, 256, task, Panel::Clean);
         assert_eq!(errors(&result.committed, &test).unwrap(), 0);
         assert!(errors(&no_recurrent_edges(&result.committed), &test).unwrap() > 0);
