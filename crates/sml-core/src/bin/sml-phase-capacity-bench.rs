@@ -72,11 +72,19 @@ impl Task {
             Self::Stride5Control => 5,
         }
     }
-    fn phase(self) -> usize { self.index() }
-    fn exact_width(self) -> Option<usize> {
-        if self.index() == 5 { None } else { Some(self.index().max(1)) }
+    fn phase(self) -> usize {
+        self.index()
     }
-    fn expected_period(self) -> usize { self.phase() }
+    fn exact_width(self) -> Option<usize> {
+        if self.index() == 5 {
+            None
+        } else {
+            Some(self.index().max(1))
+        }
+    }
+    fn expected_period(self) -> usize {
+        self.phase()
+    }
 }
 const ALL_TASKS: [Task; TASKS] = [
     Task::Direct,
@@ -88,7 +96,10 @@ const ALL_TASKS: [Task; TASKS] = [
 ];
 
 #[derive(Debug, Clone, Copy)]
-enum Panel { Clean, Noise }
+enum Panel {
+    Clean,
+    Noise,
+}
 impl Panel {
     fn name(self) -> &'static str {
         match self {
@@ -141,7 +152,9 @@ fn seed(seed: usize, task: Task, panel: Panel, stage: u64) -> u64 {
 fn dataset(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
     let mut rng = SplitMix64::new(seed);
     let mut inputs = vec![0u64; steps * INPUT_BITS];
-    for word in &mut inputs { *word = rng.next_u64(); }
+    for word in &mut inputs {
+        *word = rng.next_u64();
+    }
     let mut phases = [0u64; 6];
     let mut targets = vec![0u64; steps];
     for (t, target) in targets.iter_mut().enumerate() {
@@ -154,27 +167,37 @@ fn dataset(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
         };
         let noise = if matches!(panel, Panel::Noise) {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         *target = inputs[t * INPUT_BITS] ^ residual ^ noise;
     }
     LaneData {
         input_bits: INPUT_BITS,
         target_bits: 1,
-        blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+        blocks: vec![LaneBlock {
+            steps,
+            inputs,
+            targets,
+            valid: u64::MAX,
+        }],
     }
 }
 
 fn baseline_errors(data: &LaneData) -> u64 {
-    data.blocks.iter().map(|block| {
-        (0..block.steps).map(|t| {
-            let residual = block.targets[t] ^ block.inputs[t * INPUT_BITS];
-            u64::from((residual & block.valid).count_ones())
-        }).sum::<u64>()
-    }).sum()
+    data.blocks
+        .iter()
+        .map(|block| {
+            (0..block.steps)
+                .map(|t| {
+                    let residual = block.targets[t] ^ block.inputs[t * INPUT_BITS];
+                    u64::from((residual & block.valid).count_ones())
+                })
+                .sum::<u64>()
+        })
+        .sum()
 }
-fn old_two_bit_errors(
-    model: &LocalAnfNetwork, data: &LaneData,
-) -> Result<u64, Box<dyn Error>> {
+fn old_two_bit_errors(model: &LocalAnfNetwork, data: &LaneData) -> Result<u64, Box<dyn Error>> {
     Ok(residual_output_errors(model, data, 1, 0, 0)?.0)
 }
 
@@ -213,11 +236,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             for index in 0..seeds {
                 let train = dataset(
                     seed(index, task, panel, 0xa6c5_b101),
-                    TRAIN_STEPS, task, panel,
+                    TRAIN_STEPS,
+                    task,
+                    panel,
                 );
                 let validation = dataset(
                     seed(index, task, panel, 0xa6c5_b202),
-                    VALIDATION_STEPS, task, panel,
+                    VALIDATION_STEPS,
+                    task,
+                    panel,
                 );
                 let clock = Instant::now();
                 let phase = fit_phase_memory(&train, &validation, &spec(), 4)?;
@@ -226,7 +253,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let clock = Instant::now();
                 let old_two_bit = fit_recurrent_cycles(
                     &original_two_state_initial(),
-                    &train, &validation, &cycle_spec(),
+                    &train,
+                    &validation,
+                    &cycle_spec(),
                     seed(index, task, panel, 0xa6c5_b303),
                 )?;
                 let old_fit_seconds = clock.elapsed().as_secs_f64();
@@ -238,10 +267,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 {
                     return Err("A6-C5b preregistered protocol mismatch".into());
                 }
-                let width_train: Vec<String> = phase.widths.iter()
-                    .map(|v| v.train_errors.to_string()).collect();
-                let width_val: Vec<String> = phase.widths.iter()
-                    .map(|v| v.validation_errors.to_string()).collect();
+                let width_train: Vec<String> = phase
+                    .widths
+                    .iter()
+                    .map(|v| v.train_errors.to_string())
+                    .collect();
+                let width_val: Vec<String> = phase
+                    .widths
+                    .iter()
+                    .map(|v| v.validation_errors.to_string())
+                    .collect();
                 println!(
                     "A6C5B_FROZEN,task={},panel={},seed={},selected_width={},selected_period={},expected_period={},width_match={},accepted={},selected_feedback={},selected_raw={},selected_root_truth={},selected_delay_masks={:?},selected_anf_terms={},train_errors_per_width={},val_errors_per_width={},train_selected_errors={},val_selected_errors={},old_two_bit_train_errors={},old_two_bit_val_errors={},ring_evaluations={},old_joint_evaluations={},phase_fit_seconds={:.6},old_fit_seconds={:.6}",
                     task.name(), panel.name(), index,
@@ -262,8 +297,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     phase_fit_seconds, old_fit_seconds
                 );
                 frozen.push(Frozen {
-                    seed: index, task, panel, phase, old_two_bit,
-                    phase_fit_seconds, old_fit_seconds,
+                    seed: index,
+                    task,
+                    panel,
+                    phase,
+                    old_two_bit,
+                    phase_fit_seconds,
+                    old_fit_seconds,
                 });
             }
         }
@@ -286,15 +326,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         let panel_index = case.panel.index();
         width_matches[task_index][panel_index] += usize::from(
             case.task.exact_width() == Some(case.phase.selected_width)
-                && case.phase.selected_effective_period == case.task.expected_period()
+                && case.phase.selected_effective_period == case.task.expected_period(),
         );
         acceptances[task_index][panel_index] += usize::from(case.phase.accepted);
         fit_secs[task_index][panel_index] += case.phase_fit_seconds;
         old_secs[task_index][panel_index] += case.old_fit_seconds;
         for (h, length) in TEST_STEPS.iter().copied().enumerate() {
             let data = dataset(
-                seed(case.seed, case.task, case.panel, 0xa6c5_b404 + length as u64),
-                length, case.task, case.panel,
+                seed(
+                    case.seed,
+                    case.task,
+                    case.panel,
+                    0xa6c5_b404 + length as u64,
+                ),
+                length,
+                case.task,
+                case.panel,
             );
             let values = [
                 baseline_errors(&data),
@@ -310,10 +357,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             println!(
                 "A6C5B_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6},{:.6}",
-                case.task.name(), case.panel.name(), case.seed, length, length * LANES,
-                values[0],values[1],values[2],values[3],values[4],values[5],values[6],
-                case.phase.selected_width, case.phase.selected_effective_period,
-                case.phase_fit_seconds, case.old_fit_seconds
+                case.task.name(),
+                case.panel.name(),
+                case.seed,
+                length,
+                length * LANES,
+                values[0],
+                values[1],
+                values[2],
+                values[3],
+                values[4],
+                values[5],
+                values[6],
+                case.phase.selected_width,
+                case.phase.selected_effective_period,
+                case.phase_fit_seconds,
+                case.old_fit_seconds
             );
         }
     }
@@ -364,10 +423,7 @@ mod tests {
                     parity[t % task.phase()] ^= source;
                     parity[t % task.phase()]
                 };
-                assert_eq!(
-                    block.targets[t] ^ block.inputs[t * INPUT_BITS],
-                    residual
-                );
+                assert_eq!(block.targets[t] ^ block.inputs[t * INPUT_BITS], residual);
             }
         }
     }
@@ -389,8 +445,12 @@ mod tests {
         let validation = dataset(8, 64, task, Panel::Clean);
         let old = fit_recurrent_cycles(
             &original_two_state_initial(),
-            &train, &validation, &cycle_spec(), 0xabc,
-        ).unwrap();
+            &train,
+            &validation,
+            &cycle_spec(),
+            0xabc,
+        )
+        .unwrap();
         assert!(old.joint_train_errors > 0);
     }
 }
