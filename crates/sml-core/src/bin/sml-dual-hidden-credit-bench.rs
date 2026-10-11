@@ -272,7 +272,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     new.single_train_errors, new.single_validation_errors,
                     new.joint_train_errors, new.joint_validation_errors,
                     new.selected_train_errors, new.selected_validation_errors,
-                    old.selected_train_errors, old.selected_validation_errors,
+                    if old.accepted { old.proposed_train_errors } else { old.baseline_train_errors },
+                    if old.accepted { old.proposed_validation_errors } else { old.baseline_validation_errors },
                     new.two_gate_pairs_probed, new.pairs_full_train_rescored,
                     new.one_gate_candidates, new.feature_probe_payload_bytes,
                     new_fit_seconds, old_fit_seconds
