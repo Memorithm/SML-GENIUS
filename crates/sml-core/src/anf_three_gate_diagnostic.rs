@@ -453,15 +453,14 @@ fn to_rules(sources: [Source; 3], truths: [u8; 3]) -> TripleRules {
 fn evaluate_budget(
     budget: usize,
     width: usize,
-    structures: &[Candidate],
-    obs: &[Observed<'_>],
-    bank: &[Factor],
-    train: &LaneData,
-    validation: &LaneData,
-    reference: &LocalAnfNetwork,
-    baseline_validation_errors: u64,
+    search: (&[Candidate], &[Observed<'_>], &[Factor]),
+    datasets: (&LaneData, &LaneData),
+    comparison: (&LocalAnfNetwork, u64),
     ring: &mut [u64],
 ) -> Result<BudgetFit, TripleDiagError> {
+    let (structures, obs, bank) = search;
+    let (train, validation) = datasets;
+    let (reference, baseline_validation_errors) = comparison;
     let mut proxies = Vec::with_capacity(budget);
     for &structure in structures.iter().take(budget) {
         let counts = histograms(width, structure.sources, obs);
@@ -539,7 +538,7 @@ pub fn fit_three_gate_diagnostic(
     let validation_samples = validate(width, validation, false)?;
     if budgets.is_empty()
         || budgets.windows(2).any(|v| v[0] >= v[1])
-        || budgets.iter().any(|&v| v == 0)
+        || budgets.contains(&0)
     {
         return Err(TripleDiagError::InvalidBudget);
     }
