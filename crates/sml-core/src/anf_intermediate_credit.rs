@@ -143,7 +143,7 @@ pub fn candidate_count(width: usize) -> Option<usize> {
 }
 
 fn validate_rule(width: usize, rule: IntermediateRule) -> Result<(), IntermediateError> {
-    if width < 2 || width > A6C7_MAX_WIDTH {
+    if !(2..=A6C7_MAX_WIDTH).contains(&width) {
         return Err(IntermediateError::InvalidWidth);
     }
     if rule.gate == 0
@@ -225,7 +225,7 @@ pub fn native_model(
     width: usize,
     rule: Option<IntermediateRule>,
 ) -> Result<LocalAnfNetwork, IntermediateError> {
-    if width < 2 || width > A6C7_MAX_WIDTH {
+    if !(2..=A6C7_MAX_WIDTH).contains(&width) {
         return Err(IntermediateError::InvalidWidth);
     }
     if let Some(candidate) = rule {
@@ -273,7 +273,7 @@ pub fn score_rule(
     ring: &mut [u64],
 ) -> Result<u64, IntermediateError> {
     validate_data(data, false)?;
-    if width < 2 || width > A6C7_MAX_WIDTH || ring.len() < width {
+    if !(2..=A6C7_MAX_WIDTH).contains(&width) || ring.len() < width {
         return Err(IntermediateError::InvalidWidth);
     }
     Ok(if let Some(rule) = candidate {
@@ -291,7 +291,7 @@ pub fn fit_intermediate_gate(
     validation: &LaneData,
     width: usize,
 ) -> Result<IntermediateReport, IntermediateError> {
-    if width < 2 || width > A6C7_MAX_WIDTH {
+    if !(2..=A6C7_MAX_WIDTH).contains(&width) {
         return Err(IntermediateError::InvalidWidth);
     }
     let train_samples = validate_data(train, true)?;
