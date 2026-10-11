@@ -344,12 +344,7 @@ struct SearchSpace<'a> {
 impl SearchSpace<'_> {
     fn score(&self, selected: Triple) -> u64 {
         score(
-            selected,
-            self.cache,
-            self.third,
-            self.data,
-            self.spec,
-            self.n,
+            selected, self.cache, self.third, self.data, self.spec, self.n,
         )
     }
 }
@@ -491,8 +486,12 @@ pub fn fit_three_gate_credit(
         n,
     };
     let mut coordinate_evaluations = 0usize;
-    let (coordinate_choice, coordinate_train_errors) =
-        descent(initial, joint_evaluations, &mut coordinate_evaluations, &search);
+    let (coordinate_choice, coordinate_train_errors) = descent(
+        initial,
+        joint_evaluations,
+        &mut coordinate_evaluations,
+        &search,
+    );
     let coordinate_candidate = build_model(network, coordinate_choice, &first, &second, &third)?;
     if actual_errors(&coordinate_candidate, train, spec)? != coordinate_train_errors {
         return Err(MultiHopError::ScoreMismatch);
@@ -519,8 +518,7 @@ pub fn fit_three_gate_credit(
             second: rng.below(second.len()),
             third: rng.below(third.len()),
         };
-        let (choice, loss) =
-            descent(start, joint_evaluations, &mut restart_evaluations, &search);
+        let (choice, loss) = descent(start, joint_evaluations, &mut restart_evaluations, &search);
         if loss < restarted_train_errors {
             restarted_choice = choice;
             restarted_train_errors = loss;
