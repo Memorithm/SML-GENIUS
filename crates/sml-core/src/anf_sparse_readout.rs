@@ -203,7 +203,10 @@ mod tests {
                     expected = legacy_weight * kt + (1.0 - legacy_weight) * expected;
                 }
             }
-            assert_eq!(model.predict_one(row).unwrap().to_bits(), expected.to_bits());
+            assert_eq!(
+                model.predict_one(row).unwrap().to_bits(),
+                expected.to_bits()
+            );
             assert_eq!(
                 model.predict_with_alpha(row, 4.0).unwrap().to_bits(),
                 expected.to_bits()
