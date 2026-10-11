@@ -24,26 +24,45 @@ pub struct SparseBinaryReadout {
 
 impl SparseBinaryReadout {
     pub fn fit(rows: &[u64], targets: &[bool], width: usize) -> Result<Self, SparseReadoutError> {
-        if width > 63 { return Err(SparseReadoutError::Width); }
-        if rows.is_empty() { return Err(SparseReadoutError::Empty); }
-        if rows.len() != targets.len() { return Err(SparseReadoutError::Shape); }
+        if width > 63 {
+            return Err(SparseReadoutError::Width);
+        }
+        if rows.is_empty() {
+            return Err(SparseReadoutError::Empty);
+        }
+        if rows.len() != targets.len() {
+            return Err(SparseReadoutError::Shape);
+        }
         let mut counts = vec![BTreeMap::<u64, [u64; 2]>::new(); width + 1];
         let limit = if width == 0 { 0 } else { (1u64 << width) - 1 };
         for (&row, &target) in rows.iter().zip(targets) {
-            if row & !limit != 0 { return Err(SparseReadoutError::Width); }
+            if row & !limit != 0 {
+                return Err(SparseReadoutError::Width);
+            }
             for (depth, level) in counts.iter_mut().enumerate() {
                 let mask = if depth == 0 { 0 } else { (1u64 << depth) - 1 };
                 let entry = level.entry(row & mask).or_default();
                 entry[usize::from(target)] = entry[usize::from(target)]
-                    .checked_add(1).ok_or(SparseReadoutError::Overflow)?;
+                    .checked_add(1)
+                    .ok_or(SparseReadoutError::Overflow)?;
             }
         }
-        Ok(Self { width, counts, samples: rows.len() as u64 })
+        Ok(Self {
+            width,
+            counts,
+            samples: rows.len() as u64,
+        })
     }
 
     pub fn predict_one(&self, row: u64) -> Result<f64, SparseReadoutError> {
-        let limit = if self.width == 0 { 0 } else { (1u64 << self.width) - 1 };
-        if row & !limit != 0 { return Err(SparseReadoutError::Width); }
+        let limit = if self.width == 0 {
+            0
+        } else {
+            (1u64 << self.width) - 1
+        };
+        if row & !limit != 0 {
+            return Err(SparseReadoutError::Width);
+        }
         let base = self.counts[0].get(&0).ok_or(SparseReadoutError::Empty)?;
         let mut probability = (base[1] as f64 + 0.5) / (self.samples as f64 + 1.0);
         for depth in 1..=self.width {
@@ -59,9 +78,17 @@ impl SparseBinaryReadout {
         Ok(probability)
     }
 
-    pub fn bits_per_target(&self, rows: &[u64], targets: &[bool]) -> Result<f64, SparseReadoutError> {
-        if rows.is_empty() { return Err(SparseReadoutError::Empty); }
-        if rows.len() != targets.len() { return Err(SparseReadoutError::Shape); }
+    pub fn bits_per_target(
+        &self,
+        rows: &[u64],
+        targets: &[bool],
+    ) -> Result<f64, SparseReadoutError> {
+        if rows.is_empty() {
+            return Err(SparseReadoutError::Empty);
+        }
+        if rows.len() != targets.len() {
+            return Err(SparseReadoutError::Shape);
+        }
         let mut total = 0.0;
         for (&row, &target) in rows.iter().zip(targets) {
             let p = self.predict_one(row)?;
@@ -74,7 +101,9 @@ impl SparseBinaryReadout {
         self.counts.iter().map(BTreeMap::len).sum()
     }
 
-    pub fn training_samples(&self) -> u64 { self.samples }
+    pub fn training_samples(&self) -> u64 {
+        self.samples
+    }
 }
 
 #[cfg(test)]
@@ -83,8 +112,11 @@ mod tests {
     #[test]
     fn sparse_backoff_is_normalized_and_finite_for_unseen_contexts() {
         let model = SparseBinaryReadout::fit(
-            &[0, 0, 1, 1, 1, 2], &[false, false, true, true, true, false], 12
-        ).unwrap();
+            &[0, 0, 1, 1, 1, 2],
+            &[false, false, true, true, true, false],
+            12,
+        )
+        .unwrap();
         for row in [0, 1, 2, 3, 1023, 4095] {
             let p = model.predict_one(row).unwrap();
             assert!(p > 0.0 && p < 1.0);
@@ -99,17 +131,31 @@ mod tests {
         let labels = [false, true, false, true, true, true, false, true];
         let model = SparseBinaryReadout::fit(&rows, &labels, 4).unwrap();
         let before = model.clone();
-        let loss = model.bits_per_target(&[15, 2, 9], &[true, false, true]).unwrap();
+        let loss = model
+            .bits_per_target(&[15, 2, 9], &[true, false, true])
+            .unwrap();
         assert!(loss.is_finite());
         assert_eq!(model, before);
         assert_eq!(model, SparseBinaryReadout::fit(&rows, &labels, 4).unwrap());
     }
     #[test]
     fn rejects_bad_shapes_and_out_of_range_addresses() {
-        assert_eq!(SparseBinaryReadout::fit(&[], &[], 1), Err(SparseReadoutError::Empty));
-        assert_eq!(SparseBinaryReadout::fit(&[0], &[], 1), Err(SparseReadoutError::Shape));
-        assert_eq!(SparseBinaryReadout::fit(&[0], &[true], 64), Err(SparseReadoutError::Width));
-        assert_eq!(SparseBinaryReadout::fit(&[2], &[true], 1), Err(SparseReadoutError::Width));
+        assert_eq!(
+            SparseBinaryReadout::fit(&[], &[], 1),
+            Err(SparseReadoutError::Empty)
+        );
+        assert_eq!(
+            SparseBinaryReadout::fit(&[0], &[], 1),
+            Err(SparseReadoutError::Shape)
+        );
+        assert_eq!(
+            SparseBinaryReadout::fit(&[0], &[true], 64),
+            Err(SparseReadoutError::Width)
+        );
+        assert_eq!(
+            SparseBinaryReadout::fit(&[2], &[true], 1),
+            Err(SparseReadoutError::Width)
+        );
         let model = SparseBinaryReadout::fit(&[0], &[true], 1).unwrap();
         assert_eq!(model.predict_one(2), Err(SparseReadoutError::Width));
     }
