@@ -1,16 +1,23 @@
 //! A5 toy learning benchmark: local fan-in ANF recurrent model vs baselines.
 //!
-//! Usage: `sml-learn-toy [seeds] [state_bits] [fan_in] [local|random]`
-//! (defaults 5, 32, 6, local).
-//! Prints a markdown table (mean ± std over seeds of per-step test accuracy).
-//! Accuracy numbers are deterministic per seed; wall-clock times are not.
+//! Usage: `sml-learn-toy [seeds] [state_bits] [fan_in] [local|random] [history_lags]`
+//! (defaults 5, 32, 6, local, 16). Prints a markdown table (mean ± std over
+//! seeds of per-step accuracy). Accuracy numbers are deterministic per seed;
+//! wall-clock times are not.
+//!
+//! Learners: "ANF v1" is the step-1 learner (task-loss local search only).
+//! "ANF+hist" first fits a self-supervised history layer (A5 step 2, see
+//! `anf_local_history`), then runs the same search on the free gates.
+//! "hist+readout" is the ablation without free-gate search.
 use sml_core::anf_local::{LocalAnfShape, LocalAnfWiring};
+use sml_core::anf_local_history::{fit_history_layer, train_with_history};
 use sml_core::anf_local_learn::{errors, train, LocalAnfLearnConfig, PackedSplit};
 use sml_core::toy_baselines::{ConstantBaseline, ElmanRnn, NGramBaseline, RnnConfig};
-use sml_core::toy_tasks::{accuracy, ToySplitSpec, ToySplits, ToyTask};
+use sml_core::toy_tasks::{accuracy, generate, SplitMix64, ToySplitSpec, ToySplits, ToyTask};
 use std::time::Instant;
 
 const NGRAM_WINDOW: usize = 9;
+const XLONG_LEN: usize = 512;
 
 fn stats(values: &[f64]) -> (f64, f64) {
     let n = values.len() as f64;
@@ -40,6 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(other) => return Err(format!("unknown wiring {other}").into()),
         },
     };
+    let lags = arg(4, 16)?;
     let spec = ToySplitSpec::default();
     let tasks = [
         ToyTask::RunningParity,
@@ -49,32 +57,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ToyTask::DelayedRecall(2),
         ToyTask::DelayedRecall(4),
         ToyTask::DelayedRecall(8),
+        ToyTask::DelayedRecall(12),
+        ToyTask::DelayedRecall(16),
         ToyTask::WindowMajority(5),
     ];
     println!(
-        "Splits: train {}x{}, val {}x{}, test {}x{}, test-long {}x{} (sequences x steps); seeds 0..{}",
-        spec.train, spec.len, spec.val, spec.len, spec.test, spec.len, spec.test_long, spec.long_len, seeds
+        "Splits: train {}x{}, val {}x{}, test {}x{}, test-long {}x{}, test-xlong 64x{XLONG_LEN} (sequences x steps); seeds 0..{seeds}",
+        spec.train, spec.len, spec.val, spec.len, spec.test, spec.len, spec.test_long, spec.long_len
     );
     println!(
-        "ANF: N={} state bits, fan-in k={}, readout fan-in {}, wiring {:?}; RNN: Elman H={}; n-gram window {}\n",
+        "ANF: N={} state bits, fan-in k={}, readout fan-in {}, wiring {:?}, history lags L={lags} (free gates {}); RNN: Elman H={}; n-gram window {NGRAM_WINDOW}\n",
         shape.state_bits,
         shape.fan_in,
         shape.readout_fan_in,
         shape.wiring,
+        shape.state_bits - lags,
         RnnConfig::default().hidden,
-        NGRAM_WINDOW
     );
-    println!("| Task | Constant | n-gram (w=9) | RNN test | RNN test-long | ANF init+readout only (test) | ANF train | ANF test | ANF test-long | ANF exact runs (test-long 100%) | ANF time/run (s) | RNN time/run (s) |");
-    println!("|---|---|---|---|---|---|---|---|---|---|---|---|");
-    let mut learned_bits = 0;
-    let mut bits_read = 0;
-    let mut rnn_params = 0;
+    println!("| Task | Constant | n-gram (w=9) | RNN test-long | ANF v1 test-long (exact) | hist+readout test-long (exact) | ANF+hist train | ANF+hist test | ANF+hist test-long (exact) | ANF+hist test-xlong | RNN test-xlong | time v1 (s) | time hist fit (ms) | time ANF+hist total (s) | time RNN (s) |");
+    println!("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+    let mut summary = String::new();
     for task in tasks {
-        let mut rows: [Vec<f64>; 9] = Default::default();
-        let mut exact = 0;
-        let (mut anf_time, mut rnn_time) = (0.0, 0.0);
+        let mut rows: [Vec<f64>; 10] = Default::default();
+        let mut exact = [0u32; 3];
+        let mut times = [0.0f64; 4];
         for seed in 0..seeds {
             let s = ToySplits::new(task, spec, seed);
+            let xlong = generate(
+                task,
+                64,
+                XLONG_LEN,
+                SplitMix64::new(seed ^ 0x0516).next_u64(),
+            );
             let constant = ConstantBaseline::fit(&s.train);
             rows[0].push(accuracy(&s.test, |x| constant.predict(x)));
             let ngram = NGramBaseline::fit(&s.train, NGRAM_WINDOW);
@@ -88,76 +102,95 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &s.train,
                 &s.val,
             );
-            rnn_time += start.elapsed().as_secs_f64();
-            rnn_params = rnn.parameter_count();
-            rows[2].push(accuracy(&s.test, |x| rnn.predict(x)));
-            rows[3].push(accuracy(&s.test_long, |x| rnn.predict(x)));
+            times[3] += start.elapsed().as_secs_f64();
+            rows[2].push(accuracy(&s.test_long, |x| rnn.predict(x)));
+            rows[9].push(accuracy(&xlong, |x| rnn.predict(x)));
             let packed = |q: &[_]| PackedSplit::new(q);
-            let (tr, va, te, tl) = (
+            let (tr, va, te, tl, xl) = (
                 packed(&s.train)?,
                 packed(&s.val)?,
                 packed(&s.test)?,
                 packed(&s.test_long)?,
+                packed(&xlong)?,
             );
-            // Control: frozen random initial network, readout fitted, no state search.
-            let control = train(
-                LocalAnfLearnConfig {
-                    shape,
-                    seed,
-                    max_epochs: 0,
-                    ..LocalAnfLearnConfig::default()
-                },
-                &tr,
-                &va,
-            )?;
-            rows[8].push(1.0 - errors(&control.network, &te) as f64 / te.total() as f64);
+            let acc = |net: &_, p: &PackedSplit| 1.0 - errors(net, p) as f64 / p.total() as f64;
+            let config = LocalAnfLearnConfig {
+                shape,
+                seed,
+                ..LocalAnfLearnConfig::default()
+            };
+            // Step-1 learner (baseline column).
             let start = Instant::now();
-            let report = train(
-                LocalAnfLearnConfig {
-                    shape,
-                    seed,
-                    ..LocalAnfLearnConfig::default()
-                },
-                &tr,
-                &va,
-            )?;
-            anf_time += start.elapsed().as_secs_f64();
-            let acc = |p: &PackedSplit| 1.0 - errors(&report.network, p) as f64 / p.total() as f64;
-            rows[4].push(acc(&tr));
-            rows[5].push(acc(&te));
-            rows[6].push(acc(&tl));
-            if errors(&report.network, &tl) == 0 {
-                exact += 1;
-            }
-            learned_bits = report.network.learned_bits();
-            bits_read = report.network.bits_read_per_token();
+            let v1 = train(config, &tr, &va)?;
+            times[0] += start.elapsed().as_secs_f64();
+            rows[3].push(acc(&v1.network, &tl));
+            exact[0] += u32::from(errors(&v1.network, &tl) == 0);
+            // Ablation: history layer + readout search only (free gates frozen at init).
+            let ablation = train_with_history(config, lags, false, &tr, &va)?;
+            rows[4].push(acc(&ablation.search.network, &tl));
+            exact[1] += u32::from(errors(&ablation.search.network, &tl) == 0);
+            // History-layer fit cost alone.
+            let start = Instant::now();
+            let mut probe = sml_core::anf_local::LocalAnfNetwork::random(shape, seed)?;
+            fit_history_layer(&mut probe, lags, shape.fan_in, &tr)?;
+            times[1] += start.elapsed().as_secs_f64();
+            // Full step-2 learner.
+            let start = Instant::now();
+            let full = train_with_history(config, lags, true, &tr, &va)?;
+            times[2] += start.elapsed().as_secs_f64();
+            let net = &full.search.network;
+            rows[5].push(acc(net, &tr));
+            rows[6].push(acc(net, &te));
+            rows[7].push(acc(net, &tl));
+            rows[8].push(acc(net, &xl));
+            exact[2] += u32::from(errors(net, &tl) == 0);
             eprintln!(
-                "{task} seed={seed}: anf epochs={} evals={} train_err={} val_err={} test={:.3} long={:.3} | rnn test={:.3}",
-                report.epochs, report.evaluations, report.train_errors, report.val_errors,
-                acc(&te), acc(&tl), rows[2].last().copied().unwrap_or(0.0)
+                "{task} seed={seed}: v1 long={:.3} | hist+readout long={:.3} | hist epochs={} evals={} train_err={} val_err={} test={:.3} long={:.3} xlong={:.3} hist_fit_errors={} | rnn long={:.3}",
+                rows[3].last().copied().unwrap_or(0.0),
+                rows[4].last().copied().unwrap_or(0.0),
+                full.search.epochs,
+                full.search.evaluations,
+                full.search.train_errors,
+                full.search.val_errors,
+                acc(net, &te),
+                acc(net, &tl),
+                acc(net, &xl),
+                full.history.iter().map(|h| h.train_errors).sum::<u64>(),
+                rows[2].last().copied().unwrap_or(0.0),
             );
+            if summary.is_empty() {
+                summary = format!(
+                    "ANF learned coefficient bits: {} ({} history-layer gates fitted greedily, {} free gates searched); state/input bits read per token: {}. RNN f32 parameters: {}.",
+                    net.learned_bits(),
+                    lags,
+                    shape.state_bits - lags,
+                    net.bits_read_per_token(),
+                    rnn.parameter_count()
+                );
+            }
         }
+        let n = seeds as f64;
         println!(
-            "| {task} | {} | {} | {} | {} | {} | {} | {} | {} | {exact}/{seeds} | {:.1} | {:.1} |",
+            "| {task} | {} | {} | {} | {} ({}/{seeds}) | {} ({}/{seeds}) | {} | {} | {} ({}/{seeds}) | {} | {} | {:.1} | {:.2} | {:.2} | {:.1} |",
             pct(&rows[0]),
             pct(&rows[1]),
             pct(&rows[2]),
             pct(&rows[3]),
-            pct(&rows[8]),
+            exact[0],
             pct(&rows[4]),
+            exact[1],
             pct(&rows[5]),
             pct(&rows[6]),
-            anf_time / seeds as f64,
-            rnn_time / seeds as f64
+            pct(&rows[7]),
+            exact[2],
+            pct(&rows[8]),
+            pct(&rows[9]),
+            times[0] / n,
+            times[1] / n * 1000.0,
+            times[2] / n,
+            times[3] / n,
         );
     }
-    println!(
-        "\nANF learned coefficient bits: {learned_bits} ({} bytes); state/input bits read per token: {bits_read}; \
-         coefficient bits touched per token by direct ANF evaluation: {learned_bits}. \
-         RNN f32 parameters: {rnn_params} ({} bytes). n-gram table: {} entries.",
-        learned_bits / 8,
-        rnn_params * 4,
-        1usize << NGRAM_WINDOW
-    );
+    println!("\n{summary}");
     Ok(())
 }

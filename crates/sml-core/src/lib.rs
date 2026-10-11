@@ -14,6 +14,7 @@ pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
 pub mod anf_local;
+pub mod anf_local_history;
 pub mod anf_local_learn;
 pub mod anf_sbg_unified;
 pub mod atlas;
