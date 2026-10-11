@@ -158,7 +158,6 @@ fn panel_seed(seed: u64, panel: Panel, stage: u64) -> u64 {
 struct GateRun {
     target: usize,
     controls: Vec<ConstructedGate>,
-    validation_errors: [u64; 3],
     decision: ConstructionDecision,
     fit_seconds: [f64; 3],
 }
@@ -262,7 +261,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 gate_runs.push(GateRun {
                     target,
                     controls,
-                    validation_errors,
                     decision,
                     fit_seconds,
                 });
