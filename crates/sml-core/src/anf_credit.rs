@@ -21,6 +21,7 @@ pub const MAX_CREDIT_INPUT_BITS: usize = 8;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreditError {
     Network(LocalAnfError),
+    Constructive(crate::anf_constructive::ConstructiveError),
     InvalidShape,
     InvalidSpec,
     ScoreMismatch,
@@ -34,6 +35,11 @@ impl std::error::Error for CreditError {}
 impl From<LocalAnfError> for CreditError {
     fn from(value: LocalAnfError) -> Self {
         Self::Network(value)
+    }
+}
+impl From<crate::anf_constructive::ConstructiveError> for CreditError {
+    fn from(value: crate::anf_constructive::ConstructiveError) -> Self {
+        Self::Constructive(value)
     }
 }
 
