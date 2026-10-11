@@ -230,6 +230,9 @@ fn emit_summaries(records: &[Ranked], nseeds: usize) {
                         })
                         .collect::<Vec<_>>();
                     assert_eq!(group.len(), nseeds);
+                    let mut observed_seeds = group.iter().map(|r| r.seed).collect::<Vec<_>>();
+                    observed_seeds.sort_unstable();
+                    assert_eq!(observed_seeds, (0..nseeds).collect::<Vec<_>>());
                     let within = |rank: usize| {
                         group
                             .iter()
