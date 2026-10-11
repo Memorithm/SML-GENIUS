@@ -12,6 +12,7 @@ pub mod ablation;
 pub mod anf;
 pub mod anf_char;
 pub mod anf_constructive;
+pub mod anf_credit;
 pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
