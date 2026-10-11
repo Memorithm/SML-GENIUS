@@ -118,8 +118,9 @@ avec canal brut `x1` et tap `s_(N-1)`. Les délais natifs
 intermédiaires sont des portes ANF unaires identité,
 explicitement fixées par le protocole.
 
-À 16 384 pas, **tous les exemples propres des 40 modèles
-de parité périodique ont zéro erreur**, soit **32 fois
+À 16 384 pas, **tous les exemples propres des 35 modèles
+de parité périodique ont zéro erreur** (7 tâches de parité
+× 5 graines), ainsi que les 5 modèles directs, soit **32 fois
 les 512 pas de leurs séquences d'entraînement**.
 Le panneau bruité a l'erreur attendue ≈6,25 %.
 
