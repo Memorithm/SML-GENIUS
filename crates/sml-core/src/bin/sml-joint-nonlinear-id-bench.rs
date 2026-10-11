@@ -339,7 +339,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 *sum += value;
             }
             println!(
-                "A6C10_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.2},{:.6}",
+                "A6C10_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.2},{:.6}",
                 case.task.name(),
                 case.panel.name(),
                 case.seed,
