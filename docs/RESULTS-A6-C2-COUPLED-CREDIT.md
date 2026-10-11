@@ -99,7 +99,7 @@ comparaison de débit de génération de tokens.
 - Exécution : GitHub Actions Ubuntu x86_64, 4 processeurs logiques,
   Rust 1.89.0.
 - Résultats : workflow A6-C2, job
-  [coupled-credit](https://github.com/Memorithm/SML-GENIUS/actions/runs/38147590000).
+  [coupled-credit](https://github.com/Memorithm/SML-GENIUS/actions/runs/38148444765).
 - Source exacte de vérification : le journal du job porte les marqueurs
   `A6C2_FROZEN`, `A6C2_ALL_FROZEN`, `A6C2_TEST_RESULT` et
   `A6C2_SUMMARY`. Les validations incluent formatage, compilation,
