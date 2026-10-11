@@ -143,7 +143,7 @@ fn fixture(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
     }
     let mut targets = vec![0u64; steps];
     let x = |t: usize, channel: usize| inputs[t * INPUT_BITS + channel];
-    for t in 0..steps {
+    for (t, target) in targets.iter_mut().enumerate() {
         let residual = match task {
             Task::Direct => x(t, 1) & x(t, 2),
             Task::Skip => {
@@ -174,7 +174,7 @@ fn fixture(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
         } else {
             0
         };
-        targets[t] = x(t, 0) ^ residual ^ label_noise;
+        *target = x(t, 0) ^ residual ^ label_noise;
     }
     LaneData {
         input_bits: INPUT_BITS,
