@@ -1,0 +1,53 @@
+name: A6-C2 coupled recurrent credit evidence
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c2-credit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  coupled-credit:
+    if: startsWith(github.head_ref, 'research/a6-c2-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR revision without saved credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatting, compilation, Clippy and constructive credit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_credit
+          cargo test --locked -p sml-core --bin sml-coupled-credit-bench
+      - name: A6-C2 frozen 5-seed paired-credit benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C2_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-coupled-credit-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c2-credit.log"
+          grep -q '^A6C2_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c2-credit.log"
+          test "$(grep -c '^A6C2_FROZEN,' "$RUNNER_TEMP/a6c2-credit.log")" -eq 10
+          test "$(grep -c '^A6C2_TEST_RESULT,' "$RUNNER_TEMP/a6c2-credit.log")" -eq 10
+          test "$(grep -c '^A6C2_SUMMARY,' "$RUNNER_TEMP/a6c2-credit.log")" -eq 2
+          grep '^A6C2_SUMMARY,' "$RUNNER_TEMP/a6c2-credit.log"
