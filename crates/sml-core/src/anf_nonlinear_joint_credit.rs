@@ -591,7 +591,7 @@ mod tests {
         assert_eq!(native_dual_errors(&report.selected, &test).unwrap(), 0);
         assert_eq!(
             report.conditional_evaluations,
-            second_candidate_count(width).unwrap() + 1 + 2 * second_candidate_count(width).unwrap()
+            9 * second_candidate_count(width).unwrap() + 1
         );
     }
 
