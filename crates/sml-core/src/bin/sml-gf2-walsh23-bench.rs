@@ -413,15 +413,13 @@ struct Frozen {
     fit: Option<BudgetFit>,
 }
 fn freeze(
-    task: Task,
-    panel: Panel,
-    seed: usize,
-    n: usize,
+    identity: (Task, Panel, usize, usize),
     method: Method,
     train: &LaneData,
     validation: &LaneData,
     o: &Observed,
 ) -> Result<Frozen, Box<dyn Error>> {
+    let (task, panel, seed, n) = identity;
     let expected = task.sources();
     let (full_pairs, full_triples) = count_combinations(o);
     let start = Instant::now();
@@ -481,7 +479,7 @@ fn freeze(
     println!(
         "A6C12B_FROZEN,task={},panel={},seed={},n={},method={},status={},pair_rank={},triplet_rank={},true_triplet_proposed={},pair_screens={},triple_screens={},factorized_structures={},score_seconds={:.6},factor_seconds={:.6},proposal_sources={:?},proposal_truths={:?},accepted={}",
         task.name(),panel.name(),seed,n,method.name(),status,pair_rank,rank_true,
-        proposed.iter().any(|&sources| sources == expected),full_pairs,full_triples,
+        proposed.contains(&expected),full_pairs,full_triples,
         proposed.len(),score_seconds,factor_seconds,
         fit.as_ref().map(|x|x.proposal_sources),
         fit.as_ref().map(|x|x.proposal_rules.rules.map(|r| r.truth)),
@@ -554,10 +552,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                     for method in Method::ALL {
                         frozen.push(freeze(
-                            task,
-                            panel,
-                            index,
-                            n,
+                            (task, panel, index, n),
                             method,
                             &train,
                             &validation,
