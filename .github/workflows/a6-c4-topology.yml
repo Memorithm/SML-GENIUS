@@ -1,0 +1,53 @@
+name: A6-C4 adaptive recurrent ANF topology evidence
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c4-topology-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  adaptive-topology:
+    if: startsWith(github.head_ref, 'research/a6-c4-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatting, Rust contracts and native ANF topology oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_credit_topology
+          cargo test --locked -p sml-core --bin sml-topology-credit-bench
+      - name: Four structural motifs x clean/noisy x five seeds, train-val-test frozen
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C4_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-topology-credit-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c4-adaptive-topology.log"
+          grep -q '^A6C4_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c4-adaptive-topology.log"
+          test "$(grep -c '^A6C4_FROZEN,' "$RUNNER_TEMP/a6c4-adaptive-topology.log")" -eq 40
+          test "$(grep -c '^A6C4_TEST_RESULT,' "$RUNNER_TEMP/a6c4-adaptive-topology.log")" -eq 40
+          test "$(grep -c '^A6C4_SUMMARY,' "$RUNNER_TEMP/a6c4-adaptive-topology.log")" -eq 8
+          grep '^A6C4_SUMMARY,' "$RUNNER_TEMP/a6c4-adaptive-topology.log"
