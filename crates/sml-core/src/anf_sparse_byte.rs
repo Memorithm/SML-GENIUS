@@ -100,6 +100,41 @@ impl SparseByteReadouts {
     }
 
     /// Fixed alpha=4.0 reference retained for backward compatibility.
+    /// Exact 256-way argmax via a shared chain-rule prefix tree.
+    /// The 255 unique conditional prefixes replace 256 * 8 repeated lookups.
+    fn argmax_byte(
+        &self,
+        model: &CharAnfModel,
+        sources: &[u64],
+        lane: u32,
+        alpha: f64,
+    ) -> Result<usize, SparseByteError> {
+        let mut logp = [0.0f64; 512];
+        for b in 0..BYTE_BITS {
+            for prefix in 0..(1usize << b) {
+                let mut parent_bits = [0usize; BYTE_BITS];
+                for (i, bit) in parent_bits.iter_mut().enumerate().take(b) {
+                    *bit = (prefix >> (b - 1 - i)) & 1;
+                }
+                let a = address(&model.readouts[b], sources, lane, &parent_bits);
+                let p = self.bits[b].predict_with_alpha(a, alpha)?;
+                let base = logp[(1 << b) + prefix];
+                let child = (2 << b) + (prefix << 1);
+                logp[child] = base + (1.0 - p).log2();
+                logp[child + 1] = base + p.log2();
+            }
+        }
+        let best = (0..256usize).fold((0usize, f64::NEG_INFINITY), |acc, byte| {
+            let score = logp[256 + byte];
+            if score > acc.1 {
+                (byte, score)
+            } else {
+                acc
+            }
+        });
+        Ok(best.0)
+    }
+
     pub fn evaluate(
         &self,
         model: &CharAnfModel,
@@ -147,22 +182,9 @@ impl SparseByteReadouts {
                         bits -= if actual[b] == 1 { p } else { 1.0 - p }.log2();
                     }
                     if argmax {
-                        let mut best = (0usize, f64::NEG_INFINITY);
-                        for candidate in 0..256usize {
-                            let mut prefix = [0usize; BYTE_BITS];
-                            let mut lp = 0.0;
-                            for b in 0..BYTE_BITS {
-                                prefix[b] = (candidate >> (7 - b)) & 1;
-                                let a = address(&model.readouts[b], sources, lane, &prefix);
-                                let p = self.bits[b].predict_with_alpha(a, alpha)?;
-                                lp += if prefix[b] == 1 { p } else { 1.0 - p }.log2();
-                            }
-                            if lp > best.1 {
-                                best = (candidate, lp);
-                            }
-                        }
+                        let prediction = self.argmax_byte(model, sources, lane, alpha)?;
                         let truth = actual.iter().fold(0usize, |a, &b| (a << 1) | b);
-                        correct += u64::from(best.0 == truth);
+                        correct += u64::from(prediction == truth);
                     }
                     tokens += 1;
                 }
@@ -233,6 +255,26 @@ mod tests {
             .unwrap();
         assert_eq!(a, b);
         assert_eq!(a, alpha_four);
+        let traj = Trajectory::simulate(&report.model.network, &held_out).unwrap();
+        let row = traj.row(0, 0);
+        for alpha in [1.0, 4.0, 16.0] {
+            let optimized = sparse.argmax_byte(&report.model, row, 0, alpha).unwrap();
+            let mut reference = (0usize, f64::NEG_INFINITY);
+            for byte in 0..256usize {
+                let mut prefix = [0usize; BYTE_BITS];
+                let mut lp = 0.0;
+                for b in 0..BYTE_BITS {
+                    prefix[b] = (byte >> (7 - b)) & 1;
+                    let a = address(&report.model.readouts[b], row, 0, &prefix);
+                    let p = sparse.bits[b].predict_with_alpha(a, alpha).unwrap();
+                    lp += if prefix[b] == 1 { p } else { 1.0 - p }.log2();
+                }
+                if lp > reference.1 {
+                    reference = (byte, lp);
+                }
+            }
+            assert_eq!(optimized, reference.0);
+        }
         for alpha in [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0] {
             let scored = sparse
                 .evaluate_with_alpha(&report.model, &held_out, false, alpha)
