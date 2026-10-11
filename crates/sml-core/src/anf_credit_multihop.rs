@@ -114,7 +114,11 @@ fn check_spec(network: &LocalAnfNetwork, spec: &MultiHopSpec) -> Result<(), Mult
             return Err(MultiHopError::Spec);
         }
     }
-    if network.gates().iter().any(|g| g.truth_table().iter().any(|&v| v)) {
+    if network
+        .gates()
+        .iter()
+        .any(|g| g.truth_table().iter().any(|&v| v))
+    {
         return Err(MultiHopError::Spec);
     }
     Ok(())
@@ -156,10 +160,18 @@ fn check_data(
 #[inline]
 fn apply_truth(truth: u8, a: u64, b: u64) -> u64 {
     let mut out = 0u64;
-    if truth & 1 != 0 { out |= !a & !b; }
-    if truth & 2 != 0 { out |= a & !b; }
-    if truth & 4 != 0 { out |= !a & b; }
-    if truth & 8 != 0 { out |= a & b; }
+    if truth & 1 != 0 {
+        out |= !a & !b;
+    }
+    if truth & 2 != 0 {
+        out |= a & !b;
+    }
+    if truth & 4 != 0 {
+        out |= !a & b;
+    }
+    if truth & 8 != 0 {
+        out |= a & b;
+    }
     out
 }
 
@@ -199,26 +211,43 @@ fn grammar(
 fn first_outputs(rule: &GateRule, data: &LaneData, n: usize) -> Series {
     let a = rule.inputs[0] - n;
     let b = rule.inputs[1] - n;
-    data.blocks.iter().map(|block| {
-        (0..block.steps).map(|t| {
-            apply_truth(
-                rule.truth,
-                block.inputs[t * data.input_bits + a],
-                block.inputs[t * data.input_bits + b],
-            )
-        }).collect()
-    }).collect()
+    data.blocks
+        .iter()
+        .map(|block| {
+            (0..block.steps)
+                .map(|t| {
+                    apply_truth(
+                        rule.truth,
+                        block.inputs[t * data.input_bits + a],
+                        block.inputs[t * data.input_bits + b],
+                    )
+                })
+                .collect()
+        })
+        .collect()
 }
 fn second_outputs(rule: &GateRule, upstream: &Series, data: &LaneData, n: usize) -> Series {
     let raw = rule.inputs[1] - n;
-    data.blocks.iter().enumerate().map(|(bi, block)| {
-        (0..block.steps).map(|t| {
-            let prior = if t == 0 { 0 } else { upstream[bi][t - 1] };
-            apply_truth(rule.truth, prior, block.inputs[t * data.input_bits + raw])
-        }).collect()
-    }).collect()
+    data.blocks
+        .iter()
+        .enumerate()
+        .map(|(bi, block)| {
+            (0..block.steps)
+                .map(|t| {
+                    let prior = if t == 0 { 0 } else { upstream[bi][t - 1] };
+                    apply_truth(rule.truth, prior, block.inputs[t * data.input_bits + raw])
+                })
+                .collect()
+        })
+        .collect()
 }
-fn terminal_errors(rule: &GateRule, prior: &Series, data: &LaneData, spec: &MultiHopSpec, n: usize) -> u64 {
+fn terminal_errors(
+    rule: &GateRule,
+    prior: &Series,
+    data: &LaneData,
+    spec: &MultiHopSpec,
+    n: usize,
+) -> u64 {
     let raw = rule.inputs[1] - n;
     let mut errors = 0u64;
     for (bi, block) in data.blocks.iter().enumerate() {
@@ -234,15 +263,27 @@ fn terminal_errors(rule: &GateRule, prior: &Series, data: &LaneData, spec: &Mult
 }
 
 fn score(
-    selected: Triple, cache: &TrainCache, third: &[GateRule],
-    data: &LaneData, spec: &MultiHopSpec, n: usize,
+    selected: Triple,
+    cache: &TrainCache,
+    third: &[GateRule],
+    data: &LaneData,
+    spec: &MultiHopSpec,
+    n: usize,
 ) -> u64 {
-    terminal_errors(&third[selected.third], &cache[selected.first][selected.second], data, spec, n)
+    terminal_errors(
+        &third[selected.third],
+        &cache[selected.first][selected.second],
+        data,
+        spec,
+        n,
+    )
 }
 
 fn build_cache(
-    network: &LocalAnfNetwork, data: &LaneData,
-    first: &[GateRule], second: &[GateRule],
+    network: &LocalAnfNetwork,
+    data: &LaneData,
+    first: &[GateRule],
+    second: &[GateRule],
 ) -> (TrainCache, usize) {
     let n = network.state_bits();
     let mut all = Vec::with_capacity(first.len());
@@ -262,11 +303,18 @@ fn build_cache(
 
 fn as_anf(rule: &GateRule, width: usize) -> Result<LocalAnfGate, MultiHopError> {
     let table: Vec<bool> = (0..4).map(|i| (rule.truth >> i) & 1 != 0).collect();
-    Ok(LocalAnfGate::from_truth_table(rule.inputs.to_vec(), &table, width)?)
+    Ok(LocalAnfGate::from_truth_table(
+        rule.inputs.to_vec(),
+        &table,
+        width,
+    )?)
 }
 fn build_model(
-    reference: &LocalAnfNetwork, selected: Triple,
-    first: &[GateRule], second: &[GateRule], third: &[GateRule],
+    reference: &LocalAnfNetwork,
+    selected: Triple,
+    first: &[GateRule],
+    second: &[GateRule],
+    third: &[GateRule],
 ) -> Result<LocalAnfNetwork, MultiHopError> {
     let mut model = reference.clone();
     model.gates_mut()[0] = as_anf(&first[selected.first], reference.source_width())?;
@@ -275,19 +323,26 @@ fn build_model(
     Ok(model)
 }
 fn actual_errors(
-    network: &LocalAnfNetwork, data: &LaneData, spec: &MultiHopSpec,
+    network: &LocalAnfNetwork,
+    data: &LaneData,
+    spec: &MultiHopSpec,
 ) -> Result<u64, MultiHopError> {
-    Ok(residual_output_errors(
-        network, data, 2, spec.target_bit, spec.baseline_input,
-    )?.0)
+    Ok(residual_output_errors(network, data, 2, spec.target_bit, spec.baseline_input)?.0)
 }
 
 /// One-gate-at-a-time strictly improving moves; no neutral temporary credit.
 /// Restarted control uses different initial triples but exactly this method.
 fn descent(
-    start: Triple, budget: usize, evaluations: &mut usize,
-    cache: &TrainCache, first: &[GateRule], second: &[GateRule], third: &[GateRule],
-    data: &LaneData, spec: &MultiHopSpec, n: usize,
+    start: Triple,
+    budget: usize,
+    evaluations: &mut usize,
+    cache: &TrainCache,
+    first: &[GateRule],
+    second: &[GateRule],
+    third: &[GateRule],
+    data: &LaneData,
+    spec: &MultiHopSpec,
+    n: usize,
 ) -> (Triple, u64) {
     debug_assert!(*evaluations < budget);
     let mut selected = start;
@@ -334,12 +389,23 @@ fn descent(
 }
 
 fn validate_commit(
-    reference: &LocalAnfNetwork, candidate: LocalAnfNetwork,
-    validation: &LaneData, spec: &MultiHopSpec, baseline: u64,
+    reference: &LocalAnfNetwork,
+    candidate: LocalAnfNetwork,
+    validation: &LaneData,
+    spec: &MultiHopSpec,
+    baseline: u64,
 ) -> Result<(LocalAnfNetwork, bool, u64), MultiHopError> {
     let loss = actual_errors(&candidate, validation, spec)?;
     let accepted = loss < baseline;
-    Ok((if accepted { candidate } else { reference.clone() }, accepted, loss))
+    Ok((
+        if accepted {
+            candidate
+        } else {
+            reference.clone()
+        },
+        accepted,
+        loss,
+    ))
 }
 
 /// Exhaustive three-gate fit versus two independent end-task-only controls.
@@ -360,14 +426,22 @@ pub fn fit_three_gate_credit(
     let n = network.state_bits();
     let baseline_train_errors = actual_errors(network, train, spec)?;
     let baseline_validation_errors = actual_errors(network, validation, spec)?;
-    let initial = Triple { first: 0, second: 0, third: 0 };
+    let initial = Triple {
+        first: 0,
+        second: 0,
+        third: 0,
+    };
     let mut best = initial;
     let mut joint_train_errors = u64::MAX;
     let mut joint_evaluations = 0usize;
     for a in 0..first.len() {
         for b in 0..second.len() {
             for c in 0..third.len() {
-                let triple = Triple { first: a, second: b, third: c };
+                let triple = Triple {
+                    first: a,
+                    second: b,
+                    third: c,
+                };
                 let loss = score(triple, &cache, &third, train, spec, n);
                 joint_evaluations += 1;
                 if loss < joint_train_errors {
@@ -381,21 +455,38 @@ pub fn fit_three_gate_credit(
     if actual_errors(&proposed, train, spec)? != joint_train_errors {
         return Err(MultiHopError::ScoreMismatch);
     }
-    let (committed, joint_accepted, joint_validation_errors) =
-        validate_commit(network, proposed.clone(), validation, spec, baseline_validation_errors)?;
+    let (committed, joint_accepted, joint_validation_errors) = validate_commit(
+        network,
+        proposed.clone(),
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
 
     let mut coordinate_evaluations = 0usize;
     let (coordinate_choice, coordinate_train_errors) = descent(
-        initial, joint_evaluations, &mut coordinate_evaluations,
-        &cache, &first, &second, &third, train, spec, n,
+        initial,
+        joint_evaluations,
+        &mut coordinate_evaluations,
+        &cache,
+        &first,
+        &second,
+        &third,
+        train,
+        spec,
+        n,
     );
-    let coordinate_candidate =
-        build_model(network, coordinate_choice, &first, &second, &third)?;
+    let coordinate_candidate = build_model(network, coordinate_choice, &first, &second, &third)?;
     if actual_errors(&coordinate_candidate, train, spec)? != coordinate_train_errors {
         return Err(MultiHopError::ScoreMismatch);
     }
-    let (coordinate, coordinate_accepted, coordinate_validation_errors) =
-        validate_commit(network, coordinate_candidate, validation, spec, baseline_validation_errors)?;
+    let (coordinate, coordinate_accepted, coordinate_validation_errors) = validate_commit(
+        network,
+        coordinate_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
 
     // Same objective-evaluation CAP as exhaustive joint search. Random
     // restarts can stop sooner if they discover a zero-training-error chain.
@@ -412,21 +503,33 @@ pub fn fit_three_gate_credit(
             third: rng.below(third.len()),
         };
         let (choice, loss) = descent(
-            start, joint_evaluations, &mut restart_evaluations,
-            &cache, &first, &second, &third, train, spec, n,
+            start,
+            joint_evaluations,
+            &mut restart_evaluations,
+            &cache,
+            &first,
+            &second,
+            &third,
+            train,
+            spec,
+            n,
         );
         if loss < restarted_train_errors {
             restarted_choice = choice;
             restarted_train_errors = loss;
         }
     }
-    let restarted_candidate =
-        build_model(network, restarted_choice, &first, &second, &third)?;
+    let restarted_candidate = build_model(network, restarted_choice, &first, &second, &third)?;
     if actual_errors(&restarted_candidate, train, spec)? != restarted_train_errors {
         return Err(MultiHopError::ScoreMismatch);
     }
-    let (restarted, restarted_accepted, restarted_validation_errors) =
-        validate_commit(network, restarted_candidate, validation, spec, baseline_validation_errors)?;
+    let (restarted, restarted_accepted, restarted_validation_errors) = validate_commit(
+        network,
+        restarted_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
 
     Ok(MultiHopReport {
         proposed,
@@ -471,7 +574,11 @@ mod tests {
         LocalAnfNetwork::with_input_bits(n, 5, gates, readout).unwrap()
     }
     fn spec() -> MultiHopSpec {
-        MultiHopSpec { raw_candidates: vec![1, 2, 3, 4], baseline_input: 0, target_bit: 0 }
+        MultiHopSpec {
+            raw_candidates: vec![1, 2, 3, 4],
+            baseline_input: 0,
+            target_bit: 0,
+        }
     }
     fn fixture(seed: u64, steps: usize) -> LaneData {
         let mut rng = SplitMix64::new(seed);
@@ -483,23 +590,35 @@ mod tests {
         for t in 0..steps {
             let parity = if t >= 2 {
                 inputs[5 * (t - 2) + 1] ^ inputs[5 * (t - 2) + 2]
-            } else { 0 };
+            } else {
+                0
+            };
             let middle = if t >= 1 {
                 inputs[5 * (t - 1) + 3] & parity
-            } else { 0 };
+            } else {
+                0
+            };
             targets[t] = inputs[5 * t] ^ inputs[5 * t + 4] ^ middle;
         }
         LaneData {
             input_bits: 5,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
     #[test]
     fn bit_sliced_truth_masks_match_existing_anf_semantics() {
         for mask in 0..16u8 {
-            let rule = GateRule { inputs: [3, 4], truth: mask };
+            let rule = GateRule {
+                inputs: [3, 4],
+                truth: mask,
+            };
             let gate = as_anf(&rule, 8).unwrap();
             let mut products = [0u64; 4];
             for a in [0, u64::MAX] {
@@ -542,7 +661,9 @@ mod tests {
         let a = fit_three_gate_credit(&network, &train, &val, &spec(), 7).unwrap();
         let mut inverted = val.clone();
         for block in &mut inverted.blocks {
-            for word in &mut block.targets { *word = !*word; }
+            for word in &mut block.targets {
+                *word = !*word;
+            }
         }
         let b = fit_three_gate_credit(&network, &train, &inverted, &spec(), 7).unwrap();
         assert_eq!(a.proposed, b.proposed);
@@ -558,7 +679,8 @@ mod tests {
         let network = baseline();
         let train = fixture(99, 16);
         let bad_spec = MultiHopSpec {
-            raw_candidates: vec![1, 2, 2, 4], ..spec()
+            raw_candidates: vec![1, 2, 2, 4],
+            ..spec()
         };
         assert_eq!(
             fit_three_gate_credit(&network, &train, &train, &bad_spec, 1),
