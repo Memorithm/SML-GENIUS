@@ -28,7 +28,9 @@ use std::{error::Error, time::Instant};
 
 use sml_core::{
     anf_constructive::residual_output_errors,
-    anf_credit_topology::{fit_adaptive_topology, DiscoveredTopology, TopologyReport, TopologySpec},
+    anf_credit_topology::{
+        fit_adaptive_topology, DiscoveredTopology, TopologyReport, TopologySpec,
+    },
     anf_local::{LocalAnfGate, LocalAnfNetwork},
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
@@ -76,7 +78,10 @@ impl Task {
     fn kind_recovered(self, topology: DiscoveredTopology) -> bool {
         match self {
             Self::Direct => topology == DiscoveredTopology::Direct,
-            Self::Skip => matches!(topology, DiscoveredTopology::Skip | DiscoveredTopology::ViaMiddle),
+            Self::Skip => matches!(
+                topology,
+                DiscoveredTopology::Skip | DiscoveredTopology::ViaMiddle
+            ),
             Self::Chain => topology == DiscoveredTopology::Chain,
             Self::Parallel => topology == DiscoveredTopology::Parallel,
         }
@@ -142,31 +147,44 @@ fn fixture(seed: u64, steps: usize, task: Task, panel: Panel) -> LaneData {
         let residual = match task {
             Task::Direct => x(t, 1) & x(t, 2),
             Task::Skip => {
-                if t == 0 { 0 } else {
+                if t == 0 {
+                    0
+                } else {
                     (x(t - 1, 1) ^ x(t - 1, 2)) & x(t, 3)
                 }
             }
             Task::Chain => {
-                x(t, 4) ^ if t < 2 { 0 } else {
-                    (x(t - 2, 1) ^ x(t - 2, 2)) & x(t - 1, 3)
-                }
+                x(t, 4)
+                    ^ if t < 2 {
+                        0
+                    } else {
+                        (x(t - 2, 1) ^ x(t - 2, 2)) & x(t - 1, 3)
+                    }
             }
             Task::Parallel => {
-                if t == 0 { 0 } else {
-                    (x(t - 1, 1) & x(t - 1, 2))
-                        ^ (x(t - 1, 3) & x(t - 1, 4))
+                if t == 0 {
+                    0
+                } else {
+                    (x(t - 1, 1) & x(t - 1, 2)) ^ (x(t - 1, 3) & x(t - 1, 4))
                 }
             }
         };
         let label_noise = if panel == Panel::LabelNoise {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        } else { 0 };
+        } else {
+            0
+        };
         targets[t] = x(t, 0) ^ residual ^ label_noise;
     }
     LaneData {
         input_bits: INPUT_BITS,
         target_bits: 1,
-        blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+        blocks: vec![LaneBlock {
+            steps,
+            inputs,
+            targets,
+            valid: u64::MAX,
+        }],
     }
 }
 
@@ -212,16 +230,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             for seed in 0..seeds {
                 let train = fixture(
                     derive_seed(seed, task, panel, 0xa6c4_1001),
-                    TRAIN_STEPS, task, panel,
+                    TRAIN_STEPS,
+                    task,
+                    panel,
                 );
                 let validation = fixture(
                     derive_seed(seed, task, panel, 0xa6c4_2002),
-                    VALIDATION_STEPS, task, panel,
+                    VALIDATION_STEPS,
+                    task,
+                    panel,
                 );
                 let clock = Instant::now();
-                let report = fit_adaptive_topology(
-                    &zero_network(), &train, &validation, &topology_spec(),
-                )?;
+                let report =
+                    fit_adaptive_topology(&zero_network(), &train, &validation, &topology_spec())?;
                 let fit_seconds = clock.elapsed().as_secs_f64();
                 if report.train_evaluations != 77_190
                     || report.chain_evaluations != 24_576
@@ -248,7 +269,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report.proposed.gates()[1].inputs(),
                     report.proposed.gates()[2].inputs(), fit_seconds
                 );
-                frozen.push(Frozen { task, panel, seed, report, fit_seconds });
+                frozen.push(Frozen {
+                    task,
+                    panel,
+                    seed,
+                    report,
+                    fit_seconds,
+                });
             }
         }
     }
@@ -268,7 +295,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     for run in &frozen {
         let test = fixture(
             derive_seed(run.seed, run.task, run.panel, 0xa6c4_3003),
-            TEST_STEPS, run.task, run.panel,
+            TEST_STEPS,
+            run.task,
+            run.panel,
         );
         let reference = zero_network();
         let zero_errors = count_errors(&reference, &test)?;
@@ -282,8 +311,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             *e = count_errors(&altered, &test)?;
         }
         let errors = [
-            zero_errors, direct_errors, chain_errors, adaptive_errors,
-            ablated[0], ablated[1], ablated[2],
+            zero_errors,
+            direct_errors,
+            chain_errors,
+            adaptive_errors,
+            ablated[0],
+            ablated[1],
+            ablated[2],
         ];
         let t = run.task.index();
         let p = run.panel.index();
@@ -298,10 +332,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         times[t][p] += run.fit_seconds;
         println!(
             "A6C4_TEST_RESULT,{},{},{},{},{},{},{},{},{},{},{},{},{},{:.6}",
-            run.task.name(), run.panel.name(), run.seed, TEST_STEPS * LANES,
-            zero_errors, direct_errors, chain_errors, adaptive_errors,
-            ablated[0], ablated[1], ablated[2],
-            run.report.topology.name(), run.report.depth, run.fit_seconds
+            run.task.name(),
+            run.panel.name(),
+            run.seed,
+            TEST_STEPS * LANES,
+            zero_errors,
+            direct_errors,
+            chain_errors,
+            adaptive_errors,
+            ablated[0],
+            ablated[1],
+            ablated[2],
+            run.report.topology.name(),
+            run.report.depth,
+            run.fit_seconds
         );
     }
     for task in tasks {
@@ -341,18 +385,25 @@ mod tests {
                 let expected = match task {
                     Task::Direct => x(t, 1) & x(t, 2),
                     Task::Skip => {
-                        if t == 0 { 0 }
-                        else { (x(t - 1, 1) ^ x(t - 1, 2)) & x(t, 3) }
+                        if t == 0 {
+                            0
+                        } else {
+                            (x(t - 1, 1) ^ x(t - 1, 2)) & x(t, 3)
+                        }
                     }
                     Task::Chain => {
-                        x(t, 4) ^ if t < 2 { 0 }
-                        else { (x(t - 2, 1) ^ x(t - 2, 2)) & x(t - 1, 3) }
+                        x(t, 4)
+                            ^ if t < 2 {
+                                0
+                            } else {
+                                (x(t - 2, 1) ^ x(t - 2, 2)) & x(t - 1, 3)
+                            }
                     }
                     Task::Parallel => {
-                        if t == 0 { 0 }
-                        else {
-                            (x(t - 1, 1) & x(t - 1, 2))
-                                ^ (x(t - 1, 3) & x(t - 1, 4))
+                        if t == 0 {
+                            0
+                        } else {
+                            (x(t - 1, 1) & x(t - 1, 2)) ^ (x(t - 1, 3) & x(t - 1, 4))
                         }
                     }
                 };
@@ -366,8 +417,12 @@ mod tests {
         let a = fixture(99, 64, Task::Parallel, Panel::Clean);
         let b = fixture(99, 64, Task::Parallel, Panel::LabelNoise);
         assert_eq!(a.blocks[0].inputs, b.blocks[0].inputs);
-        let flips = a.blocks[0].targets.iter().zip(&b.blocks[0].targets)
-            .map(|(a, b)| (a ^ b).count_ones() as usize).sum::<usize>();
+        let flips = a.blocks[0]
+            .targets
+            .iter()
+            .zip(&b.blocks[0].targets)
+            .map(|(a, b)| (a ^ b).count_ones() as usize)
+            .sum::<usize>();
         assert!((150..400).contains(&flips));
     }
 }
