@@ -88,8 +88,7 @@ fn dataset(seed: u64, steps: usize, panel: Panel) -> LaneData {
     let mut targets = vec![0u64; steps];
     for t in 0..steps {
         let delayed_feature = if t >= 2 {
-            let xor = inputs[(t - 2) * INPUT_BITS + 1]
-                ^ inputs[(t - 2) * INPUT_BITS + 2];
+            let xor = inputs[(t - 2) * INPUT_BITS + 1] ^ inputs[(t - 2) * INPUT_BITS + 2];
             xor & inputs[(t - 1) * INPUT_BITS + 3]
         } else {
             0
@@ -99,10 +98,7 @@ fn dataset(seed: u64, steps: usize, panel: Panel) -> LaneData {
         } else {
             0
         };
-        targets[t] = inputs[t * INPUT_BITS]
-            ^ inputs[t * INPUT_BITS + 4]
-            ^ delayed_feature
-            ^ noise;
+        targets[t] = inputs[t * INPUT_BITS] ^ inputs[t * INPUT_BITS + 4] ^ delayed_feature ^ noise;
     }
     LaneData {
         input_bits: INPUT_BITS,
@@ -294,15 +290,13 @@ mod tests {
         let block = &data.blocks[0];
         for t in 0..block.steps {
             let delayed = if t >= 2 {
-                (block.inputs[(t - 2) * INPUT_BITS + 1]
-                    ^ block.inputs[(t - 2) * INPUT_BITS + 2])
+                (block.inputs[(t - 2) * INPUT_BITS + 1] ^ block.inputs[(t - 2) * INPUT_BITS + 2])
                     & block.inputs[(t - 1) * INPUT_BITS + 3]
             } else {
                 0
             };
-            let expected = block.inputs[t * INPUT_BITS]
-                ^ block.inputs[t * INPUT_BITS + 4]
-                ^ delayed;
+            let expected =
+                block.inputs[t * INPUT_BITS] ^ block.inputs[t * INPUT_BITS + 4] ^ delayed;
             assert_eq!(block.targets[t], expected);
         }
     }
@@ -313,7 +307,9 @@ mod tests {
         let noisy = dataset(101, 96, Panel::LabelNoise);
         assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
         let total = (0..96)
-            .map(|t| (clean.blocks[0].targets[t] ^ noisy.blocks[0].targets[t]).count_ones() as usize)
+            .map(|t| {
+                (clean.blocks[0].targets[t] ^ noisy.blocks[0].targets[t]).count_ones() as usize
+            })
             .sum::<usize>();
         assert!(total > 200);
         assert!(total < 600);
