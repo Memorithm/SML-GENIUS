@@ -361,11 +361,10 @@ pub fn fit_nonlinear_credit(
     let (initial_pair,initial_loss) =
         conditional_best.ok_or(NonlinearError::InvalidData)?;
 
-    let mut coordinate_evaluations = 0usize;
-    let before = conditional_evaluations;
+    let before = *ctx.evaluations;
     let (pair, loss, committed_updates) =
         coordinate_pass(initial_pair, initial_loss, &mut ctx)?;
-    coordinate_evaluations += conditional_evaluations - before;
+    let coordinate_evaluations = *ctx.evaluations - before;
     if committed_updates > A6C9_COORDINATE_PASSES * 2 {
         return Err(NonlinearError::NativeOracle);
     }
