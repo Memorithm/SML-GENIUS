@@ -54,7 +54,16 @@ impl SparseBinaryReadout {
         })
     }
 
+    /// Original A5-4 reference at alpha=4.0; unchanged for existing callers.
     pub fn predict_one(&self, row: u64) -> Result<f64, SparseReadoutError> {
+        self.predict_with_alpha(row, 4.0)
+    }
+
+    /// Train-frozen interpolation: only alpha changes between predictions.
+    pub fn predict_with_alpha(&self, row: u64, alpha: f64) -> Result<f64, SparseReadoutError> {
+        if !alpha.is_finite() || alpha <= 0.0 {
+            return Err(SparseReadoutError::Shape);
+        }
         let limit = if self.width == 0 {
             0
         } else {
@@ -71,7 +80,7 @@ impl SparseBinaryReadout {
                 let n = (counts[0] + counts[1]) as f64;
                 let kt = (counts[1] as f64 + 0.5) / (n + 1.0);
                 // Rare contexts back off; frequent contexts dominate.
-                let weight = n / (n + 4.0);
+                let weight = n / (n + alpha);
                 probability = weight * kt + (1.0 - weight) * probability;
             }
         }
@@ -171,5 +180,45 @@ mod tests {
         assert!(model.predict_one(0).unwrap() < 0.1);
         assert!(model.predict_one(1).unwrap() > 0.9);
         assert!(model.bits_per_target(&rows, &labels).unwrap() < 0.2);
+    }
+
+    #[test]
+    fn alpha_four_is_bit_exact_legacy_oracle_and_extremes_are_valid() {
+        let model = SparseBinaryReadout::fit(
+            &[0, 1, 1, 2, 2, 2, 3],
+            &[false, false, true, false, true, true, true],
+            3,
+        )
+        .unwrap();
+        let before = model.clone();
+        for row in 0..8u64 {
+            let base = model.counts[0].get(&0).unwrap();
+            let mut expected = (base[1] as f64 + 0.5) / (model.samples as f64 + 1.0);
+            for depth in 1..=model.width {
+                let mask = (1u64 << depth) - 1;
+                if let Some(counts) = model.counts[depth].get(&(row & mask)) {
+                    let n = (counts[0] + counts[1]) as f64;
+                    let kt = (counts[1] as f64 + 0.5) / (n + 1.0);
+                    let legacy_weight = n / (n + 4.0);
+                    expected = legacy_weight * kt + (1.0 - legacy_weight) * expected;
+                }
+            }
+            assert_eq!(model.predict_one(row).unwrap().to_bits(), expected.to_bits());
+            assert_eq!(
+                model.predict_with_alpha(row, 4.0).unwrap().to_bits(),
+                expected.to_bits()
+            );
+            for alpha in [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0] {
+                let p = model.predict_with_alpha(row, alpha).unwrap();
+                assert!(p.is_finite() && p > 0.0 && p < 1.0);
+            }
+        }
+        for alpha in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                model.predict_with_alpha(0, alpha),
+                Err(SparseReadoutError::Shape)
+            );
+        }
+        assert_eq!(model, before);
     }
 }
