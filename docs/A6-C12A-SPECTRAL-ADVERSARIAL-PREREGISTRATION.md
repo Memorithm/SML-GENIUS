@@ -2,6 +2,8 @@
 
 **Date de gel : 12 octobre 2026. Statut : protocole fixé avant la création du code et avant les premières mesures A6-C12a.**
 
+**Erratum arithmétique post-exécution (sans modification du protocole)** : la première version indiquait à tort 80 politiques. Le produit correct **4 tâches × 2 panneaux × 5 graines × 2 longueurs TRAIN × 2 budgets** vaut **160 politiques**. Le programme a dès sa première exécution gelé et évalué 160 politiques ; seule la vérification de cardinalité de la CI contenait 80. La correction de ce décompte n'altère aucun générateur, algorithme, seuil, donnée, budget ou résultat. Première exécution de référence : GitHub Actions run 38182344480, job 114597361506 (échec du seul contrôle de cardinalité après résultats complets).
+
 Dépendance : A6-C11D (PR #491, fusionnée). Cette étape **n'augmente pas la capacité du modèle**, ne modifie pas l'algorithme sélectionné pour la production et n'évalue ni la qualité linguistique ni SML-25B. Tous les changements expérimentaux après ce gel devront être explicitement signalés comme amendements et les mesures antérieures conservées.
 
 ## Hypothèse réfutable
@@ -43,7 +45,7 @@ Même classe de 508 sources possibles (127 positions × quatre canaux), mêmes d
 - N=128, cinq canaux, 64 voies `u64`, entrées uniformes et indépendantes.
 - Quatre tâches × deux panneaux (propre, corruption indépendante des labels Bernoulli 1/16) × cinq graines = **40 jeux TRAIN/VAL indépendants au niveau graine-tâche-panneau**.
 - Deux longueurs TRAIN **512 et 2048**, la première étant le préfixe exact de la seconde ; validation indépendante 512, test indépendant 4096 pas.
-- **240 observations de classement** = 4×2×5×2×3 scores, **80 propositions apprises** = 4×2×5×2 et **40 TEST distincts** partagés entre les deux longueurs.
+- **240 observations de classement** = 4×2×5×2×3 scores, **160 propositions apprises** = 4×2×5×2 et **40 TEST distincts** partagés entre les deux longueurs.
 - Budget de classement : exactement les 508 sources, top24, les triplets à positions distinctes ; classement du triplet véritable **dans ce pool**, ou `absent`. Mesurer sa présence au rang ≤64 ou ≤640. Les 64/640 concernent toujours les structures évaluées en TRAIN complet, pas les éléments du top24.
 - Test indépendant créé **après gel de toutes les propositions** ; aucune décision basée sur TEST. Mesurer les erreurs du réseau natif proposé, du réseau retenu après validation et du générateur natif sur le même flux TEST. Aucune modification du score ou des seuils après lecture de TEST.
 - Toutes les erreurs et toutes les graines sont publiées, y compris les échecs. Les observations de classement sous longueurs et scores différents **ne sont pas indépendantes**.
