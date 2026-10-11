@@ -13,6 +13,7 @@ pub mod anf;
 pub mod anf_char;
 pub mod anf_constructive;
 pub mod anf_credit;
+pub mod anf_credit_cycles;
 pub mod anf_credit_multihop;
 pub mod anf_credit_topology;
 pub mod anf_large;

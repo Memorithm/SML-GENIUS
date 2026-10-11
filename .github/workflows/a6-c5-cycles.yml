@@ -1,0 +1,53 @@
+name: A6-C5 recurrent ANF cycle and length evidence
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c5-cycles-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  recurrent-cycles:
+    if: startsWith(github.head_ref, 'research/a6-c5-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact source without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format check, lint and causal native trajectory oracle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_credit_cycles
+          cargo test --locked -p sml-core --bin sml-cycle-credit-bench
+      - name: Train/validation frozen cycle experiment and independent 512/4096-step holdouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C5_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-cycle-credit-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c5-cycles.log"
+          grep -q '^A6C5_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c5-cycles.log"
+          test "$(grep -c '^A6C5_FROZEN,' "$RUNNER_TEMP/a6c5-cycles.log")" -eq 50
+          test "$(grep -c '^A6C5_TEST_RESULT,' "$RUNNER_TEMP/a6c5-cycles.log")" -eq 100
+          test "$(grep -c '^A6C5_SUMMARY,' "$RUNNER_TEMP/a6c5-cycles.log")" -eq 20
+          grep '^A6C5_SUMMARY,' "$RUNNER_TEMP/a6c5-cycles.log"
