@@ -161,10 +161,15 @@ non une borne universelle sur les capacités de SML-GENIUS.
 
 ## Ressources, temps et reproductibilité
 
-- **Commit mesuré :**
-  `645e804bea8c3045e91e5a554a36e2fd1a05cdf8`.
-- **Banc spécialisé vert :** [A6-C5b GitHub Actions, job
-  phase-capacity](https://github.com/Memorithm/SML-GENIUS/actions/runs/38159146526/job/114528253673).
+- **Commits effectivement mesurés :**
+  `645e804bea8c3045e91e5a554a36e2fd1a05cdf8` (code)
+  et `bd32f00ff382cc8d8a2f60592a937ac7e9447954`
+  (même code, rapport scientifique ajouté).
+- **Bancs spécialisés verts :**
+  [première exécution](https://github.com/Memorithm/SML-GENIUS/actions/runs/38159146526/job/114528253673)
+  et [rejeu sur le rapport complet](https://github.com/Memorithm/SML-GENIUS/actions/runs/38159483800/job/114529215272).
+  Les 24 mesures de taux d'erreur et les sélections de capacité sont
+  identiques entre ces deux exécutions.
 - Plateforme : **GitHub-hosted Ubuntu x86_64, 4 processeurs logiques,
   Rust 1.89.0**. **Aucune mesure n'a été prise sur le Dell.**
 - Contrôles de formatage, compilation, Clippy, tests du module
@@ -172,12 +177,15 @@ non une borne universelle sur les capacités de SML-GENIUS.
 - Vérification des compteurs : **60** modèles gelés avant test,
   **120** lignes de mesure de test, **24** lignes de synthèse.
 - Temps moyen de recherche annulaire : environ **11,9–12,2 ms**
-  par graine/panneau/tâche sur ce runner, pour les quatre largeurs
-  réunies. Le contrôle A6-C5 original prend typiquement
-  **28–58 ms** selon la tâche et le bruit, mais utilise une
-  **grammaire et un nombre d'évaluations différents**.
-  Ces temps ne justifient donc **pas** un facteur d'accélération
-  général entre algorithmes.
+  par graine/panneau/tâche lors de la première exécution ;
+  environ **7,3–7,6 ms** dans le second replay pour les mêmes
+  20 032 hypothèses, sur un autre runner. Le contrôle A6-C5
+  original varie de **28 à 58 ms** sur ces deux exécutions,
+  selon la tâche, le bruit et le runner. Ces temps soulignent
+  la variabilité matérielle de GitHub Actions et ne justifient
+  **pas** un facteur d'accélération algorithmique général,
+  puisque les deux méthodes ont des grammaires et budgets
+  d'évaluation distincts.
 - Un automate à trois bits représente 3 bits d'état par séquence
   (3 mots `u64` pour 64 séquences bit-slicées) ; quatre bits
   représentent 4 mots `u64`. Ces nombres **excluent** le coût
