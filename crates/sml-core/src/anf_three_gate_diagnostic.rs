@@ -330,6 +330,96 @@ fn rank_features(width: usize, blocks: &[Observed<'_>]) -> (Vec<RankedFeature>, 
     });
     (ranked, strongest)
 }
+/// A6-C12a: read-only spectral ablation. No model selection is changed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpectralAblation {
+    Marginal,
+    RootInteraction,
+    RootInteractionAndPeeling,
+}
+
+/// Return all 4*(N-1) candidate lag features ranked on TRAIN alone.
+///
+/// The third variant is *exactly* the preexisting A6-C11D screening rule;
+/// its XOR peeling removes only one top marginal feature, not an affine
+/// Gaussian-elimination solution. No hidden teacher rule enters any score.
+pub fn rank_features_ablated(
+    train: &LaneData,
+    width: usize,
+    ablation: SpectralAblation,
+) -> Result<Vec<RankedFeature>, TripleDiagError> {
+    validate(width, train, true)?;
+    let obs = observed(train);
+    if ablation == SpectralAblation::RootInteractionAndPeeling {
+        return Ok(rank_features(width, &obs).0);
+    }
+    let mut ranked = Vec::with_capacity((width - 1) * DIAG_RAW_POOL.len());
+    for gate in 1..width {
+        for raw in DIAG_RAW_POOL {
+            let candidate = Source { gate, raw };
+            let (mut marginal, mut interaction) = (0i64, 0i64);
+            for block in &obs {
+                let lanes = i64::from(block.valid.count_ones());
+                for t in width..block.root.len() {
+                    let x = feature_at(width, candidate, block, t);
+                    let z = block.residual[t];
+                    let r = block.root[t - width];
+                    marginal += lanes - 2 * i64::from(((z ^ x) & block.valid).count_ones());
+                    interaction +=
+                        lanes - 2 * i64::from(((z ^ x ^ r) & block.valid).count_ones());
+                }
+            }
+            let first = marginal.unsigned_abs();
+            ranked.push(RankedFeature {
+                source: candidate,
+                walsh_absolute: if ablation == SpectralAblation::RootInteraction {
+                    first.max(interaction.unsigned_abs())
+                } else {
+                    first
+                },
+                raw_walsh_absolute: first,
+            });
+        }
+    }
+    ranked.sort_unstable_by(|a, b| {
+        b.walsh_absolute
+            .cmp(&a.walsh_absolute)
+            .then_with(|| a.source.cmp(&b.source))
+    });
+    Ok(ranked)
+}
+
+/// One-based retrospective ranks. None if a true source is absent.
+/// Caller must keep teacher parameters outside the learner and use this
+/// function strictly after fitting, for scientific diagnostics only.
+pub fn retrospective_source_ranks(
+    ranked: &[RankedFeature],
+    sources: &[Source],
+) -> Vec<Option<usize>> {
+    sources
+        .iter()
+        .map(|source| {
+            ranked
+                .iter()
+                .position(|item| item.source == *source)
+                .map(|index| index + 1)
+        })
+        .collect()
+}
+
+/// One-based position of the true 3-source structure within the current
+/// top24-derived triplet pool; None means it never reaches that pool.
+pub fn retrospective_structure_rank(
+    ranked: &[RankedFeature],
+    true_sources: [Source; 3],
+) -> Option<usize> {
+    let sorted = sort_sources(true_sources)?;
+    spectral_triplets(ranked)
+        .iter()
+        .position(|candidate| candidate.sources == sorted)
+        .map(|index| index + 1)
+}
+
 fn spectral_triplets(features: &[RankedFeature]) -> Vec<Candidate> {
     let n = features.len().min(DIAG_SCREEN_FEATURES);
     let mut out = Vec::with_capacity(n * (n - 1) * (n - 2) / 6);
@@ -703,6 +793,66 @@ mod tests {
         assert_eq!(result.budgets[0].structures_full_train_scored, 64);
         assert_eq!(result.budgets[1].structures_full_train_scored, 640);
         assert_eq!(result.train_samples, 512 * 64);
+    }
+    fn exact_walsh_moment(mask: u16, subset: usize) -> i32 {
+        (0..16usize)
+            .map(|address| {
+                let truth = (mask >> address) & 1;
+                let parity = ((address & subset).count_ones() & 1) as u16;
+                if truth == parity { 1 } else { -1 }
+            })
+            .sum()
+    }
+    #[test]
+    fn parity_and_masked_and_are_adversarial_to_low_order_screening() {
+        let pure = composed_mask([6, 6, 6]);
+        // Parity R^a^b^c: every non-full Walsh coefficient vanishes exactly.
+        for subset in 0..15 {
+            assert_eq!(exact_walsh_moment(pure, subset), 0);
+        }
+        assert_eq!(exact_walsh_moment(pure, 15), 16);
+
+        let mixed = composed_mask([8, 6, 6]); // (R&a)^b^c
+        // The existing scanner examines x and x^R for each raw feature.
+        for variable in [2usize, 4, 8] {
+            assert_eq!(exact_walsh_moment(mixed, variable), 0);
+            assert_eq!(exact_walsh_moment(mixed, variable | 1), 0);
+        }
+        // But degree-two *arbitrary pair* Walsh is not identically zero.
+        assert_ne!(exact_walsh_moment(mixed, 4 | 8), 0);
+    }
+    #[test]
+    fn ablation_preserves_the_original_full_peeling_ranking() {
+        let train = data(1285, 32, 512, rules());
+        let obs = observed(&train);
+        let baseline = rank_features(32, &obs).0;
+        let full = rank_features_ablated(
+            &train,
+            32,
+            SpectralAblation::RootInteractionAndPeeling,
+        )
+        .unwrap();
+        assert_eq!(baseline, full);
+        let w1 = rank_features_ablated(&train, 32, SpectralAblation::Marginal).unwrap();
+        let w1_root = rank_features_ablated(&train, 32, SpectralAblation::RootInteraction).unwrap();
+        assert_eq!(w1.len(), (32 - 1) * 4);
+        for scored in w1 {
+            let root = w1_root
+                .iter()
+                .find(|item| item.source == scored.source)
+                .unwrap();
+            let peeling = full
+                .iter()
+                .find(|item| item.source == scored.source)
+                .unwrap();
+            assert!(scored.walsh_absolute <= root.walsh_absolute);
+            assert!(root.walsh_absolute <= peeling.walsh_absolute);
+        }
+        let truth = rules().sources();
+        let ranks = retrospective_source_ranks(&full, &truth);
+        assert_eq!(ranks.len(), 3);
+        assert!(ranks.iter().all(Option::is_some));
+        assert!(retrospective_structure_rank(&full, truth).is_none_or(|rank| rank >= 1));
     }
     #[test]
     fn invalid_data_and_budget_are_rejected() {
