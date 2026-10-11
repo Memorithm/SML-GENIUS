@@ -245,8 +245,10 @@ fn emit_summaries(records: &[Ranked], nseeds: usize) {
                     let mut medians = [0usize; 3];
                     let mut worst = [0usize; 3];
                     for index in 0..3 {
-                        let mut ranks =
-                            group.iter().map(|r| r.source_ranks[index]).collect::<Vec<_>>();
+                        let mut ranks = group
+                            .iter()
+                            .map(|r| r.source_ranks[index])
+                            .collect::<Vec<_>>();
                         ranks.sort_unstable();
                         medians[index] = ranks[ranks.len() / 2];
                         worst[index] = *ranks.last().unwrap();
@@ -310,7 +312,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let candidates = rank_features_ablated(&train, WIDTH, score.method())?;
                         let ranks = retrospective_source_ranks(&candidates, &family.sources());
                         if ranks.len() != 3 || ranks.iter().any(Option::is_none) {
-                            return Err("registered source absent from complete candidate space".into());
+                            return Err(
+                                "registered source absent from complete candidate space".into()
+                            );
                         }
                         let source_ranks =
                             [ranks[0].unwrap(), ranks[1].unwrap(), ranks[2].unwrap()];
@@ -342,8 +346,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         });
                     }
                     let start = Instant::now();
-                    let report =
-                        fit_three_gate_diagnostic(&train, &val, WIDTH, &DIAG_BUDGETS)?;
+                    let report = fit_three_gate_diagnostic(&train, &val, WIDTH, &DIAG_BUDGETS)?;
                     let seconds = start.elapsed().as_secs_f64();
                     for fit in report.budgets {
                         println!(
