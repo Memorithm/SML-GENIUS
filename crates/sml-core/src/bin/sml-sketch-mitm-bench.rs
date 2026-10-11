@@ -3,7 +3,12 @@
 //! Learner receives no hidden-gate rules. TEST data is created AFTER all fits.
 //! Sub-exhaustive in observed workloads, not a worst-case subcubic theorem.
 
-use std::{cmp::Reverse, collections::{BTreeSet, HashSet}, error::Error, time::Instant};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeSet, HashSet},
+    error::Error,
+    time::Instant,
+};
 
 use sml_core::{
     anf_dual_hidden_credit::{make_multi_gate_native, native_errors},
@@ -280,16 +285,19 @@ fn rank_triples_stream(o: &Observed) -> Vec<[Source; 3]> {
             if o.same_gate(i, j) {
                 continue;
             }
-            let paired = o.p.iter()
-                .zip(&o.columns[i])
-                .zip(&o.columns[j])
-                .map(|((&p, &a), &b)| p ^ a ^ b)
-                .collect::<Vec<_>>();
+            let paired =
+                o.p.iter()
+                    .zip(&o.columns[i])
+                    .zip(&o.columns[j])
+                    .map(|((&p, &a), &b)| p ^ a ^ b)
+                    .collect::<Vec<_>>();
             for k in j + 1..o.sources.len() {
                 if o.same_gate(i, k) || o.same_gate(j, k) {
                     continue;
                 }
-                let errors: u64 = paired.iter().zip(&o.columns[k])
+                let errors: u64 = paired
+                    .iter()
+                    .zip(&o.columns[k])
                     .map(|(&p, &c)| u64::from((p ^ c).count_ones()))
                     .sum();
                 let key = (o.magnitude(errors), Reverse([i, j, k]));
@@ -302,7 +310,10 @@ fn rank_triples_stream(o: &Observed) -> Vec<[Source; 3]> {
             }
         }
     }
-    top.iter().rev().map(|(_, reverse)| triplet(o, reverse.0)).collect()
+    top.iter()
+        .rev()
+        .map(|(_, reverse)| triplet(o, reverse.0))
+        .collect()
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -315,9 +326,12 @@ struct SketchStats {
 }
 
 fn sketch_key(column: &[u64], samples: &[usize; SKETCH_BITS]) -> usize {
-    samples.iter().enumerate().fold(0usize, |key, (bit, &slot)| {
-        key | ((((column[slot / 64] >> (slot % 64)) & 1) as usize) << bit)
-    })
+    samples
+        .iter()
+        .enumerate()
+        .fold(0usize, |key, (bit, &slot)| {
+            key | ((((column[slot / 64] >> (slot % 64)) & 1) as usize) << bit)
+        })
 }
 
 fn triple_correlation(o: &Observed, ids: [usize; 3], words: usize) -> u64 {
@@ -355,7 +369,9 @@ fn rank_sketch_triplets(o: &Observed) -> (Vec<[Source; 3]>, SketchStats) {
                 }
             }
         }
-        let keys = o.columns.iter()
+        let keys = o
+            .columns
+            .iter()
             .map(|column| sketch_key(column, &samples))
             .collect::<Vec<_>>();
         let target = sketch_key(&o.p, &samples);
@@ -385,19 +401,24 @@ fn rank_sketch_triplets(o: &Observed) -> (Vec<[Source; 3]>, SketchStats) {
         }
     }
     stats.unique = matched.len();
-    let mut coarse = matched.into_iter()
+    let mut coarse = matched
+        .into_iter()
         .map(|ids| (triple_correlation(o, ids, SKETCH_COARSE_WORDS), ids))
         .collect::<Vec<_>>();
     stats.coarse_scored = coarse.len();
-    coarse.sort_unstable_by(|a,b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    coarse.sort_unstable_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     coarse.truncate(SKETCH_COARSE_KEEP);
-    let mut full = coarse.into_iter()
-        .map(|(_,ids)| (triple_correlation(o, ids, o.p.len()), ids))
+    let mut full = coarse
+        .into_iter()
+        .map(|(_, ids)| (triple_correlation(o, ids, o.p.len()), ids))
         .collect::<Vec<_>>();
     stats.full_scored = full.len();
-    full.sort_unstable_by(|a,b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    full.sort_unstable_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     full.truncate(TOP_TRIPLES);
-    (full.into_iter().map(|(_,ids)| triplet(o, ids)).collect(), stats)
+    (
+        full.into_iter().map(|(_, ids)| triplet(o, ids)).collect(),
+        stats,
+    )
 }
 
 fn triplet(o: &Observed, ids: [usize; 3]) -> [Source; 3] {
@@ -457,7 +478,8 @@ fn freeze(
         Method::Walsh2Pair | Method::Hybrid => {
             let pair_scores = rank_pairs(observed);
             if task == Task::AndXorXor {
-                pair_rank = pair_scores.iter()
+                pair_rank = pair_scores
+                    .iter()
                     .position(|pair| {
                         observed.sources[pair.ids[0]] == expected[1]
                             && observed.sources[pair.ids[1]] == expected[2]
@@ -487,7 +509,9 @@ fn freeze(
     let fit = if proposed.is_empty() {
         None
     } else {
-        Some(fit_three_gate_candidates(train, validation, WIDTH, &proposed)?)
+        Some(fit_three_gate_candidates(
+            train, validation, WIDTH, &proposed,
+        )?)
     };
     let factor_seconds = factor_start.elapsed().as_secs_f64();
     let w3_full_correlations = if method == Method::Walsh3Stream {
@@ -678,9 +702,7 @@ mod tests {
         let mut words = vec![0u64; 32];
         words[1] = u64::MAX;
         words[16] = 0b11;
-        let samples: [usize; SKETCH_BITS] = [
-            0, 1, 2, 3, 4, 5, 6, 64, 65, 66, 67, 1024, 1025, 1026,
-        ];
+        let samples: [usize; SKETCH_BITS] = [0, 1, 2, 3, 4, 5, 6, 64, 65, 66, 67, 1024, 1025, 1026];
         let key = sketch_key(&words, &samples);
         assert_eq!(key, sketch_key(&words, &samples));
         assert_eq!(key & (1 << 7), 1 << 7);
