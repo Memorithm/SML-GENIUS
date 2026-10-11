@@ -12,7 +12,6 @@
 //! Negative controls: zero model, single-gate greedy coordinate descent,
 //! learned-chain upstream/downstream ablations.
 
-use std::{error::Error, time::Instant};
 use sml_core::{
     anf_constructive::residual_output_errors,
     anf_credit::{fit_coupled_credit, CoupledCreditReport, CoupledCreditSpec},
@@ -20,6 +19,7 @@ use sml_core::{
     anf_local_incremental::{LaneBlock, LaneData},
     toy_tasks::SplitMix64,
 };
+use std::{error::Error, time::Instant};
 
 const TRAIN_STEPS: usize = 96;
 const VAL_STEPS: usize = 48;
@@ -183,7 +183,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut totals = [[0u64; 5]; 2];
     let mut clean_zero_error_seeds = [0usize; 2];
     for run in &frozen {
-        let test = dataset(derive_seed(run.seed, run.panel, 0xa6c2_3003), TEST_STEPS, run.panel);
+        let test = dataset(
+            derive_seed(run.seed, run.panel, 0xa6c2_3003),
+            TEST_STEPS,
+            run.panel,
+        );
         let zero = base_network();
         let baseline_errors = errors(&zero, &test)?;
         let coordinate_errors = errors(&run.learned.coordinate, &test)?;
@@ -243,15 +247,13 @@ mod tests {
         let block = &data.blocks[0];
         for t in 0..block.steps {
             let past = if t > 0 {
-                block.inputs[(t - 1) * INPUT_BITS + 2]
-                    ^ block.inputs[(t - 1) * INPUT_BITS + 3]
+                block.inputs[(t - 1) * INPUT_BITS + 2] ^ block.inputs[(t - 1) * INPUT_BITS + 3]
             } else {
                 0
             };
             assert_eq!(
                 block.targets[t],
-                block.inputs[t * INPUT_BITS]
-                    ^ (block.inputs[t * INPUT_BITS + 1] & past)
+                block.inputs[t * INPUT_BITS] ^ (block.inputs[t * INPUT_BITS + 1] & past)
             );
         }
     }
