@@ -86,8 +86,7 @@ impl ElasticPhaseRule {
     }
     pub fn root_monomials(self) -> usize {
         let [a, b, c, d] = [0, 1, 2, 3].map(|i| self.truth & (1 << i) != 0);
-        usize::from(a) + usize::from(a ^ b)
-            + usize::from(a ^ c) + usize::from(a ^ b ^ c ^ d)
+        usize::from(a) + usize::from(a ^ b) + usize::from(a ^ c) + usize::from(a ^ b ^ c ^ d)
     }
 }
 
@@ -153,7 +152,9 @@ fn validate(
         {
             return Err(ElasticPhaseError::InvalidData);
         }
-        steps = steps.checked_add(block.steps).ok_or(ElasticPhaseError::InvalidData)?;
+        steps = steps
+            .checked_add(block.steps)
+            .ok_or(ElasticPhaseError::InvalidData)?;
         samples += u64::from(block.valid.count_ones()) * block.steps as u64;
     }
     if capped_train && steps > ELASTIC_MAX_TRAIN_STEPS {
@@ -163,7 +164,8 @@ fn validate(
 }
 
 fn check_widths(widths: &[usize]) -> Result<(), ElasticPhaseError> {
-    if widths.is_empty() || widths.len() > ELASTIC_MAX_WIDTH
+    if widths.is_empty()
+        || widths.len() > ELASTIC_MAX_WIDTH
         || widths.iter().any(|&w| w == 0 || w > ELASTIC_MAX_WIDTH)
         || widths.windows(2).any(|pair| pair[0] >= pair[1])
     {
@@ -175,10 +177,18 @@ fn check_widths(widths: &[usize]) -> Result<(), ElasticPhaseError> {
 #[inline]
 fn apply_truth(mask: u8, state: u64, raw: u64) -> u64 {
     let mut out = 0u64;
-    if mask & 1 != 0 { out |= !state & !raw; }
-    if mask & 2 != 0 { out |= state & !raw; }
-    if mask & 4 != 0 { out |= !state & raw; }
-    if mask & 8 != 0 { out |= state & raw; }
+    if mask & 1 != 0 {
+        out |= !state & !raw;
+    }
+    if mask & 2 != 0 {
+        out |= state & !raw;
+    }
+    if mask & 4 != 0 {
+        out |= !state & raw;
+    }
+    if mask & 8 != 0 {
+        out |= state & raw;
+    }
     out
 }
 /// Independent scored bit-sliced reference used for post-freeze evaluation.
@@ -202,8 +212,7 @@ pub fn score_rule(
 }
 
 fn truth_uses_previous_state(mask: u8) -> bool {
-    (mask & 1 != 0) != (mask & 2 != 0)
-        || (mask & 4 != 0) != (mask & 8 != 0)
+    (mask & 1 != 0) != (mask & 2 != 0) || (mask & 4 != 0) != (mask & 8 != 0)
 }
 
 /// Exact O(T) candidate score: root reads its (tap+1)-step delayed output.
@@ -239,11 +248,7 @@ fn score_ring(
 
 /// Tie-breaking is determined exclusively by training errors, then minimum
 /// active memory and ANF terms, followed by deterministic source/truth order.
-fn train_better(
-    rule: ElasticPhaseRule,
-    loss: u64,
-    old: Option<(ElasticPhaseRule, u64)>,
-) -> bool {
+fn train_better(rule: ElasticPhaseRule, loss: u64, old: Option<(ElasticPhaseRule, u64)>) -> bool {
     old.is_none_or(|(prior, old_loss)| {
         (
             loss,
@@ -275,8 +280,10 @@ pub fn make_native(
     rule: ElasticPhaseRule,
     spec: &ElasticPhaseSpec,
 ) -> Result<LocalAnfNetwork, ElasticPhaseError> {
-    if rule.width == 0 || rule.width > ELASTIC_MAX_WIDTH
-        || rule.tap >= rule.width || rule.raw >= ELASTIC_INPUT_BITS
+    if rule.width == 0
+        || rule.width > ELASTIC_MAX_WIDTH
+        || rule.tap >= rule.width
+        || rule.raw >= ELASTIC_INPUT_BITS
         || rule.truth >= 16
         || !spec.raw_candidates.contains(&rule.raw)
     {
@@ -345,21 +352,30 @@ pub fn native_errors(
 }
 
 pub fn reference_errors(data: &LaneData, spec: &ElasticPhaseSpec) -> u64 {
-    data.blocks.iter().map(|block| {
-        (0..block.steps).map(|t| {
-            let observed_residual = block.targets[t * data.target_bits + spec.target_bit]
-                ^ block.inputs[t * data.input_bits + spec.baseline_input];
-            u64::from((observed_residual & block.valid).count_ones())
-        }).sum::<u64>()
-    }).sum()
+    data.blocks
+        .iter()
+        .map(|block| {
+            (0..block.steps)
+                .map(|t| {
+                    let observed_residual = block.targets[t * data.target_bits + spec.target_bit]
+                        ^ block.inputs[t * data.input_bits + spec.baseline_input];
+                    u64::from((observed_residual & block.valid).count_ones())
+                })
+                .sum::<u64>()
+        })
+        .sum()
 }
 
-fn zero_model(
-    spec: &ElasticPhaseSpec, width: usize,
-) -> Result<LocalAnfNetwork, ElasticPhaseError> {
-    make_native(ElasticPhaseRule {
-        width, tap: 0, raw: spec.raw_candidates[0], truth: 0,
-    }, spec)
+fn zero_model(spec: &ElasticPhaseSpec, width: usize) -> Result<LocalAnfNetwork, ElasticPhaseError> {
+    make_native(
+        ElasticPhaseRule {
+            width,
+            tap: 0,
+            raw: spec.raw_candidates[0],
+            truth: 0,
+        },
+        spec,
+    )
 }
 
 /// One train-only prefix sweep serves every width in the caller-supplied
@@ -387,7 +403,12 @@ pub fn fit_elastic_phase(
     for tap in 0..max_width {
         for &raw in &spec.raw_candidates {
             for truth in 0..16u8 {
-                let candidate = ElasticPhaseRule { width: max_width, tap, raw, truth };
+                let candidate = ElasticPhaseRule {
+                    width: max_width,
+                    tap,
+                    raw,
+                    truth,
+                };
                 let loss = score_ring(candidate, train, spec, &mut ring);
                 evaluations += 1;
                 for (i, &width) in widths.iter().enumerate() {
@@ -430,13 +451,9 @@ pub fn fit_elastic_phase(
     for index in 1..families.len() {
         let prior = &families[selected_index];
         let candidate = &families[index];
-        if (
-            candidate.validation_errors,
-            candidate.rule.width,
-        ) < (
-            prior.validation_errors,
-            prior.rule.width,
-        ) {
+        if (candidate.validation_errors, candidate.rule.width)
+            < (prior.validation_errors, prior.rule.width)
+        {
             selected_index = index;
         }
     }
@@ -472,8 +489,7 @@ pub fn fit_elastic_phase(
 mod tests {
     use super::*;
     use crate::{
-        anf_local_incremental::LaneBlock,
-        semantic::bitfield::SemanticBitField,
+        anf_local_incremental::LaneBlock, semantic::bitfield::SemanticBitField,
         toy_tasks::SplitMix64,
     };
 
@@ -506,7 +522,12 @@ mod tests {
         LaneData {
             input_bits: ELASTIC_INPUT_BITS,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -530,7 +551,12 @@ mod tests {
     #[test]
     fn truth_table_and_mobius_anf_agree_across_16_masks() {
         for truth in 0..16u8 {
-            let rule = ElasticPhaseRule { width: 4, tap: 3, raw: 1, truth };
+            let rule = ElasticPhaseRule {
+                width: 4,
+                tap: 3,
+                raw: 1,
+                truth,
+            };
             let model = make_native(rule, &spec()).unwrap();
             let mut products = [0u64; 4];
             for state in [0u64, u64::MAX] {
@@ -557,13 +583,21 @@ mod tests {
             assert_eq!(fitted.selected_rule.raw, 1);
             assert_eq!(fitted.selected_train_errors, 0);
             assert_eq!(fitted.selected_validation_errors, 0);
-            assert_eq!(native_errors(&fitted.selected, &dataset(99, 2048, stride), &spec()).unwrap(), 0);
+            assert_eq!(
+                native_errors(&fitted.selected, &dataset(99, 2048, stride), &spec()).unwrap(),
+                0
+            );
         }
     }
 
     #[test]
     fn full_width_256_elastic_state_is_bit_exact_and_reused() {
-        let rule = ElasticPhaseRule { width: 256, tap: 255, raw: 1, truth: 6 };
+        let rule = ElasticPhaseRule {
+            width: 256,
+            tap: 255,
+            raw: 1,
+            truth: 6,
+        };
         let model = make_native(rule, &spec()).unwrap();
         assert_eq!(model.state_bits(), 256);
         assert_eq!(model.gates().len(), 256);
@@ -579,7 +613,13 @@ mod tests {
     fn unsupported_width_families_or_malformed_splits_are_rejected() {
         let train = dataset(15, 32, 4);
         let val = dataset(16, 32, 4);
-        for widths in [&[][..], &[0, 4][..], &[16, 8][..], &[8, 8][..], &[256, 257][..]] {
+        for widths in [
+            &[][..],
+            &[0, 4][..],
+            &[16, 8][..],
+            &[8, 8][..],
+            &[256, 257][..],
+        ] {
             assert_eq!(
                 fit_elastic_phase(&train, &val, &spec(), widths),
                 Err(ElasticPhaseError::InvalidWidths),
