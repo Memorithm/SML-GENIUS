@@ -17,6 +17,7 @@ pub mod anf_credit_cycles;
 pub mod anf_credit_multihop;
 pub mod anf_credit_topology;
 pub mod anf_elastic_capacity;
+pub mod anf_intermediate_credit;
 pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
