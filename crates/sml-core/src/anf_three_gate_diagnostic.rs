@@ -365,8 +365,7 @@ pub fn rank_features_ablated(
                     let z = block.residual[t];
                     let r = block.root[t - width];
                     marginal += lanes - 2 * i64::from(((z ^ x) & block.valid).count_ones());
-                    interaction +=
-                        lanes - 2 * i64::from(((z ^ x ^ r) & block.valid).count_ones());
+                    interaction += lanes - 2 * i64::from(((z ^ x ^ r) & block.valid).count_ones());
                 }
             }
             let first = marginal.unsigned_abs();
@@ -799,7 +798,11 @@ mod tests {
             .map(|address| {
                 let truth = (mask >> address) & 1;
                 let parity = ((address & subset).count_ones() & 1) as u16;
-                if truth == parity { 1 } else { -1 }
+                if truth == parity {
+                    1
+                } else {
+                    -1
+                }
             })
             .sum()
     }
@@ -812,8 +815,8 @@ mod tests {
         }
         assert_eq!(exact_walsh_moment(pure, 15), 16);
 
-        let mixed = composed_mask([8, 6, 6]); // (R&a)^b^c
-        // The existing scanner examines x and x^R for each raw feature.
+        // Mixed truth: (R&a)^b^c; current scanner checks x and x^R only.
+        let mixed = composed_mask([8, 6, 6]);
         for variable in [2usize, 4, 8] {
             assert_eq!(exact_walsh_moment(mixed, variable), 0);
             assert_eq!(exact_walsh_moment(mixed, variable | 1), 0);
@@ -826,12 +829,8 @@ mod tests {
         let train = data(1285, 32, 512, rules());
         let obs = observed(&train);
         let baseline = rank_features(32, &obs).0;
-        let full = rank_features_ablated(
-            &train,
-            32,
-            SpectralAblation::RootInteractionAndPeeling,
-        )
-        .unwrap();
+        let full =
+            rank_features_ablated(&train, 32, SpectralAblation::RootInteractionAndPeeling).unwrap();
         assert_eq!(baseline, full);
         let w1 = rank_features_ablated(&train, 32, SpectralAblation::Marginal).unwrap();
         let w1_root = rank_features_ablated(&train, 32, SpectralAblation::RootInteraction).unwrap();
