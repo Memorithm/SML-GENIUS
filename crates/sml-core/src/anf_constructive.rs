@@ -170,11 +170,7 @@ fn residual_counts(
             for (address, counts_for_address) in counts.iter_mut().enumerate() {
                 let mut mask = block.valid;
                 for (j, &word) in words.iter().take(inputs.len()).enumerate() {
-                    mask &= if (address >> j) & 1 != 0 {
-                        word
-                    } else {
-                        !word
-                    };
+                    mask &= if (address >> j) & 1 != 0 { word } else { !word };
                 }
                 counts_for_address[1] += u64::from((mask & label).count_ones());
                 counts_for_address[0] += u64::from((mask & !label).count_ones());
@@ -210,10 +206,7 @@ pub fn fit_residual_gate(
     if candidates.is_empty() || candidates.len() > MAX_CONSTRUCTIVE_CANDIDATES {
         return Err(ConstructiveError::Shape);
     }
-    if max_fan_in == 0
-        || max_fan_in > MAX_CONSTRUCTIVE_FAN_IN
-        || max_fan_in > candidates.len()
-    {
+    if max_fan_in == 0 || max_fan_in > MAX_CONSTRUCTIVE_FAN_IN || max_fan_in > candidates.len() {
         return Err(ConstructiveError::FanIn(max_fan_in));
     }
     for (j, &source) in candidates.iter().enumerate() {
@@ -249,11 +242,8 @@ pub fn fit_residual_gate(
         });
     }
     let truth_table: Vec<bool> = best_counts.iter().map(|c| c[1] > c[0]).collect();
-    let gate = LocalAnfGate::from_truth_table(
-        best_inputs.clone(),
-        &truth_table,
-        network.source_width(),
-    )?;
+    let gate =
+        LocalAnfGate::from_truth_table(best_inputs.clone(), &truth_table, network.source_width())?;
     Ok(ConstructedGate {
         gate,
         inputs: best_inputs,
@@ -312,8 +302,13 @@ pub fn validate_and_commit(
         residual_output_errors(network, validation, gate_index, target_bit, baseline_input)?;
     let mut candidate = network.clone();
     candidate.gates_mut()[gate_index] = fitted.gate.clone();
-    let (candidate_errors, candidate_samples) =
-        residual_output_errors(&candidate, validation, gate_index, target_bit, baseline_input)?;
+    let (candidate_errors, candidate_samples) = residual_output_errors(
+        &candidate,
+        validation,
+        gate_index,
+        target_bit,
+        baseline_input,
+    )?;
     if samples != candidate_samples {
         return Err(ConstructiveError::Shape);
     }
