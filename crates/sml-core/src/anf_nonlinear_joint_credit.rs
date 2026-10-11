@@ -559,6 +559,16 @@ mod tests {
         let train = dataset(101, width, 256, &rules);
         let validation = dataset(102, width, 256, &rules);
         let report = fit_nonlinear_credit(&train, &validation, width).unwrap();
+        eprintln!(
+            "A6C9_DIAG one_rule={:?} one_train={} one_val={} affine_pair={:?} affine_train={} affine_val={} nonlinear_pair={:?} nonlinear_train={:?} nonlinear_val={:?} selected={:?} selected_count={} selected_train={} selected_val={}",
+            report.old_one.proposed_rule, report.old_one.proposed_train_errors,
+            report.old_one.proposed_validation_errors, report.old_affine.joint_rules,
+            report.old_affine.joint_train_errors, report.old_affine.joint_validation_errors,
+            report.conditional_rules, report.conditional_train_errors,
+            report.conditional_validation_errors, report.selected_rules,
+            report.selected_count, report.selected_train_errors,
+            report.selected_validation_errors
+        );
         assert_eq!(report.selected_count, 2);
         assert_eq!(report.selected_train_errors, 0);
         assert_eq!(report.selected_validation_errors, 0);
