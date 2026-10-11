@@ -47,10 +47,10 @@ jobs:
           set -euo pipefail
           echo "A6C12A_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
           cargo run --locked --release -p sml-core --bin sml-spectral-adversarial-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
-          grep -q '^A6C12A_ALL_FROZEN,rank_observations=240,policies=80$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
+          grep -q '^A6C12A_ALL_FROZEN,rank_observations=240,policies=160$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
           test "$(grep -c '^A6C12A_RANK,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 240
-          test "$(grep -c '^A6C12A_FROZEN,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 80
-          test "$(grep -c '^A6C12A_TEST,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 80
+          test "$(grep -c '^A6C12A_FROZEN,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 160
+          test "$(grep -c '^A6C12A_TEST,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 160
           test "$(grep -c '^A6C12A_RANK_SUMMARY,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log")" -eq 48
-          grep -q '^A6C12A_COMPLETE,rank_observations=240,frozen=80,independent_test_streams=40,summaries=48$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
+          grep -q '^A6C12A_COMPLETE,rank_observations=240,frozen=160,independent_test_streams=40,summaries=48$' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
           grep '^A6C12A_RANK_SUMMARY,' "$RUNNER_TEMP/a6c12a-spectral-ablation.log"
