@@ -1,0 +1,54 @@
+name: A6-C6 elastic ANF 4–256-bit state capacity
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c6-elastic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  elastic-state-capacity:
+    if: startsWith(github.head_ref, 'research/a6-c6-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact source revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify Rust 1.89 formatting, compilation, lints, boundary and oracle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_elastic_capacity
+          cargo test --locked -p sml-core --bin sml-elastic-capacity-bench
+      - name: A6-C6 90 frozen models, 180 independent tests through 256 bits
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C6_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --release --locked -p sml-core --bin sml-elastic-capacity-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c6-elastic-capacity.log"
+          grep -q '^A6C6_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c6-elastic-capacity.log"
+          test "$(grep -c '^A6C6_MEM,' "$RUNNER_TEMP/a6c6-elastic-capacity.log")" -eq 7
+          test "$(grep -c '^A6C6_FROZEN,' "$RUNNER_TEMP/a6c6-elastic-capacity.log")" -eq 90
+          test "$(grep -c '^A6C6_TEST_RESULT,' "$RUNNER_TEMP/a6c6-elastic-capacity.log")" -eq 180
+          test "$(grep -c '^A6C6_SUMMARY,' "$RUNNER_TEMP/a6c6-elastic-capacity.log")" -eq 36
+          grep '^A6C6_SUMMARY,' "$RUNNER_TEMP/a6c6-elastic-capacity.log"
