@@ -119,6 +119,7 @@ pub fn make_multi_gate_native(
             }
             _ => DualCreditError::InvalidSpec,
         })?;
+    let source_width = net.source_width();
     for rule in mutations {
         if rule.gate == 0 || rule.gate >= width
             || !A6C8_RAW_CHOICES.contains(&rule.raw)
@@ -129,7 +130,7 @@ pub fn make_multi_gate_native(
         seen[rule.gate] = true;
         net.gates_mut()[rule.gate] = LocalAnfGate::from_truth_table(
             vec![rule.gate - 1, width + rule.raw],
-            &bool_truth(rule.truth), net.source_width(),
+            &bool_truth(rule.truth), source_width,
         )?;
     }
     Ok(net)
