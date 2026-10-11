@@ -32,6 +32,7 @@ pub mod anf_phase_capacity;
 pub mod anf_sbg_unified;
 pub mod anf_sparse_byte;
 pub mod anf_sparse_readout;
+pub mod anf_three_gate_diagnostic;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;

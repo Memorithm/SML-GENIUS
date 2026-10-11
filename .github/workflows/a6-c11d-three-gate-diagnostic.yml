@@ -1,0 +1,55 @@
+name: A6-C11D three-gate search versus data diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+      - research/a6-c10-joint-nonlinear-anf-system-id
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c11d-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  three-gate-diagnostic:
+    if: startsWith(github.head_ref, 'research/a6-c11-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR revision without saved GitHub credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89 toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Verify formatter, types, lint and native four-segment equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core anf_three_gate_diagnostic -- --nocapture
+          cargo test --locked -p sml-core --bin sml-three-gate-diagnostic-bench
+      - name: A6-C11D 120 pre-frozen budgets and nested training streams
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C11D_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-three-gate-diagnostic-bench -- 5 2>&1 | tee "$RUNNER_TEMP/a6c11d-three-gate.log"
+          grep -q '^A6C11D_ALL_FROZEN,true$' "$RUNNER_TEMP/a6c11d-three-gate.log"
+          test "$(grep -c '^A6C11D_FROZEN,' "$RUNNER_TEMP/a6c11d-three-gate.log")" -eq 120
+          test "$(grep -c '^A6C11D_TEST_RESULT,' "$RUNNER_TEMP/a6c11d-three-gate.log")" -eq 120
+          test "$(grep -c '^A6C11D_SUMMARY,' "$RUNNER_TEMP/a6c11d-three-gate.log")" -eq 24
+          grep '^A6C11D_SUMMARY,' "$RUNNER_TEMP/a6c11d-three-gate.log"
