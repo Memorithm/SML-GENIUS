@@ -151,7 +151,10 @@ fn validate(
         || spec.target_bit >= data.target_bits
         || data.input_bits != A6C5_INPUT_BITS
         || data.blocks.is_empty()
-        || network.gates().iter().any(|gate| gate.truth_table().iter().any(|&v| v))
+        || network
+            .gates()
+            .iter()
+            .any(|gate| gate.truth_table().iter().any(|&v| v))
     {
         return Err(CycleError::Spec);
     }
@@ -188,7 +191,10 @@ fn rules(spec: &CycleSpec) -> Vec<Rule> {
     for (i, &a) in sources.iter().enumerate() {
         for &b in &sources[i + 1..] {
             for truth in 0..16u8 {
-                all.push(Rule { inputs: [a, b], truth });
+                all.push(Rule {
+                    inputs: [a, b],
+                    truth,
+                });
             }
         }
     }
@@ -198,10 +204,18 @@ fn rules(spec: &CycleSpec) -> Vec<Rule> {
 #[inline]
 fn apply_truth(truth: u8, a: u64, b: u64) -> u64 {
     let mut out = 0u64;
-    if truth & 1 != 0 { out |= !a & !b; }
-    if truth & 2 != 0 { out |= a & !b; }
-    if truth & 4 != 0 { out |= !a & b; }
-    if truth & 8 != 0 { out |= a & b; }
+    if truth & 1 != 0 {
+        out |= !a & !b;
+    }
+    if truth & 2 != 0 {
+        out |= a & !b;
+    }
+    if truth & 4 != 0 {
+        out |= !a & b;
+    }
+    if truth & 8 != 0 {
+        out |= a & b;
+    }
     out
 }
 #[inline]
@@ -246,9 +260,10 @@ fn input_matters(truth: u8, pos: usize) -> bool {
     })
 }
 fn depends_on(rule: &Rule, source: usize) -> bool {
-    rule.inputs.iter().enumerate().any(|(j, &input)| {
-        input == source && input_matters(rule.truth, j)
-    })
+    rule.inputs
+        .iter()
+        .enumerate()
+        .any(|(j, &input)| input == source && input_matters(rule.truth, j))
 }
 fn monomials(truth: u8) -> usize {
     let mut coefficients: [bool; 4] = std::array::from_fn(|i| truth & (1 << i) != 0);
@@ -280,14 +295,16 @@ fn complexity(first: &Rule, second: &Rule) -> [usize; 3] {
         + usize::from(first_live && depends_on(first, 0))
         + usize::from(first_live && depends_on(first, 1));
     let terms = monomials(second.truth)
-        + if first_live { monomials(first.truth) } else { 0 };
+        + if first_live {
+            monomials(first.truth)
+        } else {
+            0
+        };
     [active, feedback, terms]
 }
 
 fn better(candidate: Best, selected: Option<Best>) -> bool {
-    selected.is_none_or(|old| {
-        (candidate.loss, candidate.complexity) < (old.loss, old.complexity)
-    })
+    selected.is_none_or(|old| (candidate.loss, candidate.complexity) < (old.loss, old.complexity))
 }
 fn materialize(
     baseline: &LocalAnfNetwork,
@@ -297,9 +314,8 @@ fn materialize(
     let mut result = baseline.clone();
     for (i, rule) in [first, second].iter().enumerate() {
         let table: Vec<bool> = (0..4).map(|j| rule.truth & (1 << j) != 0).collect();
-        result.gates_mut()[i] = LocalAnfGate::from_truth_table(
-            rule.inputs.to_vec(), &table, baseline.source_width(),
-        )?;
+        result.gates_mut()[i] =
+            LocalAnfGate::from_truth_table(rule.inputs.to_vec(), &table, baseline.source_width())?;
     }
     Ok(result)
 }
@@ -319,7 +335,11 @@ fn validate_commit(
 ) -> Result<(LocalAnfNetwork, u64, bool), CycleError> {
     let loss = native_loss(&candidate, validation, spec)?;
     let accepted = loss < baseline_errors;
-    Ok((if accepted { candidate } else { initial.clone() }, loss, accepted))
+    Ok((
+        if accepted { candidate } else { initial.clone() },
+        loss,
+        accepted,
+    ))
 }
 
 struct Search<'a> {
@@ -354,7 +374,12 @@ fn descent(
             for index in 0..search.rules.len() {
                 if *evaluations >= budget {
                     let c = complexity(&search.rules[selected.0], &search.rules[selected.1]);
-                    return Best { first: selected.0, second: selected.1, loss, complexity: c };
+                    return Best {
+                        first: selected.0,
+                        second: selected.1,
+                        loss,
+                        complexity: c,
+                    };
                 }
                 let candidate = if axis == 0 {
                     (index, selected.1)
@@ -425,9 +450,7 @@ pub fn fit_recurrent_cycles(
             }
             // Acyclic control: gate0 raw-only, gate1 may use gate0 or raw,
             // but must not read itself. This eliminates ALL directed cycles.
-            if r0.inputs.iter().all(|&s| s >= A6C5_STATE_BITS)
-                && !r1.inputs.contains(&1)
-            {
+            if r0.inputs.iter().all(|&s| s >= A6C5_STATE_BITS) && !r1.inputs.contains(&1) {
                 acyclic_evaluations += 1;
                 if better(candidate, best_dag) {
                     best_dag = Some(candidate);
@@ -470,7 +493,11 @@ pub fn fit_recurrent_cycles(
 
     // Monotone coordinate control and randomized restarts share the identical
     // training data, objective, rules and maximum number of scored pairs.
-    let search = Search { rules: &bank, training: train, spec };
+    let search = Search {
+        rules: &bank,
+        training: train,
+        spec,
+    };
     let mut coordinate_evaluations = 0usize;
     let coordinate_best = descent((0, 0), &search, A6C5_PAIRS, &mut coordinate_evaluations);
     let mut restart_evaluations = 0usize;
@@ -490,10 +517,16 @@ pub fn fit_recurrent_cycles(
             restart_best = candidate;
         }
     }
-    let coordinate_candidate =
-        materialize(initial, &bank[coordinate_best.first], &bank[coordinate_best.second])?;
-    let restarted_candidate =
-        materialize(initial, &bank[restart_best.first], &bank[restart_best.second])?;
+    let coordinate_candidate = materialize(
+        initial,
+        &bank[coordinate_best.first],
+        &bank[coordinate_best.second],
+    )?;
+    let restarted_candidate = materialize(
+        initial,
+        &bank[restart_best.first],
+        &bank[restart_best.second],
+    )?;
     for (candidate, expected) in [
         (&coordinate_candidate, coordinate_best.loss),
         (&restarted_candidate, restart_best.loss),
@@ -502,16 +535,41 @@ pub fn fit_recurrent_cycles(
             return Err(CycleError::NativeOracle);
         }
     }
-    let (committed, joint_validation_errors, accepted_joint) =
-        validate_commit(initial, proposed.clone(), validation, spec, baseline_validation_errors)?;
-    let (direct, direct_validation_errors, accepted_direct) =
-        validate_commit(initial, direct_candidate, validation, spec, baseline_validation_errors)?;
-    let (acyclic, acyclic_validation_errors, accepted_acyclic) =
-        validate_commit(initial, acyclic_candidate, validation, spec, baseline_validation_errors)?;
-    let (coordinate, coordinate_validation_errors, accepted_coordinate) =
-        validate_commit(initial, coordinate_candidate, validation, spec, baseline_validation_errors)?;
-    let (restarted, restarted_validation_errors, accepted_restarted) =
-        validate_commit(initial, restarted_candidate, validation, spec, baseline_validation_errors)?;
+    let (committed, joint_validation_errors, accepted_joint) = validate_commit(
+        initial,
+        proposed.clone(),
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
+    let (direct, direct_validation_errors, accepted_direct) = validate_commit(
+        initial,
+        direct_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
+    let (acyclic, acyclic_validation_errors, accepted_acyclic) = validate_commit(
+        initial,
+        acyclic_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
+    let (coordinate, coordinate_validation_errors, accepted_coordinate) = validate_commit(
+        initial,
+        coordinate_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
+    let (restarted, restarted_validation_errors, accepted_restarted) = validate_commit(
+        initial,
+        restarted_candidate,
+        validation,
+        spec,
+        baseline_validation_errors,
+    )?;
     let rule0 = &bank[joint.first];
     let rule1 = &bank[joint.second];
     Ok(CycleReport {
@@ -522,7 +580,11 @@ pub fn fit_recurrent_cycles(
         coordinate,
         restarted,
         proposed_class: classify(rule0, rule1),
-        selected_class: if accepted_joint { classify(rule0, rule1) } else { FeedbackClass::Direct },
+        selected_class: if accepted_joint {
+            classify(rule0, rule1)
+        } else {
+            FeedbackClass::Direct
+        },
         active_gate_count: complexity(rule0, rule1)[0],
         active_feedback_edges: complexity(rule0, rule1)[1],
         monomials: complexity(rule0, rule1)[2],
@@ -570,14 +632,26 @@ mod tests {
         LocalAnfNetwork::with_input_bits(n, A6C5_INPUT_BITS, gates, readout).unwrap()
     }
     fn spec() -> CycleSpec {
-        CycleSpec { raw_candidates: vec![1, 2, 3, 4], baseline_input: 0, target_bit: 0 }
+        CycleSpec {
+            raw_candidates: vec![1, 2, 3, 4],
+            baseline_input: 0,
+            target_bit: 0,
+        }
     }
     #[derive(Clone, Copy)]
-    enum Task { Direct, Delay, Running, Interleaved, Impossible }
+    enum Task {
+        Direct,
+        Delay,
+        Running,
+        Interleaved,
+        Impossible,
+    }
     fn fixture(seed: u64, steps: usize, task: Task) -> LaneData {
         let mut rng = SplitMix64::new(seed);
         let mut inputs = vec![0u64; steps * A6C5_INPUT_BITS];
-        for word in &mut inputs { *word = rng.next_u64(); }
+        for word in &mut inputs {
+            *word = rng.next_u64();
+        }
         let mut targets = vec![0u64; steps];
         let mut period1 = 0u64;
         let mut period2 = [0u64; 2];
@@ -589,7 +663,13 @@ mod tests {
             period3[t % 3] ^= signal;
             let residual = match task {
                 Task::Direct => signal & inputs[t * A6C5_INPUT_BITS + 2],
-                Task::Delay => if t == 0 { 0 } else { inputs[(t - 1) * A6C5_INPUT_BITS + 1] },
+                Task::Delay => {
+                    if t == 0 {
+                        0
+                    } else {
+                        inputs[(t - 1) * A6C5_INPUT_BITS + 1]
+                    }
+                }
                 Task::Running => period1,
                 Task::Interleaved => period2[t % 2],
                 Task::Impossible => period3[t % 3],
@@ -599,7 +679,12 @@ mod tests {
         LaneData {
             input_bits: A6C5_INPUT_BITS,
             target_bits: 1,
-            blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+            blocks: vec![LaneBlock {
+                steps,
+                inputs,
+                targets,
+                valid: u64::MAX,
+            }],
         }
     }
 
@@ -632,7 +717,8 @@ mod tests {
             let reference = baseline();
             let training = fixture(20, 32, task);
             let validation = fixture(21, 32, task);
-            let report = fit_recurrent_cycles(&reference, &training, &validation, &spec(), 44).unwrap();
+            let report =
+                fit_recurrent_cycles(&reference, &training, &validation, &spec(), 44).unwrap();
             assert_eq!(report.joint_train_errors, 0);
             assert_eq!(report.joint_validation_errors, 0);
             assert_eq!(report.proposed_class, required);
@@ -647,7 +733,14 @@ mod tests {
     fn unrepresentable_period_three_is_a_falsification_control() {
         let reference = baseline();
         let data = fixture(40, 32, Task::Impossible);
-        let report = fit_recurrent_cycles(&reference, &data, &fixture(41, 20, Task::Impossible), &spec(), 123).unwrap();
+        let report = fit_recurrent_cycles(
+            &reference,
+            &data,
+            &fixture(41, 20, Task::Impossible),
+            &spec(),
+            123,
+        )
+        .unwrap();
         assert!(report.joint_train_errors > 0);
     }
 
@@ -659,7 +752,9 @@ mod tests {
         let a = fit_recurrent_cycles(&reference, &train, &val, &spec(), 17).unwrap();
         let mut flipped = val.clone();
         for block in &mut flipped.blocks {
-            for word in &mut block.targets { *word = !*word; }
+            for word in &mut block.targets {
+                *word = !*word;
+            }
         }
         let b = fit_recurrent_cycles(&reference, &train, &flipped, &spec(), 17).unwrap();
         assert_eq!(a.proposed, b.proposed);
@@ -669,6 +764,9 @@ mod tests {
         assert_eq!(reference, baseline());
         let mut wrong = spec();
         wrong.raw_candidates = vec![1, 1, 3, 4];
-        assert_eq!(fit_recurrent_cycles(&reference, &train, &val, &wrong, 1), Err(CycleError::Spec));
+        assert_eq!(
+            fit_recurrent_cycles(&reference, &train, &val, &wrong, 1),
+            Err(CycleError::Spec)
+        );
     }
 }
