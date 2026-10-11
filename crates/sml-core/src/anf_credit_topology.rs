@@ -690,7 +690,7 @@ mod tests {
         }
         let mut targets = vec![0u64; steps];
         let x = |t: usize, p: usize| inputs[t * INPUT_BITS + p];
-        for t in 0..steps {
+        for (t, target) in targets.iter_mut().enumerate() {
             let residual = match task {
                 Task::Direct => x(t, 1) & x(t, 2),
                 Task::Skip => {
@@ -716,7 +716,7 @@ mod tests {
                     }
                 }
             };
-            targets[t] = x(t, 0) ^ residual;
+            *target = x(t, 0) ^ residual;
         }
         LaneData {
             input_bits: INPUT_BITS,
