@@ -637,10 +637,7 @@ pub fn fit_three_gate_candidates(
     let mut unique = std::collections::BTreeSet::new();
     for &triple in triples {
         for source in triple {
-            if source.gate == 0
-                || source.gate >= width
-                || !DIAG_RAW_POOL.contains(&source.raw)
-            {
+            if source.gate == 0 || source.gate >= width || !DIAG_RAW_POOL.contains(&source.raw) {
                 return Err(TripleDiagError::InvalidSplit);
             }
         }
@@ -913,8 +910,7 @@ mod tests {
     fn independently_screened_truth_uses_same_native_three_gate_factorizer() {
         let train = data(91, 32, 512, rules());
         let validation = data(92, 32, 512, rules());
-        let fit =
-            fit_three_gate_candidates(&train, &validation, 32, &[rules().sources()]).unwrap();
+        let fit = fit_three_gate_candidates(&train, &validation, 32, &[rules().sources()]).unwrap();
         assert_eq!(fit.proposal_sources, rules().sources());
         assert_eq!(fit.autonomous_train_errors, 0);
         assert_eq!(fit.autonomous_validation_errors, 0);
