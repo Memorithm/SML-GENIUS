@@ -780,3 +780,29 @@ Next qualifications: broader declared SBG/domain/selection geometries; quality-
 gated learned page export; persistent authenticated whole-pipeline checkpoints;
 then separately admitted physical end-to-end cost and matched learning/ablation
 gates. Do not infer those results from the synthetic closed-loop equality checks.
+
+## A6-C12c parity source screening — bounded 508-source evidence (2026-10-12)
+
+[Pre-registration](A6-C12C-SKETCH-MITM-508-PREREGISTRATION.md) and
+[measurements](RESULTS-A6-C12C-SKETCH-MITM-508.md) qualify the independent
+synthetic three-gate N128 ring **as a diagnostic of source selection**, not
+an end-to-end SML language-model training milestone. On 24 paired
+task/panel/seed streams, the 508-feature hybrid of unrestricted Walsh pairs
+and 14-bit sketch-based meet-in-the-middle recovered all 24 generator
+positions, sources and Boolean tables. The exhaustive order-3 reference
+also recovered 8/8 of its declared n508 subset; hybrid total fit was
+35.06 times faster **on those eight matched cases**, including factorization.
+
+Do not infer subcubic worst-case complexity: measured sketch bucket collisions
+and W2 pair scans matter. The current research learner still assumes a fixed
+128-state-bit delay ring and **at most three hidden gates**. No general
+508-state-bit free-graph learning, SML-25B perplexity, GPU performance or
+million-function-bank selection has been demonstrated.
+
+Next evidence gates, each requiring prior registration and negative controls:
+masked-variable identifiability proofs; correlated distractors and
+non-i.i.d. label noise; adaptive selection among W3 exhaustive and W2/MITM
+under matched cost/accuracy; eventual variable k=4/5 *with enough learner
+capacity* and learned bank integration. The experiments must retain the
+native Rust-only/hardware-independent boundary, and avoid software NVIDIA
+dependencies beyond allowed GPU drivers.
