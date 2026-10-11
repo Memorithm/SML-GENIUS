@@ -347,8 +347,16 @@ mod tests {
         let block = &data.blocks[0];
         for t in 0..block.steps {
             let p = block.inputs[t * 4 + 3];
-            let a = if t > 0 { block.inputs[(t - 1) * 4 + 1] } else { 0 };
-            let b = if t > 1 { block.inputs[(t - 2) * 4 + 2] } else { 0 };
+            let a = if t > 0 {
+                block.inputs[(t - 1) * 4 + 1]
+            } else {
+                0
+            };
+            let b = if t > 1 {
+                block.inputs[(t - 2) * 4 + 2]
+            } else {
+                0
+            };
             assert_eq!(block.targets[t * 2] ^ block.inputs[t * 4], p ^ a ^ b);
             assert_eq!(
                 block.targets[t * 2 + 1] ^ block.inputs[t * 4],
@@ -375,7 +383,10 @@ mod tests {
             )
             .unwrap();
             assert_eq!(fit.train_errors, 0);
-            assert_eq!(fit.inputs, vec![FREE_GATES + 1, FREE_GATES + INPUT_BITS + 2, STATE_BITS + 3]);
+            assert_eq!(
+                fit.inputs,
+                vec![FREE_GATES + 1, FREE_GATES + INPUT_BITS + 2, STATE_BITS + 3]
+            );
             assert_eq!(fit.evaluated_subsets, 12 + 66 + 220);
             let decision = validate_and_commit(
                 &mut network,
