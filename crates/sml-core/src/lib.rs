@@ -31,6 +31,8 @@ pub mod candidate;
 pub mod char_baselines;
 pub mod circuit;
 pub mod context_ledger;
+pub mod crypto_features;
+pub mod crypto_strategy;
 pub mod delta_kv;
 pub mod delta_kv_adaptive;
 pub mod delta_kv_controls;

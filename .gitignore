@@ -2,3 +2,4 @@
 *.profraw
 .DS_Store
 /data/char/
+/data/crypto/

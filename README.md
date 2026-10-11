@@ -104,6 +104,7 @@ The raw packed weights would therefore require exactly **3,906,250,000 bytes** b
 - **docs/RESULTS-A5-TOY.md**: first A5 learning prototype (local fan-in ANF recurrent model, gradient-free search) vs baselines on toy sequence tasks; diagnostic only.
 - **docs/RESULTS-A5-STEP2.md**: A5 step 2, a self-supervised history layer (lagged-input targets, greedy exact gate fitting) plus task search; delayed recall d=8/12/16 and ablations; diagnostic only.
 - **docs/RESULTS-A5-STEP3.md**: A5 step 3, incremental proposal evaluation (bit-exact, throughput up to N=4096) and a first byte-level next-byte task (public-domain French text, fetched by `scripts/fetch-char-corpus.sh`) vs n-gram and RNN baselines; diagnostic only.
+- **docs/RESULTS-A6-CRYPTO.md**: A6, a crypto decision benchmark (BTCUSDT/ETHUSDT hourly, Binance public dumps fetched by `scripts/fetch-crypto-data.sh`): risk-off filter vs forward-return direction, walk-forward with costs, ANF decision circuit vs baselines; diagnostic only, nothing beats buy & hold after costs.
 - **docs/ROADMAP.md**: evidence-gated progression from reference primitives to 25B.
 - **docs/SML-DELTA-KV-BOOTSTRAP.md**: evidence-gated bounded rewritable-memory programme and matched controls.
 - **BOOTSTRAP.md**: durable project re-entry state, including the SBG roadmap and current implementation slice.
