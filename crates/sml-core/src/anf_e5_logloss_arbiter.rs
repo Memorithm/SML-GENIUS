@@ -74,15 +74,18 @@ pub fn context_signals(
             0.5 * (base * (base / mean).ln() + candidate * (candidate / mean).ln())
         })
         .sum::<f64>();
-    let log_support = f64::from(support_count.min(support_cap)).ln_1p()
-        / f64::from(support_cap).ln_1p();
+    let log_support =
+        f64::from(support_count.min(support_cap)).ln_1p() / f64::from(support_cap).ln_1p();
     let features = [
         entropy,
         log_support,
         js_nats / std::f64::consts::LN_2,
         (execution_cost / cost_cap).min(1.0),
     ];
-    if features.iter().any(|&x| !x.is_finite() || !(-1.0e-12..=1.0 + 1.0e-12).contains(&x)) {
+    if features
+        .iter()
+        .any(|&x| !x.is_finite() || !(-1.0e-12..=1.0 + 1.0e-12).contains(&x))
+    {
         return Err(ArbiterError::InvalidSignals);
     }
     Ok(features.map(|x| x.clamp(0.0, 1.0)))
@@ -121,7 +124,9 @@ impl Default for ArbiterConfig {
 }
 
 fn check_signals(signals: &[f64; ARBITER_SIGNALS]) -> bool {
-    signals.iter().all(|&x| x.is_finite() && (0.0..=1.0).contains(&x))
+    signals
+        .iter()
+        .all(|&x| x.is_finite() && (0.0..=1.0).contains(&x))
 }
 
 fn sigmoid(input: f64) -> f64 {
@@ -338,8 +343,7 @@ impl CalibrationMonitor {
             .filter(|bin| bin.count != 0)
             .map(|bin| {
                 let n = bin.count as f64;
-                (n / total)
-                    * (bin.confidence_sum / n - bin.correct as f64 / n).abs()
+                (n / total) * (bin.confidence_sum / n - bin.correct as f64 / n).abs()
             })
             .sum::<f64>();
         Ok(CalibrationSummary {
@@ -401,7 +405,10 @@ mod tests {
         let model = LoglossArbiter::fit(&examples, ArbiterConfig::default()).unwrap();
         assert_eq!(model.samples(), examples.len());
         let lambda = model.lambda(&examples[0].signals, 18).unwrap();
-        assert!(lambda > 0.5, "OOF log-loss gain should favor ANF, λ={lambda}");
+        assert!(
+            lambda > 0.5,
+            "OOF log-loss gain should favor ANF, λ={lambda}"
+        );
         assert!(lambda < 1.0);
     }
 
@@ -419,7 +426,10 @@ mod tests {
         let base = [0.8, 0.2];
         let anf = [0.1, 0.9];
         assert_eq!(model.lambda(&[0.0; 4], 0).unwrap(), 0.0);
-        assert_eq!(model.distribution(&base, &anf, &[0.0; 4], 0).unwrap(), base.to_vec());
+        assert_eq!(
+            model.distribution(&base, &anf, &[0.0; 4], 0).unwrap(),
+            base.to_vec()
+        );
         let p = model.distribution(&base, &anf, &[0.5; 4], 8).unwrap();
         assert!(p[0] > 0.0 && p[1] > 0.0);
         assert!((p.iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
