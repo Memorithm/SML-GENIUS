@@ -1427,3 +1427,49 @@ Next scientific gates, without promoting A6-I5 to model-quality evidence:
 4. **Independent replication and scaling:** rerun on new teacher populations/streams, full resource accounting on target device, predeclared baselines and mandatory higher-order counterexamples before considering any SML-1/SML-2 model-level claims.
 
 The k128 exact support scan covers 341,376 triples. With the frozen budget 350,000, k256 and k1024 full-width scans are refused before allocation. No model 25B parameter training, one-million-function bank, or Thor GPU speed evidence follows.
+
+## A6-I6 limited fourth-order interaction memory and mandatory blind-spot falsification — 2026-10-12
+
+The [preregistered A6-I6 protocol](A6-I6-BOUNDED-FOURTH-SUPPORT-PREREGISTRATION.md)
+and [measured positive/negative report](RESULTS-A6-I6-BOUNDED-FOURTH-SUPPORT.md)
+extend epistemic uncertainty controls from marginal, pair and
+global triple coverage to **budgeted externally registered
+fourth-order context monitoring** in the existing native
+`PassiveCommittee` runtime. Input-only support masks store
+16 observed bit patterns per watched quadruple (`u16`)
+and support width k1024 without an O(k^4) enumeration.
+
+Evidence: 168 frozen policies, 86,016 OOD predictions, four
+matched scenarios. With a relevant public watched interaction,
+10,752 missing-bank errors were prevented at 50% coverage;
+with a bank-complete true teacher, 10,752 entirely correct
+predictions were unnecessarily suppressed. **Two mandatory
+negatives remain severe:** an unmonitored fourth-order or
+fifth-order missing teacher term yielded **10,752 confident
+errors among 21,504 accepted predictions** per regime.
+Input novelty of a partial watchlist can never certify
+completion of a candidate function bank; unknown support
+outside the watchlist may be indistinguishable on TRAIN.
+
+The exact logical guarded-input retention for one tuple is
+40 bytes on the hosted x86_64 ABI, excluding host allocations
+and the *much larger* supplied candidate committee. This
+is NOT a native 1,048,576-function bank, an attention replacement
+performance benchmark, nor native Thor GPU evidence.
+
+**Research next steps, each separately preregistered:**
+1. A6-I7 active question selection with bounded membership
+   access/delayed feedback, including a control where permitted
+   queries **cannot** reveal the hidden fourth-order interaction.
+2. Causal source localization of unknown ANF terms **without**
+   handing over watch coordinates, and explicit memory/latency
+   tradeoffs for k1024 under a limited number of probes.
+3. Calibration and shift detection when historical contextual
+   priors are wrong, and missing true teacher cannot be caught
+   from passive evidence.
+4. Convert accepted/abstained predictions into multi-cycle
+   SBG/MOR/Delta-KV actions with observed rollback, provenance
+   and resource counters, independent of language-quality claims.
+5. Truly learned variable-width page banks, adversarial
+   large-degree interactions, million-address function storage
+   and physical ARM/NEON/Thor tests under Rust/native policies.
