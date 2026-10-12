@@ -1004,3 +1004,54 @@ adaptive change detection/intervention, and passive recurrent
 SBG/MOR/Delta-KV observation streams before any SML-25B claim.
 Retain native Rust, restricted GPU vendor software and strong
 rollback/CI contracts.
+
+## A6-I2 passive ANF committee, OOD shifts and missing-teacher risk — 2026-10-12
+
+The [frozen four-way passive protocol](docs/A6-I2-FOUR-HYPOTHESIS-PASSIVE-PREREGISTRATION.md),
+the [honestly recorded comparator amendment](docs/A6-I2-FAIR-BASELINE-AMENDMENT.md)
+and the [source-backed A6-I2 results](docs/RESULTS-A6-I2-FOUR-HYPOTHESIS-PASSIVE.md)
+qualify **uncertainty management, not general ANF discovery**.
+
+A new Rust `anf_passive_committee::PassiveCommittee` ranks 2..8
+GIVEN `WideAnfGate` hypotheses by a passive noisy-label
+log-posterior. Its four-candidate k8..1024 synthetic test uses a
+**persistent Markov input process**, 512 TRAIN steps, optional
+Bernoulli1/16 label flips and 2048 new OOD inputs from a changed
+process. Across **504 frozen committees**, EXACT passive signature
+classes identify 1, 2 or 4 distinguishable candidates according
+to the three visibility regimes. All four teacher labels and
+posteriors are indistinguishable in BLIND; partial visibility
+separates two groups, FULL reveals four. Teacher posteriors
+are ≥0.99 in 168/168 FULL fits.
+
+With the true teacher guaranteed IN the supplied bank, confidence
+threshold 0.90 accepts **56.19% of BLIND OOD, 74.94% of PARTIAL
+and 100% of FULL**, with no accepted clean errors across this
+bounded corpus. This is **not** proof of calibrated confidence
+under arbitrary OOD; 21 OOD input streams are shared across
+the teacher panels. The fixed simplicity prior [4,2,2,1]/9
+underperforms a fairly updated uniform prior in BLIND Brier
+(0.120071 vs 0.109515) and PARTIAL (0.069606 vs 0.062645)
+on BALANCED teachers. Both converge in FULL. Original static
+uniform and posthoc uniform-updated reference results remain
+separately documented; do not confuse them.
+
+**Safety-critical counterexample**: when the true function
+`h0 XOR x[r6]x[r7]` is absent from all four hypotheses,
+21/21 episodes with visible training evidence are flagged by
+the model-adequacy guard. If x[r6]=0 throughout passive TRAIN,
+the extra monomial is mathematically invisible: 21/21 bank
+checks accept, yet **5981/24168 high-confidence OOD predictions
+are wrong** (≈24.75% error). A unanimous candidate bank can be
+confidently wrong because the bank itself is incomplete.
+Do not trust 100% apparent consensus as universal certainty.
+
+**Outstanding gates**: learn candidate monomials rather than just
+rank a supplied bank; detect missing support and covariate shift
+via controlled low-budget interventions; update a genuine SBG/MOR/
+Delta-KV recurrent model, measure calibration/selective risk
+under balanced and historical meta priors, and validate true
+1,048,576-function bank behavior. The tested Markov process is
+an input recurrence, NOT SBG/Delta-KV model recurrence. No
+SML-25B language quality, native GPU performance or human-like
+intuition claim follows. Rust-only; no prohibited NVIDIA software.

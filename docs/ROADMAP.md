@@ -1233,3 +1233,68 @@ The next demonstration must deliberately include observable
 failures and uncertainty, not only easy synthetic successes;
 identifiability is an information property, not something
 computational effort alone can eliminate.
+
+## A6-I2 passive epistemic committee and missing-hypothesis certificate — 2026-10-12
+
+[Pre-registered A6-I2 experiment](A6-I2-FOUR-HYPOTHESIS-PASSIVE-PREREGISTRATION.md),
+[append-only fair baseline amendment](A6-I2-FAIR-BASELINE-AMENDMENT.md)
+and [complete native evidence report](RESULTS-A6-I2-FOUR-HYPOTHESIS-PASSIVE.md)
+expand the epistemic A6-I1 pair into **four native sparse ANF
+hypotheses** with passive Markov-correlated observations, varying
+visibility, OOD context shifts and deliberate true-teacher
+absence.
+
+**Measured scientific milestone:** 7 widths k8..1024 ×3 seeds
+×4 balanced teachers×3 passive Markov visibility regimes×2
+label panels = **504 frozen committees** on shared inputs,
+with **21 independent-width/seed OOD input streams** and
+1,032,192 repeated native TEST prediction comparisons. Their
+full passive prediction signatures certify 1, 2 and 4
+observational equivalence classes respectively. 168/168
+FULL teacher posteriors ≥0.99. Selective confidence ≥0.90
+covers **56.19% BLIND, 74.94% PARTIAL, 100% FULL** with zero
+error on selected clean test inputs under **true teacher in
+the supplied bank**. Forced MAP nonetheless makes 75,360
+BLIND errors and 43,108 PARTIAL errors. The supplied
+simplicity prior [4,2,2,1]/9 is worse in Brier than an
+**UPDATED uniform Bayesian comparator** when balanced
+teachers hide at least one dimension; original static
+comparator results are explicitly retained as a different
+baseline, not falsely equated with updating.
+
+**Essential negative, not to suppress:** 21 out-of-bank
+teachers with visible x[r6]x[r7] signals trigger the
+predeclared 1/8 training mismatch guard; 21 more with the
+same missing term but TRAIN x[r6]=0 are **undetectable from
+that support** and pass the guard. OOD release exposes
+**5,981 high-confidence errors out of 24,168 accepted
+predictions** in the censored condition. A 100%-unanimous
+bank cannot certify correctness of unmodeled functions.
+No distribution-free certainty, consciousness or universally
+calibrated confidence is claimed.
+
+**Next independently falsifiable PRs:**
+1. Candidate-bank **expansion from bounded active interventions**
+   with explicit cost in new oracle labels, source provenance
+   and direct comparison against passive-only abstention.
+2. **Unknown hypothesis** state / model inadequacy alarm that
+   distinguishes distribution shift in the input support,
+   epistemic uncertainty across known candidates and latent
+   misspecification; document cases impossible to detect
+   from passive labels alone.
+3. Real recurrent **SBG/MOR/Delta-KV** temporal execution
+   with learned wide sparse gates and dynamically ranked
+   page candidates; tests for missing pages, memory
+   rollback and observational equivalence.
+4. Controlled high-degree, >4-term and incomplete candidate
+   registries with long-range history and heavy-tail
+   rare-context coverage; calibrated posterior and
+   selective-risk intervals on independent teacher populations.
+5. Dynamic K=1,048,576 ANF function-bank storage, physical
+   page activation, SIMD/ARM/Thor native measurements and
+   independent SML-25B language benchmarks.
+
+Keep hypothesis **selection** distinct from discovery of
+ANF monomial structure, passively observed Markov input streams
+distinct from model-owned recurrent state, and native CPU
+measurements distinct from GPU/token quality.
