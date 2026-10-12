@@ -38,10 +38,16 @@ enum PassiveMode {
 impl PassiveMode {
     const ALL: [Self; 2] = [Self::Exclusive, Self::FrozenZero];
     fn index(self) -> u64 {
-        match self { Self::Exclusive => 0, Self::FrozenZero => 1 }
+        match self {
+            Self::Exclusive => 0,
+            Self::FrozenZero => 1,
+        }
     }
     fn name(self) -> &'static str {
-        match self { Self::Exclusive => "exclusive", Self::FrozenZero => "frozen_zero" }
+        match self {
+            Self::Exclusive => "exclusive",
+            Self::FrozenZero => "frozen_zero",
+        }
     }
 }
 
@@ -55,7 +61,9 @@ impl Regime {
     const ALL: [Self; 3] = [Self::Matched, Self::Reversed, Self::Uninformative];
     fn index(self) -> u64 {
         match self {
-            Self::Matched => 0, Self::Reversed => 1, Self::Uninformative => 2,
+            Self::Matched => 0,
+            Self::Reversed => 1,
+            Self::Uninformative => 2,
         }
     }
     fn name(self) -> &'static str {
@@ -94,7 +102,10 @@ fn stream(base: u64, salt: u64, context: usize, episode: usize) -> u64 {
 /// The hidden status is NOT passed to this builder. Both hypotheses share
 /// four base terms (degrees 2,3,4,5) drawn from all but two randomized
 /// physical indexes. Only the second adds their AND interaction.
-fn hypotheses(width: usize, pair_seed: u64) -> Result<(EpistemicAnfPair, usize, usize), Box<dyn Error>> {
+fn hypotheses(
+    width: usize,
+    pair_seed: u64,
+) -> Result<(EpistemicAnfPair, usize, usize), Box<dyn Error>> {
     let mut rng = SplitMix64::new(pair_seed);
     let mut perm = (0..width).collect::<Vec<_>>();
     for i in (1..width).rev() {
@@ -115,14 +126,20 @@ fn hypotheses(width: usize, pair_seed: u64) -> Result<(EpistemicAnfPair, usize, 
         base_terms.push(term);
     }
     let original = WideAnfGate::from_monomials(
-        (0..width).collect(), base_terms.clone(), width, gate_budget()
+        (0..width).collect(),
+        base_terms.clone(),
+        width,
+        gate_budget(),
     )?;
     let mut alternative_terms = base_terms;
     let mut new_term = vec![a, b];
     new_term.sort_unstable();
     alternative_terms.push(new_term);
     let alternative = WideAnfGate::from_monomials(
-        (0..width).collect(), alternative_terms, width, gate_budget()
+        (0..width).collect(),
+        alternative_terms,
+        width,
+        gate_budget(),
     )?;
     Ok((EpistemicAnfPair::new(original, alternative)?, a, b))
 }
@@ -130,13 +147,30 @@ fn hypotheses(width: usize, pair_seed: u64) -> Result<(EpistemicAnfPair, usize, 
 /// Train modes always satisfy x_a & x_b = 0, regardless of whether the
 /// teacher is the reference or alternative. The pair is *provably*
 /// indistinguishable on ALL observations of these distributions.
-fn passive_input(width: usize, a: usize, b: usize, rng: &mut SplitMix64, mode: PassiveMode) -> Vec<bool> {
-    let mut q = (0..width).map(|_| rng.next_u64() & 1 != 0).collect::<Vec<_>>();
+fn passive_input(
+    width: usize,
+    a: usize,
+    b: usize,
+    rng: &mut SplitMix64,
+    mode: PassiveMode,
+) -> Vec<bool> {
+    let mut q = (0..width)
+        .map(|_| rng.next_u64() & 1 != 0)
+        .collect::<Vec<_>>();
     match mode {
         PassiveMode::Exclusive => match rng.below(3) {
-            0 => { q[a] = false; q[b] = false; }
-            1 => { q[a] = true; q[b] = false; }
-            _ => { q[a] = false; q[b] = true; }
+            0 => {
+                q[a] = false;
+                q[b] = false;
+            }
+            1 => {
+                q[a] = true;
+                q[b] = false;
+            }
+            _ => {
+                q[a] = false;
+                q[b] = true;
+            }
         },
         PassiveMode::FrozenZero => {
             q[a] = false;
@@ -247,29 +281,31 @@ fn run_blind_cell(
     let pooled_prior = prior.pooled_probability_alternative()?;
     for context in 0..2 {
         let contextual_prior = prior.probability_alternative(context)?;
-        let mut teacher_rng = SplitMix64::new(
-            stream(base, TEST_SALT ^ 0x1111_1111_1111_1111, context, regime.index() as usize)
-        );
+        let mut teacher_rng = SplitMix64::new(stream(
+            base,
+            TEST_SALT ^ 0x1111_1111_1111_1111,
+            context,
+            regime.index() as usize,
+        ));
         for episode in 0..BLIND_EPISODES_PER_CONTEXT {
             // The chosen current-teacher ID is used ONLY by the simulator's
             // independent observation and retrospective score oracle.
-            let teacher_is_alt =
-                teacher_rng.below(8) < regime.alternative_eighths(context);
-            let (pair, a, b) = hypotheses(
-                width,
-                stream(base, CANDIDATES_SALT, context, episode)
-            )?;
+            let teacher_is_alt = teacher_rng.below(8) < regime.alternative_eighths(context);
+            let (pair, a, b) = hypotheses(width, stream(base, CANDIDATES_SALT, context, episode))?;
             let mut passive_rng = SplitMix64::new(stream(base, PASSIVE_SALT, context, episode));
-            let mut label_rng = SplitMix64::new(
-                stream(base, LABEL_SALT ^ PASSIVE_SALT, context, episode)
-            );
+            let mut label_rng =
+                SplitMix64::new(stream(base, LABEL_SALT ^ PASSIVE_SALT, context, episode));
             for _ in 0..PASSIVE_TRAIN + PASSIVE_VAL {
                 let q = passive_input(width, a, b, &mut passive_rng, mode);
                 let pred = pair.predict(&q, contextual_prior)?;
                 if pred.disagreement || (q[a] && q[b]) {
                     return Err("passive observational equivalence violated".into());
                 }
-                let true_label = if teacher_is_alt { pred.alternative } else { pred.reference };
+                let true_label = if teacher_is_alt {
+                    pred.alternative
+                } else {
+                    pred.reference
+                };
                 let flipped = noisy && label_rng.next_u64() & 15 == 0;
                 let observed = true_label ^ flipped;
                 // Consuming the passive label can never choose the ID,
@@ -295,9 +331,8 @@ fn run_blind_cell(
             } else {
                 active_truth.reference
             };
-            let mut intervention_rng = SplitMix64::new(
-                stream(base, INTERVENTION_SALT, context, episode)
-            );
+            let mut intervention_rng =
+                SplitMix64::new(stream(base, INTERVENTION_SALT, context, episode));
             let votes = if noisy { 21 } else { 1 };
             let mut observed_votes = Vec::new();
             observed_votes
@@ -315,11 +350,13 @@ fn run_blind_cell(
             // Held-out OOD: 32 naturally sampled queries + 16 targeted
             // rare coactivations. Metadata/tag held fixed, no update.
             let mut ood_rng = SplitMix64::new(stream(
-                base, TEST_SALT ^ 0x2222_2222_2222_2222, context, episode
+                base,
+                TEST_SALT ^ 0x2222_2222_2222_2222,
+                context,
+                episode,
             ));
-            let mut test_noise_rng = SplitMix64::new(stream(
-                base, LABEL_SALT ^ TEST_SALT, context, episode
-            ));
+            let mut test_noise_rng =
+                SplitMix64::new(stream(base, LABEL_SALT ^ TEST_SALT, context, episode));
             for query_idx in 0..OOD_TEST {
                 let mut query = (0..width)
                     .map(|_| ood_rng.next_u64() & 1 != 0)
@@ -358,7 +395,9 @@ fn run_blind_cell(
                     result.uniform_brier_sum += (uniform.probability_true - target).powi(2);
                     result.confidence_sum += contextual_prior.max(1.0 - contextual_prior);
                 } else {
-                    let accepted = contextual.consensus_only.ok_or("missing consensus prediction")?;
+                    let accepted = contextual
+                        .consensus_only
+                        .ok_or("missing consensus prediction")?;
                     result.selective_covered += 1;
                     result.selective_clean_errors += u64::from(accepted != truth);
                     result.selective_noisy_errors += u64::from(accepted != noisy_label);
@@ -453,19 +492,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         && matched.brier_context() < matched.brier_pooled()
         && matched.brier_context() < matched.brier_uniform()
         && matched_cal_gap < 0.10;
-    let criterion_reversed = reversed.accuracy() <= 0.25
-        && reversed.brier_context() > reversed.brier_uniform();
-    let criterion_null = (0.45..=0.55).contains(&null.accuracy())
-        && null.brier_context() >= null.brier_uniform();
+    let criterion_reversed =
+        reversed.accuracy() <= 0.25 && reversed.brier_context() > reversed.brier_uniform();
+    let criterion_null =
+        (0.45..=0.55).contains(&null.accuracy()) && null.brier_context() >= null.brier_uniform();
     let criterion_consensus = totals.iter().all(|r| {
         r.passive_disagreements == 0
             && r.selective_clean_errors == 0
             && r.ood_disagreements > 0
             && r.selective_covered > 0
     });
-    let criterion_intervention = totals.iter().all(|m| {
-        (m.intervention_correct as f64 / m.episodes as f64) >= 0.99
-    });
+    let criterion_intervention = totals
+        .iter()
+        .all(|m| (m.intervention_correct as f64 / m.episodes as f64) >= 0.99);
     for (index, regime) in Regime::ALL.iter().enumerate() {
         let m = totals[index];
         println!(
