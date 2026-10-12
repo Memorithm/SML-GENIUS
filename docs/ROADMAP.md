@@ -1298,3 +1298,64 @@ Keep hypothesis **selection** distinct from discovery of
 ANF monomial structure, passively observed Markov input streams
 distinct from model-owned recurrent state, and native CPU
 measurements distinct from GPU/token quality.
+
+## A6-I3 — empirical support envelopes, pairwise blind spots and honest abstention (2026-10-12)
+
+[Pre-registered support protocol](A6-I3-EPISTEMIC-SUPPORT-PREREGISTRATION.md)
+and [complete negative/positive report](RESULTS-A6-I3-EPISTEMIC-SUPPORT.md)
+add `anf_marginal_support::AnfMarginalSupportGuard` to the native
+four-candidate `PassiveCommittee` from merged A6-I2. The API
+tracks only whether every input dimension's **current 0/1 value
+has been observed** in the 512 passive TRAIN steps. No hidden
+candidate identity or label enters the guard. Combined selective
+forecast requires 0.90 confidence, bank TRAIN mismatch <=1/8,
+and zero marginal novelty. All invalid widths, empty TRAIN,
+out-of-sync committee histories and exhausted budgets fail closed.
+
+The preregistered panel covers 7 k widths×3 seeds×2 noise panels
+×5 regimes = **210 frozen policies, 430,080 later TEST inputs**.
+Outcomes for each 42-fit regime (86,016 TEST outputs):
+- Missing teacher with r6 censored in TRAIN: 43,008 wrong
+  confident bare-committee forecasts reduced to **zero wrong
+  guarded accepted forecasts**, at **50% coverage**.
+- True teacher actually IN bank, same censoring: **43,008
+  unnecessary abstentions**; the base model had zero error.
+- Missing teacher with r6/r7 observed separately but never
+  jointly 1: **43,008 high-confidence guarded errors remain**
+  despite 100% coverage, because a univariate support alarm
+  cannot see the unseen interaction.
+- Full coverage with true teacher included: zero guarded errors
+  at 100% coverage.
+- Fully visible missing teacher: the native TRAIN mismatch
+  alarm rejects all 42 inadequate banks, despite no novel
+  marginal input values.
+
+**Critical interpretation:** empirical novelty alarms lower risk
+on explicit distribution shifts while also losing useful coverage,
+and DO NOT bound the risk of hidden high-order interactions.
+The 43,008 pair-censored failures are required negative evidence,
+not a test failure to hide or threshold-tune away. No model
+proves an unseen function is impossible absent interventions
+or a sound hypothesis-class completeness assumption.
+
+**Next separately preregistered research gates:**
+1. Explicit learned/budgeted **pairwise coactivation** support
+   coverage (O(k²) naïve) with sparsified sketches and memory
+   footprint on k1024/large K, while including an analogous
+   **three-way invisible interaction** negative control.
+2. Adaptive information acquisition: active queries selected
+   only when uncertainty or support novelty warrants, reporting
+   query cost versus extrapolation risk/abstention utility.
+3. Passive recurrent SBG/MOR/Delta-KV trajectories and
+   hidden teacher functions outside candidate banks, including
+   graceful abstention and detection of distribution drift.
+4. Incremental candidate-bank hypothesis generation and
+   true model-order search beyond the small fixed four-way
+   supplied ANF library, with exact source-aware signatures.
+5. Function-bank scaling toward K=1,048,576, memory/active
+   coefficient budgets, and independently measured linguistic
+   token prediction and native Thor performance.
+
+Keep strict Rust, no NVIDIA vendor software beyond allowed
+drivers, no private runner execution and no broad claims from
+small synthetic ANF support evidence.
