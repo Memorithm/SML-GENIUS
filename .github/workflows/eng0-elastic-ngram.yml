@@ -1,0 +1,45 @@
+name: ENG-0 ElasticNGram exact reference and depth boundary
+on:
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+concurrency:
+  group: eng0-ngram-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  exact-reference:
+    if: startsWith(github.head_ref, 'research/eng0-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89 with rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check exact snapshot, format, build and strict Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+      - name: Execute full fixed-depth Witten-Bell equivalence and budget tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-core --lib elastic_ngram -- --nocapture
+          cargo test --locked -p sml-core --lib anf_byte_backoff
+          cargo test --locked -p sml-core --lib anf_joint_feature_selection
