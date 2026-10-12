@@ -54,7 +54,7 @@ require_equal() {
 
 measure() {
   local round="$1" arm="$2" logfile="$evidence/round${round}-${arm}.txt"
-  "$binary" "$arm" | tee "$logfile"
+  "$binary" "$arm" | tee "$logfile" >&2
   local lines
   lines="$(grep -c '^ENG1B_MEASURE,' "$logfile")"
   require_equal "measure_rows" "$lines" "1"
@@ -77,7 +77,7 @@ measure() {
     require_equal "followers" "$(get_field "$record" followers)" "$expected_followers"
     require_equal "reference_digest" "$(get_field "$record" digest)" "$expected_digest"
   fi
-  printf '%s' "$record"
+  printf '%s\n' "$record"
 }
 
 printf 'round,trie_vmHWM_KiB,long_vmHWM_KiB,trie_p95_ns,long_p95_ns,gate\n' > "$evidence/rounds.csv"
