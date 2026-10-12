@@ -831,3 +831,40 @@ memory accounting, add 64-state batched SBG evaluation, and qualify
 native Thor acceleration without non-driver NVIDIA software. No million-
 function bank, SML-25B language results, or general learned topology
 has been qualified by these functional integration tests.
+
+## Wide ANF sparse monomial discovery via active interventions — 2026-10-12
+
+After the merged wide-kernel PR #498 and MOR/SBG/Delta-KV page
+integration PR #499, the [frozen A6-WL1 protocol](docs/ANF-WIDE-ACTIVE-SPARSE-LEARNING-PREREGISTRATION.md)
+and [native test results](docs/RESULTS-ANF-WIDE-ACTIVE-SPARSE-LEARNING.md)
+establish the **first fit, rather than merely execution**, of
+previously unknown sparse ANF monomials up to **1024 inputs**.
+
+`anf_wide_active_learn::fit_selector_anchored_sparse` learns via
+TRAIN-only **adaptive membership queries**: 4 PUBLIC selector
+positions `x0..x3`, exactly one positive-literal AND monomial gated
+by each selector, remaining support unknown. Under this restricted
+grammar, one-hot interventions plus group bisection identify each
+unknown support. The native learning core does **not** read generator
+monomials or VAL/TEST, and reports physical query costs; the noisy
+panel uses 15 independent repeated observations with p=1/16 label
+flips. The resulting WideAnfGate can be placed directly into
+`WideAnfPageAtlas` and executed under a native selected MOR PageId.
+
+**Bounded evidence:** 42/42 exact source supports and ANF functions
+(7 k widths×3 seeds×2 TRAIN panels), 42/42 VAL accepts, zero bit
+disagreements on 42×4096 heldout TEST predictions, 6 k8 exhaustive
+truth tables, 7/7 detected cross-selector misspecification controls
+and 16/16 selected-page outputs for a learned k1024 gate. Panels
+share only **21 distinct teachers**, and the fit's one-hot oracle
+access is an active data-generation assumption, NOT passive learning
+from natural language sequences.
+
+**Do not promote** this to an arbitrary 1024-input ANF learner,
+to the selection of unknown routing selectors or learned page IDs,
+to a bank of 1,048,576 trained ANFs, or to SML-25B quality/speed.
+Next scientific gates: learn unknown selectors, multiple and
+interacting monomials under explicit observability and resource
+constraints, then replay the fit inside true recurrent SBG/MOR/
+Delta-KV model loops with passive input streams and held-out tasks.
+Keep Rust-only and vendor software restrictions unchanged.
