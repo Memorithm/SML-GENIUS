@@ -177,9 +177,11 @@ fn existing_large_bridge() -> Result<(), Box<dyn Error>> {
         let query = inputs.iter().enumerate().fold(0u32, |acc, (i, &word)| {
             acc | ((((word >> lane) & 1) as u32) << i)
         });
-        if ((output >> lane) & 1 != 0) != existing
+        if ((output >> lane) & 1 != 0)
+            != existing
                 .evaluate(query)
-                .map_err(|e| format!("legacy large ANF evaluation failed: {e:?}"))? {
+                .map_err(|e| format!("legacy large ANF evaluation failed: {e:?}"))?
+        {
             return Err(format!("existing 31-bit sparse bridge mismatch lane {lane}").into());
         }
         compared += 1;
