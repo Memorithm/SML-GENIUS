@@ -6,9 +6,7 @@
 //! arbitrary teacher functions or shifted target labels. This is a
 //! fail-closed marginal novelty alarm, NOT proof of global correctness.
 
-use crate::anf_passive_committee::{
-    PassiveCommittee, PassiveCommitteeError, PassivePrediction,
-};
+use crate::anf_passive_committee::{PassiveCommittee, PassiveCommitteeError, PassivePrediction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnfSupportError {
@@ -201,12 +199,16 @@ mod tests {
             guard.observe(&input).unwrap();
         }
         let mut known = vec![false; 8];
-        let covered = guard.predict_guarded(&committee, &known, 0.90, 0.125).unwrap();
+        let covered = guard
+            .predict_guarded(&committee, &known, 0.90, 0.125)
+            .unwrap();
         assert!(covered.marginal.marginally_supported);
         assert_eq!(covered.guarded_prediction, Some(false));
         known[6] = true;
         known[7] = true;
-        let novel = guard.predict_guarded(&committee, &known, 0.90, 0.125).unwrap();
+        let novel = guard
+            .predict_guarded(&committee, &known, 0.90, 0.125)
+            .unwrap();
         assert_eq!(novel.marginal.novel_dimensions, 1);
         assert!(novel.guarded_prediction.is_none());
         assert_eq!(novel.committee.selective_prediction, Some(false));
@@ -217,11 +219,22 @@ mod tests {
         let mut guard = AnfMarginalSupportGuard::new(8, 512).unwrap();
         let mut committee = committee();
         for step in 0..512usize {
-            let mut input = (0..8).map(|i| step & (1 << (i % 6)) != 0).collect::<Vec<_>>();
+            let mut input = (0..8)
+                .map(|i| step & (1 << (i % 6)) != 0)
+                .collect::<Vec<_>>();
             match step % 3 {
-                0 => { input[6] = false; input[7] = false; },
-                1 => { input[6] = true; input[7] = false; },
-                _ => { input[6] = false; input[7] = true; },
+                0 => {
+                    input[6] = false;
+                    input[7] = false;
+                }
+                1 => {
+                    input[6] = true;
+                    input[7] = false;
+                }
+                _ => {
+                    input[6] = false;
+                    input[7] = true;
+                }
             };
             let label = input[2] ^ input[3];
             committee.observe(&input, label).unwrap();
@@ -230,7 +243,9 @@ mod tests {
         let mut unseen_pair = vec![false; 8];
         unseen_pair[6] = true;
         unseen_pair[7] = true;
-        let result = guard.predict_guarded(&committee, &unseen_pair, 0.90, 0.125).unwrap();
+        let result = guard
+            .predict_guarded(&committee, &unseen_pair, 0.90, 0.125)
+            .unwrap();
         assert!(result.marginal.marginally_supported);
         assert_eq!(result.marginal.novel_dimensions, 0);
         assert_eq!(result.guarded_prediction, Some(false));
@@ -240,13 +255,22 @@ mod tests {
 
     #[test]
     fn shape_budget_and_async_committee_snapshots_fail_closed() {
-        assert_eq!(AnfMarginalSupportGuard::new(0, 2), Err(AnfSupportError::Width));
-        assert_eq!(AnfMarginalSupportGuard::new(8, 0), Err(AnfSupportError::Budget));
+        assert_eq!(
+            AnfMarginalSupportGuard::new(0, 2),
+            Err(AnfSupportError::Width)
+        );
+        assert_eq!(
+            AnfMarginalSupportGuard::new(8, 0),
+            Err(AnfSupportError::Budget)
+        );
         let mut guard = AnfMarginalSupportGuard::new(8, 1).unwrap();
         let before = guard.clone();
         assert_eq!(guard.observe(&[false; 7]), Err(AnfSupportError::Width));
         assert_eq!(guard, before);
-        assert_eq!(guard.assess(&[false; 8]), Err(AnfSupportError::EmptyTraining));
+        assert_eq!(
+            guard.assess(&[false; 8]),
+            Err(AnfSupportError::EmptyTraining)
+        );
         guard.observe(&[false; 8]).unwrap();
         let full = guard.clone();
         assert_eq!(guard.observe(&[true; 8]), Err(AnfSupportError::Budget));
