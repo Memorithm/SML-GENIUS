@@ -58,7 +58,10 @@ impl Scenario {
         }
     }
     fn teacher_missing(self) -> bool {
-        matches!(self, Self::CensoredAbsent | Self::PairCensoredAbsent | Self::FullAbsent)
+        matches!(
+            self,
+            Self::CensoredAbsent | Self::PairCensoredAbsent | Self::FullAbsent
+        )
     }
     fn single_censored(self) -> bool {
         matches!(self, Self::CensoredAbsent | Self::CensoredIncluded)
@@ -105,12 +108,7 @@ fn candidates(width: usize, r: &[usize; 8]) -> Vec<WideAnfGate> {
         vec![vec![r[2]], vec![r[3]]],
         vec![vec![r[2]], vec![r[3]], vec![r[0], r[1]]],
         vec![vec![r[2]], vec![r[3]], vec![r[4], r[5]]],
-        vec![
-            vec![r[2]],
-            vec![r[3]],
-            vec![r[0], r[1]],
-            vec![r[4], r[5]],
-        ],
+        vec![vec![r[2]], vec![r[3]], vec![r[0], r[1]], vec![r[4], r[5]]],
     ]
     .into_iter()
     .map(|terms| gate(width, terms))
@@ -128,7 +126,9 @@ fn train_input(
     scenario: Scenario,
     step: usize,
 ) -> Vec<bool> {
-    let mut input = (0..width).map(|_| rng.next_u64() & 1 != 0).collect::<Vec<_>>();
+    let mut input = (0..width)
+        .map(|_| rng.next_u64() & 1 != 0)
+        .collect::<Vec<_>>();
     if scenario.single_censored() {
         input[roles[6]] = false;
     } else if scenario.pair_censored() {
@@ -153,13 +153,10 @@ fn train_input(
 
 /// TEST is deliberately paired between supported and activated contexts:
 /// 1024 baseline r6=0 contexts versus 1024 r6=r7=1 contexts.
-fn test_input(
-    rng: &mut SplitMix64,
-    width: usize,
-    roles: &[usize; 8],
-    step: usize,
-) -> Vec<bool> {
-    let mut input = (0..width).map(|_| rng.next_u64() & 1 != 0).collect::<Vec<_>>();
+fn test_input(rng: &mut SplitMix64, width: usize, roles: &[usize; 8], step: usize) -> Vec<bool> {
+    let mut input = (0..width)
+        .map(|_| rng.next_u64() & 1 != 0)
+        .collect::<Vec<_>>();
     if step % 2 == 0 {
         input[roles[6]] = false;
     } else {
@@ -225,7 +222,9 @@ fn fit_one(
         return Err("prereg CENSORED TRAIN unexpectedly has r6=1".into());
     }
     if scenario.pair_censored() && (saw_pair || !saw_r6_one || !saw_r7_one) {
-        return Err("prereg PAIR TRAIN did not cover both marginals without pair coactivation".into());
+        return Err(
+            "prereg PAIR TRAIN did not cover both marginals without pair coactivation".into(),
+        );
     }
     if !scenario.single_censored() && !scenario.pair_censored() && !saw_pair {
         return Err("prereg FULL TRAIN did not observe a true interaction".into());
@@ -259,18 +258,15 @@ struct Metrics {
 }
 
 fn evaluate_one(frozen: &Frozen) -> Result<Metrics, Box<dyn Error>> {
-    let mut rng =
-        SplitMix64::new(seed(frozen.width, frozen.index, frozen.scenario, TEST_SALT));
+    let mut rng = SplitMix64::new(seed(frozen.width, frozen.index, frozen.scenario, TEST_SALT));
     let mut out = Metrics::default();
     for step in 0..TEST_STEPS {
         let input = test_input(&mut rng, frozen.width, &frozen.roles, step);
         let truth = frozen.true_gate.evaluate_scalar(&input)?;
-        let evaluated = frozen.guard.predict_guarded(
-            &frozen.committee,
-            &input,
-            SELECT_CONF,
-            BANK_ERROR_MAX,
-        )?;
+        let evaluated =
+            frozen
+                .guard
+                .predict_guarded(&frozen.committee, &input, SELECT_CONF, BANK_ERROR_MAX)?;
         out.tests += 1;
         out.novel_cases += usize::from(!evaluated.marginal.marginally_supported);
         if let Some(pred) = evaluated.committee.selective_prediction {
@@ -361,9 +357,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     && f.bank_adequate
             }
             Scenario::FullAbsent => {
-                measured.novel_cases == 0
-                    && measured.guarded_accepted == 0
-                    && !f.bank_adequate
+                measured.novel_cases == 0 && measured.guarded_accepted == 0 && !f.bank_adequate
             }
         };
         structural_failures += usize::from(!required);
@@ -400,7 +394,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         "A6_I3_COMPLETE,policies=210,tests=430080,regimes=5,preregistered_failures={structural_failures}"
     );
     if structural_failures != 0 {
-        return Err("A6-I3 preregistered abstention and interaction-failure criteria not met".into());
+        return Err(
+            "A6-I3 preregistered abstention and interaction-failure criteria not met".into(),
+        );
     }
     Ok(())
 }
