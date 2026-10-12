@@ -22,9 +22,8 @@ const SAMPLES: usize = 2048;
 fn bytes_for_lanes(offset: usize) -> Vec<u8> {
     (0..LANES)
         .flat_map(|lane| {
-            (0..BYTES_PER_LANE).map(move |t| {
-                (((lane + offset) * 19 + t * 17 + ((t / 7) % 5) * 31) % 251) as u8
-            })
+            (0..BYTES_PER_LANE)
+                .map(move |t| (((lane + offset) * 19 + t * 17 + ((t / 7) % 5) * 31) % 251) as u8)
         })
         .collect()
 }
