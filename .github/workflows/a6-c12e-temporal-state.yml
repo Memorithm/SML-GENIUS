@@ -1,0 +1,58 @@
+name: A6-C12e temporal alias and hidden-state robustness
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12e-temporal-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  temporal-state:
+    if: startsWith(github.head_ref, 'research/a6-c12e-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA without persisted GitHub credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Validate strict Rust and genuine transition-noise controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-temporal-state-bench
+      - name: Run preregistered 120-policy temporal/state evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12E_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-temporal-state-bench -- 3 2>&1 | tee "$RUNNER_TEMP/a6c12e-temporal-state.log"
+          grep -q '^A6C12E_ALL_FROZEN,policies=120,datasets=36$' "$RUNNER_TEMP/a6c12e-temporal-state.log"
+          test "$(grep -c '^A6C12E_INPUT,' "$RUNNER_TEMP/a6c12e-temporal-state.log")" -eq 36
+          test "$(grep -c '^A6C12E_FROZEN,' "$RUNNER_TEMP/a6c12e-temporal-state.log")" -eq 120
+          test "$(grep -c '^A6C12E_TEST,' "$RUNNER_TEMP/a6c12e-temporal-state.log")" -eq 120
+          test "$(grep -c '^A6C12E_WITNESS,' "$RUNNER_TEMP/a6c12e-temporal-state.log")" -eq 36
+          test "$(grep -c '^A6C12E_FROZEN,.*method=walsh3_stream,' "$RUNNER_TEMP/a6c12e-temporal-state.log")" -eq 12
+          test "$(grep '^A6C12E_WITNESS,.*mode=exact_lag,' "$RUNNER_TEMP/a6c12e-temporal-state.log" | grep -c 'alternative_native_errors=Some(0)')" -eq 12
+          test "$(grep '^A6C12E_WITNESS,.*mode=hidden_state_flip_1_in_256,' "$RUNNER_TEMP/a6c12e-temporal-state.log" | grep -c 'alternative_native_errors=None')" -eq 12
+          grep -q '^A6C12E_COMPLETE,policies=120,distinct_test_datasets=36,exact_lag_native_witness_checked=true,hidden_state_transition_noise_checked=true,modes=3,methods=4$' "$RUNNER_TEMP/a6c12e-temporal-state.log"
+          grep '^A6C12E_TEST,' "$RUNNER_TEMP/a6c12e-temporal-state.log" | grep ',method=hybrid_w2_mitm,' || true
