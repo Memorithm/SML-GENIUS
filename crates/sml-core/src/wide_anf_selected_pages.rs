@@ -57,10 +57,7 @@ pub struct WideAnfPageAtlas<const S: usize> {
 }
 
 impl<const S: usize> WideAnfPageAtlas<S> {
-    pub fn new(
-        mut pages: Vec<WideAnfPage<S>>,
-        max_selected: usize,
-    ) -> Result<Self, WidePageError> {
+    pub fn new(mut pages: Vec<WideAnfPage<S>>, max_selected: usize) -> Result<Self, WidePageError> {
         if S == 0 || pages.is_empty() || max_selected == 0 {
             return Err(WidePageError::Empty);
         }
@@ -89,11 +86,11 @@ impl<const S: usize> WideAnfPageAtlas<S> {
                     return Err(WidePageError::Shape);
                 }
             }
-            if page
-                .gates
-                .iter()
-                .any(|gate| gate.input_positions().iter().any(|&i| i >= page.inputs.len()))
-            {
+            if page.gates.iter().any(|gate| {
+                gate.input_positions()
+                    .iter()
+                    .any(|&i| i >= page.inputs.len())
+            }) {
                 return Err(WidePageError::Shape);
             }
         }
@@ -162,7 +159,12 @@ impl<const S: usize> WideAnfPageAtlas<S> {
             if evaluations > max_gate_evaluations || trace_words > max_trace_words {
                 return Err(WidePageError::Budget);
             }
-            if page.gates.iter().map(WideAnfGate::scratch_words).max().unwrap_or(0)
+            if page
+                .gates
+                .iter()
+                .map(WideAnfGate::scratch_words)
+                .max()
+                .unwrap_or(0)
                 > self.max_scratch_words_per_page
             {
                 return Err(WidePageError::Budget);
@@ -190,7 +192,12 @@ impl<const S: usize> WideAnfPageAtlas<S> {
                 let bit = coordinate.read(state).map_err(WidePageError::Projection)?;
                 input_words.push(if bit { u64::MAX } else { 0 });
             }
-            let scratch_words = page.gates.iter().map(WideAnfGate::scratch_words).max().unwrap_or(0);
+            let scratch_words = page
+                .gates
+                .iter()
+                .map(WideAnfGate::scratch_words)
+                .max()
+                .unwrap_or(0);
             let mut scratch = Vec::new();
             scratch
                 .try_reserve_exact(scratch_words)
@@ -223,18 +230,17 @@ impl<const S: usize> WideAnfPageAtlas<S> {
                 packed,
             });
         }
-        Ok(WidePageResult { state: next, traces })
+        Ok(WidePageResult {
+            state: next,
+            traces,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        anf_wide_sparse::WideAnfLimits,
-        mor::MorDecision,
-        pvp6_sbg::SbgField,
-    };
+    use crate::{anf_wide_sparse::WideAnfLimits, mor::MorDecision, pvp6_sbg::SbgField};
 
     fn limit() -> WideAnfLimits {
         WideAnfLimits::new(2048, 256, 8192, 8192, 8192)
@@ -248,9 +254,12 @@ mod tests {
         WideAnfGate::from_monomials((0..k).collect(), terms, k, limit()).unwrap()
     }
 
-    fn page<const S: usize>(id: u32, k: usize, terms: Vec<Vec<usize>>, output_bit: usize)
-      -> WideAnfPage<S>
-    {
+    fn page<const S: usize>(
+        id: u32,
+        k: usize,
+        terms: Vec<Vec<usize>>,
+        output_bit: usize,
+    ) -> WideAnfPage<S> {
         WideAnfPage {
             id: PageId(id),
             gates: vec![gate(k, terms)],
@@ -343,7 +352,9 @@ mod tests {
             (vec![0], 0, 1),
             (vec![0], 1, 0),
         ] {
-            assert!(atlas.execute(&original, &decision(&ids), gates, trace).is_err());
+            assert!(atlas
+                .execute(&original, &decision(&ids), gates, trace)
+                .is_err());
             assert_eq!(atlas, before);
             assert_eq!(original, SemanticState::zeroed().unwrap());
         }
@@ -366,9 +377,15 @@ mod tests {
         );
         let mut malformed = first.clone();
         malformed.inputs.push(malformed.inputs[0]);
-        assert_eq!(WideAnfPageAtlas::new(vec![malformed], 1), Err(WidePageError::Shape));
+        assert_eq!(
+            WideAnfPageAtlas::new(vec![malformed], 1),
+            Err(WidePageError::Shape)
+        );
         let mut out = first;
         out.outputs[0].bit = 16;
-        assert_eq!(WideAnfPageAtlas::new(vec![out], 1), Err(WidePageError::Shape));
+        assert_eq!(
+            WideAnfPageAtlas::new(vec![out], 1),
+            Err(WidePageError::Shape)
+        );
     }
 }
