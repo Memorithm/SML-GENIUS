@@ -326,7 +326,9 @@ mod tests {
         assert_eq!(pair.missing_pair_count(), Some(0));
         let query = vec![true; 8];
         assert!(pair.assess(&query).unwrap().pairwise_supported);
-        let result = guard.predict_guarded(&committee, &query, 0.9, 0.125).unwrap();
+        let result = guard
+            .predict_guarded(&committee, &query, 0.9, 0.125)
+            .unwrap();
         assert!(!result.triple.triplewise_supported);
         assert_eq!(result.triple.novel_triples, 1);
         assert_eq!(result.committee.selective_prediction, Some(false));
@@ -367,7 +369,10 @@ mod tests {
             AnfTripleSupportError::Budget
         );
         let mut guard = AnfTripleSupportGuard::new(8, 1, 350_000, 1).unwrap();
-        assert_eq!(guard.seal().unwrap_err(), AnfTripleSupportError::EmptyTraining);
+        assert_eq!(
+            guard.seal().unwrap_err(),
+            AnfTripleSupportError::EmptyTraining
+        );
         guard.observe(&[false; 8]).unwrap();
         let before = guard.clone();
         assert_eq!(guard.seal().unwrap_err(), AnfTripleSupportError::Budget);
@@ -396,7 +401,8 @@ mod tests {
         guard.observe(&[false; 8]).unwrap();
         guard.seal().unwrap();
         assert_eq!(
-            guard.predict_guarded(&committee, &[false; 8], 0.9, 0.125)
+            guard
+                .predict_guarded(&committee, &[false; 8], 0.9, 0.125)
                 .unwrap_err(),
             AnfTripleSupportError::OutOfSync
         );
