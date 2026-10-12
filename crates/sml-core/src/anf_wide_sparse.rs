@@ -673,7 +673,7 @@ mod tests {
             Err(WideAnfError::SourceTooShort)
         );
         assert_eq!(
-            gate.evaluate_scalar(&vec![true; 99]),
+            gate.evaluate_scalar(&[true; 99]),
             Err(WideAnfError::SourceTooShort)
         );
         let mut exact = vec![0u64; 100];
