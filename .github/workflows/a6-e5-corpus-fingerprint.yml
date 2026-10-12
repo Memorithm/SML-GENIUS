@@ -1,0 +1,61 @@
+name: A6-E5 French third-corpus fingerprint only (no model)
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e5-corpus-fingerprint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fingerprint:
+    if: startsWith(github.head_ref, 'research/a6-e5-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact pull request SHA, read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Obtain raw fingerprint and frozen 80/10/10 denominators, no model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          url='https://www.gutenberg.org/cache/epub/14155/pg14155.txt'
+          curl --proto '=https' --tlsv1.2 --retry 5 --retry-connrefused --location --silent --show-error --fail "$url" -o "$RUNNER_TEMP/flaubert-source.txt"
+          test "$(grep -c '^\*\*\* START OF' "$RUNNER_TEMP/flaubert-source.txt")" -eq 1
+          test "$(grep -c '^\*\*\* END OF' "$RUNNER_TEMP/flaubert-source.txt")" -eq 1
+          tr -d '\r' < "$RUNNER_TEMP/flaubert-source.txt" |
+            awk '/^\*\*\* START OF/{body=1;next} /^\*\*\* END OF/{body=0} body' > "$RUNNER_TEMP/flaubert-body.txt"
+          bytes="$(wc -c < "$RUNNER_TEMP/flaubert-body.txt")"
+          test "$bytes" -gt 100000
+          raw_sha="$(sha256sum "$RUNNER_TEMP/flaubert-source.txt" | cut -d' ' -f1)"
+          body_sha="$(sha256sum "$RUNNER_TEMP/flaubert-body.txt" | cut -d' ' -f1)"
+          train_end="$((bytes * 8 / 10))"
+          val_end="$((bytes * 9 / 10))"
+          train_size="$train_end"
+          val_size="$((val_end-train_end))"
+          test_size="$((bytes-val_end))"
+          train_events="$((64 * (train_size / 64 - 4)))"
+          val_events="$((64 * (val_size / 64 - 4)))"
+          test_events="$((64 * (test_size / 64 - 4)))"
+          test "$train_events" -gt 0
+          test "$val_events" -gt 0
+          test "$test_events" -gt 0
+          printf 'A6E5_DATASET_FINGERPRINT,commit=%s,source_url=%s,raw_sha256=%s,normalized_bytes=%s,body_sha256=%s,train_events=%s,val_events=%s,test_events=%s\n'             "$(git rev-parse HEAD)" "$url" "$raw_sha" "$bytes" "$body_sha"             "$train_events" "$val_events" "$test_events" |
+            tee "$RUNNER_TEMP/a6-e5-dataset-pin.csv"
+      - name: Archive only small hash manifest (never book text)
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6-e5-independent-french-corpus-fingerprint
+          path: ${{ runner.temp }}/a6-e5-dataset-pin.csv
+          retention-days: 30
