@@ -696,3 +696,37 @@ biased/time-shifted channels and corrupt recurrent state; only then generalize
 to k≥4/5 with an appropriately capable learner. SML remains self-contained;
 RemoteOps is the reference physical control plane, and no proprietary
 NVIDIA software is imported.
+
+## A6-C12e temporal and stochastic-state evidence — 2026-10-12
+
+Read the [frozen experimental protocol](docs/A6-C12E-TEMPORAL-STATE-PREREGISTRATION.md)
+and [native Rust results](docs/RESULTS-A6-C12E-TEMPORAL-STATE.md)
+before continuing the A6/ANF source-selection and bank programmes.
+
+The bounded N128/three-gate hybrid learner can distinguish imperfect
+one-step temporal aliases (12/12 exact original positions, sources,
+truths), but when `x3(t)=x4(t-1)`, independent native generators using
+`j68/x3` and `j67/x4` have the same observable behavior (12/12
+zero-disagreement TEST witnesses). The hybrid recovers the observable
+function 12/12 without necessarily returning the arbitrary original
+position/channel labels (0/12 strict identity). Evaluation contracts
+must carry a distinct observational-equivalence class identifier or
+witness and must not penalize an unidentifiable hidden representation.
+
+A third native panel flips bits of the **persisted recurrent state**
+`state[127]` with probability 1/256 per lane per step. The learner
+still identified the original deterministic parameters on all 12/12
+cases and matched that deterministic model's errors against the noisy
+teacher labels. This is evidence of structure discovery under the
+specific weak hidden-state perturbation, not latent-noise prediction,
+a minimax error floor or successful general stochastic inference.
+
+All measurements were made in a fixed 128-bit recurrent topology with
+508 candidate input-channel/lag features and two synthetic three-gate
+families. Never cite the measured ≈35× W3-vs-hybrid fit speed difference
+as a worst-case asymptotic improvement, million-function bank result,
+Jetson/Thor native speed or SML-25B language benchmark. Subsequent
+capacity expansion to k≥4/5 gates must explicitly represent those
+gates before assessing their recoverability. Retain Rust-only native
+tooling, no proprietary GPU software beyond driver support, and
+RemoteOps as independent physical control plane.
