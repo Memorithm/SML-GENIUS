@@ -65,7 +65,7 @@ impl Regime {
             Self::Uninformative => "uninformative",
         }
     }
-    fn alternative_eighths(self, context: usize) -> u64 {
+    fn alternative_eighths(self, context: usize) -> usize {
         match (self, context) {
             (Self::Matched, 0) | (Self::Reversed, 1) => 1,
             (Self::Matched, 1) | (Self::Reversed, 0) => 7,
