@@ -230,16 +230,27 @@ fn binary_loss(p: f64, truth: bool) -> f64 {
     }
 }
 
-fn score(
-    bytes: &[u8],
-    committee: &PassiveCommittee,
-    pairs: &ScopedPatternGuard,
-    triples: &ScopedPatternGuard,
-    nearest: &Hamming16Guard,
-    ngram2: &NGramModel,
-    ngram4: &NGramModel,
+#[derive(Clone, Copy)]
+struct ScoreReferences<'a> {
+    committee: &'a PassiveCommittee,
+    pairs: &'a ScopedPatternGuard,
+    triples: &'a ScopedPatternGuard,
+    nearest: &'a Hamming16Guard,
+    ngram2: &'a NGramModel,
+    ngram4: &'a NGramModel,
     majority_probability: f64,
-) -> Result<Vec<EvalRow>, Box<dyn Error>> {
+}
+
+fn score(bytes: &[u8], refs: &ScoreReferences<'_>) -> Result<Vec<EvalRow>, Box<dyn Error>> {
+    let ScoreReferences {
+        committee,
+        pairs,
+        triples,
+        nearest,
+        ngram2,
+        ngram4,
+        majority_probability,
+    } = *refs;
     let layout = ChunkLayout::new(bytes.len())?;
     let mut out = Vec::new();
     out.try_reserve_exact(LANES * (layout.chunk - 2))?;
@@ -491,16 +502,16 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     // TEST is not read or scored until every policy and fallback has been
     // chosen using VAL only. Even the test corpus bytes are accessed below.
     let val_start = Instant::now();
-    let validation = score(
-        &splits.val,
-        &committee,
-        &pairs,
-        &triples,
-        &nearest,
-        &ngram2,
-        &ngram4,
+    let references = ScoreReferences {
+        committee: &committee,
+        pairs: &pairs,
+        triples: &triples,
+        nearest: &nearest,
+        ngram2: &ngram2,
+        ngram4: &ngram4,
         majority_probability,
-    )?;
+    };
+    let validation = score(&splits.val, &references)?;
     let grid = policies();
     if grid.len() != 32 {
         return Err("predeclared 32-policy count violated".into());
@@ -533,16 +544,7 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     );
 
     let test_start = Instant::now();
-    let heldout = score(
-        &splits.test,
-        &committee,
-        &pairs,
-        &triples,
-        &nearest,
-        &ngram2,
-        &ngram4,
-        majority_probability,
-    )?;
+    let heldout = score(&splits.test, &references)?;
     let (test_ng2, ng2_errors) = baseline_score(&heldout, "ngram2");
     let (test_ng4, ng4_errors) = baseline_score(&heldout, "ngram4");
     let (test_anf, anf_errors) = baseline_score(&heldout, "anf");
@@ -684,8 +686,8 @@ mod tests {
     #[test]
     fn real_byte_features_are_strictly_past_only() {
         assert_eq!(bits16(0xab, 0xcd), 0xcdab);
-        assert_eq!(unpack(0xcdab)[0], true);
-        assert_eq!(unpack(0xcdab)[15], true);
+        assert!(unpack(0xcdab)[0]);
+        assert!(unpack(0xcdab)[15]);
         assert_eq!(address(0b1010, &[1, 3]), 3);
         assert_eq!(address(0b1010, &[0, 2]), 0);
     }
