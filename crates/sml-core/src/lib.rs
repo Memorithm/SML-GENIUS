@@ -24,6 +24,7 @@ pub mod anf_joint_nonlinear_system_id;
 pub mod anf_large;
 pub mod anf_large_bank;
 pub mod anf_large_recurrent;
+pub mod anf_marginal_support;
 pub mod anf_local;
 pub mod anf_local_history;
 pub mod anf_local_incremental;
