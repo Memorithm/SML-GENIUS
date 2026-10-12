@@ -63,9 +63,6 @@ pub mod gf2;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;
-pub mod wide_anf_selected_pages;
-pub mod wide_anf_routed;
-pub mod wide_anf_delta_kv;
 pub mod memory;
 pub mod mor;
 pub mod mor_affinity;
@@ -103,6 +100,9 @@ pub mod toy_tasks;
 pub mod trace;
 pub mod train;
 pub mod v888_handoff;
+pub mod wide_anf_delta_kv;
+pub mod wide_anf_routed;
+pub mod wide_anf_selected_pages;
 
 /// Inference RAM ceiling for the target SML-25B profile.
 pub const TARGET_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
