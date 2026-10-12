@@ -1,0 +1,90 @@
+name: A6-C12h preregistered extreme noise phase boundaries
+
+on:
+  pull_request:
+    branches:
+      - main
+      - research/a6-c12g-noise-sample-phase-transition
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12h-phase-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: startsWith(github.head_ref, 'research/a6-c12h-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format, check, strict Clippy, unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-noise-sample-phase-h-bench
+
+  phase-transition:
+    needs: validate
+    if: startsWith(github.head_ref, 'research/a6-c12h-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2, 3]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Execute complete matrix and audit exact census
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12H_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,replica=${{ matrix.replica }},arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-noise-sample-phase-h-bench > "$RUNNER_TEMP/a6c12h.log" 2>&1
+          test "$(grep -c '^A6C12H_FROZEN,' "$RUNNER_TEMP/a6c12h.log")" -eq 1872
+          test "$(grep -c '^A6C12H_TEST,' "$RUNNER_TEMP/a6c12h.log")" -eq 1872
+          test "$(grep -c '^A6C12H_SUMMARY,' "$RUNNER_TEMP/a6c12h.log")" -eq 180
+          test "$(grep -c '^A6C12H_THRESHOLD,' "$RUNNER_TEMP/a6c12h.log")" -eq 18
+          test "$(grep -c '^A6C12H_THEORY_THRESHOLD,' "$RUNNER_TEMP/a6c12h.log")" -eq 8
+          grep -q '^A6C12H_ALL_FROZEN,policies=1872,test_datasets=128$' "$RUNNER_TEMP/a6c12h.log"
+          grep -q '^A6C12H_COMPLETE,policies=1872,test_rows=1872,distinct_test_datasets=128,noise_rates=4,word_budgets=10,seed_count=16,core_seed_count=8,fit_repeats=3$' "$RUNNER_TEMP/a6c12h.log"
+          grep -E '^A6C12H_(CONFIG|THEORY|THEORY_THRESHOLD|ALL_FROZEN|SUMMARY|THRESHOLD|COMPLETE),' "$RUNNER_TEMP/a6c12h.log"
+      - name: Archive full FROZEN and TEST trace, including incomplete runs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6c12h-full-trace-runner-${{ matrix.replica }}
+          path: ${{ runner.temp }}/a6c12h.log
+          if-no-files-found: ignore
+          retention-days: 30
