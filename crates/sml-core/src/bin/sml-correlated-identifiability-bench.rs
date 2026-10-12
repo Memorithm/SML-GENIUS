@@ -772,12 +772,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                             (false, false, None, None, false)
                         };
                         println!(
-                            "A6C12D_TEST,task={},panel={},seed={},mode={},method={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},alias_native_mismatches={},factor_structures={},pair_rank={},sketch_bucket_hits={},sketch_unique={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
+                            "A6C12D_TEST,task={},panel={},seed={},mode={},method={},n={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},alias_native_mismatches={},factor_structures={},pair_rank={},pair_candidates={},triple_candidates={},sketch_bucket_hits={},sketch_unique={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
                             task.name(),
                             panel.name(),
                             index,
                             mode.name(),
                             fit.method.name(),
+                            fit.n,
                             oracle_errors,
                             proposal_errors,
                             selected_errors,
@@ -787,6 +788,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                             alias_native_mismatches,
                             fit.proposals,
                             fit.pair_rank,
+                            fit.full_pairs,
+                            fit.full_triples,
                             fit.sketch.bucket_hits,
                             fit.sketch.unique,
                             fit.sketch.full_scored,
