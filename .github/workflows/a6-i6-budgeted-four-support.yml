@@ -1,0 +1,58 @@
+name: A6-I6 budgeted fourth-order support and mandatory high-order blind spots
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i6-four-watch-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  epistemic-four-watch:
+    if: startsWith(github.head_ref, 'research/a6-i6-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check full Rust formatting, native compile, strict Clippy and unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_budgeted_four_support
+          cargo test --locked -p sml-core --bin sml-budgeted-four-watch-bench
+      - name: Execute frozen 168-fit high-order positive and mandatory negative challenge
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I6_ENV,sha=$(git rev-parse HEAD),arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc),runner=$RUNNER_NAME"
+          cargo run --locked --release -p sml-core --bin sml-budgeted-four-watch-bench 2>&1 | tee "$RUNNER_TEMP/a6i6.log"
+          grep -q '^A6_I6_ALL_FROZEN,policies=168,distinct_tasks=84,watched_tuples_per_policy=1$' "$RUNNER_TEMP/a6i6.log"
+          test "$(grep -c '^A6_I6_FROZEN,' "$RUNNER_TEMP/a6i6.log")" -eq 168
+          test "$(grep -c '^A6_I6_TEST,' "$RUNNER_TEMP/a6i6.log")" -eq 168
+          test "$(grep -c '^A6_I6_SUMMARY,' "$RUNNER_TEMP/a6i6.log")" -eq 4
+          grep -q '^A6_I6_SUMMARY,regime=WATCHED_ABSENT,fits=42,samples=21504,committee_accepted=21504,committee_errors=10752,watch_accepted=10752,watch_errors=0,novel_inputs=10752,unnecessary_abstentions=0,bank_inadequate=0$' "$RUNNER_TEMP/a6i6.log"
+          grep -q '^A6_I6_SUMMARY,regime=WATCHED_INCLUDED,fits=42,samples=21504,committee_accepted=21504,committee_errors=0,watch_accepted=10752,watch_errors=0,novel_inputs=10752,unnecessary_abstentions=10752,bank_inadequate=0$' "$RUNNER_TEMP/a6i6.log"
+          grep -q '^A6_I6_SUMMARY,regime=UNWATCHED_ABSENT,fits=42,samples=21504,committee_accepted=21504,committee_errors=10752,watch_accepted=21504,watch_errors=10752,novel_inputs=0,unnecessary_abstentions=0,bank_inadequate=0$' "$RUNNER_TEMP/a6i6.log"
+          grep -q '^A6_I6_SUMMARY,regime=FIFTH_UNWATCHED_ABSENT,fits=42,samples=21504,committee_accepted=21504,committee_errors=10752,watch_accepted=21504,watch_errors=10752,novel_inputs=0,unnecessary_abstentions=0,bank_inadequate=0$' "$RUNNER_TEMP/a6i6.log"
+          grep -q '^A6_I6_COMPLETE,policies=168,tests=86016,watched_blocked_errors=10752,unwatched_confident_errors=10752,fifth_confident_errors=10752,unnecessary_abstentions=10752,all_preregistered_conditions_passed=true$' "$RUNNER_TEMP/a6i6.log"
