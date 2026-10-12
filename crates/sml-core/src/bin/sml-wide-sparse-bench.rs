@@ -165,7 +165,8 @@ fn native_recurrent_bridge(seed: u64) -> Result<(), Box<dyn Error>> {
 
 fn existing_large_bridge() -> Result<(), Box<dyn Error>> {
     let mask = (1u32 << 30) | 1;
-    let existing = LargeAnfGate::new(31, vec![0, 1, 3, 1u32 << 20, 1u32 << 30, mask])?;
+    let existing = LargeAnfGate::new(31, vec![0, 1, 3, 1u32 << 20, 1u32 << 30, mask])
+        .map_err(|e| format!("invalid legacy large ANF test gate: {e:?}"))?;
     let wide = WideAnfGate::from_large(&existing, (0..31).collect(), 31, limits())?;
     let mut rng = SplitMix64::new(91);
     let inputs = (0..31).map(|_| rng.next_u64()).collect::<Vec<_>>();
@@ -176,7 +177,9 @@ fn existing_large_bridge() -> Result<(), Box<dyn Error>> {
         let query = inputs.iter().enumerate().fold(0u32, |acc, (i, &word)| {
             acc | ((((word >> lane) & 1) as u32) << i)
         });
-        if ((output >> lane) & 1 != 0) != existing.evaluate(query)? {
+        if ((output >> lane) & 1 != 0) != existing
+                .evaluate(query)
+                .map_err(|e| format!("legacy large ANF evaluation failed: {e:?}"))? {
             return Err(format!("existing 31-bit sparse bridge mismatch lane {lane}").into());
         }
         compared += 1;
