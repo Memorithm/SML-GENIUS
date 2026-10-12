@@ -1055,3 +1055,44 @@ under balanced and historical meta priors, and validate true
 an input recurrence, NOT SBG/Delta-KV model recurrence. No
 SML-25B language quality, native GPU performance or human-like
 intuition claim follows. Rust-only; no prohibited NVIDIA software.
+
+## A6-I3 conservative OOD support envelope with mandatory unseen-pair failure — 2026-10-12
+
+After A6-I1 [intuition under observation ambiguity] and
+A6-I2 [four-way passive committee with missing-teacher failures],
+the [frozen A6-I3 protocol](docs/A6-I3-EPISTEMIC-SUPPORT-PREREGISTRATION.md)
+and [measured report](docs/RESULTS-A6-I3-EPISTEMIC-SUPPORT.md) qualify an
+explicit **O(k) empirical marginal support guard** around the native
+`PassiveCommittee`, without altering the learned posterior or candidate bank.
+
+The new `AnfMarginalSupportGuard` stores one u8 per input dimension,
+tracking separately whether 0/1 appeared in TRAIN. The separate
+`predict_guarded` action accepts an existing confident posterior
+prediction (threshold 0.90) **only** if the original native committee
+has adequate TRAIN fit (minimum candidate error <=1/8) and the
+current input contains no marginally unseen values. This is an
+ABSTENTION policy, not a new probability estimate or a proof of
+candidate-bank completeness.
+
+The 210-fit ×2048 TEST native stress showed:
+- CENSORED_ABSENT: **43,008 confident committee errors removed** by
+  rejecting the novel half; 43,008 accepted predictions remain exact.
+- CENSORED_INCLUDED: **43,008 correct predictions also rejected**;
+  this exposes the cost of the conservative alarm.
+- PAIR_CENSORED_ABSENT: both bits 0 and1 seen separately, but never
+  jointly 1; the guard accepts 86,016 OOD inputs and makes **43,008
+  confident wrong predictions**, a mathematically exact blind spot.
+- FULL_INCLUDED: 86,016/86,016 accepted with no error.
+- FULL_ABSENT: existing committee's 1/8 TRAIN mismatch alarm rejects
+  42/42 inadequate candidate banks and abstains from all 86,016 TESTs.
+
+**Never claim a universal guarantee from input support alone**.
+No univariate alarm can detect a novel pair when each marginal has
+already taken both values. High-confidence agreement of a committee
+is conditional on the true hypothesis being in the bank. Real
+SML-GENIUS deployment requires explicit OOD monitoring, groupwise
+interaction witnesses, false-abstention accounting, and tests
+where high-order hidden functions remain observationally
+indistinguishable. This is synthetic Rust reference evidence, not
+human intuition, SML-25B language quality, passive learning of
+unknown monomials or native Thor GPU speed.
