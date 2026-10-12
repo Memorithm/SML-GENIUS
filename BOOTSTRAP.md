@@ -730,3 +730,38 @@ capacity expansion to k≥4/5 gates must explicitly represent those
 gates before assessing their recoverability. Retain Rust-only native
 tooling, no proprietary GPU software beyond driver support, and
 RemoteOps as independent physical control plane.
+
+## A6-C12f state-noise and bitwise-equivalence evidence — 2026-10-12
+
+Before promoting the current three-gate ANF source selector or using it
+to qualify a massive bank, consult the [pre-registered experiment](docs/A6-C12F-STATE-NOISE-OBSERVABILITY-PREREGISTRATION.md)
+and its [native TEST/CI evidence](docs/RESULTS-A6-C12F-STATE-NOISE-OBSERVABILITY.md).
+
+**New required evaluation contract**: distinguish exact hidden
+parameters, equal *numbers* of errors, **equal output bits** on
+independently generated held-out streams, and provable observational
+equivalence on a declared restricted input domain. Native evaluation
+executes two independent LocalAnfNetworks from zero state on the
+same TEST inputs, compares their outputs bit-by-bit, and is independent
+of noisy labels. Equal error counts are not sufficient.
+
+The 6-mode N128 fixed-ring, k=3 benchmark injects Bernoulli(1/256)
+or Bernoulli(1/64) flips into actual persistent state slots 0,68,127
+**after** transition and **before** readout. It recovered 72/72 original
+gate triples and produced zero bit disagreements with the underlying
+deterministic native teacher on all 72 held-out stream comparisons.
+These sources were selected among **508 candidate channel/position
+features**, not 508 state bits or 508 independent gates. This result
+does NOT imply prediction of hidden random transition flips.
+A separate exact temporal-lag witness formally relates the
+j68/x3 and j67/x4 XOR injections only under their lagged-input
+constraint and zero initial state.
+
+Keep the measured ~35.138× advantage over brute-force W3 (24 matched
+cases) bounded to this synthetic CPU fit. The learner is still
+fixed-topology, three gates; no graph-learning guarantee, no millions
+of ANF bank entries demonstrated, no k≥4/5 learned circuits, no
+SML-25B language evaluation, no Thor GPU acceleration. Require a
+new source-aware and capacity-matched preregistration for future
+experiments with hidden state correlations, masking and expanded k.
+The ANF/SBG/MOR/Delta-KV integration gate remains independent.

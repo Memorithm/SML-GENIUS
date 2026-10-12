@@ -1,0 +1,63 @@
+name: A6-C12f state noise and bitwise observational equivalence
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12f-state-matrix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  state-observability:
+    if: startsWith(github.head_ref, 'research/a6-c12f-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head, no persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Validate fmt, check, strict clippy and bitwise native controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-state-observability-bench
+      - name: Run preregistered 240 fits, 72 held-out streams and 12 causal witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12F_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-state-observability-bench -- 3 2>&1 | tee "$RUNNER_TEMP/a6c12f-state.log"
+          grep -q '^A6C12F_ALL_FROZEN,policies=240,datasets=72$' "$RUNNER_TEMP/a6c12f-state.log"
+          test "$(grep -c '^A6C12F_INPUT,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 72
+          test "$(grep -c '^A6C12F_FROZEN,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 240
+          test "$(grep -c '^A6C12F_NOISE,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 72
+          test "$(grep -c '^A6C12F_TEST,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 240
+          test "$(grep -c '^A6C12F_FROZEN,.*method=walsh3_stream,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 24
+          test "$(grep -c '^A6C12F_EQUIVALENCE,' "$RUNNER_TEMP/a6c12f-state.log")" -eq 6
+          test "$(grep '^A6C12F_EQUIVALENCE,' "$RUNNER_TEMP/a6c12f-state.log" | grep -c 'exact_bit_disagreements=0')" -eq 6
+          if grep '^A6C12F_EQUIVALENCE,' "$RUNNER_TEMP/a6c12f-state.log" | grep -Eq 'near_bit_disagreements=0([,$]|$)'; then
+            echo "near-lag witness was erroneously identical" >&2
+            exit 1
+          fi
+          test "$(grep '^A6C12F_TEST,' "$RUNNER_TEMP/a6c12f-state.log" | grep -c 'selected_bit_disagreements=')" -eq 240
+          grep -q '^A6C12F_COMPLETE,policies=240,distinct_test_datasets=72,exact_temporal_witnesses=6,near_temporal_controls=6,state_noise_modes=6,methods=4$' "$RUNNER_TEMP/a6c12f-state.log"
+          grep '^A6C12F_TEST,' "$RUNNER_TEMP/a6c12f-state.log" | grep ',method=hybrid_w2_mitm,' || true
