@@ -1,0 +1,59 @@
+name: A6-I2 passive Markov four-candidate epistemic shift
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i2-four-candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  passive-committee:
+    if: startsWith(github.head_ref, 'research/a6-i2-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact head with no persistent authentication
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89 with formatter and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check all targets and exact committee unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_passive_committee -- --nocapture
+          cargo test --locked -p sml-core --bin sml-passive-committee-bench -- --nocapture
+      - name: Reproduce all 504 frozen passive fits and both missing-teacher regimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I2_ENV,sha=$(git rev-parse HEAD),arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc),runner=$RUNNER_NAME"
+          cargo run --locked --release -p sml-core --bin sml-passive-committee-bench 2>&1 | tee "$RUNNER_TEMP/a6-i2.log"
+          test "$(grep -c '^A6_I2_FROZEN,' "$RUNNER_TEMP/a6-i2.log")" -eq 504
+          test "$(grep -c '^A6_I2_STRATUM,' "$RUNNER_TEMP/a6-i2.log")" -eq 126
+          test "$(grep -c '^A6_I2_TEST,' "$RUNNER_TEMP/a6-i2.log")" -eq 504
+          test "$(grep -c '^A6_I2_NEGATIVE,' "$RUNNER_TEMP/a6-i2.log")" -eq 42
+          test "$(grep -c '^A6_I2_REGIME,' "$RUNNER_TEMP/a6-i2.log")" -eq 3
+          test "$(grep '^A6_I2_STRATUM,' "$RUNNER_TEMP/a6-i2.log" | grep -c 'oracle=PASS$')" -eq 126
+          test "$(grep '^A6_I2_TEST,' "$RUNNER_TEMP/a6-i2.log" | grep -c 'oracle=PASS$')" -eq 504
+          test "$(grep '^A6_I2_NEGATIVE,' "$RUNNER_TEMP/a6-i2.log" | grep -c 'oracle=PASS$')" -eq 42
+          grep -q '^A6_I2_ALL_FROZEN,positive=504,negative=42,distinct_ood_input_streams=21,training_teacher_signatures_checked=126$' "$RUNNER_TEMP/a6-i2.log"
+          grep -q '^A6_I2_COMPLETE,policies=504,strata=126,blind_equivalent_groups=42,partial_equivalent_groups=42,full_posterior_pass=168,negative_visible_rejected=21,negative_censored_accepted=21,negative_censored_wrong_confident=21,blind_selective_errors=0,full_selective_errors=0,prior_harms_balanced=true,prior_helps_h0=true,prior_harms_h3=true,oracle=PASS$' "$RUNNER_TEMP/a6-i2.log"
