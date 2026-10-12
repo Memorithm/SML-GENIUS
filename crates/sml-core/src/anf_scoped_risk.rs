@@ -219,9 +219,7 @@ impl ScopedPatternGuard {
         let missing_patterns = self
             .tuples
             .iter()
-            .filter(|tuple| {
-                tuple.seen & (1u8 << Self::pattern(input, tuple, self.strength)) == 0
-            })
+            .filter(|tuple| tuple.seen & (1u8 << Self::pattern(input, tuple, self.strength)) == 0)
             .count();
         Ok(ScopeNovelty {
             missing_patterns,
@@ -335,7 +333,10 @@ impl Hamming16Guard {
     #[must_use]
     pub fn logical_payload_bytes(&self) -> usize {
         self.seen.len() * size_of::<bool>()
-            + self.nearest.as_ref().map_or(0, |values| values.len() * size_of::<u8>())
+            + self
+                .nearest
+                .as_ref()
+                .map_or(0, |values| values.len() * size_of::<u8>())
     }
 }
 
@@ -394,9 +395,11 @@ impl DegreeDesignRank {
         if input.len() != self.width {
             return Err(ScopedRiskError::Width);
         }
-        let active = self.support.iter().enumerate().fold(0u16, |v, (i, &p)| {
-            v | (u16::from(input[p]) << i)
-        });
+        let active = self
+            .support
+            .iter()
+            .enumerate()
+            .fold(0u16, |v, (i, &p)| v | (u16::from(input[p]) << i));
         let mut row = self.terms.iter().enumerate().fold(0u64, |v, (i, &term)| {
             if active & term == term {
                 v | (1u64 << i)
@@ -461,7 +464,10 @@ mod tests {
             assert_eq!(f, g, "even parity training points indistinguishable");
         }
         pairs.seal().unwrap();
-        assert_eq!(pairs.assess(&vec_from_code(3, 1)).unwrap().missing_patterns, 0);
+        assert_eq!(
+            pairs.assess(&vec_from_code(3, 1)).unwrap().missing_patterns,
+            0
+        );
         assert_eq!(rank.monomial_count(), 4);
         assert!(rank.rank() < rank.monomial_count());
         assert!(vec_from_code(3, 1).iter().fold(false, |a, &b| a ^ b));
@@ -494,8 +500,12 @@ mod tests {
     fn candidate_union_is_bounded_and_does_not_inspect_true_teacher() {
         let limits = WideAnfLimits::new(32, 256, 8192, 8192, 8192);
         let g1 = WideAnfGate::from_monomials(vec![1, 8], vec![vec![0, 1]], 16, limits).unwrap();
-        let g2 = WideAnfGate::from_monomials(vec![3, 8], vec![vec![0], vec![1]], 16, limits).unwrap();
-        assert_eq!(competing_support(&[g1.clone(), g2.clone()], 4).unwrap(), vec![1, 3, 8]);
+        let g2 =
+            WideAnfGate::from_monomials(vec![3, 8], vec![vec![0], vec![1]], 16, limits).unwrap();
+        assert_eq!(
+            competing_support(&[g1.clone(), g2.clone()], 4).unwrap(),
+            vec![1, 3, 8]
+        );
         assert_eq!(
             competing_support(&[g1, g2], 2).unwrap_err(),
             ScopedRiskError::Budget
