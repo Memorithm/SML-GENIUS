@@ -1,0 +1,58 @@
+name: A6-WL1 train-only wide ANF active sparse monomial learning
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anf-wide-learning-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  wide-learning:
+    if: startsWith(github.head_ref, 'research/anf-wide-active-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA without persistent authentication
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict formatter, all-targets compilation, Clippy and learner tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_wide_active_learn
+          cargo test --locked -p sml-core --bin sml-wide-active-learn-bench
+      - name: Run preregistered 42 fitted wide models and negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "WIDE_LEARN_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-wide-active-learn-bench 2>&1 | tee "$RUNNER_TEMP/a6-wl1-learning.log"
+          grep -q '^WIDE_LEARN_ALL_FROZEN,policies=42,distinct_teachers=21$' "$RUNNER_TEMP/a6-wl1-learning.log"
+          test "$(grep -c '^WIDE_LEARN_FROZEN,' "$RUNNER_TEMP/a6-wl1-learning.log")" -eq 42
+          test "$(grep -c '^WIDE_LEARN_TEST,' "$RUNNER_TEMP/a6-wl1-learning.log")" -eq 42
+          test "$(grep -c '^WIDE_LEARN_NEGATIVE,' "$RUNNER_TEMP/a6-wl1-learning.log")" -eq 7
+          test "$(grep -c '^WIDE_LEARN_SBG,' "$RUNNER_TEMP/a6-wl1-learning.log")" -eq 1
+          test "$(grep '^WIDE_LEARN_TEST,' "$RUNNER_TEMP/a6-wl1-learning.log" | grep -c 'oracle=PASS$')" -eq 42
+          test "$(grep '^WIDE_LEARN_NEGATIVE,' "$RUNNER_TEMP/a6-wl1-learning.log" | grep -c 'accepted=false,oracle=PASS$')" -eq 7
+          grep -q '^WIDE_LEARN_SBG,width=1024,seed=0,panel=clean,selected_page=17,real_wide_gate=true,oracle_comparisons=16,bit_disagreements=0,oracle=PASS$' "$RUNNER_TEMP/a6-wl1-learning.log"
+          grep -q '^WIDE_LEARN_COMPLETE,policies=42,structure_exact=42,validation_accepted=42,zero_test_disagreements=42,negative_rejected=7,k8_exhaustive_pass=6,sbg_learned_gate=true$' "$RUNNER_TEMP/a6-wl1-learning.log"

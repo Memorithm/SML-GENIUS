@@ -1007,3 +1007,54 @@ function-bank storage/selection validation; (5) separate language
 model-scale and quality benchmarks. Keep the historical PVP6 and
 LargeAnf page executors unchanged for regression comparison.
 No NVIDIA toolkit dependency beyond permitted GPU drivers.
+
+## A6-WL1 active discovery of wide sparse ANF monomials — 2026-10-12
+
+The [scientific preregistration](ANF-WIDE-ACTIVE-SPARSE-LEARNING-PREREGISTRATION.md)
+and [complete benchmark results](RESULTS-ANF-WIDE-ACTIVE-SPARSE-LEARNING.md)
+qualify a new `anf_wide_active_learn` component with explicit
+membership-query and resource-budget boundaries.
+
+**Real measured milestone:** 42 train/validation-frozen supported
+models on 21 distinct hidden supports, 7 widths
+`k=8,16,32,64,128,256,1024`, 4 PUBLIC one-hot selectors, exactly
+1 unknown positive-literal AND monomial per selector, 3 seeds,
+TRAIN clean vs noisy (1/16 response flips, 15 majority votes).
+Adaptive group interventions found **42/42 exact hidden supports**,
+all 42 were accepted on independently generated 544-case
+validation sets, and all 42 showed **zero bit disagreement on 4096
+held-out random inputs per fit**. Six k8 exhaustive 256-input
+truth tables also agree exactly; deliberate extra interaction
+`x0 ∧ x1` is invisible to the one-hot TRAIN probes but
+**7/7 rejected** by validation including simultaneous selectors.
+
+At k1024, average training cost was **240 logical queries** for
+the clean panel, **3600 physical observations** with noisy
+repetition, yielding a native four-term sparse WideAnfGate of
+**9024 logical payload bytes and 19 words scratch**. Test of the
+**actual fitted gate** inserted into a MOR-decision-selected
+`WideAnfPageAtlas<1024>` passed 16/16 native SBG output checks.
+The page selection in that experiment was EXPLICIT, not learned;
+the independent PR #499 native MOR/Delta-KV integration remains
+the runtime component. Measured times cover a local synthetic
+membership oracle, not a physical production data-collection cost.
+
+**Next work, in separate preregistered PRs:**
+- Unknown selector discovery without handing over `x0..x3`;
+  quantify identifiability when selectors can interact, and
+  negative supports/negations or multiple monomials per selector.
+- Passive/online learning and conditional noisy recurrence
+  without controllable membership queries; expose cases of
+  information-theoretic impossibility rather than claim generality.
+- Frozen TRAIN/VAL/TEST fitting plus truly selected SBG/MOR/
+  Delta-KV recurrent execution, with causal route selection,
+  active gate counts and rollback evidence.
+- Sparse learning/selection across a bounded model-owned bank
+  and then the target `K=1,048,576` address/function scale;
+  distinguish functions stored, functions activated and
+  coefficients actually searched or touched.
+- Native SIMD/ARM/Jetson Thor physical benchmarks under the
+  no-proprietary-NVIDIA-software-beyond-drivers constraint,
+  and independent model language-quality evaluation.
+A6-WL1 does **not** qualify free Boolean circuits, unknown
+five-gate recurrent topologies, SML-25B perplexity or tok/s.
