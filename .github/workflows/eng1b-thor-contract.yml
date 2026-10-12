@@ -65,9 +65,11 @@ jobs:
           echo "ENG1B_PARSER_MOCK_ONLY=TRUE"
           MOCK_STOP=0 bash scripts/eng1b/native-thor-five.sh "$mock" "$RUNNER_TEMP/mock-pass" > "$RUNNER_TEMP/mock-pass-console.txt"
           grep -qx 'ENG1B_THOR_RESOURCE_VERDICT=PASS_NATIVE_SYNTHETIC_DIAGNOSTIC_ONLY' "$RUNNER_TEMP/mock-pass/decision.txt"
+          grep -qx 'ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=0.800000,p95_trie_over_long=0.800000,rounds=5' "$RUNNER_TEMP/mock-pass/decision.txt"
           test "$(tail -n +2 "$RUNNER_TEMP/mock-pass/rounds.csv" | wc -l)" -eq 5
           MOCK_STOP=1 bash scripts/eng1b/native-thor-five.sh "$mock" "$RUNNER_TEMP/mock-stop" > "$RUNNER_TEMP/mock-stop-console.txt"
           grep -qx 'ENG1B_THOR_RESOURCE_VERDICT=STOP_RESOURCE_NO_PROMOTION' "$RUNNER_TEMP/mock-stop/decision.txt"
+          grep -qx 'ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=0.990000,p95_trie_over_long=1.400000,rounds=5' "$RUNNER_TEMP/mock-stop/decision.txt"
           test "$(grep -c ',STOP$' "$RUNNER_TEMP/mock-stop/rounds.csv")" -eq 5
           test "$(grep -c '^ENG1B_THOR_ROUND' "$RUNNER_TEMP/mock-stop-console.txt")" -eq 5
           echo "ENG1B_NATIVE_REPORT_PARSER_MOCK_TESTS=PASS,physical_measurements=NONE"
