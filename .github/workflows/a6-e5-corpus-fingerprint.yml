@@ -52,6 +52,16 @@ jobs:
           test "$test_events" -gt 0
           printf 'A6E5_DATASET_FINGERPRINT,commit=%s,source_url=%s,raw_sha256=%s,normalized_bytes=%s,body_sha256=%s,train_events=%s,val_events=%s,test_events=%s\n'             "$(git rev-parse HEAD)" "$url" "$raw_sha" "$bytes" "$body_sha"             "$train_events" "$val_events" "$test_events" |
             tee "$RUNNER_TEMP/a6-e5-dataset-pin.csv"
+      - name: Recheck fixed source/body fingerprint independently before model code
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-flaubert-e5-corpus.sh "$RUNNER_TEMP/e5-flaubert-pinned.txt"
+          test "$(wc -c < "$RUNNER_TEMP/e5-flaubert-pinned.txt")" -eq 717674
+          test "$(sha256sum "$RUNNER_TEMP/e5-flaubert-pinned.txt" | cut -d' ' -f1)" = 7aa8b5f8871e46d88d3715dcbfd4e8e46cc8ba89218b134454b0778df4942eb8
+          grep -q 'raw_sha256=93f0a2259dbaf5fde6e7b96adc22346d52f80eb1e9319336c8381a045efe40cd' "$RUNNER_TEMP/a6-e5-dataset-pin.csv"
+          grep -q 'normalized_bytes=717674,body_sha256=7aa8b5f8871e46d88d3715dcbfd4e8e46cc8ba89218b134454b0778df4942eb8' "$RUNNER_TEMP/a6-e5-dataset-pin.csv"
+          grep -q 'train_events=573824,val_events=71488,test_events=71488' "$RUNNER_TEMP/a6-e5-dataset-pin.csv"
       - name: Archive only small hash manifest (never book text)
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
