@@ -978,3 +978,32 @@ No SML-25B perplexity, generated-token throughput, 100M active
 gates, semantic retrieval improvement, general LPN solution or
 worst-case subcubic complexity follows from these synthetic exactness
 and CPU microbenchmark observations.
+
+## WideSparseANF MOR-selected SBG pages and Delta-KV integration — 2026-10-12
+
+After [PR #498's native wide ANF core](RESULTS-ANF-WIDE-SPARSE-1024.md),
+the [predeclared qualification protocol](ANF-WIDE-SBG-MOR-DELTAKV-PREREGISTRATION.md)
+and [measured tests](RESULTS-ANF-WIDE-SBG-MOR-DELTAKV.md) define the first
+**real opt-in dataflow** through WideSparseANF → selected SBG expert pages
+→ MOR route selection → current-route Delta-KV projection and update.
+The existing `RoutedSemantic` and `DeltaKvDynamicRekeyKernel` perform
+the routing/memory work; these mechanisms are not mocked.
+
+Natively tested: one 1024-input sparse AND gate selected from an atlas
+by a MOR decision, using 1024 SBG `value` input coordinates to write
+`meaning_mask`; all-ones and 0/512/1023 one-zero controls; inactive
+page exclusion; simultaneous selected-page snapshot semantics; duplicate
+IDs, output conflicts and independent gate/trace/scratch budgets;
+two full coupled-vs-manual MOR→WideSparseANF→Delta-KV cycles; atomic
+rollback under bad provenance or subsequent budget failure. Fixed
+routing, not a learned route policy; scalar SBG state broadcast to
+u64 lanes, not 64 independent SBG evaluations.
+
+**Follow-up gates:** (1) explicit page-atlas activation in the chosen
+model runtime; (2) k>8 trainable sparse monomial discovery with
+held-out evidence and resource caps; (3) actual multi-SBG vectorization
+and NEON/SIMD/Thor measurements; (4) page cache and K=1,048,576
+function-bank storage/selection validation; (5) separate language
+model-scale and quality benchmarks. Keep the historical PVP6 and
+LargeAnf page executors unchanged for regression comparison.
+No NVIDIA toolkit dependency beyond permitted GPU drivers.
