@@ -77,8 +77,7 @@ impl ContextualPrior {
             return Err(EpistemicAnfError::EmptyMetaHistory);
         }
         // Beta(1,1) prior: report probability, not certainty.
-        Ok((f64::from(self.alternative[context]) + 1.0)
-            / (f64::from(self.total[context]) + 2.0))
+        Ok((f64::from(self.alternative[context]) + 1.0) / (f64::from(self.total[context]) + 2.0))
     }
 
     pub fn pooled_probability_alternative(&self) -> Result<f64, EpistemicAnfError> {
@@ -140,9 +139,7 @@ impl EpistemicAnfPair {
         input: &[bool],
         probability_alternative: f64,
     ) -> Result<EpistemicPrediction, EpistemicAnfError> {
-        if !probability_alternative.is_finite()
-            || !(0.0..=1.0).contains(&probability_alternative)
-        {
+        if !probability_alternative.is_finite() || !(0.0..=1.0).contains(&probability_alternative) {
             return Err(EpistemicAnfError::InvalidProbability);
         }
         if input.len() != self.fan_in() {
