@@ -397,8 +397,9 @@ mod tests {
         let initial = initial();
         looped.rewrite(&initial, 1).unwrap();
         let before = looped.clone();
+        let next_input = looped.cycles().last().unwrap().output.clone();
         assert!(matches!(
-            looped.rewrite(&looped.cycles().last().unwrap().output.clone(), 2),
+            looped.rewrite(&next_input, 2),
             Err(WideCoupledError::Experts(WideRoutedError::Budget))
                 | Err(WideCoupledError::Experts(WideRoutedError::Page(_)))
         ));
