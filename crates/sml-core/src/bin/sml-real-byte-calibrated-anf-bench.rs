@@ -47,14 +47,13 @@ fn bits16(previous: u8, previous_previous: u8) -> u16 {
     u16::from(previous) | (u16::from(previous_previous) << 8)
 }
 
-fn unpack(bits: u16) -> [bool; 16] {
-    std::array::from_fn(|i| bits & (1u16 << i) != 0)
-}
-
 fn address(bits: u16, support: &[usize]) -> usize {
-    support.iter().enumerate().fold(0usize, |acc, (index, &bit)| {
-        acc | ((usize::from(bits >> bit) & 1) << index)
-    })
+    support
+        .iter()
+        .enumerate()
+        .fold(0usize, |acc, (index, &bit)| {
+            acc | ((usize::from(bits >> bit) & 1) << index)
+        })
 }
 
 fn training_rows(bytes: &[u8]) -> Result<Vec<TrainRow>, Box<dyn Error>> {
@@ -91,7 +90,8 @@ fn loo_bits(rows: &[TrainRow], support: &[usize]) -> f64 {
             let numerator = f64::from(pair[usize::from(row.truth)]) - 0.5;
             -(numerator / denominator).log2()
         })
-        .sum::<f64>() / rows.len() as f64
+        .sum::<f64>()
+        / rows.len() as f64
 }
 
 /// Same deterministic TRAIN-only greedy support selector as A6-E1.
@@ -127,7 +127,10 @@ fn greedy_supports(rows: &[TrainRow]) -> Vec<Vec<usize>> {
 /// deliberately uses the *same learned counts*, not overconfident hard voting.
 fn verify_native_anf(support: &[usize], counts: &[[u32; 2]]) -> Result<usize, Box<dyn Error>> {
     let k = support.len();
-    let table = counts.iter().map(|pair| pair[1] > pair[0]).collect::<Vec<_>>();
+    let table = counts
+        .iter()
+        .map(|pair| pair[1] > pair[0])
+        .collect::<Vec<_>>();
     if table.len() != 1usize << k {
         return Err("invalid ANF table length".into());
     }
@@ -142,7 +145,11 @@ fn verify_native_anf(support: &[usize], counts: &[[u32; 2]]) -> Result<usize, Bo
     }
     let monomials = (0..(1 << k))
         .filter(|&mask| coefficients[mask])
-        .map(|mask| (0..k).filter(|&bit| mask & (1 << bit) != 0).collect::<Vec<_>>())
+        .map(|mask| {
+            (0..k)
+                .filter(|&bit| mask & (1 << bit) != 0)
+                .collect::<Vec<_>>()
+        })
         .collect::<Vec<_>>();
     let gate = WideAnfGate::from_monomials(
         support.to_vec(),
@@ -195,7 +202,11 @@ fn clip_probability(value: f64) -> f64 {
 
 fn bit_loss(probability: f64, truth: bool) -> f64 {
     let p = clip_probability(probability);
-    if truth { -p.log2() } else { -(1.0 - p).log2() }
+    if truth {
+        -p.log2()
+    } else {
+        -(1.0 - p).log2()
+    }
 }
 
 fn score_rows(
@@ -231,18 +242,23 @@ fn evaluate(rows: &[EvalRow], expert: Option<(&Expert, f64, f64)>, baseline: &st
     let mut loss = 0.0f64;
     for row in rows {
         let p = match expert {
-            Some((model, alpha, lambda)) => mixture(kt_probability(model, row.bits, alpha), row.ngram4, lambda),
+            Some((model, alpha, lambda)) => {
+                mixture(kt_probability(model, row.bits, alpha), row.ngram4, lambda)
+            }
             None => match baseline {
                 "ngram2" => row.ngram2,
                 "ngram4" => row.ngram4,
                 "majority" => row.majority,
                 _ => unreachable!("unregistered baseline"),
-            }
+            },
         };
         errors += usize::from((p >= 0.5) != row.truth);
         loss += bit_loss(p, row.truth);
     }
-    Metrics { bits_per_event: loss / rows.len() as f64, mistakes: errors }
+    Metrics {
+        bits_per_event: loss / rows.len() as f64,
+        mistakes: errors,
+    }
 }
 
 fn candidates() -> [(usize, usize); 16] {
@@ -276,7 +292,10 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     let val_majority = evaluate(&validation, None, "majority");
     println!(
         "A6_E2_VAL_BASELINES,events={},ngram2_bits={:.8},ngram4_bits={:.8},majority_bits={:.8}",
-        validation.len(), val_ngram2.bits_per_event, val_ngram4.bits_per_event, val_majority.bits_per_event
+        validation.len(),
+        val_ngram2.bits_per_event,
+        val_ngram4.bits_per_event,
+        val_majority.bits_per_event
     );
 
     let grid = candidates();
@@ -288,7 +307,12 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
         let pure = evaluate(&validation, Some((model, alpha, 1.0)), "");
         println!(
             "A6_E2_VAL_PURE,index={},fanin={},alpha={:.2},events={},bits={:.8},errors={}",
-            index, model.support.len(), alpha, validation.len(), pure.bits_per_event, pure.mistakes
+            index,
+            model.support.len(),
+            alpha,
+            validation.len(),
+            pure.bits_per_event,
+            pure.mistakes
         );
         if best_pure.is_none_or(|(_, current)| pure.bits_per_event < current - 1.0e-12) {
             best_pure = Some((index, pure.bits_per_event));
@@ -325,8 +349,16 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     ];
     let (pure_id, pure_alpha_id) = grid[pure_index];
     let (mix_id, mix_alpha_id) = grid[mix_index];
-    let pure = evaluate(&heldout, Some((&experts[pure_id], ALPHAS[pure_alpha_id], 1.0)), "");
-    let mixed = evaluate(&heldout, Some((&experts[mix_id], ALPHAS[mix_alpha_id], LAMBDAS[lambda_id])), "");
+    let pure = evaluate(
+        &heldout,
+        Some((&experts[pure_id], ALPHAS[pure_alpha_id], 1.0)),
+        "",
+    );
+    let mixed = evaluate(
+        &heldout,
+        Some((&experts[mix_id], ALPHAS[mix_alpha_id], LAMBDAS[lambda_id])),
+        "",
+    );
     println!(
         "A6_E2_TEST_BASELINES,events={},ngram2_bits={:.8},ngram2_errors={},ngram4_bits={:.8},ngram4_errors={},majority_bits={:.8},majority_errors={}",
         heldout.len(), ng2.bits_per_event, ng2.mistakes, ng4.bits_per_event, ng4.mistakes,
@@ -395,7 +427,10 @@ mod tests {
         }
         assert!(verify_native_anf(&support, &counts).is_ok());
         let train = (0..32)
-            .map(|k| TrainRow { bits: (k % 8) as u16, truth: k % 2 == 0 })
+            .map(|k| TrainRow {
+                bits: (k % 8) as u16,
+                truth: k % 2 == 0,
+            })
             .collect::<Vec<_>>();
         assert_eq!(greedy_supports(&train).len(), 4);
     }
@@ -405,9 +440,18 @@ mod tests {
         assert_eq!(CORPUS_BYTES, 433_036);
         assert_eq!(EXPECTED_TEST_EVENTS, 43_136);
         assert_eq!(REQUIRED_ADVANTAGE, 0.02);
-        let row = EvalRow { bits: 0, truth: true, ngram2: 0.4, ngram4: 0.7, majority: 0.6 };
+        let row = EvalRow {
+            bits: 0,
+            truth: true,
+            ngram2: 0.4,
+            ngram4: 0.7,
+            majority: 0.6,
+        };
         let a = evaluate(&[row], None, "ngram4");
-        let one = Expert { support: vec![0], counts: vec![[7, 3], [7, 3]] };
+        let one = Expert {
+            support: vec![0],
+            counts: vec![[7, 3], [7, 3]],
+        };
         let b = evaluate(&[row], Some((&one, 1.0, 0.0)), "");
         assert!((a.bits_per_event - b.bits_per_event).abs() < 1.0e-12);
         assert_eq!(a.mistakes, b.mistakes);
