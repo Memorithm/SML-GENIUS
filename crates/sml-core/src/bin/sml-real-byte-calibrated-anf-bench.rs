@@ -135,7 +135,8 @@ fn verify_native_anf(support: &[usize], counts: &[[u32; 2]]) -> Result<usize, Bo
     for bit in 0..k {
         for mask in 0..(1 << k) {
             if mask & (1 << bit) != 0 {
-                coefficients[mask] ^= coefficients[mask ^ (1 << bit)];
+                let lower = coefficients[mask ^ (1 << bit)];
+                coefficients[mask] ^= lower;
             }
         }
     }
