@@ -1,0 +1,101 @@
+name: ENG-1b lossless suffix-trie parity and hosted memory diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1b-suffix-trie-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  exact-trie:
+    if: startsWith(github.head_ref, 'research/eng1b-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout untrusted exact HEAD without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89 with rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Validate exact head, full Rust formatting, compiler and strict Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          uname -m
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+      - name: Full 256-way parity, structural limits and existing ENG regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-core --lib elastic_ngram_trie -- --nocapture
+          cargo test --locked -p sml-core --lib elastic_ngram_long -- --nocapture
+          cargo test --locked -p sml-core --lib elastic_ngram::tests -- --nocapture
+          cargo test --locked -p sml-core --bin sml-eng1b-resource-bench
+      - name: Preregistered separate-process RSS and latency diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-core --bin sml-eng1b-resource-bench
+          mkdir -p "$RUNNER_TEMP/eng1b"
+          echo "ENG1B_ENV,source_sha=$(git rev-parse HEAD),arch=$(uname -m),rust=$(rustc --version),os=$(uname -s)" | tee "$RUNNER_TEMP/eng1b/environment.txt"
+          for arm in trie long legacy; do
+            target/release/sml-eng1b-resource-bench "$arm" | tee "$RUNNER_TEMP/eng1b/$arm.txt"
+            test "$(grep -c '^ENG1B_MEASURE,' "$RUNNER_TEMP/eng1b/$arm.txt")" -eq 1
+            grep -Eq '^ENG1B_MEASURE,arm=(TRIE|LONG|LEGACY),depth=(7|32),.*samples=2048,warmup=256,digest=[0-9a-f]{16},arch=[A-Za-z0-9_]+,integrity=PASS$' "$RUNNER_TEMP/eng1b/$arm.txt"
+          done
+          record() { grep '^ENG1B_MEASURE,' "$RUNNER_TEMP/eng1b/$1.txt"; }
+          field() { printf '%s\n' "$1" | tr ',' '\n' | sed -n "s/^$2=//p"; }
+          trie="$(record trie)"
+          long="$(record long)"
+          legacy="$(record legacy)"
+          test "$(field "$trie" depth)" = "32"
+          test "$(field "$long" depth)" = "32"
+          test "$(field "$legacy" depth)" = "7"
+          test "$(field "$trie" digest)" = "$(field "$long" digest)"
+          test "$(field "$trie" contexts)" = "$(field "$long" contexts)"
+          test "$(field "$trie" followers)" = "$(field "$long" followers)"
+          t_rss="$(field "$trie" vmhwm_kib)"
+          l_rss="$(field "$long" vmhwm_kib)"
+          t_p95="$(field "$trie" p95_ns)"
+          l_p95="$(field "$long" p95_ns)"
+          for metric in "$t_rss" "$l_rss" "$t_p95" "$l_p95"; do
+            test "$metric" -gt 0
+          done
+          awk -v tr="$t_rss" -v lr="$l_rss" -v tp="$t_p95" -v lp="$l_p95" 'BEGIN {
+            physical=(tr * 10 <= lr * 9)
+            latency=(tp * 10 <= lp * 11)
+            if(physical && latency) {
+              print "ENG1B_PROMOTION_GATE=PASS,kind=hosted_diagnostic_only"
+            } else {
+              print "ENG1B_PROMOTION_GATE=STOP,kind=hosted_diagnostic_only"
+            }
+            print "ENG1B_RESOURCE,vmhwm_trie_kib=" tr ",vmhwm_long_kib=" lr ",p95_trie_ns=" tp ",p95_long_ns=" lp
+          }' | tee "$RUNNER_TEMP/eng1b/decision.txt"
+          # A negative resource result must remain visible, not alter correctness.
+      - name: Retain raw all-arm diagnostic and frozen environment manifest
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1b-suffix-trie-physical-diagnostic
+          path: ${{ runner.temp }}/eng1b/
+          if-no-files-found: warn
+          retention-days: 30
