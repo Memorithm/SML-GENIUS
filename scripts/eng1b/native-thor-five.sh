@@ -123,3 +123,27 @@ fi
   echo "ENG1B_THOR_REAL_LANGUAGE_QUALITY=NOT_MEASURED"
   echo "ENG1B_THOR_GPU_METRICS=NOT_MEASURED"
 } | tee "$evidence/decision.txt"
+
+# Median of the five *per-round* physical ratios, not a ratio of medians.
+# Full sorting stays in the evidence script and is not a quality gate.
+awk -F, '
+  NR > 1 {
+    n++
+    memory[n] = $2 / $3
+    latency[n] = $4 / $5
+  }
+  END {
+    if (n != 5) exit 2
+    for (i = 1; i <= n; i++) {
+      for (j = i + 1; j <= n; j++) {
+        if (memory[i] > memory[j]) {
+          t = memory[i]; memory[i] = memory[j]; memory[j] = t
+        }
+        if (latency[i] > latency[j]) {
+          t = latency[i]; latency[i] = latency[j]; latency[j] = t
+        }
+      }
+    }
+    printf "ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=%.6f,p95_trie_over_long=%.6f,rounds=%d\\n", memory[3], latency[3], n
+  }
+' "$evidence/rounds.csv" | tee -a "$evidence/decision.txt"
