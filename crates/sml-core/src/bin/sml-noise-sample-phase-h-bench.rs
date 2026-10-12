@@ -88,40 +88,67 @@ impl Task {
 
 // A6-C12g: the two preregistered teacher families are the first two C12c tasks.
 const TASKS: [Task; 2] = [Task::ALL[0], Task::ALL[1]];
-const WORD_BUDGETS: [usize; 7] = [8, 16, 32, 64, 128, 256, 512];
-const SEEDS: usize = 8;
+const WORD_BUDGETS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+const SEEDS: usize = 16;
+const CORE_SEEDS: usize = 8;
 const REPEATS: usize = 3;
-const TEST_STREAMS: usize = 2 * 5 * SEEDS;
-const POLICY_COUNT: usize = 2 * 5 * 7 * SEEDS * 2 + 2 * 7 * SEEDS;
+const TEST_STREAMS: usize = 2 * 4 * SEEDS;
+const POLICY_COUNT: usize = 2 * 4 * 8 * 10 * 2 + 2 * 8 * 10 + 2 * 4 * 8 * 3 * 2 + 2 * 8 * 3;
 const GAUSS_MAX_WORDS: usize = 16;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NoiseRate {
     Zero,
-    OneIn32,
-    OneIn16,
-    OneIn8,
     OneIn5,
+    ThreeIn10,
+    TwoIn5,
 }
 impl NoiseRate {
-    const ALL: [Self; 5] = [
-        Self::Zero, Self::OneIn32, Self::OneIn16, Self::OneIn8, Self::OneIn5,
+    const ALL: [Self; 4] = [
+        Self::Zero, Self::OneIn5, Self::ThreeIn10, Self::TwoIn5,
     ];
     fn name(self) -> &'static str {
         match self {
-            Self::Zero => "0", Self::OneIn32 => "1/32", Self::OneIn16 => "1/16",
-            Self::OneIn8 => "1/8", Self::OneIn5 => "1/5",
+            Self::Zero => "0",
+            Self::OneIn5 => "1/5",
+            Self::ThreeIn10 => "3/10",
+            Self::TwoIn5 => "2/5",
         }
-    }
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|&r| r == self).unwrap()
     }
     fn eta(self) -> f64 {
         match self {
-            Self::Zero => 0.0, Self::OneIn32 => 1.0 / 32.0,
-            Self::OneIn16 => 1.0 / 16.0, Self::OneIn8 => 1.0 / 8.0,
+            Self::Zero => 0.0,
             Self::OneIn5 => 0.2,
+            Self::ThreeIn10 => 0.3,
+            Self::TwoIn5 => 0.4,
         }
+    }
+}
+fn theory_nstar(task: Task, rate: NoiseRate) -> f64 {
+    let rho = (1.0 - 2.0 * rate.eta()).powi(2);
+    let amp = match task {
+        Task::XorXorXor => rho,
+        Task::AndXorXor => rho / 2.0,
+        _ => unreachable!("unregistered teacher"),
+    };
+    2.0 * (2.0 * 317_440f64).ln() / (amp * amp)
+}
+// Additional seeds ONLY in a priori theory-guided windows, not from TEST.
+fn scheduled_words(task: Task, rate: NoiseRate, index: usize) -> &'static [usize] {
+    if index < CORE_SEEDS {
+        return &WORD_BUDGETS;
+    }
+    assert!(index < SEEDS);
+    match (task, rate) {
+        (Task::XorXorXor, NoiseRate::Zero) => &[1, 2, 4],
+        (Task::XorXorXor, NoiseRate::OneIn5) => &[2, 4, 8],
+        (Task::XorXorXor, NoiseRate::ThreeIn10) => &[8, 16, 32],
+        (Task::XorXorXor, NoiseRate::TwoIn5) => &[128, 256, 512],
+        (Task::AndXorXor, NoiseRate::Zero) => &[1, 2, 4],
+        (Task::AndXorXor, NoiseRate::OneIn5) => &[8, 16, 32],
+        (Task::AndXorXor, NoiseRate::ThreeIn10) => &[32, 64, 128],
+        (Task::AndXorXor, NoiseRate::TwoIn5) => &[128, 256, 512],
+        _ => unreachable!("unregistered teacher"),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,17 +175,22 @@ fn seed(index: usize, task: Task, stage: u64) -> u64 {
 fn noise_mask(rate: NoiseRate, rng: &mut SplitMix64) -> u64 {
     match rate {
         NoiseRate::Zero => 0,
-        NoiseRate::OneIn32 => {
-            rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        }
-        NoiseRate::OneIn16 => {
-            rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        }
-        NoiseRate::OneIn8 => rng.next_u64() & rng.next_u64() & rng.next_u64(),
         NoiseRate::OneIn5 => {
+            // Preserve C12g's 20% control generator, bit for bit.
             let mut bits = 0u64;
             for bit in 0..LANES {
                 if rng.next_u64() < u64::MAX / 5 {
+                    bits |= 1u64 << bit;
+                }
+            }
+            bits
+        }
+        NoiseRate::ThreeIn10 | NoiseRate::TwoIn5 => {
+            let numerator = if rate == NoiseRate::ThreeIn10 { 3u128 } else { 4u128 };
+            let cutoff = ((u64::MAX as u128 + 1) * numerator) / 10;
+            let mut bits = 0u64;
+            for bit in 0..LANES {
+                if (rng.next_u64() as u128) < cutoff {
                     bits |= 1u64 << bit;
                 }
             }
