@@ -166,7 +166,7 @@ fn run(kind: &str) -> Result<(), Box<dyn Error>> {
         }
         black_box(&distribution);
     }
-    if timings.len() != SAMPLES || timings.iter().any(|&value| value == 0) {
+    if timings.len() != SAMPLES || timings.contains(&0) {
         return Err("incomplete/zero monotonic timing sample".into());
     }
     timings.sort_unstable();
