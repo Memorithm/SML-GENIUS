@@ -102,6 +102,8 @@ enum Execution {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WideAnfGate {
     inputs: Vec<usize>,
+    /// Cached exact global source bound; no O(k) validation in the hot loop.
+    required_source_len: usize,
     active_monomials: usize,
     execution: Execution,
 }
@@ -133,6 +135,9 @@ impl WideAnfGate {
         if let Some(pair) = unique_inputs.windows(2).find(|w| w[0] == w[1]) {
             return Err(WideAnfError::DuplicateInput(pair[0]));
         }
+        // Every index is < source_width, hence +1 is safe; exactly the
+        // same precondition as checking all input indices on every call.
+        let required_source_len = unique_inputs[k - 1] + 1;
         let mask_words_per_term = k.div_ceil(64);
         let mask_words_total = mask_words_per_term
             .checked_mul(monomials.len())
@@ -232,6 +237,7 @@ impl WideAnfGate {
         };
         Ok(Self {
             inputs,
+            required_source_len,
             active_monomials: term_count,
             execution,
         })
@@ -348,7 +354,7 @@ impl WideAnfGate {
     /// Independent scalar reference: the sparse path reads packed monomial
     /// masks, NOT the cached-prefix nodes used by the u64 batch evaluator.
     pub fn evaluate_scalar(&self, source: &[bool]) -> Result<bool, WideAnfError> {
-        if self.inputs.iter().any(|&input| input >= source.len()) {
+        if source.len() < self.required_source_len {
             return Err(WideAnfError::SourceTooShort);
         }
         match &self.execution {
@@ -382,7 +388,7 @@ impl WideAnfGate {
     /// Exact 64-lane evaluation. Caller owns scratch to avoid per-step
     /// allocations. All bounds are checked before writing scratch.
     pub fn evaluate_lanes(&self, source: &[u64], scratch: &mut [u64]) -> Result<u64, WideAnfError> {
-        if self.inputs.iter().any(|&input| input >= source.len()) {
+        if source.len() < self.required_source_len {
             return Err(WideAnfError::SourceTooShort);
         }
         if scratch.len() < self.scratch_words() {
