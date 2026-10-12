@@ -1058,3 +1058,55 @@ membership oracle, not a physical production data-collection cost.
   and independent model language-quality evaluation.
 A6-WL1 does **not** qualify free Boolean circuits, unknown
 five-gate recurrent topologies, SML-25B perplexity or tok/s.
+
+## A6-WL2 selector-free sparse ANF discovery and limitations — 2026-10-12
+
+The [pre-registration](A6-WL2-UNANCHORED-ANF-PREREGISTRATION.md)
+and [native results](RESULTS-A6-WL2-UNANCHORED-ANF.md) establish
+a first model-owned active learner for **four unordered unknown ANF
+monomial supports with NO distinguished selectors**.
+
+Seven bit widths `k∈{8,16,32,64,128,256,1024}` ×3 fixed
+teachers per width ×2 TRAIN noise panels produced **42/42 exact
+supports**, 42/42 accepted 544-case independent VAL, no bit
+differences on 42×4096 TEST predictions, six complete k8
+truth tables, 7/7 out-of-prior targeted fifth high-degree AND
+detections and 16/16 real learned k1024 SBG selected-page outputs.
+Under noisy TRAIN (Bernoulli1/16, 21 repeated votes), k1024
+averaged **8218 physical observations per fit** versus 391.3
+logical group queries. The support constraints are **four
+disjoint positive monomials of degree 2..5**, and the fitter
+actively selects query assignments. No PASS generalizes beyond
+this restricted identifiable function class.
+
+The method uses successive minimal-positive witnesses of a
+residual Boolean oracle that cancels previously found monomials.
+Disjoint supports make it possible to distinguish a single
+active conjunction from odd overlaps by a ≤5 degree gate.
+Without such structure the approach may be wrong; training on
+only passive streaming tokens, overlapping monomials or changing
+input distributions remains **unproven**. The 7 out-of-grammar
+controls are targeted: a fifth **all-input AND** is nearly
+invisible to uniform random validation at k1024, but a
+predeclared all-one validation probe exposes it, rejecting all
+seven fixtures. This is not a complete misspecification
+detector.
+
+**Next falsification priorities:**
+1. ANF monomials with controlled overlap between support sets
+   and explicit observability rather than disjointness.
+2. Unknown number of active monomials and bounded model-order
+   selection, including negative cases with exactly matching
+   random validation loss but different functions.
+3. Replace active membership queries with passive or
+   intervention-limited recurrent training, separating
+   information deficiency from computational search failure.
+4. Explicitly use learned monomials inside the full
+   selected MOR/SBG/Delta-KV loop for multiple cycles with
+   rollback under memory budget and provenance errors, rather
+   than only a manually selected one-page replay.
+5. Model-owned page banks with incremental storage,
+   1,048,576 actual function addresses and bounded active
+   coefficients, SIMD/Thor measurements and independent
+   SML-25B language-quality benchmarks.
+These are **not** established by A6-WL2.
