@@ -802,3 +802,32 @@ AVX/NEON/GPU execution, a K=1,048,576 function bank and SML-25B language
 model quality. A gate width of 1024 is **not** the number of ANF functions
 in a bank, nor a count of active gates per token. Native Rust only;
 no proprietary NVIDIA software stack apart from permitted drivers.
+
+## WideSparseANF selected pages in SBG/MOR/Delta-KV — 2026-10-12
+
+The [frozen WideSparseANF page-integration protocol](docs/ANF-WIDE-SBG-MOR-DELTAKV-PREREGISTRATION.md)
+and [verified native results](docs/RESULTS-ANF-WIDE-SBG-MOR-DELTAKV.md)
+extend PR #498 beyond standalone wide-gate and recurrent execution.
+
+The opt-in `WideAnfPageAtlas`, `WideRoutedExperts`, and `WideAnfDeltaKvLoop`
+now use the existing MOR `MorDecision` and `RoutedSemantic`, the existing
+SBG `SbgCoordinate` projections, and the actual `DeltaKvDynamicRekeyKernel`.
+A native selected page reads **1024 actual semantic-state input coordinates**
+into a 1024-input sparse AND gate and commits its output only if budgets,
+selected-page destinations and coupled memory stages succeed. Tests confirm
+a single immutable SBG snapshot for all selected page reads, 2 complete
+manual-vs-coupled MOR/page/Delta-KV cycle comparisons, and rollback of
+routes/traces/memory on a failing projection or gate budget.
+
+Important: each scalar SBG coordinate is **broadcast** to all 64 u64 lanes
+before the native WideAnfGate evaluator runs. This does **not** benchmark
+64 different SBG states simultaneously. It is an explicit alternative
+selected-page backend; old PVP6 and LargeAnfPageAtlas routes still work
+unchanged and are not automatically promoted.
+
+Next: train sparse wide monomials with TRAIN/VAL-only selection, build a
+truly budgeted multi-page bank with active/MOR page gating and physical
+memory accounting, add 64-state batched SBG evaluation, and qualify
+native Thor acceleration without non-driver NVIDIA software. No million-
+function bank, SML-25B language results, or general learned topology
+has been qualified by these functional integration tests.
