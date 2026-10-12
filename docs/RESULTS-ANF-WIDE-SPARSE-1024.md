@@ -56,6 +56,8 @@ Mesures du **second run** pour les trois représentations k1024 :
 | mixed16 | 16 | 47 | 256 | **11 120 octets** | 48 mots |
 | full_and | 1 | 1024 | 16 | **24 712 octets** | 1025 mots |
 
+**Correction de comptabilité effectuée après la seconde mesure (sans modification de l'algorithme) :** le backend dense conserve la liste d'indices de l'enveloppe `WideAnfGate` **et** une seconde liste dans `LocalAnfGate`. Les premiers logs décomptaient une seule liste : `k8/dense128` indiquait **96 octets** de payload logique au lieu de **160 octets** (2 listes×64 octets +32 octets de coefficients). Le compteur a été corrigé pour la qualification finale, sans changer les résultats, le chemin d'exécution, les monômes ou le scratch. Les nombres k1024 sparse ci-dessus sont inchangés.
+
 Les « octets de payload » additionnent précisément les indices d'entrées de la porte, les mots de masques, les nœuds de préfixes et les identifiants terminaux. Ils **excluent** en-têtes/capacités `Vec`, structures de l'allocateur et RSS global. Le scratch est **fourni séparément** : 33, 48 ou 1025 mots `u64` (respectivement 264, 384 ou 8200 octets), pouvant être réutilisés entre appels. Aucune allocation de `2^{1024}` bits ou de table de vérité n'est effectuée.
 
 La mémoire et le temps de calcul sont liés à **la largeur réellement adressée, au nombre de monômes actifs et aux préfixes nécessaires**, sous limites de sécurité explicites. Pour une ANF dense arbitraire à k1024, la complexité potentielle reste exponentielle : le moteur sparse ne supprime pas cette impossibilité générale.
