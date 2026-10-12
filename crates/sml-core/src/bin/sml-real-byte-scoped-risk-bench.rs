@@ -369,23 +369,48 @@ fn standalone_controls() -> [(&'static str, Policy); 5] {
     [
         (
             "COMMITTEE_ONLY",
-            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 16 },
+            Policy {
+                confidence: 0.5,
+                strength: 0,
+                missing_limit: 0,
+                hamming_limit: 16,
+            },
         ),
         (
             "SCOPED_PAIR_ONLY",
-            Policy { confidence: 0.5, strength: 2, missing_limit: 0, hamming_limit: 16 },
+            Policy {
+                confidence: 0.5,
+                strength: 2,
+                missing_limit: 0,
+                hamming_limit: 16,
+            },
         ),
         (
             "SCOPED_TRIPLE_ONLY",
-            Policy { confidence: 0.5, strength: 3, missing_limit: 0, hamming_limit: 16 },
+            Policy {
+                confidence: 0.5,
+                strength: 3,
+                missing_limit: 0,
+                hamming_limit: 16,
+            },
         ),
         (
             "HAMMING_EXACT_ONLY",
-            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 0 },
+            Policy {
+                confidence: 0.5,
+                strength: 0,
+                missing_limit: 0,
+                hamming_limit: 0,
+            },
         ),
         (
             "HAMMING_ONE_ONLY",
-            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 1 },
+            Policy {
+                confidence: 0.5,
+                strength: 0,
+                missing_limit: 0,
+                hamming_limit: 1,
+            },
         ),
     ]
 }
@@ -415,8 +440,7 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     let train_start = Instant::now();
     let training = collect_rows(&splits.train)?;
     let train_positives = training.iter().filter(|row| row.truth).count();
-    let majority_probability =
-        (train_positives as f64 + 0.5) / (training.len() as f64 + 1.0);
+    let majority_probability = (train_positives as f64 + 0.5) / (training.len() as f64 + 1.0);
     let gates = train_bank(&training)?;
     let positions = competing_support(&gates, 16)?;
     let mut committee = PassiveCommittee::new_with_source_width(
