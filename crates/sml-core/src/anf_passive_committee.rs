@@ -79,9 +79,7 @@ impl PassiveCommittee {
             }
         }
         if prior_weights.len() != candidates.len()
-            || prior_weights
-                .iter()
-                .any(|&p| !p.is_finite() || p <= 0.0)
+            || prior_weights.iter().any(|&p| !p.is_finite() || p <= 0.0)
         {
             return Err(PassiveCommitteeError::Prior);
         }
@@ -212,9 +210,7 @@ impl PassiveCommittee {
         input: &[bool],
         confidence_threshold: f64,
     ) -> Result<PassivePrediction, PassiveCommitteeError> {
-        if !(0.5..=1.0).contains(&confidence_threshold)
-            || !confidence_threshold.is_finite()
-        {
+        if !(0.5..=1.0).contains(&confidence_threshold) || !confidence_threshold.is_finite() {
             return Err(PassiveCommitteeError::Confidence);
         }
         if input.len() != self.fan_in() {
@@ -241,8 +237,7 @@ impl PassiveCommittee {
             .map_or(0, |(i, _)| i);
         let map_prediction = bits[max_candidate];
         let unanimous = bits.iter().all(|&bit| bit == bits[0]);
-        let selective_prediction =
-            (confidence >= confidence_threshold).then_some(map_prediction);
+        let selective_prediction = (confidence >= confidence_threshold).then_some(map_prediction);
         Ok(PassivePrediction {
             candidate_bits: bits,
             posterior,
@@ -275,8 +270,7 @@ mod tests {
         .collect()
     }
     fn model() -> PassiveCommittee {
-        PassiveCommittee::new(candidates(), vec![4.0, 2.0, 2.0, 1.0], 1.0 / 16.0, 512)
-            .unwrap()
+        PassiveCommittee::new(candidates(), vec![4.0, 2.0, 2.0, 1.0], 1.0 / 16.0, 512).unwrap()
     }
 
     #[test]
@@ -294,7 +288,10 @@ mod tests {
             .windows(2)
             .all(|pair| pair[0] == pair[1]));
         let priors = model.posterior();
-        for (p, prior) in priors.into_iter().zip([4.0 / 9.0, 2.0 / 9.0, 2.0 / 9.0, 1.0 / 9.0]) {
+        for (p, prior) in priors
+            .into_iter()
+            .zip([4.0 / 9.0, 2.0 / 9.0, 2.0 / 9.0, 1.0 / 9.0])
+        {
             assert!((p - prior).abs() < 1e-10);
         }
         let unseen = [true, true, false, false, false, true, false, false];
@@ -339,12 +336,8 @@ mod tests {
 
     #[test]
     fn invalid_config_and_attempted_mutation_fail_closed() {
-        let invalid = PassiveCommittee::new(
-            candidates(),
-            vec![4.0, -2.0, 2.0, 1.0],
-            1.0 / 16.0,
-            512,
-        );
+        let invalid =
+            PassiveCommittee::new(candidates(), vec![4.0, -2.0, 2.0, 1.0], 1.0 / 16.0, 512);
         assert_eq!(invalid, Err(PassiveCommitteeError::Prior));
         assert_eq!(
             PassiveCommittee::new(candidates(), vec![1.0; 4], 0.0, 512),
@@ -352,7 +345,10 @@ mod tests {
         );
         let mut model = model();
         let prior_state = model.clone();
-        assert_eq!(model.observe(&[false; 7], false), Err(PassiveCommitteeError::Width));
+        assert_eq!(
+            model.observe(&[false; 7], false),
+            Err(PassiveCommitteeError::Width)
+        );
         assert_eq!(model, prior_state);
         assert_eq!(
             model.predict(&[false; 8], 0.2),
