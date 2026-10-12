@@ -618,9 +618,10 @@ struct Frozen {
     median_total_us: f64,
 }
 fn freeze(
-    task: Task, rate: NoiseRate, index: usize, words: usize, method: Method,
+    task: Task, rate: NoiseRate, sample: (usize, usize), method: Method,
     train: &LaneData, validation: &LaneData, observed: &Observed,
 ) -> Result<Frozen, Box<dyn Error>> {
+    let (index, words) = sample;
     let mut times_screen = [0.0f64; REPEATS];
     let mut times_factor = [0.0f64; REPEATS];
     let mut times_total = [0.0f64; REPEATS];
@@ -754,10 +755,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let observed = Observed::new(&train, grid(128));
                     assert_eq!(observed.p.len(), words);
                     for method in Method::TWO {
-                        frozen.push(freeze(task, rate, index, words, method, &train, &validation, &observed)?);
+                        frozen.push(freeze(task, rate, (index, words), method, &train, &validation, &observed)?);
                     }
                     if rate == NoiseRate::Zero {
-                        frozen.push(freeze(task, rate, index, words, Method::GaussExact, &train, &validation, &observed)?);
+                        frozen.push(freeze(task, rate, (index, words), Method::GaussExact, &train, &validation, &observed)?);
                     }
                 }
             }
