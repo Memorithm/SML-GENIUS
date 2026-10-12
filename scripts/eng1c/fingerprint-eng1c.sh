@@ -83,6 +83,28 @@ raw_sha="$(sha256sum "$tmp/raw.txt" | cut -d' ' -f1)"
 body_sha="$(sha256sum "$tmp/body.txt" | cut -d' ' -f1)"
 raw_bytes="$(wc -c < "$tmp/raw.txt" | tr -d '[:space:]')"
 
+# SHA-256 and full byte lengths pinned by the first read-only job
+# 38315908889, BEFORE any ENG-1c trained/heldout model run.
+# A remote Gutenberg content change is a fail-closed provenance drift.
+if [[ "$language" == "FR" ]]; then
+  expected_raw_sha='9ea7a8b127a9dfa36de0b0cf9c2e26293beea5c37a0fc988fb9308b63160f282'
+  expected_body_sha='24ebc9a0037fc57bf93bf3ac6788c5ca64a9a6bbaf92b9fdbdfe6ca0f4114dde'
+  expected_raw_bytes=784416
+  expected_body_bytes=747855
+else
+  expected_raw_sha='3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75'
+  expected_body_sha='e79303d04de9260489f9d5a2ad4aae5776680fcec484f2e732d6ded7411bf402'
+  expected_raw_bytes=772386
+  expected_body_bytes=737950
+fi
+if [[ "$raw_sha" != "$expected_raw_sha" ||
+      "$body_sha" != "$expected_body_sha" ||
+      "$raw_bytes" != "$expected_raw_bytes" ||
+      "$n" != "$expected_body_bytes" ]]; then
+  echo "ENG1C_PINNED_CORPUS_IDENTITY_DRIFT,ebook=$book" >&2
+  exit 1
+fi
+
 a=$((n * 8 / 10))
 b=$((n * 9 / 10))
 train=$a
