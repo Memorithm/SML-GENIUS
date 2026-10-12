@@ -638,18 +638,6 @@ struct FrozenStress {
     fitted: Frozen,
 }
 
-fn input_pair_differences(split: &LaneData) -> (u64, u64) {
-    let block = &split.blocks[0];
-    let mut first = 0u64;
-    let mut second = 0u64;
-    for t in 0..block.steps {
-        let at = t * INPUT_BITS;
-        first += u64::from((block.inputs[at + 1] ^ block.inputs[at + 2]).count_ones());
-        second += u64::from((block.inputs[at + 3] ^ block.inputs[at + 4]).count_ones());
-    }
-    (first, second)
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() > 2 {
