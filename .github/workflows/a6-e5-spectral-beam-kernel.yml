@@ -1,0 +1,44 @@
+name: A6-E5 partial Walsh residuals and heldout-MDL beam reference
+
+on:
+  pull_request:
+    branches:
+      - main
+      - research/a6-e5-spectral-beam-prereq
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e5-spectral-kernel-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-reference:
+    if: startsWith(github.head_ref, 'research/a6-e5-spectral-beam-kernel')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR HEAD read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict Rust formatting, compilation, lint and no-oracle unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --lib
+          cargo clippy --locked -p sml-core --lib -- -D warnings
+          cargo test --locked -p sml-core --lib anf_e5_spectral_beam -- --nocapture
