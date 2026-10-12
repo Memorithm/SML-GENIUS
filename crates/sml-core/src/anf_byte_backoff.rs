@@ -127,17 +127,17 @@ impl SparseByteBackoff {
             }
             for (depth, level) in levels.iter_mut().enumerate() {
                 let key = prefix(bits, depth);
-                if !level.contains_key(&key) {
-                    if contexts >= cfg.max_contexts {
-                        return Err(ByteBackoffError::ContextBudgetExceeded);
+                let counts = match level.entry(key) {
+                    std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        if contexts >= cfg.max_contexts {
+                            return Err(ByteBackoffError::ContextBudgetExceeded);
+                        }
+                        contexts += 1;
+                        entry.insert(ByteCounts::default())
                     }
-                    level.insert(key, ByteCounts::default());
-                    contexts += 1;
-                }
-                level
-                    .get_mut(&key)
-                    .expect("just checked/inserted TRAIN address")
-                    .observe(label)?;
+                };
+                counts.observe(label)?;
             }
         }
         Ok(Self {
