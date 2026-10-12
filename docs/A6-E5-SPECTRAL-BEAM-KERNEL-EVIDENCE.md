@@ -1,0 +1,17 @@
+# A6-E5-1 — Référence native Walsh→Möbius→Beam/MDL, sans corpus TEST
+
+**Statut : référence algébrique synthétique vérifiée, pas étude de qualité linguistique A6-E5.** Cette étape reprend les préenregistrements fusionnés avant le premier code : `docs/A6-E5-SPECTRAL-BEAM-PREREGISTRATION.md`, `docs/A6-E5-NUMERIC-FROZEN-BEFORE-CODE.md`, `docs/A6-E5-FLAUBERT-CORPUS-FROZEN.md`. Le troisième corpus français est SHA256 fixé ; **aucun programme de prédiction n'a encore lu son TEST**.
+
+La bibliothèque `crates/sml-core/src/anf_e5_spectral_beam.rs` est strictement **opt-in** et autonome sur CPU, sans dépendance d'exécution SciRust externe. Elle fournit :
+
+- un accumulateur streaming de corrélations résiduelles multiclasses 2..256 pour **≤96 masques de Walsh partiels**, **≤8192 observations**, sans allocation `2^32`, avec validation de la distribution fournie ;
+- un opérateur composite `AND` de 1..3 parités XOR, compilé par la vraie inversion de **Möbius GF(2)** sur au plus 12 variables physiques puis validé sur **toutes** les affectations dans le `WideAnfGate` existant. Rien n'est appelé « monôme ANF brut » alors que la porte est en réalité un ET de parités ;
+- une recherche par faisceau borné avec banc `TRAIN_fit` et banc **TRAIN_inner_VAL** transmis explicitement (pas de TEST dans l'API), top-W déterministe, critère de gain en `Σ ln(p_mix/p_NG)` **nats**, pénalité de complexité convertie **bits→nats via ln 2**, et refus explicite d'un candidat lorsque le gain net est négatif ;
+- la conservation de candidats d'étape singleton même avec gains négatifs afin que des interactions nécessaires ensemble ne disparaissent pas avant de pouvoir être évaluées ;
+- des budgets stricts de nombre de masques, taille du faisceau, profondeur, lignes et évaluations, ainsi que des tests négatifs empêchant les faux gains sous signal nul.
+
+**Contrôles GitHub-hosted.** Le workflow isolé `.github/workflows/a6-e5-spectral-beam-kernel.yml` sur Rust 1.89 inclut formatage, `cargo check --locked`, Clippy `-D warnings`, et les tests unitaires `anf_e5_spectral_beam`. [Run 38305696340](https://github.com/Memorithm/SML-GENIUS/actions/runs/38305696340) au code `a5919dacfc661efb97f72e428b4e0b264865ff16` a conclu **SUCCESS** après corrections séparées de rustfmt et du lint Clippy `filter_map_bool_then`; le contrôle CI général sera qualifié sur le SHA final contenant le présent rapport.
+
+**Limites non négociables :** la validation de provenance temporelle des probabilités NG hors-échantillon reste contractuelle pour le **caller** (la bibliothèque ne peut pas le prouver à partir des seuls nombres). Le score initial Walsh n'est qu'une heuristique, et la pénalité structurelle déclarée n'est pas un code MDL complet. La recherche renvoie **au plus une porte composite sélectionnée**, pas une banque de huit fonctions entraînée. Elle n'intègre pas encore l'arbitre contextuel optimisé par log-loss, le repli multinomial complet du PR #518, les mesures physiques de Pascal/ATLAS ni les comparaisons Flaubert. L'existence de cette référence ne constitue **aucune démonstration de supériorité** sur RAW32, NG4, E4 ni les Transformers.
+
+**Étape suivante distincte :** préparer l'arbitre log-loss sur prédictions strictement hors-échantillon, les ablations de BACKOFF et un banc réel 256 classes avec toutes les baselines appariées. Un seul TEST Flaubert gelé ne devra être exécuté qu'après ensemble de modèle et choix complet **immuable** au SHA final.
