@@ -1488,3 +1488,15 @@ Historical A5 **full-next-byte** score: Witten–Bell context4 **2.019 bits/byte
 5. Once model-level quality is demonstrated, compare resource-bounded flat/Pascal SIMD/WGPU kernels from SciRust, FLAT-ATTENTION and NNIS on the actual model workload, preserving SML's hardware-sovereignty and self-sufficient model/harness separation.
 
 The existing A6-I3/I4/I5 and A6-I6 (#508) guards are useful bounded negative controls, not a logical progression toward 25B without a generalization-positive model.
+
+## A6-C12g / A6-C12h — transition spectrale falsifiable, pas un successeur du test réel A6-E1 (2026-10-12)
+
+**État vérifié :** [#510](https://github.com/Memorithm/SML-GENIUS/pull/510) C12g en DRAFT, et [#511](https://github.com/Memorithm/SML-GENIUS/pull/511) C12h en DRAFT empilée, toutes deux sans mesure qualifiée : les workflows `ubuntu-24.04` marquent `failure` à **zéro étape**, sans runner. Consigner les diagnostics sans attribuer ce défaut à Rust ni à une hypothèse de facturation non démontrée ; aucune CI verte ni merge à annoncer.
+
+**Objectif et protocole maintenus :** C12g 1232 politiques, deux enseignants, 128 sources, sept budgets 512..32768 bits et cinq taux de corruption des étiquettes. C12h, préenregistrée au commit `62da8067f0442705dac143647704162f98d2d075` **avant le premier code**, mesure une extension *distincte* de 1872 politiques : budgets de 64..32768 bits, η=0/0.2/0.3/0.4, 8 graines uniformes et 8 graines supplémentaires dans trois fenêtres par scénario déterminées théoriquement. Le bruit observé du proxy XOR de deux étiquettes vaut `2η(1−η)`, non `η`. Un benchmark dédié, une CI dédiée et des tests de petits budgets ont été proposés ; leurs résultats sont **inconnus tant qu'ils n'ont pas été exécutés**.
+
+**Étapes pour transformer des PRs documentées en résultat de science :**
+1. Élucider administrativement le refus de runners GitHub-hosted ; restaurer la vraie exécution à partir du même SHA ; ne pas masquer le blocage via un runner privé.
+2. Exécuter `fmt`, `check`, Clippy, tests ; réparer **uniquement** les erreurs de code éventuelles sans changer le protocole gelé. Confirmer 1232 puis 1872 politiques distinctes, leurs TEST et lignes SUMMARY/THRESHOLD au SHA final ; archiver les traces.
+3. Rapporter taux de succès strict natif TEST, rank vrai, marge Walsh vraie − meilleur faux, amplitudes rapportées à `sqrt(2ln(2M))` (référence heuristique, pas p-value) et CPU médian. Montrer toutes les cellules et les limites Wilson, y compris les prédictions de seuil contredites et le AND 40% au-delà des 32768 bits.
+4. Valider à part l'usage sur le **vrai** corpus A6-E1 avec un modèle ANF **probabiliste et calibré** ; sur ce corpus le comité existant perd contre ngram4 et reste STOP. Aucune promotion à SML-2/25B ni annonce de performance sans ce garde indépendant de qualité réelle.
