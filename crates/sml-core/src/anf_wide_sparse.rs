@@ -663,6 +663,31 @@ mod tests {
     }
 
     #[test]
+    fn cached_global_bound_preserves_source_validation_for_noncontiguous_inputs() {
+        let gate = WideAnfGate::from_monomials(
+            vec![2, 99],
+            vec![vec![0], vec![1]],
+            100,
+            limits(),
+        )
+        .unwrap();
+        let mut scratch = vec![0u64; gate.scratch_words()];
+        let short = vec![u64::MAX; 99];
+        assert_eq!(
+            gate.evaluate_lanes(&short, &mut scratch),
+            Err(WideAnfError::SourceTooShort)
+        );
+        assert_eq!(
+            gate.evaluate_scalar(&vec![true; 99]),
+            Err(WideAnfError::SourceTooShort)
+        );
+        let mut exact = vec![0u64; 100];
+        exact[2] = u64::MAX;
+        exact[99] = 0;
+        assert_eq!(gate.evaluate_lanes(&exact, &mut scratch), Ok(u64::MAX));
+    }
+
+    #[test]
     fn native_recurrent_network_bridge_is_bit_exact_at_k8_n128() {
         for seed in [11, 29] {
             let local = LocalAnfNetwork::random(
