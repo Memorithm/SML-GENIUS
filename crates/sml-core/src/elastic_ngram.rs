@@ -135,8 +135,7 @@ impl ElasticNGram {
         {
             return Err(ElasticNGramError::InvalidLimits);
         }
-        let layout =
-            ChunkLayout::new(bytes.len()).map_err(|_| ElasticNGramError::InvalidCorpus)?;
+        let layout = ChunkLayout::new(bytes.len()).map_err(|_| ElasticNGramError::InvalidCorpus)?;
         let total_events = LANES
             .checked_mul(layout.chunk - 1)
             .ok_or(ElasticNGramError::TooManyEvents)?;
@@ -179,8 +178,7 @@ impl ElasticNGram {
                 training_events: total_events,
                 stored_contexts,
                 stored_follower_pairs: stored_pairs,
-                counter_value_bytes: (stored_contexts + stored_pairs)
-                    * std::mem::size_of::<u32>(),
+                counter_value_bytes: (stored_contexts + stored_pairs) * std::mem::size_of::<u32>(),
                 logical_key_bytes: stored_contexts * std::mem::size_of::<u64>()
                     + stored_pairs * std::mem::size_of::<u8>(),
             },
@@ -250,16 +248,11 @@ impl ElasticNGram {
     }
 
     /// Frozen scoring on independent test data. No labels enter the model.
-    pub fn score(
-        &self,
-        bytes: &[u8],
-        query_order: usize,
-    ) -> Result<ByteScore, ElasticNGramError> {
+    pub fn score(&self, bytes: &[u8], query_order: usize) -> Result<ByteScore, ElasticNGramError> {
         if query_order > self.max_order {
             return Err(ElasticNGramError::InvalidDepth);
         }
-        let layout =
-            ChunkLayout::new(bytes.len()).map_err(|_| ElasticNGramError::InvalidCorpus)?;
+        let layout = ChunkLayout::new(bytes.len()).map_err(|_| ElasticNGramError::InvalidCorpus)?;
         let (mut bits, mut correct, mut tokens) = (0.0f64, 0u64, 0u64);
         for lane in 0..LANES {
             let chunk = &bytes[lane * layout.chunk..(lane + 1) * layout.chunk];
@@ -267,8 +260,13 @@ impl ElasticNGram {
                 let probs = self.distribution(&chunk[..t], query_order)?;
                 let y = usize::from(chunk[t]);
                 bits -= probs[y].log2();
-                let best = (0..256)
-                    .fold(0, |b, candidate| if probs[candidate] > probs[b] { candidate } else { b });
+                let best = (0..256).fold(0, |b, candidate| {
+                    if probs[candidate] > probs[b] {
+                        candidate
+                    } else {
+                        b
+                    }
+                });
                 correct += u64::from(best == y);
                 tokens += 1;
             }
@@ -288,8 +286,9 @@ mod tests {
 
     fn fixture() -> Vec<u8> {
         (0..LANES)
-            .flat_map(|lane| (0..40usize)
-                .map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11) % 23) as u8))
+            .flat_map(|lane| {
+                (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11) % 23) as u8)
+            })
             .collect()
     }
 
@@ -315,7 +314,8 @@ mod tests {
                     reference.distribution(&chunk[..t], &mut expected);
                     for y in 0..256 {
                         assert_eq!(
-                            actual[y].to_bits(), expected[y].to_bits(),
+                            actual[y].to_bits(),
+                            expected[y].to_bits(),
                             "depth={depth}, lane={lane}, t={t}, byte={y}"
                         );
                     }
@@ -360,15 +360,24 @@ mod tests {
     fn immutable_reproducible_training_and_accounting() {
         let bytes = fixture();
         let model = ElasticNGram::train(&bytes, ElasticNGramLimits::default()).unwrap();
-        assert_eq!(model, ElasticNGram::train(&bytes, ElasticNGramLimits::default()).unwrap());
+        assert_eq!(
+            model,
+            ElasticNGram::train(&bytes, ElasticNGramLimits::default()).unwrap()
+        );
         let saved = model.clone();
         assert!(model.score(&bytes, 2).unwrap().bits_per_byte.is_finite());
         assert_eq!(model, saved);
         let a = model.accounting();
         assert_eq!(model.contexts_per_order().len(), 5);
         assert!(a.stored_follower_pairs >= a.stored_contexts);
-        assert_eq!(a.counter_value_bytes, 4 * (a.stored_contexts + a.stored_follower_pairs));
-        assert_eq!(a.logical_key_bytes, 8 * a.stored_contexts + a.stored_follower_pairs);
+        assert_eq!(
+            a.counter_value_bytes,
+            4 * (a.stored_contexts + a.stored_follower_pairs)
+        );
+        assert_eq!(
+            a.logical_key_bytes,
+            8 * a.stored_contexts + a.stored_follower_pairs
+        );
     }
 
     #[test]
@@ -376,13 +385,22 @@ mod tests {
         let bytes = fixture();
         let mut limits = ElasticNGramLimits::default();
         limits.max_order = 8;
-        assert_eq!(ElasticNGram::train(&bytes, limits), Err(ElasticNGramError::InvalidLimits));
+        assert_eq!(
+            ElasticNGram::train(&bytes, limits),
+            Err(ElasticNGramError::InvalidLimits)
+        );
         limits = ElasticNGramLimits::default();
         limits.max_events = 1;
-        assert_eq!(ElasticNGram::train(&bytes, limits), Err(ElasticNGramError::TooManyEvents));
+        assert_eq!(
+            ElasticNGram::train(&bytes, limits),
+            Err(ElasticNGramError::TooManyEvents)
+        );
         limits = ElasticNGramLimits::default();
         limits.max_contexts = 1;
-        assert_eq!(ElasticNGram::train(&bytes, limits), Err(ElasticNGramError::TooManyContexts));
+        assert_eq!(
+            ElasticNGram::train(&bytes, limits),
+            Err(ElasticNGramError::TooManyContexts)
+        );
         limits = ElasticNGramLimits::default();
         limits.max_follower_pairs = 1;
         assert_eq!(
