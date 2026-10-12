@@ -312,15 +312,10 @@ mod tests {
     #[test]
     fn distinct_learned_sparse_input_supports_share_a_global_source() {
         let limits = limits();
-        let low = WideAnfGate::from_monomials(vec![1, 3], vec![vec![0, 1]], 16, limits)
-            .unwrap();
-        let high = WideAnfGate::from_monomials(
-            vec![0, 2, 5],
-            vec![vec![0, 1], vec![2]],
-            16,
-            limits,
-        )
-        .unwrap();
+        let low = WideAnfGate::from_monomials(vec![1, 3], vec![vec![0, 1]], 16, limits).unwrap();
+        let high =
+            WideAnfGate::from_monomials(vec![0, 2, 5], vec![vec![0, 1], vec![2]], 16, limits)
+                .unwrap();
         assert_eq!(
             PassiveCommittee::new(
                 vec![low.clone(), high.clone()],
@@ -347,8 +342,14 @@ mod tests {
         committee.observe(&input, true).unwrap();
         let guess = committee.predict(&input, 0.5).unwrap();
         assert_eq!(guess.candidate_bits.len(), 2);
-        assert_eq!(guess.candidate_bits[0], low.evaluate_scalar(&input).unwrap());
-        assert_eq!(guess.candidate_bits[1], high.evaluate_scalar(&input).unwrap());
+        assert_eq!(
+            guess.candidate_bits[0],
+            low.evaluate_scalar(&input).unwrap()
+        );
+        assert_eq!(
+            guess.candidate_bits[1],
+            high.evaluate_scalar(&input).unwrap()
+        );
         assert_eq!(
             PassiveCommittee::new_with_source_width(
                 vec![low, high],
