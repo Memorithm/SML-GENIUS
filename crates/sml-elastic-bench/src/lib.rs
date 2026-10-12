@@ -13,6 +13,8 @@
 //! Frozen protocol: `docs/EL-NG1-ELASTIC-NGRAM-PREREGISTRATION.md`. TEST is
 //! never read: [`frozen_splits`] drops it at load.
 
+pub mod eng2_trie_gate;
+
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::Write as _;
