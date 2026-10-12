@@ -1,0 +1,43 @@
+name: A6-E4 bounded joint ANF subset selection
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e4-joint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  joint-engine:
+    if: startsWith(github.head_ref, 'research/a6-e4-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact untrusted head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Use pinned Rust 1.89 with rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Exact head, fmt, check, strict Clippy and synthetic feature-selection oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_joint_feature_selection -- --nocapture
