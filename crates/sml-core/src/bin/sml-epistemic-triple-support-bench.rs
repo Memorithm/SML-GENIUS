@@ -184,12 +184,8 @@ fn fit_one(
 ) -> Result<Frozen, Box<dyn Error>> {
     let r = roles(width, seed_id);
     let truth = teacher(width, &r, scenario);
-    let mut committee = PassiveCommittee::new(
-        bank(width, &r),
-        vec![4.0, 2.0, 2.0, 1.0],
-        1.0 / 16.0,
-        TRAIN,
-    )?;
+    let mut committee =
+        PassiveCommittee::new(bank(width, &r), vec![4.0, 2.0, 2.0, 1.0], 1.0 / 16.0, TRAIN)?;
     let mut pair = AnfPairSupportGuard::new(width, TRAIN, 600_000, 8192)?;
     let mut triple = AnfTripleSupportGuard::new(width, TRAIN, MAX_TRIPLES, MAX_MISSING)?;
     let mut rng = SplitMix64::new(seed(width, seed_id, scenario.family(), TRAIN_SALT));
@@ -221,7 +217,9 @@ fn fit_one(
     pair.seal()?;
     triple.seal()?;
     if !committee.bank_adequate(MAX_MISMATCH)? {
-        return Err("TRAIN committee rejects supplied h0 although censored teacher equals h0".into());
+        return Err(
+            "TRAIN committee rejects supplied h0 although censored teacher equals h0".into(),
+        );
     }
     println!(
         "A6_I5_FROZEN,width={},seed={},scenario={},noisy={},train={},flips={},missing_pairs={},missing_triples={},triple_payload_bytes={}",
@@ -268,18 +266,14 @@ fn test_one(frozen: &Frozen) -> Result<Metrics, Box<dyn Error>> {
         );
         let label = frozen.teacher.evaluate_scalar(&input)?;
         let is_trigger = step % 2 == 1;
-        let pair = frozen.pair.predict_guarded(
-            &frozen.committee,
-            &input,
-            CONFIDENCE,
-            MAX_MISMATCH,
-        )?;
-        let triple = frozen.triple.predict_guarded(
-            &frozen.committee,
-            &input,
-            CONFIDENCE,
-            MAX_MISMATCH,
-        )?;
+        let pair =
+            frozen
+                .pair
+                .predict_guarded(&frozen.committee, &input, CONFIDENCE, MAX_MISMATCH)?;
+        let triple =
+            frozen
+                .triple
+                .predict_guarded(&frozen.committee, &input, CONFIDENCE, MAX_MISMATCH)?;
         if triple.committee.selective_prediction != pair.committee.selective_prediction {
             return Err("pair/triple baseline committees diverged".into());
         }
