@@ -144,6 +144,6 @@ awk -F, '
         }
       }
     }
-    printf "ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=%.6f,p95_trie_over_long=%.6f,rounds=%d\\n", memory[3], latency[3], n
+    printf "ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=%.6f,p95_trie_over_long=%.6f,rounds=%d\n", memory[3], latency[3], n
   }
 ' "$evidence/rounds.csv" | tee -a "$evidence/decision.txt"
