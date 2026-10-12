@@ -1,0 +1,57 @@
+name: A6-I5 exact strength-3 support and mandatory fourth-order blind spot
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i5-triple-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  epistemic-triple-support:
+    if: startsWith(github.head_ref, 'research/a6-i5-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR commit without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict formatting compile lint and negative scientific unit controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_triple_support -- --nocapture
+          cargo test --locked -p sml-core --bin sml-epistemic-triple-support-bench -- --nocapture
+      - name: Reproduce 90 TRAIN fits and mandatory 46080 held-out TEST results
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I5_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-epistemic-triple-support-bench 2>&1 | tee "$RUNNER_TEMP/a6-i5.log"
+          grep -q '^A6_I5_ALL_FROZEN,policies=90,widths=5,regimes=3,train=512$' "$RUNNER_TEMP/a6-i5.log"
+          test "$(grep -c '^A6_I5_FROZEN,' "$RUNNER_TEMP/a6-i5.log")" -eq 90
+          test "$(grep -c '^A6_I5_TEST,' "$RUNNER_TEMP/a6-i5.log")" -eq 90
+          test "$(grep -c '^A6_I5_SUMMARY,' "$RUNNER_TEMP/a6-i5.log")" -eq 3
+          grep -q '^A6_I5_SUMMARY,scenario=TRIPLE_ABSENT,tests=15360,committee_accepted=15360,committee_errors=7680,pair_accepted=15360,pair_errors=7680,triple_accepted=7680,triple_errors=0,novel_pairs=0,novel_triples=7680,false_abstentions=0,triggers=7680$' "$RUNNER_TEMP/a6-i5.log"
+          grep -q '^A6_I5_SUMMARY,scenario=TRIPLE_INCLUDED,tests=15360,committee_accepted=15360,committee_errors=0,pair_accepted=15360,pair_errors=0,triple_accepted=7680,triple_errors=0,novel_pairs=0,novel_triples=7680,false_abstentions=7680,triggers=7680$' "$RUNNER_TEMP/a6-i5.log"
+          grep -q '^A6_I5_SUMMARY,scenario=QUAD_ABSENT,tests=15360,committee_accepted=15360,committee_errors=7680,pair_accepted=15360,pair_errors=7680,triple_accepted=15360,triple_errors=7680,novel_pairs=0,novel_triples=0,false_abstentions=0,triggers=7680$' "$RUNNER_TEMP/a6-i5.log"
+          grep -q '^A6_I5_COMPLETE,policies=90,tests=46080,triple_absent_protected=7680,triple_included_false_abstentions=7680,quad_confident_errors=7680,oversize_rejected=true,oracle=PASS$' "$RUNNER_TEMP/a6-i5.log"
