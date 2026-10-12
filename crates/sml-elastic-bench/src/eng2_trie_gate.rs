@@ -223,10 +223,10 @@ impl TrainingSnapshot {
         requested_mechanism: TransitionMechanism,
         epoch: u64,
     ) -> Result<InspectionEvidence, AdmissionError> {
-        if source_bytes != self.train {
+        if source_bytes != self.train.as_slice() {
             return Err(AdmissionError::WrongTrainSource);
         }
-        if probe == self.train {
+        if probe == self.train.as_slice() {
             return Err(AdmissionError::SameDataNotIndependent);
         }
         let probe_events =
