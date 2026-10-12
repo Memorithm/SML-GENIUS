@@ -1143,3 +1143,45 @@ SML-25B model quality.
 Following merged #506 (A6-I4), the opt-in `anf_triple_support::AnfTripleSupportGuard` examines every Boolean pattern of every three-coordinate input subset, under explicit combinatorial and retained-record budgets. Read the [protocol frozen before implementation](docs/A6-I5-TRIPLE-COVERAGE-PREREGISTRATION.md) and the [qualified positive and mandatory negative results](docs/RESULTS-A6-I5-TRIPLE-COVERAGE.md). The first native run verified 90 TRAIN-frozen committees and 46,080 OOD TEST decisions: in the hidden-triple scenario, the pair guard accepted 15,360 / 7,680 erroneous decisions while the triple guard accepted 7,680 / 0 erroneous decisions; with the true candidate present, the triple guard unnecessarily abstained from 7,680 correct decisions. Crucially, on a hidden degree-four interaction whose every triple pattern was seen during TRAIN, the triple guard accepted 15,360 decisions with 7,680 confident errors and zero triple-novelty alarms.
 
 This is an input-coverage gate, not coefficient reconstruction, epistemic correctness, or a general confidence certificate. Exact global strength-three construction refuses k256 or k1024 under the frozen 350,000-triple budget (k128 uses 341,376). Any next candidate must use explicitly budgeted feature/interaction selection and compare the cost of abstention against the cost of additional informative observations, with higher-order negative controls and untouched TEST. The bank remains supplied, not autonomously enriched; no language/SML-25B inference quality or GPU speed has been demonstrated.
+
+## A6-I6 fourth-order watched interaction guard — 2026-10-12
+
+Read the [frozen preregistration](docs/A6-I6-BOUNDED-FOURTH-SUPPORT-PREREGISTRATION.md)
+and [fully auditable results](docs/RESULTS-A6-I6-BOUNDED-FOURTH-SUPPORT.md)
+before making confidence or OOD guarantees for the native ANF committee.
+
+After I3's per-input marginal support, I4's exact pairs and I5's
+exhaustive triplets, the new opt-in `anf_budgeted_four_support`
+provides fourth-order **watchlist support**, tracking precisely
+the sixteen input assignments for **only externally declared**
+tuples, without enumerating `C(k,4)`. At k1024 an exhaustive
+fourth-order guarantee would entail 45,545,029,376 tuples.
+A watchlist may be useful when a relevant interaction subsystem
+was known BEFORE seeing the blind teacher: it is a structural
+prior, NOT newly inferred hidden teacher coefficients.
+
+The A6-I6 native experiment used 7 widths k8..k1024, three
+seeds, clean/noisy TRAIN labels, 512 passive TRAIN contexts and
+512 independent heldout TEST contexts over four regimes:
+**168 frozen native PassiveCommittee + watch guard policies**,
+86,016 OOD TEST decisions. Watch for a missing fourth-order
+teacher term caught **10,752 erroneous predictions**, leaving
+10,752 accepted and zero errors; with teacher genuinely in-bank
+it needlessly abstained **10,752 correct predictions**.
+**Mandatory adversarial failures:** when the hidden teacher
+instead used an **UNWATCHED fourth- or fifth-order ANF term**,
+the guard retained 21,504 high-confidence predictions and
+made **10,752 errors** in EACH scenario, with no novel public
+watchlist patterns. Every regime's hidden teacher is exactly
+indistinguishable from h0 on the censored TRAIN inputs.
+
+Memory metric: one watched tuple stores 40B of logical payload
+on tested x86_64, NOT total committee model RAM or coverage
+of all fourth-order combinations. The watchlist is capped at
+16 externally declared tuples and the observed sample count
+at 512. No benchmark here establishes arbitrary absent-model
+detection, recovered ANF coefficients, production SML runtime,
+online active feedback, GPU throughput or SML-25B quality.
+Next scientific gate: intervention/feedback under delayed
+teacher access with an explicit question-selection budget,
+plus mandatory inaccessible-interaction counterexamples.
