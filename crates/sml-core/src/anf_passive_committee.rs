@@ -36,6 +36,9 @@ impl std::error::Error for PassiveCommitteeError {}
 #[derive(Debug, Clone, PartialEq)]
 pub struct PassiveCommittee {
     candidates: Vec<WideAnfGate>,
+    /// Shared GLOBAL source length, allowing sparse candidate gates with
+    /// independently learned input supports only via new_with_source_width.
+    source_width: usize,
     logweights: Vec<f64>,
     prediction_signatures: Vec<Vec<bool>>,
     mismatches: Vec<usize>,
@@ -73,6 +76,38 @@ impl PassiveCommittee {
         if k == 0 || candidates.iter().any(|c| c.fan_in() != k) {
             return Err(PassiveCommitteeError::Width);
         }
+        Self::new_with_source_width(
+            candidates,
+            prior_weights,
+            assumed_label_noise,
+            max_samples,
+            k,
+        )
+    }
+
+    /// Opt-in committee for native sparse gates over DIFFERENT subsets of
+    /// one global source vector. Unlike new(), gate fan-ins may differ;
+    /// all referenced global positions must be strictly within source_width.
+    /// This does not discover supports: each gate was independently trained.
+    pub fn new_with_source_width(
+        candidates: Vec<WideAnfGate>,
+        prior_weights: Vec<f64>,
+        assumed_label_noise: f64,
+        max_samples: usize,
+        source_width: usize,
+    ) -> Result<Self, PassiveCommitteeError> {
+        if !(2..=8).contains(&candidates.len()) {
+            return Err(PassiveCommitteeError::CandidateCount);
+        }
+        if source_width == 0
+            || candidates.iter().any(|gate| {
+                gate.input_positions()
+                    .iter()
+                    .any(|&position| position >= source_width)
+            })
+        {
+            return Err(PassiveCommitteeError::Width);
+        }
         for (i, candidate) in candidates.iter().enumerate() {
             if candidates[..i].contains(candidate) {
                 return Err(PassiveCommitteeError::DuplicateCandidate);
@@ -99,6 +134,7 @@ impl PassiveCommittee {
         let count = candidates.len();
         Ok(Self {
             candidates,
+            source_width,
             logweights: prior_weights.iter().map(|p| (p / sum).ln()).collect(),
             prediction_signatures: vec![Vec::new(); count],
             mismatches: vec![0usize; count],
@@ -120,7 +156,7 @@ impl PassiveCommittee {
 
     #[must_use]
     pub fn fan_in(&self) -> usize {
-        self.candidates[0].fan_in()
+        self.source_width
     }
 
     /// TRAIN-only update: evaluate every candidate before changing state.
@@ -271,6 +307,59 @@ mod tests {
     }
     fn model() -> PassiveCommittee {
         PassiveCommittee::new(candidates(), vec![4.0, 2.0, 2.0, 1.0], 1.0 / 16.0, 512).unwrap()
+    }
+
+    #[test]
+    fn distinct_learned_sparse_input_supports_share_a_global_source() {
+        let limits = limits();
+        let low = WideAnfGate::from_monomials(vec![1, 3], vec![vec![0, 1]], 16, limits)
+            .unwrap();
+        let high = WideAnfGate::from_monomials(
+            vec![0, 2, 5],
+            vec![vec![0, 1], vec![2]],
+            16,
+            limits,
+        )
+        .unwrap();
+        assert_eq!(
+            PassiveCommittee::new(
+                vec![low.clone(), high.clone()],
+                vec![1.0, 1.0],
+                1.0 / 16.0,
+                8
+            )
+            .unwrap_err(),
+            PassiveCommitteeError::Width
+        );
+        let mut committee = PassiveCommittee::new_with_source_width(
+            vec![low.clone(), high.clone()],
+            vec![1.0, 1.0],
+            1.0 / 16.0,
+            8,
+            16,
+        )
+        .unwrap();
+        assert_eq!(committee.fan_in(), 16);
+        let mut input = [false; 16];
+        input[1] = true;
+        input[3] = true;
+        input[5] = true;
+        committee.observe(&input, true).unwrap();
+        let guess = committee.predict(&input, 0.5).unwrap();
+        assert_eq!(guess.candidate_bits.len(), 2);
+        assert_eq!(guess.candidate_bits[0], low.evaluate_scalar(&input).unwrap());
+        assert_eq!(guess.candidate_bits[1], high.evaluate_scalar(&input).unwrap());
+        assert_eq!(
+            PassiveCommittee::new_with_source_width(
+                vec![low, high],
+                vec![1.0, 1.0],
+                1.0 / 16.0,
+                8,
+                5
+            )
+            .unwrap_err(),
+            PassiveCommitteeError::Width
+        );
     }
 
     #[test]
