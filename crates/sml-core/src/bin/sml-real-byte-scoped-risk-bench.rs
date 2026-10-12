@@ -5,9 +5,7 @@
 use sml_core::{
     anf_char::{CharSplits, ChunkLayout, LANES},
     anf_passive_committee::PassiveCommittee,
-    anf_scoped_risk::{
-        competing_support, DegreeDesignRank, Hamming16Guard, ScopedPatternGuard,
-    },
+    anf_scoped_risk::{competing_support, DegreeDesignRank, Hamming16Guard, ScopedPatternGuard},
     anf_wide_sparse::{WideAnfGate, WideAnfLimits},
     char_baselines::NGramModel,
 };
@@ -139,9 +137,7 @@ fn greedy_supports(rows: &[TrainingRow]) -> Vec<Vec<usize>> {
             let mut trial = chosen.clone();
             trial.push(candidate);
             let loss = loo_bits(rows, &trial);
-            if loss < best.0 - 1.0e-12
-                || ((loss - best.0).abs() <= 1.0e-12 && candidate < best.1)
-            {
+            if loss < best.0 - 1.0e-12 || ((loss - best.0).abs() <= 1.0e-12 && candidate < best.1) {
                 best = (loss, candidate);
             }
         }
@@ -157,18 +153,12 @@ fn greedy_supports(rows: &[TrainingRow]) -> Vec<Vec<usize>> {
 }
 
 /// Convert a TRAIN majority table to a genuine GF(2) ANF by Möbius inversion.
-fn gate_from_counts(
-    support: &[usize],
-    counts: &[[u32; 2]],
-) -> Result<WideAnfGate, Box<dyn Error>> {
+fn gate_from_counts(support: &[usize], counts: &[[u32; 2]]) -> Result<WideAnfGate, Box<dyn Error>> {
     let k = support.len();
     if counts.len() != 1usize << k {
         return Err("count table does not match selected support".into());
     }
-    let mut coefficients = counts
-        .iter()
-        .map(|c| c[1] > c[0])
-        .collect::<Vec<_>>();
+    let mut coefficients = counts.iter().map(|c| c[1] > c[0]).collect::<Vec<_>>();
     let truth = coefficients.clone();
     for bit in 0..k {
         for mask in 0..(1 << k) {
@@ -553,10 +543,7 @@ mod tests {
             for (i, &position) in support.iter().enumerate() {
                 bits[position] = mask & (1 << i) != 0;
             }
-            assert_eq!(
-                gate.evaluate_scalar(&bits).unwrap(),
-                mask.count_ones() > 1
-            );
+            assert_eq!(gate.evaluate_scalar(&bits).unwrap(), mask.count_ones() > 1);
         }
     }
 
