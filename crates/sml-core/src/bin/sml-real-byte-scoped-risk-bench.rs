@@ -381,11 +381,12 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     let training = collect_rows(&splits.train)?;
     let gates = train_bank(&training)?;
     let positions = competing_support(&gates, 16)?;
-    let mut committee = PassiveCommittee::new(
+    let mut committee = PassiveCommittee::new_with_source_width(
         gates,
         vec![4.0, 2.0, 2.0, 1.0],
         1.0 / 16.0,
         training.len(),
+        16,
     )?;
     let mut pairs = ScopedPatternGuard::new(16, &positions, 2, training.len(), 1024)?;
     let mut triples = ScopedPatternGuard::new(16, &positions, 3, training.len(), 1024)?;
