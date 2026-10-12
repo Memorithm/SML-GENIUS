@@ -592,8 +592,10 @@ mod tests {
         assert!(sparse.scratch_words() < dense.scratch_words());
         let zero = WideAnfGate::from_monomials(vec![0], vec![], 1, limits()).unwrap();
         let one = WideAnfGate::from_monomials(vec![0], vec![vec![]], 1, limits()).unwrap();
-        assert_eq!(zero.evaluate_lanes(&[u64::MAX], &mut [0; 1]), Ok(0));
-        assert_eq!(one.evaluate_lanes(&[0], &mut [0; 1]), Ok(u64::MAX));
+        let mut zero_scratch = vec![0u64; zero.scratch_words()];
+        let mut one_scratch = vec![0u64; one.scratch_words()];
+        assert_eq!(zero.evaluate_lanes(&[u64::MAX], &mut zero_scratch), Ok(0));
+        assert_eq!(one.evaluate_lanes(&[0], &mut one_scratch), Ok(u64::MAX));
     }
 
     #[test]
