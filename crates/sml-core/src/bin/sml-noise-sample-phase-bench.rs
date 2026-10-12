@@ -643,7 +643,7 @@ fn freeze(
         ms, mf, mt
     );
     Ok(Frozen {
-        task, rate, seed: index, words, method, fit, proposed, exact,
+        task, rate, seed: index, words, method, fit: first_fit, proposed, exact,
         median_screen_us: ms, median_factor_us: mf, median_total_us: mt,
     })
 }
