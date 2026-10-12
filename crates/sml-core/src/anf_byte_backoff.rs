@@ -105,10 +105,7 @@ pub struct SparseByteBackoff {
 }
 
 impl SparseByteBackoff {
-    pub fn fit(
-        train: &[(u64, u8)],
-        cfg: ByteBackoffConfig,
-    ) -> Result<Self, ByteBackoffError> {
+    pub fn fit(train: &[(u64, u8)], cfg: ByteBackoffConfig) -> Result<Self, ByteBackoffError> {
         if cfg.width > MAX_BACKOFF_WIDTH {
             return Err(ByteBackoffError::InvalidWidth);
         }
@@ -154,10 +151,7 @@ impl SparseByteBackoff {
     /// All 256 next-byte class probabilities, including never-seen signatures.
     /// Start from uniform and apply Witten-Bell at each observed prefix:
     /// P_d(y)=[count_d(y)+T_d*P_(d-1)(y)]/[n_d+T_d].
-    pub fn distribution(
-        &self,
-        signature: u64,
-    ) -> Result<[f64; BYTE_CLASSES], ByteBackoffError> {
+    pub fn distribution(&self, signature: u64) -> Result<[f64; BYTE_CLASSES], ByteBackoffError> {
         if !valid(signature, self.width) {
             return Err(ByteBackoffError::SignatureOutsideDomain);
         }
