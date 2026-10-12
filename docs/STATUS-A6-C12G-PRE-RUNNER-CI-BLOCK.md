@@ -23,6 +23,10 @@ L'API de téléchargement des logs pour ces jobs retourne `HTTP 404 BlobNotFound
 
 Un workflow transitoire `contents:write` avait été ajouté pour tenter un rustfmt automatique, mais n'a **jamais démarré** et a été **supprimé** du contenu final de la branche au commit `b3578628a17f38aad4ad57550143d91174a694f5`. Le workflow scientifique restant a les seuls droits `contents:read`.
 
+## Nouvelle vérification / deuxième tentative
+
+Sur le SHA documentaire final `f5fefc6b0d00b6600eb6267cbda661301c4e368e`, [CI 38284481784](https://github.com/Memorithm/SML-GENIUS/actions/runs/38284481784) et [banc A6-C12g 38284481727](https://github.com/Memorithm/SML-GENIUS/actions/runs/38284481727) échouent également sans étapes (`steps:null`), y compris les trois copies du job scientifique. Un **rerun explicite des jobs en échec** sur 38284481727 a été accepté par l'API GitHub, puis s'est terminé avec `run_attempt=2`, `conclusion=failure`, encore `steps:null` sur les trois jobs. Le blocage est ainsi reproduit sans modification du code. Aucun résultat/erreur Rust n'est disponible. La PR reste en draft et aucun merge n'est autorisé.
+
 ## Garde avant merge
 
 Maintenir la PR en **draft**. Lorsque l'exécution des GitHub-hosted runners redevient possible, demander le contrôle format/check/Clippy/tests puis le banc réel sur les trois runs, vérifier **1232 FROZEN/1232 TEST/154 SUMMARY/22 THRESHOLD par runner** et **80 TEST distincts appariés**, publier les résultats et marges complètes y compris les échecs et intervalle Wilson. Ne pas modifier les taux, budgets, graines, critères de récupération ou Sketch/ANF sur la base des performances de TEST. Ne pas basculer sur un runner privé RemoteOps pour contourner ce blocage du protocole.
