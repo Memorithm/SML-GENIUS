@@ -9,7 +9,7 @@ use sml_core::{
     anf_wide_overlap_learn::{
         fit_overlap_sparse, OverlapFit, OverlapLearnError, OverlapLearnLimits,
     },
-    anf_wide_sparse::{WideAnfBackend, WideAnfGate, WideAnfLimits},
+    anf_wide_sparse::{WideAnfGate, WideAnfLimits},
     mor::MorDecision,
     pvp6_sbg::{SbgCoordinate, SbgField},
     semantic::SemanticState,
@@ -230,18 +230,13 @@ fn negative_control(width: usize) -> Result<bool, Box<dyn Error>> {
     extra.sort_unstable();
     terms.push(extra);
     let original = teacher(width, terms.clone())?;
-    let mut actual_flips = 0usize;
     let fit = fit_overlap_sparse(
         width,
         1,
         seed(width, family, 0, PROPOSE_SALT),
         learner_limits(),
         gate_limits(),
-        |input| {
-            let val = original.evaluate_scalar(input)?;
-            let _ = &mut actual_flips;
-            Ok(val)
-        },
+        |input| original.evaluate_scalar(input).map_err(Into::into),
     );
     match fit {
         Err(error) => {
