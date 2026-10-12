@@ -1,0 +1,58 @@
+name: A6-I4 pairwise OOD support and mandatory triple blind spot
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i4-pair-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  epistemic-pair-support:
+    if: startsWith(github.head_ref, 'research/a6-i4-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA without retained credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Rust format check strict lint and explicit triple-negative unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_pair_support -- --nocapture
+          cargo test --locked -p sml-core --bin sml-epistemic-pair-support-bench -- --nocapture
+      - name: Execute 252 frozen histories, 516096 OOD tests, 6 regimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I4_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-epistemic-pair-support-bench 2>&1 | tee "$RUNNER_TEMP/a6-i4.log"
+          grep -q '^A6_I4_ALL_FROZEN,policies=252,paired_structures=126$' "$RUNNER_TEMP/a6-i4.log"
+          test "$(grep -c '^A6_I4_FROZEN,' "$RUNNER_TEMP/a6-i4.log")" -eq 252
+          test "$(grep -c '^A6_I4_TEST,' "$RUNNER_TEMP/a6-i4.log")" -eq 252
+          test "$(grep -c '^A6_I4_SUMMARY,' "$RUNNER_TEMP/a6-i4.log")" -eq 6
+          test "$(grep '^A6_I4_TEST,' "$RUNNER_TEMP/a6-i4.log" | grep -c 'oracle=PASS$')" -eq 252
+          grep -q '^A6_I4_COMPLETE,policies=252,tests=516096,regimes=6,preregistered_failures=0$' "$RUNNER_TEMP/a6-i4.log"
+          grep -q '^A6_I4_SUMMARY,regime=PAIR_CENSORED_ABSENT,.*marginal_errors=43008,.*pair_accepted=43008,pair_errors=0,.*pair_novel_cases=43008,' "$RUNNER_TEMP/a6-i4.log"
+          grep -q '^A6_I4_SUMMARY,regime=TRIPLE_CENSORED_ABSENT,.*pair_accepted=86016,pair_errors=43008,.*pair_novel_cases=0,' "$RUNNER_TEMP/a6-i4.log"
+          grep -q '^A6_I4_SUMMARY,regime=PAIR_CENSORED_INCLUDED,.*pair_accepted=43008,pair_errors=0,' "$RUNNER_TEMP/a6-i4.log"
