@@ -664,13 +664,8 @@ mod tests {
 
     #[test]
     fn cached_global_bound_preserves_source_validation_for_noncontiguous_inputs() {
-        let gate = WideAnfGate::from_monomials(
-            vec![2, 99],
-            vec![vec![0], vec![1]],
-            100,
-            limits(),
-        )
-        .unwrap();
+        let gate = WideAnfGate::from_monomials(vec![2, 99], vec![vec![0], vec![1]], 100, limits())
+            .unwrap();
         let mut scratch = vec![0u64; gate.scratch_words()];
         let short = vec![u64::MAX; 99];
         assert_eq!(
