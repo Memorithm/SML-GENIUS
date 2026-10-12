@@ -19,6 +19,7 @@ pub mod anf_credit_topology;
 pub mod anf_dual_hidden_credit;
 pub mod anf_elastic_capacity;
 pub mod anf_epistemic_intuition;
+pub mod anf_passive_committee;
 pub mod anf_intermediate_credit;
 pub mod anf_joint_nonlinear_system_id;
 pub mod anf_large;
