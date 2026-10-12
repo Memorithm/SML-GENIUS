@@ -1,0 +1,96 @@
+name: A6-E2 native calibrated ANF readout versus real ngram
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e2-real-kt-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: startsWith(github.head_ref, 'research/a6-e2-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR HEAD read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict Rust and deterministic ANF/KT unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --bin sml-real-byte-calibrated-anf-bench
+          cargo clippy --locked -p sml-core --bin sml-real-byte-calibrated-anf-bench -- -D warnings
+          cargo test --locked -p sml-core --bin sml-real-byte-calibrated-anf-bench
+
+  corpus-evidence:
+    needs: validate
+    if: startsWith(github.head_ref, 'research/a6-e2-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR HEAD read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Download exact public-domain corpus and check cryptographic digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-char-corpus.sh "$RUNNER_TEMP/frozen-verne.txt"
+          test "$(wc -c < "$RUNNER_TEMP/frozen-verne.txt")" -eq 433036
+          test "$(sha256sum "$RUNNER_TEMP/frozen-verne.txt" | cut -d' ' -f1)" = b51f36fb2baf0847fd3632fbd6ff939b8858abc1d728b5f86c94d99e64766a74
+      - name: Run frozen 16 pure and 96 mixture VAL policies then independent TEST
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_E2_ENV,sha=$(git rev-parse HEAD),replica=${{ matrix.replica }},runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version)"
+          cargo run --locked --release -p sml-core --bin sml-real-byte-calibrated-anf-bench -- "$RUNNER_TEMP/frozen-verne.txt" > "$RUNNER_TEMP/a6-e2.log" 2>&1
+          test "$(grep -c '^A6_E2_LEARNED,' "$RUNNER_TEMP/a6-e2.log")" -eq 4
+          test "$(grep -c '^A6_E2_TRAIN,' "$RUNNER_TEMP/a6-e2.log")" -eq 1
+          test "$(grep -c '^A6_E2_VAL_PURE,' "$RUNNER_TEMP/a6-e2.log")" -eq 16
+          test "$(grep -c '^A6_E2_VAL_MIX,' "$RUNNER_TEMP/a6-e2.log")" -eq 96
+          test "$(grep -c '^A6_E2_ALL_FROZEN,' "$RUNNER_TEMP/a6-e2.log")" -eq 1
+          test "$(grep -c '^A6_E2_TEST_BASELINES,' "$RUNNER_TEMP/a6-e2.log")" -eq 1
+          test "$(grep -c '^A6_E2_TEST_SELECTED,' "$RUNNER_TEMP/a6-e2.log")" -eq 1
+          grep -Eq '^A6_E2_COMPLETE,real_corpus=true,task=next_space_binary,val_pure=16,val_mix=96,test_events=43136,test_pure=1,test_mix=1,.*decision=(STOP|RESEARCH_PASS),oracle=PASS$' "$RUNNER_TEMP/a6-e2.log"
+          grep -E '^A6_E2_(LEARNED|TRAIN|VAL_BASELINES|ALL_FROZEN|TEST_BASELINES|TEST_SELECTED|COMPLETE),' "$RUNNER_TEMP/a6-e2.log"
+      - name: Archive complete frozen methodology and TEST report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6-e2-full-readout-replica-${{ matrix.replica }}
+          path: ${{ runner.temp }}/a6-e2.log
+          if-no-files-found: ignore
+          retention-days: 30
