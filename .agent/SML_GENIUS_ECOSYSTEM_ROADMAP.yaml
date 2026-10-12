@@ -975,7 +975,45 @@ elastic_ngram_program_2026_10_12:
       - no_automatic_default_route_or_production_representation_promotion
       - no_ElasticXxx_actuation_or_adaptive_depth_authorization
       - CTW_PPM_next_byte_quality_and_real_language_advantage_not_tested
+  ENG1c_stage0:
+    status: qualified_immutable_corpus_provenance_only_no_model_run
+    pull_request: 533
+    merge_commit: 9cd3042a71913e4c311e21421910768e5bcddf76
+    protocol_commit: 6579234a94434a063aa62eec632fce2248cf19dc
+    source_report: docs/ENG-1C-FROZEN-CORPORA.md
+    downloader: scripts/eng1c/fingerprint-eng1c.sh
+    independent_first_fingerprint_run: 38315908889
+    qualified_final_head: 0f089ee4ca58d6298fdc01459ff6cb0f0ca252c8
+    final_fingerprint_CI: 38316192904
+    final_general_CI: 38316192640
+    result: both_completed_success_on_final_head
+    french:
+      gutenberg_ebook: 17989
+      author: Dumas_and_Maquet
+      source_bytes: 784416
+      source_sha256: 9ea7a8b127a9dfa36de0b0cf9c2e26293beea5c37a0fc988fb9308b63160f282
+      normalized_bytes: 747855
+      normalized_sha256: 24ebc9a0037fc57bf93bf3ac6788c5ca64a9a6bbaf92b9fdbdfe6ca0f4114dde
+      train_next_byte_events: 598208
+      validation_next_byte_events: 74688
+      test_events_structural_only_unscored: 74688
+    english:
+      gutenberg_ebook: 1342
+      author: Jane_Austen
+      source_bytes: 772386
+      source_sha256: 3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75
+      normalized_bytes: 737950
+      normalized_sha256: e79303d04de9260489f9d5a2ad4aae5776680fcec484f2e732d6ded7411bf402
+      train_next_byte_events: 590272
+      validation_next_byte_events: 73728
+      test_events_structural_only_unscored: 73728
+    nonnegotiable_capacity_boundary:
+      - both_full_TRAIN_splits_exceed_ENG1b_max_events_500000
+      - node_edge_pair_memory_caps_must_be_frozen_before_model_scoring
+      - do_not_reuse_A6_E3_E4_E5_revealed_test_data_for_confirmation
+      - data_fingerprint_success_does_not_imply_depth32_model_capability_or_language_quality
   next_slices:
+    - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
     - ENG2_generic_ElasticXxx_resource_contract_issue_244
