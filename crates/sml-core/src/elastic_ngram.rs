@@ -383,30 +383,38 @@ mod tests {
     #[test]
     fn fail_closed_resource_limits() {
         let bytes = fixture();
-        let mut limits = ElasticNGramLimits::default();
-        limits.max_order = 8;
-        assert_eq!(
-            ElasticNGram::train(&bytes, limits),
-            Err(ElasticNGramError::InvalidLimits)
-        );
-        limits = ElasticNGramLimits::default();
-        limits.max_events = 1;
-        assert_eq!(
-            ElasticNGram::train(&bytes, limits),
-            Err(ElasticNGramError::TooManyEvents)
-        );
-        limits = ElasticNGramLimits::default();
-        limits.max_contexts = 1;
-        assert_eq!(
-            ElasticNGram::train(&bytes, limits),
-            Err(ElasticNGramError::TooManyContexts)
-        );
-        limits = ElasticNGramLimits::default();
-        limits.max_follower_pairs = 1;
-        assert_eq!(
-            ElasticNGram::train(&bytes, limits),
-            Err(ElasticNGramError::TooManyFollowerPairs)
-        );
+        for (limits, expected) in [
+            (
+                ElasticNGramLimits {
+                    max_order: 8,
+                    ..ElasticNGramLimits::default()
+                },
+                ElasticNGramError::InvalidLimits,
+            ),
+            (
+                ElasticNGramLimits {
+                    max_events: 1,
+                    ..ElasticNGramLimits::default()
+                },
+                ElasticNGramError::TooManyEvents,
+            ),
+            (
+                ElasticNGramLimits {
+                    max_contexts: 1,
+                    ..ElasticNGramLimits::default()
+                },
+                ElasticNGramError::TooManyContexts,
+            ),
+            (
+                ElasticNGramLimits {
+                    max_follower_pairs: 1,
+                    ..ElasticNGramLimits::default()
+                },
+                ElasticNGramError::TooManyFollowerPairs,
+            ),
+        ] {
+            assert_eq!(ElasticNGram::train(&bytes, limits), Err(expected));
+        }
         assert_eq!(
             ElasticNGram::train(&[42; 64], ElasticNGramLimits::default()),
             Err(ElasticNGramError::InvalidCorpus)
