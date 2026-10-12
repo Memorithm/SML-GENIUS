@@ -343,7 +343,7 @@ impl WideAnfGate {
                 // The compatibility backend also owns a second Vec of
                 // physical indices; count BOTH logical index payloads.
                 input_bytes
-                    + gate.inputs().len() * size_of::<usize>()
+                    + std::mem::size_of_val(gate.inputs())
                     + gate.monomial_count().div_ceil(64) * size_of::<u64>()
             }
             Execution::Sparse(body) => {
