@@ -36,6 +36,7 @@ pub mod anf_three_gate_diagnostic;
 pub mod anf_wide_active_learn;
 pub mod anf_wide_sparse;
 pub mod anf_wide_unanchored_learn;
+pub mod anf_wide_overlap_learn;
 pub mod atlas;
 pub mod audit;
 pub mod boolean_hierarchical;
