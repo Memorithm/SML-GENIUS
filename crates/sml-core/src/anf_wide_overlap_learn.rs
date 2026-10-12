@@ -190,7 +190,8 @@ where
         .checked_shl(degree as u32)
         .ok_or(OverlapLearnError::Limits)?;
     let mut truth = Vec::new();
-    truth.try_reserve_exact(rows)
+    truth
+        .try_reserve_exact(rows)
         .map_err(|_| OverlapLearnError::Allocation)?;
     let mut query = vec![false; fan_in];
     for mask in 0..rows {
@@ -217,9 +218,7 @@ where
             .enumerate()
             .filter_map(|(i, &position)| (mask & (1 << i) != 0).then_some(position))
             .collect::<Vec<_>>();
-        if (min_degree..=max_degree).contains(&indices.len())
-            && !known.contains(&indices)
-        {
+        if (min_degree..=max_degree).contains(&indices.len()) && !known.contains(&indices) {
             exact_terms.push(indices);
         }
     }
@@ -270,7 +269,8 @@ where
     let indices = (0..fan_in).collect::<Vec<_>>();
     let mut assignment = vec![false; fan_in];
     let mut learned = Vec::<Vec<usize>>::new();
-    learned.try_reserve_exact(limits.max_terms)
+    learned
+        .try_reserve_exact(limits.max_terms)
         .map_err(|_| OverlapLearnError::Allocation)?;
     let mut attempted_witnesses = 0usize;
     let mut candidate_rejections = 0usize;
@@ -334,12 +334,8 @@ where
         break;
     }
     learned.sort_unstable();
-    let gate = WideAnfGate::from_monomials(
-        (0..fan_in).collect(),
-        learned.clone(),
-        fan_in,
-        gate_limits,
-    )?;
+    let gate =
+        WideAnfGate::from_monomials((0..fan_in).collect(), learned.clone(), fan_in, gate_limits)?;
     Ok(OverlapFit {
         gate,
         learned_monomials: learned,
@@ -363,13 +359,7 @@ mod tests {
         WideAnfLimits::new(2048, 256, 8192, 8192, 8192)
     }
     fn oracle(k: usize, monomials: &[Vec<usize>]) -> WideAnfGate {
-        WideAnfGate::from_monomials(
-            (0..k).collect(),
-            monomials.to_vec(),
-            k,
-            gates(),
-        )
-        .unwrap()
+        WideAnfGate::from_monomials((0..k).collect(), monomials.to_vec(), k, gates()).unwrap()
     }
     #[test]
     fn overlap_hub_and_chain_supports_can_be_identified_without_disjointness() {
