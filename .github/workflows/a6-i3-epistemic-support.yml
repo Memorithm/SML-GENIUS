@@ -1,0 +1,55 @@
+name: A6-I3 epistemic marginal support and hidden-pair falsification
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i3-support-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  epistemic-support:
+    if: startsWith(github.head_ref, 'research/a6-i3-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format/check/clippy and deliberately adversarial Rust tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_marginal_support -- --nocapture
+          cargo test --locked -p sml-core --bin sml-epistemic-support-guard-bench -- --nocapture
+      - name: Run frozen 210-fit and 430080-heldout-output support-shift census
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I3_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-epistemic-support-guard-bench 2>&1 | tee "$RUNNER_TEMP/a6-i3.log"
+          grep -q '^A6_I3_ALL_FROZEN,policies=210,paired_structures=105$' "$RUNNER_TEMP/a6-i3.log"
+          test "$(grep -c '^A6_I3_FROZEN,' "$RUNNER_TEMP/a6-i3.log")" -eq 210
+          test "$(grep -c '^A6_I3_TEST,' "$RUNNER_TEMP/a6-i3.log")" -eq 210
+          test "$(grep -c '^A6_I3_SUMMARY,' "$RUNNER_TEMP/a6-i3.log")" -eq 5
+          test "$(grep '^A6_I3_TEST,' "$RUNNER_TEMP/a6-i3.log" | grep -c 'oracle=PASS$')" -eq 210
+          grep -q '^A6_I3_COMPLETE,policies=210,tests=430080,regimes=5,preregistered_failures=0$' "$RUNNER_TEMP/a6-i3.log"
