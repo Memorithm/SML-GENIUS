@@ -89,7 +89,8 @@ impl AnfBudgetedFourSupportGuard {
             return Err(FourWatchError::Budget);
         }
         let mut watch = Vec::new();
-        watch.try_reserve_exact(watched.len())
+        watch
+            .try_reserve_exact(watched.len())
             .map_err(|_| FourWatchError::Allocation)?;
         for mut indices in watched {
             indices.sort_unstable();
@@ -180,10 +181,14 @@ impl AnfBudgetedFourSupportGuard {
         if !self.sealed {
             return Err(FourWatchError::NotSealed);
         }
-        let novel = self.watch.iter().filter(|tuple| {
-            let bit = 1u16 << Self::code(tuple.indices, input);
-            tuple.seen & bit == 0
-        }).count();
+        let novel = self
+            .watch
+            .iter()
+            .filter(|tuple| {
+                let bit = 1u16 << Self::code(tuple.indices, input);
+                tuple.seen & bit == 0
+            })
+            .count();
         Ok(FourWatchEvidence {
             novel_watches: novel,
             watched_supported: novel == 0,
@@ -244,7 +249,7 @@ mod tests {
     }
 
     fn committee() -> PassiveCommittee {
-        PassiveCommittee::new(candidates(), vec![4.0, 2.0, 2.0, 1.0], 1.0/16.0, 512).unwrap()
+        PassiveCommittee::new(candidates(), vec![4.0, 2.0, 2.0, 1.0], 1.0 / 16.0, 512).unwrap()
     }
 
     #[test]
@@ -256,7 +261,7 @@ mod tests {
             }
             let mut input = vec![false; 1024];
             for (i, physical) in [4, 5, 6, 7].into_iter().enumerate() {
-                input[physical] = pattern & (1 << (3-i)) != 0;
+                input[physical] = pattern & (1 << (3 - i)) != 0;
             }
             guard.observe(&input).unwrap();
         }
@@ -268,12 +273,18 @@ mod tests {
         }
         assert_eq!(
             guard.assess(&holdout).unwrap(),
-            FourWatchEvidence { novel_watches: 1, watched_supported: false }
+            FourWatchEvidence {
+                novel_watches: 1,
+                watched_supported: false
+            }
         );
         holdout[4] = false;
         assert_eq!(guard.assess(&holdout).unwrap().novel_watches, 0);
         assert_eq!(guard.watched_count(), 1);
-        assert_eq!(guard.logical_payload_bytes(), std::mem::size_of::<WatchedTuple>());
+        assert_eq!(
+            guard.logical_payload_bytes(),
+            std::mem::size_of::<WatchedTuple>()
+        );
     }
 
     #[test]
@@ -282,7 +293,7 @@ mod tests {
         for pattern in 0..16 {
             let mut input = [false; 8];
             for (i, physical) in [4, 5, 6, 7].into_iter().enumerate() {
-                input[physical] = pattern & (1 << (3-i)) != 0;
+                input[physical] = pattern & (1 << (3 - i)) != 0;
             }
             guard.observe(&input).unwrap();
         }
@@ -301,19 +312,19 @@ mod tests {
     #[test]
     fn all_reject_paths_preserve_state_and_budgets() {
         assert_eq!(
-            AnfBudgetedFourSupportGuard::new(7, vec![[0,1,2,3]], 1, 512),
+            AnfBudgetedFourSupportGuard::new(7, vec![[0, 1, 2, 3]], 1, 512),
             Err(FourWatchError::Width)
         );
         assert_eq!(
-            AnfBudgetedFourSupportGuard::new(8, vec![[0,0,2,3]], 1, 512),
+            AnfBudgetedFourSupportGuard::new(8, vec![[0, 0, 2, 3]], 1, 512),
             Err(FourWatchError::InvalidTuple)
         );
         assert_eq!(
-            AnfBudgetedFourSupportGuard::new(8, vec![[0,1,2,3], [3,2,1,0]], 2, 512),
+            AnfBudgetedFourSupportGuard::new(8, vec![[0, 1, 2, 3], [3, 2, 1, 0]], 2, 512),
             Err(FourWatchError::DuplicateTuple)
         );
         assert_eq!(
-            AnfBudgetedFourSupportGuard::new(8, vec![[0,1,2,8]], 1, 512),
+            AnfBudgetedFourSupportGuard::new(8, vec![[0, 1, 2, 8]], 1, 512),
             Err(FourWatchError::InvalidTuple)
         );
         assert_eq!(
@@ -321,42 +332,44 @@ mod tests {
             Err(FourWatchError::Budget)
         );
         assert_eq!(
-            AnfBudgetedFourSupportGuard::new(8, vec![[0,1,2,3]], 1, 0),
+            AnfBudgetedFourSupportGuard::new(8, vec![[0, 1, 2, 3]], 1, 0),
             Err(FourWatchError::Budget)
         );
-        let mut guard=AnfBudgetedFourSupportGuard::new(8,vec![[4,5,6,7]],1,1).unwrap();
-        let previous=guard.clone();
-        assert_eq!(guard.seal(),Err(FourWatchError::EmptyTraining));
-        assert_eq!(guard,previous);
-        assert_eq!(guard.assess(&[false;8]),Err(FourWatchError::NotSealed));
-        assert_eq!(guard.observe(&[false;7]),Err(FourWatchError::Width));
-        assert_eq!(guard,previous);
-        guard.observe(&[false;8]).unwrap();
-        let after=guard.clone();
-        assert_eq!(guard.observe(&[true;8]),Err(FourWatchError::Budget));
-        assert_eq!(guard,after);
+        let mut guard = AnfBudgetedFourSupportGuard::new(8, vec![[4, 5, 6, 7]], 1, 1).unwrap();
+        let previous = guard.clone();
+        assert_eq!(guard.seal(), Err(FourWatchError::EmptyTraining));
+        assert_eq!(guard, previous);
+        assert_eq!(guard.assess(&[false; 8]), Err(FourWatchError::NotSealed));
+        assert_eq!(guard.observe(&[false; 7]), Err(FourWatchError::Width));
+        assert_eq!(guard, previous);
+        guard.observe(&[false; 8]).unwrap();
+        let after = guard.clone();
+        assert_eq!(guard.observe(&[true; 8]), Err(FourWatchError::Budget));
+        assert_eq!(guard, after);
         guard.seal().unwrap();
-        let sealed=guard.clone();
-        assert_eq!(guard.observe(&[true;8]),Err(FourWatchError::Sealed));
-        assert_eq!(guard.seal(),Err(FourWatchError::Sealed));
-        assert_eq!(guard,sealed);
+        let sealed = guard.clone();
+        assert_eq!(guard.observe(&[true; 8]), Err(FourWatchError::Sealed));
+        assert_eq!(guard.seal(), Err(FourWatchError::Sealed));
+        assert_eq!(guard, sealed);
     }
 
     #[test]
     fn trained_committee_must_be_synchronized_with_watched_history() {
-        let mut guard=AnfBudgetedFourSupportGuard::new(8,vec![[4,5,6,7]],1,512).unwrap();
-        let mut committee=committee();
-        let state=[false;8];
+        let mut guard = AnfBudgetedFourSupportGuard::new(8, vec![[4, 5, 6, 7]], 1, 512).unwrap();
+        let mut committee = committee();
+        let state = [false; 8];
         guard.observe(&state).unwrap();
         guard.seal().unwrap();
         assert_eq!(
-            guard.predict_guarded(&committee,&state,0.90,0.125),
+            guard.predict_guarded(&committee, &state, 0.90, 0.125),
             Err(FourWatchError::OutOfSync)
         );
-        committee.observe(&state,false).unwrap();
-        let p=guard.predict_guarded(&committee,&state,0.90,0.125).unwrap();
+        committee.observe(&state, false).unwrap();
+        let p = guard
+            .predict_guarded(&committee, &state, 0.90, 0.125)
+            .unwrap();
         assert!(p.bank_adequate);
         assert!(p.support.watched_supported);
-        assert_eq!(p.guarded_prediction,Some(false));
+        assert_eq!(p.guarded_prediction, Some(false));
     }
 }
