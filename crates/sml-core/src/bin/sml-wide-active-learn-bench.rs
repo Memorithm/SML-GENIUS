@@ -198,7 +198,8 @@ fn sbg_selected_learned_gate(frozen: &[Frozen]) -> Result<(), Box<dyn Error>> {
             }],
         }],
         1,
-    )?;
+    )
+    .map_err(|e| format!("could not build learned SBG atlas: {e:?}"))?;
     // Real MorDecision carrier; selection is fixed here, not learned.
     let decision = MorDecision {
         active_routers: vec![],
@@ -227,7 +228,9 @@ fn sbg_selected_learned_gate(frozen: &[Frozen]) -> Result<(), Box<dyn Error>> {
                 state.value.set(index, true)?;
             }
         }
-        let result = atlas.execute(&state, &decision, 1, 1)?;
+        let result = atlas
+            .execute(&state, &decision, 1, 1)
+            .map_err(|e| format!("learned SBG page failed to execute: {e:?}"))?;
         if result.state.meaning_mask.get(0)? != row.teacher.evaluate_scalar(&inputs)? {
             return Err("learned wide gate disagreed with teacher inside selected SBG page".into());
         }
