@@ -596,6 +596,7 @@ mod tests {
         let dense = WideAnfGate::from_monomials((0..k).collect(), monomials, k, limits()).unwrap();
         assert_eq!(dense.backend(), WideAnfBackend::Dense);
         assert_eq!(dense.scratch_words(), 256);
+        assert_eq!(dense.payload_bytes(), 160); // both input index arrays + 32B coefficients
         let sparse =
             WideAnfGate::from_monomials((0..k).collect(), vec![vec![0]], k, limits()).unwrap();
         assert_eq!(sparse.backend(), WideAnfBackend::Sparse);
