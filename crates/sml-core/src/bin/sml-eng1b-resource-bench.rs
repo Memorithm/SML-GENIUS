@@ -10,7 +10,6 @@ use std::{
 
 use sml_core::{
     anf_char::LANES,
-    char_baselines::NGramModel,
     elastic_ngram::{ElasticNGram, ElasticNGramLimits},
     elastic_ngram_long::{ElasticNGramLong, LongNGramLimits},
     elastic_ngram_trie::{ElasticNGramTrie, TrieLimits},
@@ -177,7 +176,7 @@ fn run(kind: &str) -> Result<(), Box<dyn Error>> {
     let hwm_kib = proc_kib("VmHWM:")?;
     let total_wall = Duration::from_micros(u64::try_from(train_us)?);
     println!(
-        "ENG1B_MEASURE,arm={},depth={},train_events={},contexts={},followers={},logical_key_bytes={},logical_counter_bytes={},rss_training_kib={},vmhwm_kib={},train_us={},p50_ns={},p95_ns={},samples={},warmup={},digest={:016x},arch={},rustc=1.89.0,integrity=PASS",
+        "ENG1B_MEASURE,arm={},depth={},train_events={},contexts={},followers={},logical_key_bytes={},logical_counter_bytes={},rss_training_kib={},vmhwm_kib={},train_us={},p50_ns={},p95_ns={},samples={},warmup={},digest={:016x},arch={},integrity=PASS",
         kind.to_ascii_uppercase(),
         depth,
         LANES * (BYTES_PER_LANE - 1),
