@@ -10,6 +10,7 @@
 use crate::anf_wide_sparse::{WideAnfError, WideAnfGate};
 
 pub const MAX_MATERIALIZED_FAN_IN: usize = 16;
+pub const MAX_MATERIALIZATION_SOURCE_WIDTH: usize = 4096;
 const BITS_PER_BLOCK: usize = 512;
 
 #[repr(align(64))]
@@ -99,13 +100,17 @@ pub fn choose_execution(
         return Err(PlannerError::InvalidProfile);
     }
     let (addresses, table_bytes) = checked_table_bytes(gate).unwrap_or((0, 0));
+    let source_width = gate.input_positions().iter().copied().max().unwrap_or(0) + 1;
+    let source_scratch_safe = source_width <= MAX_MATERIALIZATION_SOURCE_WIDTH
+        && source_width <= p.max_materialization_ram_bytes;
     let n = p.expected_queries as u128;
     let direct = n * u128::from(p.direct_ns_per_query);
     let lookup = n * u128::from(p.lookup_ns_per_query);
     let total = lookup
         .checked_add(u128::from(p.estimated_compile_ns))
         .ok_or(PlannerError::InvalidProfile)?;
-    let choice = if table_bytes != 0
+    let choice = if source_scratch_safe
+        && table_bytes != 0
         && table_bytes <= p.max_materialization_ram_bytes
         && table_bytes <= p.max_materialization_l3_bytes
         && direct > total
