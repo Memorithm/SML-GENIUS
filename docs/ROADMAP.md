@@ -1359,3 +1359,59 @@ or a sound hypothesis-class completeness assumption.
 Keep strict Rust, no NVIDIA vendor software beyond allowed
 drivers, no private runner execution and no broad claims from
 small synthetic ANF support evidence.
+
+## A6-I4 — pairwise ANF coverage and mandatory third-order failure (2026-10-12)
+
+[Preregistered experiment](A6-I4-PAIR-SUPPORT-TRIPLE-PREREGISTRATION.md)
+and [complete native report](RESULTS-A6-I4-PAIR-SUPPORT-TRIPLE.md)
+test whether tracking the joint input-value support of each
+PAIR can reduce the confident OOD mistakes demonstrated by
+A6-I3's marginal-only alarm. The new safe Rust `anf_pair_support`
+uses 512 bit-sliced TRAIN observations per input coordinate,
+computes pairwise 4-value masks once and retains only sparsely
+MISSING joint patterns (explicit max width1024,
+max 600000 pairs and 8192 missing pairs budget).
+`PassiveCommittee` remains a supplied four-function candidate
+bank, not a learned complete model.
+
+On the predeclared **252 fits / 516096 OOD predictions**
+covering six regimes, the pair guard prevents exactly **43008**
+confident errors on a previously unseen pair11; the univariate
+guard accepts these 43008 wrong outputs. When the teacher is
+IN the bank, pair-only conservatism incorrectly abstains from
+**43008 otherwise correct predictions**, proving a real
+coverage/selective-risk trade-off. In a constructed triple
+teacher absent from bank, each of the three PAIRS has full
+TRAIN coverage but triple111 never co-activates. The new guard
+fails **mandatorily** with **43008 confident errors out of
+86016 accepted inputs** and ZERO unseen pairs. Thus observing
+all r-way configurations does not identify r+1-way
+interactions. Full-coverage true-teacher controls accept
+86016/86016 with zero errors; observable missing-teacher
+cases are rejected by the fixed 1/8 TRAIN bank-mismatch alarm.
+
+**Next falsification sequence:**
+1. Third-order presence and conditional masks with strictly
+   bounded resident/traced bytes; k1024 naive k³ coverage
+   is unacceptable without sparse conditioning or adaptive
+   selection. Keep a fourth-order invisible interaction
+   as a compulsory counterexample, no hidden oracle leak.
+2. Distinguish support novelty, candidate-bank inadequacy,
+   conflicting hypotheses and task-transfer prior shift;
+   evaluate Brier, calibration, coverage and costs on
+   balanced teachers and OOD regimes.
+3. Permit TRAIN-only discovery of previously absent low-degree
+   ANF monomials *after* the guard signals novelty, then
+   add them as native WideSparseANF candidate pages with
+   rollback/capacity evidence, not from TEST labels.
+4. Test passive SBG/MOR/Delta-KV autonomous multi-cycle
+   trajectories with state corruption, limited interventions
+   and unseen temporal interaction regimes.
+5. Verify million-function bank physical accounting and
+   native SIMD/Thor performance separately from language
+   SML-25B quality/perplexity/tokens-per-second.
+
+A6-I4 remains a synthetic **known-bank OOD guard**, NOT
+an ANF learner or a human-intuition proof. Use native
+Rust only, without proprietary NVIDIA software beyond
+permitted drivers.
