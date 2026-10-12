@@ -911,15 +911,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn source_grid_and_preregistered_cardinality_are_exact() {
-        let (train, injected) = data_with_mode(
-            11,
-            Task::XorXorXor,
-            Panel::Clean,
-            TRAIN_STEPS,
-            InputMode::ExactLag,
-        );
-        assert_eq!(injected, 0);
+    fn preregistered_census_and_native_search_grid_are_consistent() {
+        let mode = StateMode::STRESS[0];
+        let (train, flips) =
+            data_with_mode(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
+        assert!(flips > 0);
         let observed = Observed::new(&train, grid(STRESS_WIDTH));
         assert_eq!(count_combinations(&observed), (128_016, 21_336_000));
         assert!(Task::XorXorXor
@@ -927,115 +923,109 @@ mod tests {
             .iter()
             .all(|source| observed.sources.contains(source)));
         assert_eq!(
-            Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * (3 * 3 + 1),
-            120
+            Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * (3 * 3 + 1),
+            240
+        );
+        assert_eq!(
+            Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * 3,
+            72
         );
     }
 
     #[test]
-    fn exact_one_step_lag_has_a_distinct_native_equivalent_circuit() {
+    fn native_prediction_hamming_is_label_independent_and_detects_different_models() {
         for task in Task::ALL {
-            let (clean, flips) =
-                data_with_mode(51, task, Panel::Clean, TEST_STEPS, InputMode::ExactLag);
-            assert_eq!(flips, 0);
-            assert_eq!(delayed_channel_mismatches(&clean), (0, 0));
-            let true_model = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
-            let mut alternate = task.rules();
-            alternate[1].gate = 67;
-            alternate[1].raw = 4;
-            assert_ne!(alternate, task.rules());
-            assert_eq!(native_errors(&true_model, &clean).unwrap(), 0);
+            let mode = StateMode::STRESS[0];
+            let (dataset, _) = data_with_mode(57, task, Panel::Clean, 512, mode);
+            let (noisy, _) = data_with_mode(57, task, Panel::Noise, 512, mode);
+            let teacher = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
+            let mut alternative_rules = task.rules();
+            alternative_rules[0].raw = 1;
+            let alternative = make_multi_gate_native(WIDTH, &alternative_rules).unwrap();
+            let disagreements =
+                native_prediction_disagreements(&teacher, &alternative, &dataset);
+            assert!(disagreements > 0);
             assert_eq!(
-                native_errors(&make_multi_gate_native(WIDTH, &alternate).unwrap(), &clean).unwrap(),
+                disagreements,
+                native_prediction_disagreements(&teacher, &alternative, &noisy)
+            );
+            assert_eq!(
+                native_prediction_disagreements(&teacher, &teacher, &dataset),
                 0
             );
+        }
+        // Equal error COUNTS do not imply equal output vectors.
+        let a = 0b0000u64;
+        let b = 0b1111u64;
+        let labels = 0b0011u64;
+        assert_eq!((a ^ labels).count_ones(), (b ^ labels).count_ones());
+        assert_eq!((a ^ b).count_ones(), 4);
+    }
+
+    #[test]
+    fn all_six_state_modes_inject_persistent_bits_at_both_predeclared_rates() {
+        for mode in StateMode::STRESS {
+            let (clean, flips) =
+                data_with_mode(65, Task::XorXorXor, Panel::Clean, 512, mode);
+            let (noisy, with_label_noise_flips) =
+                data_with_mode(65, Task::XorXorXor, Panel::Noise, 512, mode);
+            assert!(flips > 0);
+            assert_eq!(flips, with_label_noise_flips);
+            assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
+            assert_ne!(clean.blocks[0].targets, noisy.blocks[0].targets);
+            assert!([0, 68, 127].contains(&mode.slot));
+            assert!([6, 8].contains(&mode.bits));
         }
     }
 
     #[test]
-    fn imperfect_one_step_lag_remains_observably_distinguishable() {
+    fn exact_delayed_sources_have_a_distinct_bitwise_equivalent_native_network() {
         for task in Task::ALL {
-            let (clean, flips) =
-                data_with_mode(57, task, Panel::Clean, TEST_STEPS, InputMode::NearLag);
-            assert_eq!(flips, 0);
-            let (a, b) = delayed_channel_mismatches(&clean);
-            assert!(a > 0 && b > 0);
-            let mut alternative = task.rules();
-            alternative[1].gate = 67;
-            alternative[1].raw = 4;
+            let true_teacher = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
+            let mut alternative_rules = task.rules();
+            alternative_rules[1].gate = 67;
+            alternative_rules[1].raw = 4;
+            assert_ne!(alternative_rules, task.rules());
+            let alternative = make_multi_gate_native(WIDTH, &alternative_rules).unwrap();
+            let exact = temporal_witness_inputs(0x99a7, 512, false);
+            let near = temporal_witness_inputs(0x99a7, 512, true);
             assert_eq!(
-                native_errors(
-                    &make_multi_gate_native(WIDTH, &task.rules()).unwrap(),
-                    &clean
-                )
-                .unwrap(),
+                native_prediction_disagreements(&true_teacher, &alternative, &exact),
                 0
             );
             assert!(
-                native_errors(
-                    &make_multi_gate_native(WIDTH, &alternative).unwrap(),
-                    &clean
-                )
-                .unwrap()
+                native_prediction_disagreements(&true_teacher, &alternative, &near)
                     > 0
             );
         }
     }
 
     #[test]
-    fn hidden_transition_corruption_is_real_and_not_label_noise() {
-        for task in Task::ALL {
-            let (train, flips) =
-                data_with_mode(63, task, Panel::Clean, TRAIN_STEPS, InputMode::StateFlip);
-            assert!(flips > 0);
-            let correct_deterministic = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
-            // All labels in this panel are clean *observations* of a teacher
-            // whose recurrent hidden state was perturbed, hence even the
-            // identical deterministic circuit is not a perfect predictor.
-            assert!(native_errors(&correct_deterministic, &train).unwrap() > 0);
-            let (with_label_noise, noise_flips) =
-                data_with_mode(63, task, Panel::Noise, TRAIN_STEPS, InputMode::StateFlip);
-            assert_eq!(flips, noise_flips);
-            assert_eq!(train.blocks[0].inputs, with_label_noise.blocks[0].inputs);
-            assert_ne!(train.blocks[0].targets, with_label_noise.blocks[0].targets);
-        }
-    }
-
-    #[test]
-    fn label_noise_cannot_change_raw_inputs_or_hidden_disturbance_stream() {
-        for mode in InputMode::STRESS {
-            let (clean, flips) =
-                data_with_mode(72, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
-            let (noisy, other_flips) =
-                data_with_mode(72, Task::XorXorXor, Panel::Noise, TRAIN_STEPS, mode);
-            assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
-            assert_ne!(clean.blocks[0].targets, noisy.blocks[0].targets);
-            assert_eq!(flips, other_flips);
-            if mode == InputMode::StateFlip {
-                assert!(flips > 0);
-            } else {
-                assert_eq!(flips, 0);
-            }
-        }
-    }
-
-    #[test]
-    fn sketch_probe_and_full_corr_are_accounted_separately() {
-        let (train, _) = data_with_mode(
-            93,
-            Task::XorXorXor,
-            Panel::Clean,
-            TRAIN_STEPS,
-            InputMode::NearLag,
-        );
+    fn short_sketch_and_long_correlations_are_counted_separately() {
+        let mode = StateMode::STRESS[0];
+        let (train, _) =
+            data_with_mode(93, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
         let observed = Observed::new(&train, grid(32));
-        let (triples, stats) = rank_sketch_triplets(&observed);
+        let (candidates, stats) = rank_sketch_triplets(&observed);
         assert!(stats.pair_probes > 0);
-        assert!(stats.unique >= triples.len());
+        assert!(stats.unique >= candidates.len());
         assert!(stats.coarse_scored >= stats.full_scored);
         assert!(stats.full_scored <= SKETCH_COARSE_KEEP);
-        let (again, stats2) = rank_sketch_triplets(&observed);
-        assert_eq!(again, triples);
-        assert_eq!(stats2, stats);
+        let (again, again_stats) = rank_sketch_triplets(&observed);
+        assert_eq!(again, candidates);
+        assert_eq!(again_stats, stats);
+    }
+
+    #[test]
+    fn no_native_state_noise_can_be_misreported_as_label_noise() {
+        let teacher = make_multi_gate_native(WIDTH, &Task::XorXorXor.rules()).unwrap();
+        let mode = StateMode::STRESS[2]; // slot127, 1/256
+        let (clean, flips) =
+            data_with_mode(111, Task::XorXorXor, Panel::Clean, TEST_STEPS, mode);
+        assert!(flips > 0);
+        assert!(
+            native_errors(&teacher, &clean).unwrap() > 0,
+            "a persistent corrupted state must change clean observable outputs"
+        );
     }
 }
