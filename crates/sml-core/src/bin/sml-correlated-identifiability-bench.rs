@@ -123,6 +123,9 @@ impl Method {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InputMode {
+    // Independent mode is used by C12c regression tests in this copied bench,
+    // not by the preregistered C12d production-only stress execution.
+    #[cfg_attr(not(test), allow(dead_code))]
     Independent,
     NearAlias,
     ExactAlias,
