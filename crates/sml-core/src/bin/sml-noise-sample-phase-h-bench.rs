@@ -413,7 +413,7 @@ fn triple_correlation(o: &Observed, ids: [usize; 3], words: usize) -> u64 {
 fn rank_sketch_triplets(o: &Observed) -> (Vec<[Source; 3]>, SketchStats) {
     let n = o.sources.len();
     let slots = o.p.len() * LANES;
-    assert!(slots >= SKETCH_BITS && o.p.len() >= SKETCH_COARSE_WORDS);
+    assert!(slots >= SKETCH_BITS && !o.p.is_empty());
     let mut rng = SplitMix64::new(SKETCH_SEED);
     let mut heads = vec![usize::MAX; 1 << SKETCH_BITS];
     let mut next = vec![usize::MAX; n];
@@ -464,7 +464,7 @@ fn rank_sketch_triplets(o: &Observed) -> (Vec<[Source; 3]>, SketchStats) {
     stats.unique = matched.len();
     let mut coarse = matched
         .into_iter()
-        .map(|ids| (triple_correlation(o, ids, SKETCH_COARSE_WORDS), ids))
+        .map(|ids| (triple_correlation(o, ids, SKETCH_COARSE_WORDS.min(o.p.len())), ids))
         .collect::<Vec<_>>();
     stats.coarse_scored = coarse.len();
     coarse.sort_unstable_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
@@ -664,7 +664,7 @@ fn freeze(
     let mf = median(times_factor);
     let mt = median(times_total);
     println!(
-        "A6C12G_FROZEN,task={},seed={},rate={},eta={:.8},words={},proxy_bits={},method={},status={},proposals={},proposed={},exact={},accepted={},rank_true_top16={},true_w3_abs={:.8},best_false_w3_abs={:.8},w3_signed_margin={:.8},pair_rank={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_us={:.3};{:.3};{:.3},factor_us={:.3};{:.3};{:.3},total_us={:.3};{:.3};{:.3},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3}",
+        "A6C12H_FROZEN,task={},seed={},rate={},eta={:.8},words={},proxy_bits={},method={},status={},proposals={},proposed={},exact={},accepted={},rank_true_top16={},true_w3_abs={:.8},best_false_w3_abs={:.8},w3_signed_margin={:.8},pair_rank={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_us={:.3};{:.3};{:.3},factor_us={:.3};{:.3};{:.3},total_us={:.3};{:.3};{:.3},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3}",
         task.name(),index,rate.name(),rate.eta(),words,words*LANES,method.name(),
         if first_fit.is_some() {"FITTED"} else {"NO_EXACT_GAUSS_OR_EMPTY"},
         screen.hypotheses.len(), proposed, exact,
@@ -728,17 +728,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sources = grid(128);
     let sample = Observed::new(&data(0x1234, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS), sources);
     assert_eq!(count_combinations(&sample), (7_936, 317_440));
-    assert_eq!(TEST_STREAMS, 80);
-    assert_eq!(POLICY_COUNT, 1232);
-    println!("A6C12G_CONFIG,seeds=8,tasks=xor_xor_xor;and_xor_xor,rates=0;1/32;1/16;1/8;1/5,words=8;16;32;64;128;256;512,n=128,train_max=640,val=640,test=4096,lanes=64,repeats=3,policy_count=1232,test_datasets=80");
-    println!("A6C12G_THEORY,admissible_triples=317440,train_proxy_uses_two_noisy_labels=true,noise_proxy=2eta(1-eta),rho_proxy=(1-2eta)^2,gauss_noisy_skipped=true,test_after_freeze=true");
+    assert_eq!(TEST_STREAMS, 128);
+    assert_eq!(POLICY_COUNT, 1872);
+    println!("A6C12H_CONFIG,seeds=16,core_seeds=8,tasks=xor_xor_xor;and_xor_xor,rates=0;1/5;3/10;2/5,words=1;2;4;8;16;32;64;128;256;512,n=128,train_max=640,val=640,test=4096,lanes=64,repeats=3,policy_count=1872,test_datasets=128");
+    println!("A6C12H_THEORY,admissible_triples=317440,train_proxy_uses_two_noisy_labels=true,noise_proxy=2eta(1-eta),rho_proxy=(1-2eta)^2,nstar=2ln(2M)/amplitude^2,gauss_noisy_skipped=true,test_after_freeze=true");
+    for task in TASKS {
+        for rate in NoiseRate::ALL {
+            println!(
+                "A6C12H_THEORY_THRESHOLD,task={},rate={},rho_proxy={:.6},nstar_proxy_bits={:.3}",
+                task.name(), rate.name(), (1.0 - 2.0 * rate.eta()).powi(2),
+                theory_nstar(task, rate)
+            );
+        }
+    }
     let mut frozen = Vec::with_capacity(POLICY_COUNT);
     for task in TASKS {
         for index in 0..SEEDS {
             for rate in NoiseRate::ALL {
                 let full_train = data(seed(index, task, 0xa6c1_2b11), task, rate, TRAIN_STEPS);
                 let validation = data(seed(index, task, 0xa6c1_2b22), task, rate, VAL_STEPS);
-                for words in WORD_BUDGETS {
+                for &words in scheduled_words(task, rate, index) {
                     let train = prefix(&full_train, WIDTH + words);
                     let observed = Observed::new(&train, grid(128));
                     assert_eq!(observed.p.len(), words);
@@ -755,7 +764,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if frozen.len() != POLICY_COUNT {
         return Err("A6-C12g incorrect frozen policy census".into());
     }
-    println!("A6C12G_ALL_FROZEN,policies=1232,test_datasets=80");
+    println!("A6C12H_ALL_FROZEN,policies=1872,test_datasets=128");
 
     // The very first TEST generator call is below, after all 1232 policies were frozen.
     let mut test_rows = 0usize;
@@ -779,7 +788,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     } else { (None, None, None, None, false) };
                     let success = case.exact && proposal_disagreements == Some(0) && accepted && committed_disagreements == Some(0);
                     println!(
-                        "A6C12G_TEST,task={},seed={},rate={},words={},method={},proposed={},exact={},accepted={},native_success={},oracle_errors={},proposal_errors={:?},committed_errors={:?},proposal_bit_disagreements={:?},committed_bit_disagreements={:?},samples={}",
+                        "A6C12H_TEST,task={},seed={},rate={},words={},method={},proposed={},exact={},accepted={},native_success={},oracle_errors={},proposal_errors={:?},committed_errors={:?},proposal_bit_disagreements={:?},committed_bit_disagreements={:?},samples={}",
                         task.name(),index,rate.name(),case.words,case.method.name(),
                         case.proposed,case.exact,accepted,success,teacher_errors,proposal_errors,committed_errors,
                         proposal_disagreements,committed_disagreements,TEST_STEPS*LANES
@@ -812,19 +821,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let factor = median_vector(rows.iter().map(|r| r.median_factor_us).collect());
                     let total = median_vector(rows.iter().map(|r| r.median_total_us).collect());
                     println!(
-                        "A6C12G_SUMMARY,task={},rate={},words={},method={},exact_and_accepted={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
+                        "A6C12H_SUMMARY,task={},rate={},words={},method={},exact_and_accepted={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
                         task.name(), rate.name(), words, method.name(), successes, SEEDS, lower, upper,
                         screen, factor, total, rho, (317_440f64).ln() / (rho*rho)
                     );
                 }
                 println!(
-                    "A6C12G_THRESHOLD,task={},rate={},method={},first_words_ge7_of8={:?}",
+                    "A6C12H_THRESHOLD,task={},rate={},method={},first_words_ge7_of8={:?}",
                     task.name(),rate.name(),method.name(),first_empirical_threshold
                 );
             }
         }
     }
-    println!("A6C12G_COMPLETE,policies=1232,test_rows=1232,distinct_test_datasets=80,noise_rates=5,word_budgets=7,seed_count=8,fit_repeats=3");
+    println!("A6C12H_COMPLETE,policies=1872,test_rows=1872,distinct_test_datasets=128,noise_rates=4,word_budgets=10,seed_count=16,core_seed_count=8,fit_repeats=3");
     Ok(())
 }
 
@@ -833,7 +842,7 @@ mod tests {
     use super::*;
     #[test]
     fn fixed_grid_and_noise_stages() {
-        assert_eq!(POLICY_COUNT, 1232);
+        assert_eq!(POLICY_COUNT, 1872);
         let observed = Observed::new(&data(19, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS), grid(128));
         assert_eq!(count_combinations(&observed), (7_936, 317_440));
         assert!(Task::XorXorXor.sources().iter().all(|source| observed.sources.contains(source)));
@@ -848,7 +857,7 @@ mod tests {
         for rate in NoiseRate::ALL {
             let eta = rate.eta();
             let rho = (1.0-2.0*eta).powi(2);
-            assert!(rho >= 0.36 - 1e-10);
+            assert!(rho >= 0.04 - 1e-10);
         }
         assert!((wilson(8,8).0 - 0.6755924).abs() < 1e-4);
         assert!(wilson(0,8).1 > 0.3);
