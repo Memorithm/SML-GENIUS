@@ -10,6 +10,7 @@ use core::fmt;
 
 pub mod ablation;
 pub mod anf;
+pub mod anf_budgeted_four_support;
 pub mod anf_char;
 pub mod anf_constructive;
 pub mod anf_credit;
@@ -31,7 +32,6 @@ pub mod anf_local_learn;
 pub mod anf_marginal_support;
 pub mod anf_nonlinear_joint_credit;
 pub mod anf_pair_support;
-pub mod anf_budgeted_four_support;
 pub mod anf_passive_committee;
 pub mod anf_phase_capacity;
 pub mod anf_sbg_unified;
