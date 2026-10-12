@@ -129,10 +129,7 @@ fn test_heldout(
     Ok((disagreements, TEST_RANDOM))
 }
 
-fn k8_exhaustive(
-    teacher: &WideAnfGate,
-    learned: &WideAnfGate,
-) -> Result<usize, Box<dyn Error>> {
+fn k8_exhaustive(teacher: &WideAnfGate, learned: &WideAnfGate) -> Result<usize, Box<dyn Error>> {
     let mut differences = 0usize;
     for mask in 0..256usize {
         let q = (0..8).map(|bit| mask & (1 << bit) != 0).collect::<Vec<_>>();
@@ -167,12 +164,8 @@ fn negative_control(width: usize) -> Result<(), Box<dyn Error>> {
         gate_budget(),
         |query| unsupported.evaluate_scalar(query).map_err(Into::into),
     )?;
-    let (errors, val_samples) = validate(
-        &unsupported,
-        &fitted.gate,
-        width,
-        seed(width, 0, VAL_SALT),
-    )?;
+    let (errors, val_samples) =
+        validate(&unsupported, &fitted.gate, width, seed(width, 0, VAL_SALT))?;
     println!(
         "WIDE_LEARN_NEGATIVE,width={width},extra_monomial=selector0_AND_selector1,fit_was_possible=true,validation_errors={errors},validation_samples={val_samples},accepted={},oracle=PASS",
         errors == 0
@@ -235,9 +228,7 @@ fn sbg_selected_learned_gate(frozen: &[Frozen]) -> Result<(), Box<dyn Error>> {
             }
         }
         let result = atlas.execute(&state, &decision, 1, 1)?;
-        if result.state.meaning_mask.get(0)?
-            != row.teacher.evaluate_scalar(&inputs)?
-        {
+        if result.state.meaning_mask.get(0)? != row.teacher.evaluate_scalar(&inputs)? {
             return Err("learned wide gate disagreed with teacher inside selected SBG page".into());
         }
         if result.traces.len() != 1 || result.traces[0].id != PageId(17) {
@@ -286,12 +277,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     },
                 )?;
                 let fit_ms = start.elapsed().as_secs_f64() * 1000.0;
-                let (validation_errors, validation_samples) = validate(
-                    &oracle,
-                    &learned.gate,
-                    width,
-                    seed(width, index, VAL_SALT),
-                )?;
+                let (validation_errors, validation_samples) =
+                    validate(&oracle, &learned.gate, width, seed(width, index, VAL_SALT))?;
                 let structural_exact = learned.learned_monomials == truth;
                 println!(
                     "WIDE_LEARN_FROZEN,width={width},seed={index},panel={panel},method=anchored_adaptive_group_testing,terms=4,recovered_terms={},hidden_literals={},query_logical={},query_physical={},train_noise_flips={},validation_errors={validation_errors},validation_samples={validation_samples},structure_exact={structural_exact},backend={:?},payload_bytes={},scratch_words={},fit_ms={fit_ms:.6},accepted={}",
