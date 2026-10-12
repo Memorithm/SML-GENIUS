@@ -596,127 +596,230 @@ fn freeze(
     })
 }
 
+struct FrozenStress {
+    mode: InputMode,
+    fitted: Frozen,
+}
+
+fn input_pair_differences(split: &LaneData) -> (u64, u64) {
+    let block = &split.blocks[0];
+    let mut first = 0u64;
+    let mut second = 0u64;
+    for t in 0..block.steps {
+        let at = t * INPUT_BITS;
+        first += u64::from((block.inputs[at + 1] ^ block.inputs[at + 2]).count_ones());
+        second += u64::from((block.inputs[at + 3] ^ block.inputs[at + 4]).count_ones());
+    }
+    (first, second)
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() > 2 {
-        return Err("usage: sml-sketch-mitm-bench [seeds:1..=3]".into());
+        return Err("usage: sml-correlated-identifiability-bench [seeds:1..=3]".into());
     }
     let nseeds: usize = args.get(1).map_or(Ok(3), |arg| arg.parse())?;
     if !(1..=3).contains(&nseeds) {
         return Err("seed count must be 1..=3".into());
     }
     println!(
-        "A6C12C_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor;xor_and_xor;and_and_and,panels=clean;noise_1_in_16,n=32;128;508,train=512,val=512,test=4096,lanes=64,sketch_rounds={SKETCH_ROUNDS},sketch_bits={SKETCH_BITS},sketch_coarse_words={SKETCH_COARSE_WORDS},sketch_coarse_keep={SKETCH_COARSE_KEEP},sketch_full_keep={TOP_TRIPLES},top_w2_pairs={TOP_PAIRS}"
+        "A6C12D_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor,panels=clean;noise_1_in_16,modes=near_alias_1_in_32;exact_alias,n=508,train=512,val=512,test=4096,lanes=64,sketch_rounds={SKETCH_ROUNDS},sketch_bits={SKETCH_BITS},top_w2_pairs={TOP_PAIRS}"
     );
     println!(
-        "A6C12C_PROTOCOL,teacher_rules_not_passed_to_screening=true,validation_gate_only=true,all_frozen_before_test=true,w3_n508_seed0_only=true,hash_seed_fixed=true"
+        "A6C12D_PROTOCOL,teacher_rules_never_passed_to_fitting=true,exact_alias_is_not_structurally_identifiable=true,distinct_native_alias_oracle=true,test_generated_only_after_all_frozen=true,w3_seed0_only=true"
     );
-    let mut frozen = Vec::with_capacity(4 * 2 * nseeds * 3 * 4);
+
+    let mut frozen = Vec::<FrozenStress>::new();
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                let train = data(
-                    seed(index, task, panel, 0xa6c1_2b11),
-                    task,
-                    panel,
-                    TRAIN_STEPS,
-                );
-                let validation = data(
-                    seed(index, task, panel, 0xa6c1_2b22),
-                    task,
-                    panel,
-                    VAL_STEPS,
-                );
-                for n in NS {
-                    let observed = Observed::new(&train, grid(n));
-                    assert_eq!(observed.p.len(), TRAIN_STEPS - WIDTH);
-                    assert!(task
+                for mode in InputMode::STRESS {
+                    let train = data_with_mode(
+                        seed(index, task, panel, 0xa6c1_2b11),
+                        task,
+                        panel,
+                        TRAIN_STEPS,
+                        mode,
+                    );
+                    let validation = data_with_mode(
+                        seed(index, task, panel, 0xa6c1_2b22),
+                        task,
+                        panel,
+                        VAL_STEPS,
+                        mode,
+                    );
+                    let (input_difference_12, input_difference_34) =
+                        input_pair_differences(&train);
+                    if mode == InputMode::ExactAlias && input_difference_12 != 0 {
+                        return Err("EXACT_ALIAS generator violated x1 == x2".into());
+                    }
+                    let observed = Observed::new(&train, grid(STRESS_WIDTH));
+                    if !task
                         .sources()
                         .iter()
-                        .all(|source| observed.sources.contains(source)));
-                    let (pairs, triples) = count_combinations(&observed);
+                        .all(|source| observed.sources.contains(source))
+                    {
+                        return Err("registered source missing from full 508-feature pool".into());
+                    }
                     println!(
-                        "A6C12C_GRID,task={},panel={},seed={},n={},pairs={},triples={},samples={}",
+                        "A6C12D_INPUT,task={},panel={},seed={},mode={},differences_x1_x2={},differences_x3_x4={},samples={}",
                         task.name(),
                         panel.name(),
                         index,
-                        n,
-                        pairs,
-                        triples,
-                        observed.p.len() * LANES
+                        mode.name(),
+                        input_difference_12,
+                        input_difference_34,
+                        TRAIN_STEPS * LANES
                     );
                     for method in Method::ALL {
-                        if method == Method::Walsh3Stream && n == 508 && index != 0 {
+                        if method == Method::Walsh3Stream && index != 0 {
                             continue;
                         }
-                        frozen.push(freeze(
-                            (task, panel, index, n),
+                        let fit = freeze(
+                            (task, panel, index, STRESS_WIDTH),
                             method,
                             &train,
                             &validation,
                             &observed,
-                        )?);
+                        )?;
+                        println!(
+                            "A6C12D_FROZEN,task={},panel={},seed={},mode={},method={},factor_structures={},screen_seconds={:.6},factor_seconds={:.6},sketch_bucket_hits={},sketch_unique={},sketch_full={},w3_full_correlations={}",
+                            task.name(),
+                            panel.name(),
+                            index,
+                            mode.name(),
+                            method.name(),
+                            fit.proposals,
+                            fit.screen_seconds,
+                            fit.factor_seconds,
+                            fit.sketch.bucket_hits,
+                            fit.sketch.unique,
+                            fit.sketch.full_scored,
+                            fit.w3_full_correlations
+                        );
+                        frozen.push(FrozenStress { mode, fitted: fit });
                     }
                 }
             }
         }
     }
-    let expected_frozen = 4 * 2 * (nseeds * 3 * 3 + nseeds * 2 + 1);
+    // Two tasks, two label panels, two input modes, (3 strategies on each
+    // seed + one W3 reference on seed0). For 3 seeds: exactly 80 policies.
+    let expected_frozen = Task::ALL.len()
+        * Panel::ALL.len()
+        * InputMode::STRESS.len()
+        * (3 * nseeds + 1);
     if frozen.len() != expected_frozen {
-        return Err("A6-C12c frozen cardinality violated".into());
+        return Err("A6-C12d frozen count mismatches preregistration".into());
     }
     println!(
-        "A6C12C_ALL_FROZEN,policies={},streams={}",
+        "A6C12D_ALL_FROZEN,policies={},datasets={}",
         frozen.len(),
-        4 * 2 * nseeds
+        Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * nseeds
     );
-    // TEST generators are invoked only after every policy has been frozen.
+
+    // From this point only: create held-out TEST inputs/labels, and compare
+    // an independent native alias generator against the clean true generator.
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                let test = data(
-                    seed(index, task, panel, 0xa6c1_2b33),
-                    task,
-                    panel,
-                    TEST_STEPS,
-                );
-                let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
-                let oracle_errors = native_errors(&teacher, &test)?;
-                for result in frozen
-                    .iter()
-                    .filter(|r| r.task == task && r.panel == panel && r.seed == index)
-                {
-                    let (sources_exact, truths_exact, proposal_errors, selected_errors, accepted) =
-                        if let Some(fit) = &result.fit {
-                            (
-                                fit.proposal_sources == task.sources(),
-                                fit.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
-                                Some(native_errors(&fit.proposal, &test)?),
-                                Some(native_errors(&fit.committed, &test)?),
-                                fit.accepted,
-                            )
-                        } else {
-                            (false, false, None, None, false)
-                        };
-                    println!(
-                        "A6C12C_TEST,task={},panel={},seed={},n={},method={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},pair_rank={},factor_structures={},w2_full_pairs={},w3_full_correlations={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},samples={},triples_admissible={}",
-                        task.name(),panel.name(),index,result.n,result.method.name(),
-                        oracle_errors,proposal_errors,selected_errors,sources_exact,truths_exact,
-                        accepted,result.pair_rank,result.proposals,
-                        if matches!(result.method, Method::Walsh2Pair | Method::Hybrid) {result.full_pairs} else {0},
-                        result.w3_full_correlations,result.sketch.pair_probes,
-                        result.sketch.bucket_hits,result.sketch.unique,
-                        result.sketch.coarse_scored,result.sketch.full_scored,
-                        result.screen_seconds,result.factor_seconds,TEST_STEPS*LANES,result.full_triples
+                for mode in InputMode::STRESS {
+                    let heldout_seed = seed(index, task, panel, 0xa6c1_2b33);
+                    let test = data_with_mode(
+                        heldout_seed,
+                        task,
+                        panel,
+                        TEST_STEPS,
+                        mode,
                     );
+                    let clean = data_with_mode(
+                        heldout_seed,
+                        task,
+                        Panel::Clean,
+                        TEST_STEPS,
+                        mode,
+                    );
+                    if test.blocks[0].inputs != clean.blocks[0].inputs {
+                        return Err("label corruption altered the generated raw inputs".into());
+                    }
+                    let true_model = make_multi_gate_native(WIDTH, &task.rules())?;
+                    let oracle_clean_errors = native_errors(&true_model, &clean)?;
+                    if oracle_clean_errors != 0 {
+                        return Err("clean native oracle failed exact generation parity".into());
+                    }
+                    let oracle_errors = native_errors(&true_model, &test)?;
+                    let mut alias_rules = task.rules();
+                    alias_rules[0].raw = 1;
+                    let alternate = make_multi_gate_native(WIDTH, &alias_rules)?;
+                    let alias_native_mismatches = native_errors(&alternate, &clean)?;
+                    if mode == InputMode::ExactAlias && alias_native_mismatches != 0 {
+                        return Err("functional non-identifiability proof did not hold".into());
+                    }
+                    if mode == InputMode::NearAlias && alias_native_mismatches == 0 {
+                        return Err("near-alias native source not distinguishable on TEST".into());
+                    }
+                    println!(
+                        "A6C12D_ALIAS_PROOF,task={},panel={},seed={},mode={},native_alternative_mismatches={},native_true_mismatches={},samples={}",
+                        task.name(),
+                        panel.name(),
+                        index,
+                        mode.name(),
+                        alias_native_mismatches,
+                        oracle_clean_errors,
+                        TEST_STEPS * LANES
+                    );
+                    for row in frozen.iter().filter(|row| {
+                        row.mode == mode
+                            && row.fitted.task == task
+                            && row.fitted.panel == panel
+                            && row.fitted.seed == index
+                    }) {
+                        let fit = &row.fitted;
+                        let (sources_exact, truths_exact, proposal_errors, selected_errors, accepted) =
+                            if let Some(model) = &fit.fit {
+                                (
+                                    model.proposal_sources == task.sources(),
+                                    model.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
+                                    Some(native_errors(&model.proposal, &test)?),
+                                    Some(native_errors(&model.committed, &test)?),
+                                    model.accepted,
+                                )
+                            } else {
+                                (false, false, None, None, false)
+                            };
+                        println!(
+                            "A6C12D_TEST,task={},panel={},seed={},mode={},method={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},alias_native_mismatches={},factor_structures={},pair_rank={},sketch_bucket_hits={},sketch_unique={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
+                            task.name(),
+                            panel.name(),
+                            index,
+                            mode.name(),
+                            fit.method.name(),
+                            oracle_errors,
+                            proposal_errors,
+                            selected_errors,
+                            sources_exact,
+                            truths_exact,
+                            accepted,
+                            alias_native_mismatches,
+                            fit.proposals,
+                            fit.pair_rank,
+                            fit.sketch.bucket_hits,
+                            fit.sketch.unique,
+                            fit.sketch.full_scored,
+                            fit.screen_seconds,
+                            fit.factor_seconds,
+                            fit.w3_full_correlations,
+                            TEST_STEPS * LANES
+                        );
+                    }
                 }
             }
         }
     }
     println!(
-        "A6C12C_COMPLETE,policies={},independent_test_streams={},grid_sizes=3,methods=4",
+        "A6C12D_COMPLETE,policies={},distinct_test_datasets={},exact_alias_oracle_proof=true,grids=1,methods=4",
         frozen.len(),
-        4 * 2 * nseeds
+        Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * nseeds
     );
     Ok(())
 }
@@ -787,4 +890,56 @@ mod tests {
         assert_eq!(fit.autonomous_train_errors, 0);
         assert_eq!(fit.proposal_sources, Task::XorXorXor.sources());
     }
+    #[test]
+    fn exact_alias_has_a_second_distinct_native_generator_with_identical_outputs() {
+        for task in Task::ALL {
+            let clean = data_with_mode(51, task, Panel::Clean, 512, InputMode::ExactAlias);
+            let mut alternative = task.rules();
+            alternative[0].raw = 1;
+            assert_eq!(input_pair_differences(&clean).0, 0);
+            assert_ne!(alternative, task.rules());
+            assert_eq!(
+                native_errors(&make_multi_gate_native(WIDTH, &alternative).unwrap(), &clean)
+                    .unwrap(),
+                0
+            );
+            assert_eq!(
+                native_errors(&make_multi_gate_native(WIDTH, &task.rules()).unwrap(), &clean)
+                    .unwrap(),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn noisy_labels_leave_correlated_raw_inputs_unchanged() {
+        for mode in InputMode::STRESS {
+            let clean = data_with_mode(50, Task::XorXorXor, Panel::Clean, 512, mode);
+            let noisy = data_with_mode(50, Task::XorXorXor, Panel::Noise, 512, mode);
+            assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
+            assert_ne!(clean.blocks[0].targets, noisy.blocks[0].targets);
+            let (a, b) = input_pair_differences(&clean);
+            if mode == InputMode::ExactAlias {
+                assert_eq!(a, 0);
+            } else {
+                assert!(a > 0 && b > 0);
+            }
+        }
+    }
+
+    #[test]
+    fn near_alias_is_empirically_distinguishable_by_native_outputs() {
+        for task in Task::ALL {
+            let clean = data_with_mode(57, task, Panel::Clean, 512, InputMode::NearAlias);
+            let mut alternative = task.rules();
+            alternative[0].raw = 1;
+            let different = native_errors(
+                &make_multi_gate_native(WIDTH, &alternative).unwrap(),
+                &clean,
+            )
+            .unwrap();
+            assert!(different > 0);
+        }
+    }
+
 }
