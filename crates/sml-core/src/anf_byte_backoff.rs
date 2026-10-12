@@ -192,7 +192,9 @@ impl SparseByteBackoff {
         if !alpha.is_finite() || alpha <= 0.0 || !tau.is_finite() || tau <= 0.0 {
             return Err(ByteBackoffError::InvalidHyperparameter);
         }
-        if ng_parent.iter().any(|&p| !p.is_finite() || p <= 0.0 || p > 1.0)
+        if ng_parent
+            .iter()
+            .any(|&p| !p.is_finite() || p <= 0.0 || p > 1.0)
             || (ng_parent.iter().sum::<f64>() - 1.0).abs() > 1.0e-9
         {
             return Err(ByteBackoffError::InvalidParentDistribution);
