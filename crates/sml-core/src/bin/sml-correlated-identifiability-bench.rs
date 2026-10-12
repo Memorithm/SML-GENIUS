@@ -38,8 +38,6 @@ const CORRELATION_SALT: u64 = 0xA6C1_2D00_19A5_1133;
 enum Task {
     XorXorXor,
     AndXorXor,
-    XorAndXor,
-    AndAndAnd,
 }
 impl Task {
     const ALL: [Self; 2] = [Self::XorXorXor, Self::AndXorXor];
@@ -47,8 +45,6 @@ impl Task {
         match self {
             Self::XorXorXor => "xor_xor_xor",
             Self::AndXorXor => "and_xor_xor",
-            Self::XorAndXor => "xor_and_xor",
-            Self::AndAndAnd => "and_and_and",
         }
     }
     fn index(self) -> usize {
@@ -58,8 +54,6 @@ impl Task {
         match self {
             Self::XorXorXor => [6, 6, 6],
             Self::AndXorXor => [8, 6, 6],
-            Self::XorAndXor => [6, 8, 6],
-            Self::AndAndAnd => [8, 8, 8],
         }
     }
     fn sources(self) -> [Source; 3] {
