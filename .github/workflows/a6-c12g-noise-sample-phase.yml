@@ -1,0 +1,67 @@
+name: A6-C12g noise and sample phase transition
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12g-phase-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  phase-transition:
+    if: startsWith(github.head_ref, 'research/a6-c12g-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        runner_replica: [1, 2, 3]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format, check, clippy and unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-noise-sample-phase-bench
+      - name: Run full preregistered matrix and verify census
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12G_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,replica=${{ matrix.runner_replica }},arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-noise-sample-phase-bench > "$RUNNER_TEMP/a6c12g-phase.log" 2>&1
+          test "$(grep -c '^A6C12G_FROZEN,' "$RUNNER_TEMP/a6c12g-phase.log")" -eq 1232
+          test "$(grep -c '^A6C12G_TEST,' "$RUNNER_TEMP/a6c12g-phase.log")" -eq 1232
+          test "$(grep -c '^A6C12G_SUMMARY,' "$RUNNER_TEMP/a6c12g-phase.log")" -eq 154
+          test "$(grep -c '^A6C12G_THRESHOLD,' "$RUNNER_TEMP/a6c12g-phase.log")" -eq 22
+          grep -q '^A6C12G_ALL_FROZEN,policies=1232,test_datasets=80$' "$RUNNER_TEMP/a6c12g-phase.log"
+          grep -q '^A6C12G_COMPLETE,policies=1232,test_rows=1232,distinct_test_datasets=80,noise_rates=5,word_budgets=7,seed_count=8,fit_repeats=3$' "$RUNNER_TEMP/a6c12g-phase.log"
+          grep -E '^A6C12G_(CONFIG|THEORY|ALL_FROZEN|SUMMARY|THRESHOLD|COMPLETE),' "$RUNNER_TEMP/a6c12g-phase.log"
+      - name: Archive every fit and TEST line for audit
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6c12g-full-trace-runner-${{ matrix.runner_replica }}
+          path: ${{ runner.temp }}/a6c12g-phase.log
+          if-no-files-found: ignore
+          retention-days: 30
