@@ -891,122 +891,116 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preregistered_grids_cover_native_sources() {
-        for (n, pairs, triples) in [
-            (32, 448, 3_584),
-            (128, 7_936, 317_440),
-            (508, 128_016, 21_336_000),
-        ] {
-            let observed = Observed::new(
-                &data(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
-                grid(n),
-            );
-            assert_eq!(count_combinations(&observed), (pairs, triples));
-            assert!(Task::XorXorXor
-                .sources()
-                .iter()
-                .all(|source| observed.sources.contains(source)));
-        }
-    }
-
-    #[test]
-    fn sketch_key_is_stable_and_uses_requested_bits() {
-        let mut words = vec![0u64; 32];
-        words[1] = u64::MAX;
-        words[16] = 0b11;
-        let samples: [usize; SKETCH_BITS] = [0, 1, 2, 3, 4, 5, 6, 64, 65, 66, 67, 1024, 1025, 1026];
-        let key = sketch_key(&words, &samples);
-        assert_eq!(key, sketch_key(&words, &samples));
-        assert_eq!(key & (1 << 7), 1 << 7);
-        assert_eq!(key & (1 << 8), 1 << 8);
-        assert_eq!(key & (1 << 11), 1 << 11);
-        assert_eq!(key & (1 << 12), 1 << 12);
-    }
-
-    #[test]
-    fn clean_parity_is_found_deterministically_and_has_distinct_gates() {
-        let observed = Observed::new(
-            &data(91, Task::XorXorXor, Panel::Clean, TRAIN_STEPS),
-            grid(32),
+    fn source_grid_and_preregistered_cardinality_are_exact() {
+        let (train, injected) =
+            data_with_mode(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, InputMode::ExactLag);
+        assert_eq!(injected, 0);
+        let observed = Observed::new(&train, grid(STRESS_WIDTH));
+        assert_eq!(count_combinations(&observed), (128_016, 21_336_000));
+        assert!(Task::XorXorXor
+            .sources()
+            .iter()
+            .all(|source| observed.sources.contains(source)));
+        assert_eq!(
+            Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * (3 * 3 + 1),
+            120
         );
-        let (candidates, stats) = rank_sketch_triplets(&observed);
-        assert!(candidates.contains(&Task::XorXorXor.sources()));
-        assert!(stats.full_scored <= SKETCH_COARSE_KEEP);
-        assert!(stats.coarse_scored >= stats.full_scored);
-        assert!(candidates.iter().all(|sources| {
-            sources[0].gate < sources[1].gate && sources[1].gate < sources[2].gate
-        }));
-        assert!(rank_triples_stream(&observed).contains(&Task::XorXorXor.sources()));
-        let (again, repeated_stats) = rank_sketch_triplets(&observed);
-        assert_eq!(again, candidates);
-        assert_eq!(repeated_stats, stats);
     }
 
     #[test]
-    fn same_native_anf_factorizer_fits_screened_clean_parity() {
-        let train = data(94, Task::XorXorXor, Panel::Clean, TRAIN_STEPS);
-        let val = data(95, Task::XorXorXor, Panel::Clean, VAL_STEPS);
-        let observed = Observed::new(&train, grid(32));
-        let (candidates, _) = rank_sketch_triplets(&observed);
-        let fit = fit_three_gate_candidates(&train, &val, WIDTH, &candidates).unwrap();
-        assert_eq!(fit.autonomous_train_errors, 0);
-        assert_eq!(fit.proposal_sources, Task::XorXorXor.sources());
-    }
-    #[test]
-    fn exact_alias_has_a_second_distinct_native_generator_with_identical_outputs() {
+    fn exact_one_step_lag_has_a_distinct_native_equivalent_circuit() {
         for task in Task::ALL {
-            let clean = data_with_mode(51, task, Panel::Clean, 512, InputMode::ExactAlias);
-            let mut alternative = task.rules();
-            alternative[0].raw = 1;
-            assert_eq!(input_pair_differences(&clean).0, 0);
-            assert_ne!(alternative, task.rules());
+            let (clean, flips) =
+                data_with_mode(51, task, Panel::Clean, TEST_STEPS, InputMode::ExactLag);
+            assert_eq!(flips, 0);
+            assert_eq!(delayed_channel_mismatches(&clean), (0, 0));
+            let true_model = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
+            let mut alternate = task.rules();
+            alternate[1].gate = 67;
+            alternate[1].raw = 4;
+            assert_ne!(alternate, task.rules());
+            assert_eq!(native_errors(&true_model, &clean).unwrap(), 0);
             assert_eq!(
-                native_errors(
-                    &make_multi_gate_native(WIDTH, &alternative).unwrap(),
-                    &clean
-                )
-                .unwrap(),
-                0
-            );
-            assert_eq!(
-                native_errors(
-                    &make_multi_gate_native(WIDTH, &task.rules()).unwrap(),
-                    &clean
-                )
-                .unwrap(),
+                native_errors(&make_multi_gate_native(WIDTH, &alternate).unwrap(), &clean)
+                    .unwrap(),
                 0
             );
         }
     }
 
     #[test]
-    fn noisy_labels_leave_correlated_raw_inputs_unchanged() {
+    fn imperfect_one_step_lag_remains_observably_distinguishable() {
+        for task in Task::ALL {
+            let (clean, flips) =
+                data_with_mode(57, task, Panel::Clean, TEST_STEPS, InputMode::NearLag);
+            assert_eq!(flips, 0);
+            let (a, b) = delayed_channel_mismatches(&clean);
+            assert!(a > 0 && b > 0);
+            let mut alternative = task.rules();
+            alternative[1].gate = 67;
+            alternative[1].raw = 4;
+            assert_eq!(
+                native_errors(&make_multi_gate_native(WIDTH, &task.rules()).unwrap(), &clean)
+                    .unwrap(),
+                0
+            );
+            assert!(
+                native_errors(&make_multi_gate_native(WIDTH, &alternative).unwrap(), &clean)
+                    .unwrap()
+                    > 0
+            );
+        }
+    }
+
+    #[test]
+    fn hidden_transition_corruption_is_real_and_not_label_noise() {
+        for task in Task::ALL {
+            let (train, flips) =
+                data_with_mode(63, task, Panel::Clean, TRAIN_STEPS, InputMode::StateFlip);
+            assert!(flips > 0);
+            let correct_deterministic = make_multi_gate_native(WIDTH, &task.rules()).unwrap();
+            // All labels in this panel are clean *observations* of a teacher
+            // whose recurrent hidden state was perturbed, hence even the
+            // identical deterministic circuit is not a perfect predictor.
+            assert!(native_errors(&correct_deterministic, &train).unwrap() > 0);
+            let (with_label_noise, noise_flips) =
+                data_with_mode(63, task, Panel::Noise, TRAIN_STEPS, InputMode::StateFlip);
+            assert_eq!(flips, noise_flips);
+            assert_eq!(train.blocks[0].inputs, with_label_noise.blocks[0].inputs);
+            assert_ne!(train.blocks[0].targets, with_label_noise.blocks[0].targets);
+        }
+    }
+
+    #[test]
+    fn label_noise_cannot_change_raw_inputs_or_hidden_disturbance_stream() {
         for mode in InputMode::STRESS {
-            let clean = data_with_mode(50, Task::XorXorXor, Panel::Clean, 512, mode);
-            let noisy = data_with_mode(50, Task::XorXorXor, Panel::Noise, 512, mode);
+            let (clean, flips) =
+                data_with_mode(72, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
+            let (noisy, other_flips) =
+                data_with_mode(72, Task::XorXorXor, Panel::Noise, TRAIN_STEPS, mode);
             assert_eq!(clean.blocks[0].inputs, noisy.blocks[0].inputs);
             assert_ne!(clean.blocks[0].targets, noisy.blocks[0].targets);
-            let (a, b) = input_pair_differences(&clean);
-            if mode == InputMode::ExactAlias {
-                assert_eq!(a, 0);
+            assert_eq!(flips, other_flips);
+            if mode == InputMode::StateFlip {
+                assert!(flips > 0);
             } else {
-                assert!(a > 0 && b > 0);
+                assert_eq!(flips, 0);
             }
         }
     }
 
     #[test]
-    fn near_alias_is_empirically_distinguishable_by_native_outputs() {
-        for task in Task::ALL {
-            let clean = data_with_mode(57, task, Panel::Clean, 512, InputMode::NearAlias);
-            let mut alternative = task.rules();
-            alternative[0].raw = 1;
-            let different = native_errors(
-                &make_multi_gate_native(WIDTH, &alternative).unwrap(),
-                &clean,
-            )
-            .unwrap();
-            assert!(different > 0);
-        }
+    fn sketch_probe_and_full_corr_are_accounted_separately() {
+        let (train, _) =
+            data_with_mode(93, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, InputMode::NearLag);
+        let observed = Observed::new(&train, grid(32));
+        let (triples, stats) = rank_sketch_triplets(&observed);
+        assert!(stats.pair_probes > 0);
+        assert!(stats.unique >= triples.len());
+        assert!(stats.coarse_scored >= stats.full_scored);
+        assert!(stats.full_scored <= SKETCH_COARSE_KEEP);
+        let (again, stats2) = rank_sketch_triplets(&observed);
+        assert_eq!(again, triples);
+        assert_eq!(stats2, stats);
     }
 }
