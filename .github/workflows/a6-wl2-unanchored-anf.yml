@@ -1,0 +1,58 @@
+name: A6-WL2 selector-free sparse ANF recovery
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-wl2-unanchored-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  unanchored-learning:
+    if: startsWith(github.head_ref, 'research/a6-wl2-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89 toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Validate strict Rust and selector-free negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_wide_unanchored_learn -- --nocapture
+          cargo test --locked -p sml-core --bin sml-wide-unanchored-learn-bench -- --nocapture
+      - name: Run 42 preregistered fits before independent held-out TEST
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "WIDE_UNANCHORED_ENV,sha=$(git rev-parse HEAD),arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc),runner=$RUNNER_NAME"
+          cargo run --locked --release -p sml-core --bin sml-wide-unanchored-learn-bench 2>&1 | tee "$RUNNER_TEMP/a6-wl2.log"
+          grep -q '^WIDE_UNANCHORED_ALL_FROZEN,policies=42,distinct_teachers=21$' "$RUNNER_TEMP/a6-wl2.log"
+          test "$(grep -c '^WIDE_UNANCHORED_FROZEN,' "$RUNNER_TEMP/a6-wl2.log")" -eq 42
+          test "$(grep -c '^WIDE_UNANCHORED_TEST,' "$RUNNER_TEMP/a6-wl2.log")" -eq 42
+          test "$(grep -c '^WIDE_UNANCHORED_NEGATIVE,' "$RUNNER_TEMP/a6-wl2.log")" -eq 7
+          test "$(grep -c '^WIDE_UNANCHORED_SBG,' "$RUNNER_TEMP/a6-wl2.log")" -eq 1
+          test "$(grep '^WIDE_UNANCHORED_TEST,' "$RUNNER_TEMP/a6-wl2.log" | grep -c 'oracle=PASS$')" -eq 42
+          test "$(grep '^WIDE_UNANCHORED_NEGATIVE,' "$RUNNER_TEMP/a6-wl2.log" | grep -c 'accepted=false,oracle=PASS$')" -eq 7
+          grep -q '^WIDE_UNANCHORED_SBG,width=1024,seed=0,panel=clean,page=19,learned_gate=true,comparisons=16,bit_disagreements=0,oracle=PASS$' "$RUNNER_TEMP/a6-wl2.log"
+          grep -q '^WIDE_UNANCHORED_COMPLETE,policies=42,structure_exact=42,validation_pass=42,zero_test=42,negative_rejected=7,k8_exhaustive_pass=6,sbg_learned_gate=true$' "$RUNNER_TEMP/a6-wl2.log"
