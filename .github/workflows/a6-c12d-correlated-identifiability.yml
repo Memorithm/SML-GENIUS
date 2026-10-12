@@ -1,0 +1,56 @@
+name: A6-C12d correlated-source identifiability boundary
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-c12d-identifiability-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  correlated-identifiability:
+    if: startsWith(github.head_ref, 'research/a6-c12d-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR SHA with no persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check formatter, compilation, Clippy and exact-alias native controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-correlated-identifiability-bench
+      - name: Run frozen correlated and non-identifiable 508-source panel
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6C12D_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-correlated-identifiability-bench -- 3 2>&1 | tee "$RUNNER_TEMP/a6c12d-identifiability.log"
+          grep -q '^A6C12D_ALL_FROZEN,policies=80,datasets=24$' "$RUNNER_TEMP/a6c12d-identifiability.log"
+          test "$(grep -c '^A6C12D_INPUT,' "$RUNNER_TEMP/a6c12d-identifiability.log")" -eq 24
+          test "$(grep -c '^A6C12D_FROZEN,' "$RUNNER_TEMP/a6c12d-identifiability.log")" -eq 80
+          test "$(grep -c '^A6C12D_TEST,' "$RUNNER_TEMP/a6c12d-identifiability.log")" -eq 80
+          test "$(grep -c '^A6C12D_ALIAS_PROOF,' "$RUNNER_TEMP/a6c12d-identifiability.log")" -eq 24
+          test "$(grep -c '^A6C12D_FROZEN,.*method=walsh3_stream,' "$RUNNER_TEMP/a6c12d-identifiability.log")" -eq 8
+          grep -q '^A6C12D_COMPLETE,policies=80,distinct_test_datasets=24,exact_alias_oracle_proof=true,grids=1,methods=4$' "$RUNNER_TEMP/a6c12d-identifiability.log"
+          grep '^A6C12D_TEST,' "$RUNNER_TEMP/a6c12d-identifiability.log" | grep ',method=hybrid_w2_mitm,' || true

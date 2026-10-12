@@ -806,3 +806,37 @@ under matched cost/accuracy; eventual variable k=4/5 *with enough learner
 capacity* and learned bank integration. The experiments must retain the
 native Rust-only/hardware-independent boundary, and avoid software NVIDIA
 dependencies beyond allowed GPU drivers.
+
+## A6-C12d correlated-source identifiability — bounded diagnostic (2026-10-12)
+
+[Pre-registered protocol](A6-C12D-CORRELATED-IDENTIFIABILITY-PREREGISTRATION.md)
+and [measured results](RESULTS-A6-C12D-CORRELATED-IDENTIFIABILITY.md)
+extend A6-C12c to 508 candidate features with deliberately correlated
+raw channels, while preserving the **fixed N128 ring and three hidden gates**
+limitation. The independent native 12-case near-alias panel showed
+**12/12 exact source, position and ANF truth-table recoveries** with hybrid
+W2+Sketch-MITM, plus native held-out prediction parity with the generator.
+
+A deliberately **non-identifiable** panel set raw `x1=x2`. Two different
+native networks reading x1 versus x2 at the same hidden position gave
+identical predictions on **12/12 TEST streams** and are identical for the
+entire constrained input domain by substitution. The hybrid model still
+matched the generator functionally in **12/12** cases, although it could
+not recover the generator's arbitrarily chosen source label (**0/12**).
+Research evaluations must therefore distinguish *identical hidden
+parameters*, *observable functional equivalence*, and *minimal identifiable
+representations*; never count this structural ambiguity as a learning
+failure.
+
+On four matched streams per correlation mode, the native W3 exhaustive
+reference was approximately 34.99× (near alias) and 35.21× (exact alias)
+slower in total fit time than the hybrid. These are **matched, synthetic
+measurements**, not proofs of subcubic complexity, arbitrary hidden graphs,
+nor performance results for million-function ANF banks or SML-25B.
+
+Next evidence gates: time-shifted and biased/correlated distractors,
+partial observability and identifiability equivalence classes with formal
+negative controls, state-transition noise and non-i.i.d. labels, then
+k-variable capacity-controlled studies with four/five learnable ANF gates.
+No cross-repository integration or inference-kernel promotion until
+the identifiability and cost bounds are independently qualified.
