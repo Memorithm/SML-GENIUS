@@ -275,9 +275,7 @@ where
     let mut attempted_witnesses = 0usize;
     let mut candidate_rejections = 0usize;
     let mut mobius_certificates = 0usize;
-    let mut zero_residual_probes = 0usize;
-
-    loop {
+    let zero_residual_probes = loop {
         let mut found = None;
         let mut saw_positive = false;
         for _ in 0..limits.max_witness_trials {
@@ -330,9 +328,8 @@ where
         if saw_positive {
             return Err(OverlapLearnError::WitnessExhausted);
         }
-        zero_residual_probes = limits.max_witness_trials;
-        break;
-    }
+        break limits.max_witness_trials;
+    };
     learned.sort_unstable();
     let gate =
         WideAnfGate::from_monomials((0..fan_in).collect(), learned.clone(), fan_in, gate_limits)?;
