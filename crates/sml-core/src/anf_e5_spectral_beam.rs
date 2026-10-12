@@ -237,12 +237,11 @@ impl ConjoinedParities {
         let monomials = coefficients
             .iter()
             .enumerate()
-            .filter_map(|(mask, &active)| {
-                active.then(|| {
-                    (0..width)
-                        .filter(|&bit| mask & (1 << bit) != 0)
-                        .collect::<Vec<_>>()
-                })
+            .filter(|entry| *entry.1)
+            .map(|(mask, _)| {
+                (0..width)
+                    .filter(|&bit| mask & (1 << bit) != 0)
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
         let gate = WideAnfGate::from_monomials(
