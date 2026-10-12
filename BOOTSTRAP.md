@@ -1096,3 +1096,44 @@ where high-order hidden functions remain observationally
 indistinguishable. This is synthetic Rust reference evidence, not
 human intuition, SML-25B language quality, passive learning of
 unknown monomials or native Thor GPU speed.
+
+## A6-I4 — input-pair support guard and higher-order failure (2026-10-12)
+
+After merged A6-I1/I2/I3, the [frozen pairwise-OOD protocol](docs/A6-I4-PAIR-SUPPORT-TRIPLE-PREREGISTRATION.md)
+and [native scientific results](docs/RESULTS-A6-I4-PAIR-SUPPORT-TRIPLE.md)
+add the PUBLIC Rust `anf_pair_support::AnfPairSupportGuard` alongside
+the existing `AnfMarginalSupportGuard` and `PassiveCommittee`.
+Only passive TRAIN inputs enter the guard: it stores 512 bit-sliced
+observations per variable, seals each input PAIR's four possible
+Boolean configurations once via u64 intersections and retains
+only the **missing pairs**. No teacher monomial, future output,
+dynamic MOR route or corrected candidate list is supplied.
+
+On **252 preregistered fits** and **516096 OOD predictions**
+(7 widths k8..1024 ×3 seeds×2 TRAIN label panels×6 regimes),
+the new guard eliminates **43008 confident errors** that the
+old marginal filter misses when the two individual values have
+been seen but their pair11 was never co-activated. **This costs
+43008 unnecessarily rejected correct predictions** if the
+true teacher is already in the four-candidate bank.
+
+**Critical required counterexample:** when all three input PAIRS
+have each observed all four Boolean assignments but the TRIPLE
+111 was never observed in passive TRAIN, a missing degree-three
+coefficient remains invisible. The guard accepts **86016/86016**
+predictions and **43008 are confidently WRONG**, exactly as
+preregistered. No claim that order-two support monitoring
+certifies distribution-free correctness or bank completeness.
+For k1024 the logical training-column payload is **65536 bytes**;
+one missing pair adds 24 bytes on the measured native ABI;
+1023 missing pairs under single-dimension censoring consume
+90088 bytes total, excluding Vec overhead and transient memory.
+
+**Next independently qualified gates:** adaptively budgeted
+third-order and higher support representation with mandatory
+order+1 failures; explicit posterior calibration under prior
+and distribution shift; novelty-triggered candidate expansion
+from TRAIN only; and real passive SBG/MOR/Delta-KV multi-cycle
+validation. Do not confuse absence of a visible interaction
+with proof of correctness, or synthetic performance with
+SML-25B model quality.
