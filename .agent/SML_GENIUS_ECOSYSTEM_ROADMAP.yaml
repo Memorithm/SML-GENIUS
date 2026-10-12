@@ -891,7 +891,7 @@ PVP6_native_SciRust_PVP3_harness_2026_10_07:
     - no_SML_architecture_default_route_GPU_or_model_quality_claim
 
 elastic_ngram_program_2026_10_12:
-  status: ENG0_and_ENG1a_functional_reference_qualified
+  status: ENG0_ENG1a_ENG1b_functional_references_qualified
   model_authority: Memorithm/SML-GENIUS
   generic_resource_controller: Memorithm/ElasticXxx
   ENG0:
@@ -915,8 +915,43 @@ elastic_ngram_program_2026_10_12:
       - twelve_byte_synthetic_distinguishability_fixture_qualified
       - immutable_fit_and_explicit_logical_context_counter_and_key_budgets_qualified
       - depth_transition_classified_as_model_semantics_change_not_exact_resource_actuation
+  ENG1b:
+    pull_request: 527
+    merge_commit: 5eb7bb98dca4295c61485599a6cc4303c5336e4a
+    code: crates/sml-core/src/elastic_ngram_trie.rs
+    protocol: docs/ENG-1B-TRIE-PREREGISTRATION.md
+    results: docs/RESULTS-ENG-1B-TRIE-HOSTED-DIAGNOSTIC.md
+    maximum_byte_context: 32
+    frozen_report_inclusive_head: 7900b93641679750d28689944d7c5b51904e39d1
+    dedicated_CI_run: 38311715555
+    general_CI_run: 38311715549
+    status: merged_exact_head_all_CI_success
+    synthetic_reference:
+      trained_events: 6080
+      matched_depth32_contexts: 96733
+      matched_depth32_follower_pairs: 101212
+      full_distribution_f64_bitwise_oracle: success
+      legacy_0_to_7_oracles: success
+      depth12_same_last7_collision_witness: success
+      controls: [unchanged_ENG0, unchanged_ENG1a]
+    initial_hosted_diagnostic:
+      first_run: 38311439857
+      second_run: 38311715555
+      runner: github_hosted_linux_x86_64
+      trie_process_peak_KiB_first: 15804
+      long_process_peak_KiB_first: 22148
+      trie_lookup_p95_ns_first: 4569
+      long_lookup_p95_ns_first: 10800
+      resource_gate: PASS_hosted_diagnostic_only
+      repetitions_are_not_independent_text_corpora: true
+      native_Thor_validation: not_executed
+    boundary:
+      - memory_peak_is_process_VmHWM_including_runtime_not_model_only_allocations
+      - no_automatic_default_route_or_production_representation_promotion
+      - no_ElasticXxx_actuation_or_adaptive_depth_authorization
+      - CTW_PPM_next_byte_quality_and_real_language_advantage_not_tested
   next_slices:
-    - ENG1b_shared_suffix_trie_and_physical_resource_comparison_issue_526
+    - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
     - ENG2_generic_ElasticXxx_resource_contract_issue_244
     - ENG3_heldout_quality_authorized_adaptive_depth_profiles
