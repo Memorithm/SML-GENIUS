@@ -50,7 +50,7 @@ jobs:
           test "$(grep -c '^ENG1C_FINGERPRINT,' "$RUNNER_TEMP/eng1c-provenance/en.txt")" -eq 1
           grep -Eq '^ENG1C_FINGERPRINT,language=FR,ebook=17989,raw_bytes=[0-9]+,raw_sha256=[a-f0-9]{64},body_bytes=[0-9]+,body_sha256=[a-f0-9]{64},.*integrity=PASS$' "$RUNNER_TEMP/eng1c-provenance/fr.txt"
           grep -Eq '^ENG1C_FINGERPRINT,language=EN,ebook=1342,raw_bytes=[0-9]+,raw_sha256=[a-f0-9]{64},body_bytes=[0-9]+,body_sha256=[a-f0-9]{64},.*integrity=PASS$' "$RUNNER_TEMP/eng1c-provenance/en.txt"
-          test "$(cut -d, -f6 "$RUNNER_TEMP/eng1c-provenance/fr.txt")" != "$(cut -d, -f6 "$RUNNER_TEMP/eng1c-provenance/en.txt")"
+          test "$(cut -d, -f7 "$RUNNER_TEMP/eng1c-provenance/fr.txt")" != "$(cut -d, -f7 "$RUNNER_TEMP/eng1c-provenance/en.txt")"
           (
             cd "$RUNNER_TEMP/eng1c-provenance"
             sha256sum fr.txt en.txt > manifest.sha256
