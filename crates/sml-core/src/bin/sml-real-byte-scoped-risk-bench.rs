@@ -34,6 +34,7 @@ struct EvalRow {
     confidence: f64,
     ngram2_probability: f64,
     ngram4_probability: f64,
+    majority_probability: f64,
     missing2: usize,
     missing3: usize,
     distance16: u8,
@@ -237,6 +238,7 @@ fn score(
     nearest: &Hamming16Guard,
     ngram2: &NGramModel,
     ngram4: &NGramModel,
+    majority_probability: f64,
 ) -> Result<Vec<EvalRow>, Box<dyn Error>> {
     let layout = ChunkLayout::new(bytes.len())?;
     let mut out = Vec::new();
@@ -260,6 +262,7 @@ fn score(
                 confidence: posterior.confidence,
                 ngram2_probability: probs2[usize::from(EVENT)],
                 ngram4_probability: probs4[usize::from(EVENT)],
+                majority_probability,
                 missing2: pair.missing_patterns,
                 missing3: triple.missing_patterns,
                 distance16,
@@ -291,10 +294,10 @@ fn policies() -> Vec<Policy> {
 fn evaluate_policy(rows: &[EvalRow], policy: Policy) -> Metrics {
     let mut out = Metrics::default();
     for row in rows {
-        let missing = if policy.strength == 2 {
-            row.missing2
-        } else {
-            row.missing3
+        let missing = match policy.strength {
+            2 => row.missing2,
+            3 => row.missing3,
+            _ => 0, // predeclared stand-alone Hamming/no-guard controls only
         };
         let accepted = row.confidence >= policy.confidence
             && missing <= policy.missing_limit
@@ -325,6 +328,7 @@ fn baseline_score(rows: &[EvalRow], which: &str) -> (f64, usize) {
         let probability = match which {
             "ngram2" => row.ngram2_probability,
             "ngram4" => row.ngram4_probability,
+            "majority" => row.majority_probability,
             "anf" => row.anf_probability,
             _ => unreachable!(),
         };
@@ -361,6 +365,47 @@ fn print_curve(split: &str, index: usize, policy: Policy, metrics: Metrics) {
     );
 }
 
+fn standalone_controls() -> [(&'static str, Policy); 5] {
+    [
+        (
+            "COMMITTEE_ONLY",
+            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 16 },
+        ),
+        (
+            "SCOPED_PAIR_ONLY",
+            Policy { confidence: 0.5, strength: 2, missing_limit: 0, hamming_limit: 16 },
+        ),
+        (
+            "SCOPED_TRIPLE_ONLY",
+            Policy { confidence: 0.5, strength: 3, missing_limit: 0, hamming_limit: 16 },
+        ),
+        (
+            "HAMMING_EXACT_ONLY",
+            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 0 },
+        ),
+        (
+            "HAMMING_ONE_ONLY",
+            Policy { confidence: 0.5, strength: 0, missing_limit: 0, hamming_limit: 1 },
+        ),
+    ]
+}
+
+fn print_controls(split: &str, rows: &[EvalRow]) {
+    for (name, policy) in standalone_controls() {
+        let metric = evaluate_policy(rows, policy);
+        println!(
+            "A6_E1_CONTROL,split={},name={},tests={},accepted={},errors={},coverage={:.8},fallback_bits={:.8}",
+            split,
+            name,
+            metric.total,
+            metric.accepted,
+            metric.accepted_errors,
+            metric.coverage(),
+            metric.fallback_bits()
+        );
+    }
+}
+
 fn run(path: &str) -> Result<(), Box<dyn Error>> {
     let raw = std::fs::read(path)?;
     if raw.len() != 433_036 {
@@ -369,6 +414,9 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     let splits = CharSplits::new(&raw);
     let train_start = Instant::now();
     let training = collect_rows(&splits.train)?;
+    let train_positives = training.iter().filter(|row| row.truth).count();
+    let majority_probability =
+        (train_positives as f64 + 0.5) / (training.len() as f64 + 1.0);
     let gates = train_bank(&training)?;
     let positions = competing_support(&gates, 16)?;
     let mut committee = PassiveCommittee::new_with_source_width(
@@ -427,6 +475,7 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
         &nearest,
         &ngram2,
         &ngram4,
+        majority_probability,
     )?;
     let grid = policies();
     if grid.len() != 32 {
@@ -443,6 +492,7 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    print_controls("VAL", &validation);
     let (val_ng2, _) = baseline_score(&validation, "ngram2");
     let (val_ng4, _) = baseline_score(&validation, "ngram4");
     println!(
@@ -467,17 +517,21 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
         &nearest,
         &ngram2,
         &ngram4,
+        majority_probability,
     )?;
     let (test_ng2, ng2_errors) = baseline_score(&heldout, "ngram2");
     let (test_ng4, ng4_errors) = baseline_score(&heldout, "ngram4");
     let (test_anf, anf_errors) = baseline_score(&heldout, "anf");
+    let (test_majority, majority_errors) = baseline_score(&heldout, "majority");
     println!(
-        "A6_E1_TEST_BASELINES,tokens={},ngram2_bits={:.8},ngram2_errors={},ngram4_bits={:.8},ngram4_errors={},anf_bits={:.8},anf_errors={}",
+        "A6_E1_TEST_BASELINES,tokens={},ngram2_bits={:.8},ngram2_errors={},ngram4_bits={:.8},ngram4_errors={},majority_bits={:.8},majority_errors={},anf_bits={:.8},anf_errors={}",
         heldout.len(),
         test_ng2,
         ng2_errors,
         test_ng4,
         ng4_errors,
+        test_majority,
+        majority_errors,
         test_anf,
         anf_errors
     );
@@ -489,6 +543,7 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
             test_selected = Some(metric);
         }
     }
+    print_controls("TEST", &heldout);
     let decision = if test_selected.is_some_and(|metric| {
         metric.coverage() >= REQUIRED_COVERAGE
             && metric.fallback_bits() <= test_ng4 - REQUIRED_LOGLOSS_ADVANTAGE
@@ -558,6 +613,7 @@ mod tests {
                 confidence: 0.9,
                 ngram2_probability: 0.6,
                 ngram4_probability: 0.6,
+                majority_probability: 0.6,
                 missing2: 0,
                 missing3: 0,
                 distance16: 0,
@@ -569,6 +625,7 @@ mod tests {
                 confidence: 0.9,
                 ngram2_probability: 0.7,
                 ngram4_probability: 0.7,
+                majority_probability: 0.7,
                 missing2: 0,
                 missing3: 1,
                 distance16: 1,
