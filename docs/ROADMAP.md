@@ -840,3 +840,42 @@ negative controls, state-transition noise and non-i.i.d. labels, then
 k-variable capacity-controlled studies with four/five learnable ANF gates.
 No cross-repository integration or inference-kernel promotion until
 the identifiability and cost bounds are independently qualified.
+
+## A6-C12e temporal observability and recurrent transition noise — 2026-10-12
+
+The [pre-registered protocol](A6-C12E-TEMPORAL-STATE-PREREGISTRATION.md)
+and [measured native report](RESULTS-A6-C12E-TEMPORAL-STATE.md) extend the
+bounded source-identification programme to time-shifted aliases and actual
+hidden recurrent-state perturbations, with **508 candidate source features
+and only 128 native state bits / three hidden gates**.
+
+With imperfect delayed aliases `x1(t)≈x2(t-1)` and `x3(t)≈x4(t-1)`,
+the native W2+Sketch-MITM union recovered all **12/12** original sources,
+positions and ANF truth tables and matched autonomous TEST errors. With
+**exact** delayed equality, moving the intermediate gate from `j68/x3`
+to `j67/x4` gives a distinct, observationally equivalent native circuit:
+**12/12** zero-disagreement independent alternative-oracle witnesses.
+The learner recovered **12/12** oracle-matched TEST functions but **0/12**
+identical canonical internal structures; this is not a model failure
+when the input domain cannot identify the source/position.
+
+A stochastic teacher injecting Bernoulli(1/256) flips into the persisted
+`state[127]` after each native step still yielded **12/12 recovery** of
+the true three deterministic gate tables and source positions; selected
+models matched the *deterministic* teacher's own error against the
+stochastically perturbed labels. They **did not** predict unknown hidden
+noise draws. The resulting TEST mismatch on clean labels depended strongly
+on the circuit (mean 6.168% XOR³ vs 0.766% AND→XOR→XOR).
+On four matched W3 references per mode, total fit was approximately
+35.00×, 35.70× and 35.22× faster for the hybrid, respectively.
+No theoretical worst-case cost bound follows.
+
+**Next evidence gates:** characterize true observational equivalence classes
+rather than comparing hidden labels blindly; stress more gates/slots/rates
+of state noise, time-varying conditional perturbations and input masking
+*after* a formal observability check; only then expand unknown gate count
+k=4/5 with an appropriately capable learner. Do not promote this
+three-gate N128 synthetic result to free graphs, memory banks of millions
+of ANF functions, SML-25B language quality, GPU/VRAM/throughput claims,
+or a general parity-with-noise solution. Native Rust remains the required
+implementation boundary; no NVIDIA software dependencies beyond drivers.
