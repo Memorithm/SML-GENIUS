@@ -14,14 +14,8 @@ pub const MAX_MATERIALIZATION_SOURCE_WIDTH: usize = 4096;
 const BITS_PER_BLOCK: usize = 512;
 
 #[repr(align(64))]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct AlignedTruthBlock([u64; 8]);
-
-impl Default for AlignedTruthBlock {
-    fn default() -> Self {
-        Self([0; 8])
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExecChoice {
