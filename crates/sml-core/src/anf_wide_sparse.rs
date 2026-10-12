@@ -171,8 +171,8 @@ impl WideAnfGate {
         let term_count = canonical.len();
         // Fixed density policy: dense only at k<=8 and >=25% occupancy.
         // Otherwise avoid exponential coefficient storage and evaluation.
-        let use_dense = k <= crate::anf_local::LOCAL_ANF_MAX_FAN_IN
-            && term_count >= (1usize << k).div_ceil(4);
+        let use_dense =
+            k <= crate::anf_local::LOCAL_ANF_MAX_FAN_IN && term_count >= (1usize << k).div_ceil(4);
 
         let execution = if use_dense {
             let bit_count = 1usize << k;
@@ -381,11 +381,7 @@ impl WideAnfGate {
 
     /// Exact 64-lane evaluation. Caller owns scratch to avoid per-step
     /// allocations. All bounds are checked before writing scratch.
-    pub fn evaluate_lanes(
-        &self,
-        source: &[u64],
-        scratch: &mut [u64],
-    ) -> Result<u64, WideAnfError> {
+    pub fn evaluate_lanes(&self, source: &[u64], scratch: &mut [u64]) -> Result<u64, WideAnfError> {
         if self.inputs.iter().any(|&input| input >= source.len()) {
             return Err(WideAnfError::SourceTooShort);
         }
@@ -498,11 +494,7 @@ impl WideAnfNetwork {
         Ok(())
     }
 
-    pub fn readout_lanes(
-        &self,
-        source: &[u64],
-        scratch: &mut [u64],
-    ) -> Result<u64, WideAnfError> {
+    pub fn readout_lanes(&self, source: &[u64], scratch: &mut [u64]) -> Result<u64, WideAnfError> {
         self.readout.evaluate_lanes(source, scratch)
     }
 
@@ -554,13 +546,9 @@ mod tests {
                 vec![0, k / 2, k - 1],
                 (0..k).collect::<Vec<_>>(),
             ];
-            let gate = WideAnfGate::from_monomials(
-                (0..k).collect(),
-                monomials.clone(),
-                k,
-                limits(),
-            )
-            .unwrap();
+            let gate =
+                WideAnfGate::from_monomials((0..k).collect(), monomials.clone(), k, limits())
+                    .unwrap();
             for mode in 0..3 {
                 if mode == 1 {
                     inputs.fill(0);
@@ -595,12 +583,11 @@ mod tests {
         let monomials = (0..128)
             .map(|mask| (0..k).filter(|&i| mask & (1 << i) != 0).collect::<Vec<_>>())
             .collect::<Vec<_>>();
-        let dense = WideAnfGate::from_monomials((0..k).collect(), monomials, k, limits())
-            .unwrap();
+        let dense = WideAnfGate::from_monomials((0..k).collect(), monomials, k, limits()).unwrap();
         assert_eq!(dense.backend(), WideAnfBackend::Dense);
         assert_eq!(dense.scratch_words(), 256);
-        let sparse = WideAnfGate::from_monomials((0..k).collect(), vec![vec![0]], k, limits())
-            .unwrap();
+        let sparse =
+            WideAnfGate::from_monomials((0..k).collect(), vec![vec![0]], k, limits()).unwrap();
         assert_eq!(sparse.backend(), WideAnfBackend::Sparse);
         assert!(sparse.scratch_words() < dense.scratch_words());
         let zero = WideAnfGate::from_monomials(vec![0], vec![], 1, limits()).unwrap();
@@ -654,8 +641,7 @@ mod tests {
             ),
             Err(WideAnfError::BudgetExceeded)
         );
-        let gate =
-            WideAnfGate::from_monomials(vec![0, 1], vec![vec![0], vec![1]], 2, lim).unwrap();
+        let gate = WideAnfGate::from_monomials(vec![0, 1], vec![vec![0], vec![1]], 2, lim).unwrap();
         let mut scratch = vec![0x5555u64; gate.scratch_words() - 1];
         assert_eq!(
             gate.evaluate_lanes(&[0, 0], &mut scratch),
@@ -691,7 +677,9 @@ mod tests {
             for (t, &word) in input_words.iter().enumerate() {
                 local_state[local.state_bits()] = word;
                 local.step_lanes(&mut local_state, &mut local_next, &mut local_scratch);
-                let native_y = local.readout().evaluate_lanes(&local_state, &mut local_scratch);
+                let native_y = local
+                    .readout()
+                    .evaluate_lanes(&local_state, &mut local_scratch);
                 assert_eq!(native_y, wide_output[t], "seed={seed}, timestep={t}");
             }
         }
@@ -708,9 +696,10 @@ mod tests {
         let mut scratch = vec![0u64; bridge.scratch_words()];
         let got = bridge.evaluate_lanes(&input, &mut scratch).unwrap();
         for lane in 0..64 {
-            let address = input.iter().enumerate().fold(0u32, |a, (i, &word)| {
-                a | (((word >> lane) as u32 & 1) << i)
-            });
+            let address = input
+                .iter()
+                .enumerate()
+                .fold(0u32, |a, (i, &word)| a | (((word >> lane) as u32 & 1) << i));
             assert_eq!(
                 (got >> lane) & 1 != 0,
                 large.evaluate(address).unwrap(),
@@ -734,20 +723,17 @@ mod tests {
         assert_eq!(wide_and.scratch_words(), state_bits + 1);
         // The source is fully configurable: a 1024-input AND in one
         // recurrent slot next to ordinary copy/zero slots is admissible.
-        let copy = WideAnfGate::from_monomials(
-            vec![state_bits],
-            vec![vec![0]],
-            state_bits + 1,
-            lim,
-        )
-        .unwrap();
+        let copy =
+            WideAnfGate::from_monomials(vec![state_bits], vec![vec![0]], state_bits + 1, lim)
+                .unwrap();
         let mut gates = vec![copy.clone(); state_bits];
         gates[0] = wide_and;
         let net = WideAnfNetwork::new(state_bits, 1, gates, copy).unwrap();
         let mut source = vec![u64::MAX; net.source_width()];
         let mut next = vec![0u64; state_bits];
         let mut scratch = vec![0u64; net.scratch_words()];
-        net.step_lanes(&mut source, &mut next, &mut scratch).unwrap();
+        net.step_lanes(&mut source, &mut next, &mut scratch)
+            .unwrap();
         assert_eq!(source[0], u64::MAX);
         assert_eq!(net.readout_lanes(&source, &mut scratch), Ok(u64::MAX));
     }
