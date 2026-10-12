@@ -944,7 +944,32 @@ elastic_ngram_program_2026_10_12:
       long_lookup_p95_ns_first: 10800
       resource_gate: PASS_hosted_diagnostic_only
       repetitions_are_not_independent_text_corpora: true
-      native_Thor_validation: not_executed
+      native_Thor_validation: five_rounds_success_on_aarch64_CPU
+      native_followup:
+        protocol: docs/ENG-1B-THOR-NATIVE-PREREGISTRATION.md
+        pipeline_PR: 529
+        integrated_sha: 835d6a643c41fe61de2dfec661fab3dc4fa03f15
+        workflow_run: 38314983846
+        job: 115029361907
+        artifact: 11776472119
+        host: tarek
+        architecture: aarch64
+        rust: "1.89.0"
+        rounds: 5
+        passed_resource_diagnostic: 5
+        matched_depth32_contexts: 96733
+        matched_depth32_follower_pairs: 101212
+        identical_predictions_digest: 5c4ad424180a35ae
+        median_trie_process_VmHWM_KiB: 15104
+        median_long_process_VmHWM_KiB: 21376
+        median_trie_lookup_p95_ns: 6046
+        median_long_lookup_p95_ns: 17352
+        report_PR: 531
+        results_source: docs/RESULTS-ENG-1B-THOR-NATIVE-5X.md
+        qualification: native_CPU_synthetic_only_no_model_quality_or_production_promotion
+        host_exclusivity: unverified_loadavg_before_8_96_after_6_93
+        gpu_vram_energy_and_real_text: unmeasured
+
     boundary:
       - memory_peak_is_process_VmHWM_including_runtime_not_model_only_allocations
       - no_automatic_default_route_or_production_representation_promotion
