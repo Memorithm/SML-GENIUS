@@ -43,19 +43,22 @@ fn wilson_95(success: usize, trials: usize) -> (f64, f64) {
     let p = success as f64 / n;
     let z2 = z * z;
     let center = (p + z2 / (2.0 * n)) / (1.0 + z2 / n);
-    let radius =
-        z / (1.0 + z2 / n) * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
+    let radius = z / (1.0 + z2 / n) * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
     ((center - radius).max(0.0), (center + radius).min(1.0))
 }
 
 fn audit(csv: &str) -> Result<(usize, usize), String> {
     let mut lines = csv.lines();
     let header = lines.next().ok_or("missing CSV header")?;
-    if header.split(',').count() != EXPECTED_COLUMNS || !header.starts_with("study,task,label_noise,method,proxy_words,proxy_bits,successes,trials,") {
+    if header.split(',').count() != EXPECTED_COLUMNS
+        || !header
+            .starts_with("study,task,label_noise,method,proxy_words,proxy_bits,successes,trials,")
+    {
         return Err("unexpected CSV schema".into());
     }
     let mut seen = HashSet::new();
-    let mut groups = BTreeMap::<(String, String, String, String), Vec<(usize, usize, usize)>>::new();
+    let mut groups =
+        BTreeMap::<(String, String, String, String), Vec<(usize, usize, usize)>>::new();
     let mut count_g = 0usize;
     let mut count_h = 0usize;
 
@@ -85,14 +88,20 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
             _ => return Err(format!("line {}: invalid study", line_number + 2)),
         };
         if !correct_budgets.contains(&words) || bits != words * 64 {
-            return Err(format!("line {}: invalid registered budget", line_number + 2));
+            return Err(format!(
+                "line {}: invalid registered budget",
+                line_number + 2
+            ));
         }
         let eta = label_eta(rate)?;
         if (study == "G" && !["0", "1/32", "1/16", "1/8", "1/5"].contains(&rate))
             || (study == "H" && !["0", "1/5", "3/10", "2/5"].contains(&rate))
             || (method == "gauss_clean" && rate != "0")
         {
-            return Err(format!("line {}: unregistered design cell", line_number + 2));
+            return Err(format!(
+                "line {}: unregistered design cell",
+                line_number + 2
+            ));
         }
         let expected_trials = if study == "H" && scheduled_h(task, rate)?.contains(&words) {
             16
@@ -100,14 +109,20 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
             8
         };
         if trials != expected_trials || successes > trials || train_successes > trials {
-            return Err(format!("line {}: invalid 8/16 seed census", line_number + 2));
+            return Err(format!(
+                "line {}: invalid 8/16 seed census",
+                line_number + 2
+            ));
         }
 
         let rho_expected = (1.0 - 2.0 * eta).powi(2);
-        let amp = if task == "xor_xor_xor" { rho_expected } else { rho_expected / 2.0 };
+        let amp = if task == "xor_xor_xor" {
+            rho_expected
+        } else {
+            rho_expected / 2.0
+        };
         let expected_theory = 2.0 * (2.0 * 317_440.0f64).ln() / (amp * amp);
-        if (rho - rho_expected).abs() > 0.000_001
-            || (estimate - expected_theory).abs() > 0.000_002
+        if (rho - rho_expected).abs() > 0.000_001 || (estimate - expected_theory).abs() > 0.000_002
         {
             return Err(format!("line {}: theory mismatch", line_number + 2));
         }
@@ -123,10 +138,15 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
         }
         let unique_key = (study, task, rate, method, words);
         if !seen.insert(unique_key) {
-            return Err(format!("line {}: duplicate experimental cell", line_number + 2));
+            return Err(format!(
+                "line {}: duplicate experimental cell",
+                line_number + 2
+            ));
         }
-        groups.entry((study.into(), task.into(), rate.into(), method.into()))
-            .or_default().push((words, successes, trials));
+        groups
+            .entry((study.into(), task.into(), rate.into(), method.into()))
+            .or_default()
+            .push((words, successes, trials));
         match study {
             "G" => count_g += 1,
             "H" => count_h += 1,
@@ -135,14 +155,21 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
     }
 
     if count_g != 154 || count_h != 180 || groups.len() != 40 {
-        return Err(format!("bad design census: G={count_g}, H={count_h}, groups={}", groups.len()));
+        return Err(format!(
+            "bad design census: G={count_g}, H={count_h}, groups={}",
+            groups.len()
+        ));
     }
     for ((study, _, _, method), values) in &groups {
         let registered = if study == "G" { 7 } else { 10 };
         if values.len() != registered {
             return Err("missing or duplicate budget per group".into());
         }
-        if method == "gauss_clean" && values.iter().any(|(_, _, trials)| *trials != if study == "G" { 8 } else { 16 }) {
+        if method == "gauss_clean"
+            && values
+                .iter()
+                .any(|(_, _, trials)| *trials != if study == "G" { 8 } else { 16 })
+        {
             // In H clean Gauss only the three theory-window budgets use 16 seeds.
             if study == "G" {
                 return Err("G clean Gauss census mismatch".into());
@@ -166,11 +193,17 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
         ("and_xor_xor", "0", "gauss_clean", None),
     ] {
         let key = ("H".into(), task.into(), rate.into(), method.into());
-        let first = groups.get(&key).ok_or("missing mandatory group")?.iter()
+        let first = groups
+            .get(&key)
+            .ok_or("missing mandatory group")?
+            .iter()
             .filter(|(_, success, trials)| 8 * success >= 7 * trials)
-            .map(|(words, _, _)| *words).min();
+            .map(|(words, _, _)| *words)
+            .min();
         if first != expected_first_words {
-            return Err(format!("H threshold regression for {task}/{rate}/{method}: {first:?}"));
+            return Err(format!(
+                "H threshold regression for {task}/{rate}/{method}: {first:?}"
+            ));
         }
     }
     Ok((count_g, count_h))
@@ -178,7 +211,9 @@ fn audit(csv: &str) -> Result<(usize, usize), String> {
 
 fn main() {
     let (g, h) = audit(CSV).expect("A6-C12g/h qualified CSV audit failed");
-    println!("A6C12GH_AUDIT_OK,c12g_rows={g},c12h_rows={h},statistical_replications_not_tripled=true");
+    println!(
+        "A6C12GH_AUDIT_OK,c12g_rows={g},c12h_rows={h},statistical_replications_not_tripled=true"
+    );
 }
 
 #[cfg(test)]
@@ -196,7 +231,11 @@ mod tests {
         doubled.push_str(CSV.lines().nth(1).unwrap());
         doubled.push('\n');
         assert!(audit(&doubled).is_err());
-        let missing = CSV.lines().filter(|line| !line.starts_with("H,xor_xor_xor,2/5,hybrid_w2_mitm,512,")).collect::<Vec<_>>().join("\n");
+        let missing = CSV
+            .lines()
+            .filter(|line| !line.starts_with("H,xor_xor_xor,2/5,hybrid_w2_mitm,512,"))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(audit(&missing).is_err());
     }
 }
