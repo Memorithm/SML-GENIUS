@@ -59,6 +59,8 @@ jobs:
           test "$(grep -c '^A6_E1_FROZEN,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
           test "$(grep -c '^A6_E1_CURVE,split=VAL,' "$RUNNER_TEMP/a6-e1.log")" -eq 32
           test "$(grep -c '^A6_E1_CURVE,split=TEST,' "$RUNNER_TEMP/a6-e1.log")" -eq 32
+          test "$(grep -c '^A6_E1_CONTROL,split=VAL,' "$RUNNER_TEMP/a6-e1.log")" -eq 5
+          test "$(grep -c '^A6_E1_CONTROL,split=TEST,' "$RUNNER_TEMP/a6-e1.log")" -eq 5
           test "$(grep -c '^A6_E1_POLICY_FROZEN,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
           test "$(grep -c '^A6_E1_TEST_BASELINES,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
           grep -Eq '^A6_E1_COMPLETE,real_corpus=true,policies=32,val_rows=32,test_rows=32,task=next_space_binary,.*decision=(RESEARCH_PASS|STOP),oracle=PASS$' "$RUNNER_TEMP/a6-e1.log"
