@@ -19,3 +19,9 @@ Le catalogue Gutenberg indique une version française, éditeur source Carlo Tra
 **Prétraitement figé pour le fingerprint :** HTTPS GET de l'URL précise, normaliser CRLF en supprimant les octets CR (`tr -d '\r'`) et ne conserver que les lignes *après* `^\*\*\* START OF` et *avant* `^\*\*\* END OF`, selon le script A6-E1/E2 existant ; conserver LF et tout le texte historique entre ces bornes, sans autre nettoyage éditorial. Les corps bruts/normalisés ne sont PAS commités. La branche doit archiver les deux SHA256, octets normalisés et nombres d'événements à contexte t≥4 sur 64 voies `CharSplits` (80/10/10), puis figer leur valeur avant code de modèle. Un éventuel changement ultérieur de fichier doit faire **échouer le job** plutôt que changer silencieusement la population.
 
 Aucune exécution A6-E4, aucun TEST sur ce livre ni aucune supériorité sur ngram4 ne sont revendiqués dans cette étape de provenance.
+
+## Gel de provenance effectué après ce document de préparation
+
+La [campagne de fingerprint 38301904119](https://github.com/Memorithm/SML-GENIUS/actions/runs/38301904119) a effectivement réussi, **sans exécuter de modèle**, et les valeurs sont maintenant enregistrées dans [A6-E4-CANDIDE-CORPUS-FROZEN.md](A6-E4-CANDIDE-CORPUS-FROZEN.md) : corps normalisé **210655 octets**, SHA256 `48e04595f5fc681ef6c0498123180bce0125d8fbe2167f3bcaeef189b45bd4b9`, **168256 TRAIN / 20800 VAL / 20800 TEST**. Le script `scripts/fetch-candide-corpus.sh` refusera tout contenu différent ; le workflow valide désormais le même fingerprint par deux procédures.
+
+Le protocole du futur sélecteur conjoint, ses budgets, ses alternatives et ses critères doivent **encore** être figés dans un commit spécifique avant tout code/modèle. Cette étape de métadonnées ne contient **aucune** performance de modèle A6-E4.
