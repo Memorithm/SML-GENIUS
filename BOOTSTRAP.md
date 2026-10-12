@@ -910,3 +910,50 @@ sparse cardinality, native k4/k5 hidden recurrent gate discovery,
 MOR policy learning and bank-level SML-25B validation. The current
 API is purely Rust, retains the old engines and requires no
 proprietary NVIDIA software other than allowed GPU drivers.
+
+## A6-WL3 — overlapping wide ANF supports and hidden model order (2026-10-12)
+
+Read the [scientific protocol frozen before code](docs/A6-WL3-OVERLAP-ORDER-PREREGISTRATION.md)
+and [full native results](docs/RESULTS-A6-WL3-OVERLAP-ORDER.md)
+before claiming generalized wide ANF learning. Following A6-WL1
+(known selector) and A6-WL2 (unknown selector but disjoint terms),
+the Rust `anf_wide_overlap_learn::fit_overlap_sparse` now handles
+**overlapping and nested monomial supports, with UNKNOWN exact term
+count in 2..4**, using a bounded active GF(2) membership oracle.
+
+The core methodological change is an **exact Möbius coefficient
+certificate** on all `2^d` submasks for a candidate degree d≤5.
+A locally minimal positive XOR witness can be a coalition of
+three overlapping active monomials and is therefore not itself
+sufficient proof of a coefficient. Only a real residual ANF
+coefficient of 1 may be accepted; stop occurs after 512
+uniformly sampled residual negatives, even when four terms were
+already recovered. On a nonzero degree≤5 GF(2) polynomial with
+a clean independent Boolean oracle, the minimum-weight distance
+bound gives per-stop false-negative chance
+`(31/32)^512≈8.72e-8`. Under noise, misspecification or
+correlated inputs this is **NOT** a certainty certificate.
+
+The native synthetic panels comprised 7 widths 8..1024, three
+patterns STAR4/CHAIN3/NESTED2, 3 seeds and clean versus
+Bernoulli1/16 TRAIN noise with 21-vote majority. Exactly
+**126/126 unordered hidden supports AND term counts recovered**,
+126/126 validation acceptances (544 labels each),
+**0/516096 bitwise errors** across heldout TEST rows, 18/18
+full k8 truth tables, seven targeted fifth-degree6 AND teachers
+explicitly rejected with `TooManyTerms`, and 16/16 correct
+outputs from a **fitted k1024 gate installed in a selected SBG
+page**. The two noise panels share the same 63 underlying
+teachers and paired TEST streams; do not treat 126 rows as
+126 independent populations.
+
+The **explicit boundaries** remain up to four positive monomials
+of degree ≤5, controllable membership/intervention queries,
+bounded 160k oracle observations, and explicit selected page.
+This is NOT identification of arbitrary ANF polynomials,
+passive language sequence training, native GPU/Thor speed,
+dynamic learned MOR policy, full SBG/Delta-KV end-to-end fitting,
+a million learned ANF functions or demonstrated SML-25B quality.
+The next evidence gate should study passive observations and
+identifiability of rare interaction supports under memory and
+recurrence, not silently generalize the active-oracle results.

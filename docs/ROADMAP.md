@@ -1110,3 +1110,61 @@ detector.
    coefficients, SIMD/Thor measurements and independent
    SML-25B language-quality benchmarks.
 These are **not** established by A6-WL2.
+
+## A6-WL3 — overlapping ANF, unknown term count and Möbius certificates (2026-10-12)
+
+[Preregistered A6-WL3 protocol](A6-WL3-OVERLAP-ORDER-PREREGISTRATION.md)
+and [fully auditable result report](RESULTS-A6-WL3-OVERLAP-ORDER.md)
+extend the TRAIN-only active Boolean monomial learning programme.
+Unlike A6-WL2, the learner does not assume pairwise-disjoint
+supports or the EXACT number of hidden monomials, only a cap of
+4, positive literals, degrees 2..5 and the right to intervene
+with active membership queries.
+
+**Science result on bounded corpus:** 7 k-widths × STAR4
+shared-hub, CHAIN3 overlap and NESTED2 monomials ×3 seeds×
+clean/noisy (independent Bernoulli1/16 errors, 21-vote majority)
+= **126 fitted policies from 63 distinct true teachers**.
+Model order and unordered supports are **126/126 exact**,
+544 VAL cases per fit have zero mismatches, 126×4096
+independently staged TEST output bits give **zero mismatches**,
+18 k8 exhaustive truth-table tests pass, seven fifth
+degree6 monomial controls are **explicitly rejected at fit
+via TooManyTerms** (no misleading validation score), and
+16 learned k1024 selected SBG page outputs match their oracle.
+
+**Critical algebraic guard:** locally minimal positive assignments
+may combine 3 overlapping XOR monomials. To avoid false term
+claims, `anf_wide_overlap_learn` queries all ≤32 subassignments
+of each candidate and computes its GF(2) Möbius coefficients.
+Unknown order is terminated only after 512 independent random
+residual-zero membership checks, including after the fourth
+monomial. The false-stop probability ≤`(31/32)^512` requires
+a clean uniform independent oracle AND true residual degree≤5;
+it is **not** a distribution-free certificate, especially under
+remaining noise, passive data or unsupported high-degree terms.
+Every oracle vote/query is budgeted and reported; worst observed
+physical count was **22,470 per fit**, under the fixed cap
+160,000; k1024 STAR4 noisy averaged 20,552 physical reads.
+The local Rust fit timings cannot stand in for collection cost.
+
+**Next falsification gates, separately preregistered:**
+1. Passive recurrent traces with held-out downstream contexts:
+   measure identifiability as a function of context coverage
+   and counterexamples that defeat observed-sample fitting.
+2. Controlled high-degree and negative-literal interactions;
+   quantify where 512 randomized probes cannot detect a rare
+   residual and derive a revised conditional stopping contract.
+3. Unbounded/unknown number of monomials, overlapping free
+   circuits and capacity-matched unknown 4/5 hidden recurrent
+   gates; include exhaustive small-k truth controls.
+4. Truly learned sparse pages in multi-cycle selected
+   MOR/SBG/Delta-KV, including safety budgets, page mutation,
+   causal route selection and rollback without teacher forcing.
+5. Million-address ANF bank, active-page resource accounting,
+   native ARM/NEON/Thor benchmarking and distinct SML-25B
+   language/generalization metrics.
+
+Retain Rust-only native execution, no NVIDIA proprietary software
+beyond permissible GPU drivers, and no premature scaling claims
+from this synthetic degree-bounded active membership setting.

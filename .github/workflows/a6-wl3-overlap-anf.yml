@@ -1,0 +1,58 @@
+name: A6-WL3 overlap sparse ANF identification and model order
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-wl3-overlap-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  overlap-learning:
+    if: startsWith(github.head_ref, 'research/a6-wl3-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact pull request head with no persisted authentication
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89 and components
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict fmt/check/clippy and Rust truth-inversion unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_wide_overlap_learn -- --nocapture
+          cargo test --locked -p sml-core --bin sml-wide-overlap-learn-bench -- --nocapture
+      - name: Reproduce preregistered 126-fit unknown-order overlap panel
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_WL3_ENV,sha=$(git rev-parse HEAD),arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc),runner=$RUNNER_NAME"
+          cargo run --locked --release -p sml-core --bin sml-wide-overlap-learn-bench 2>&1 | tee "$RUNNER_TEMP/a6-wl3.log"
+          grep -q '^A6_WL3_ALL_FROZEN,policies=126,distinct_teachers=63$' "$RUNNER_TEMP/a6-wl3.log"
+          test "$(grep -c '^A6_WL3_FROZEN,' "$RUNNER_TEMP/a6-wl3.log")" -eq 126
+          test "$(grep -c '^A6_WL3_TEST,' "$RUNNER_TEMP/a6-wl3.log")" -eq 126
+          test "$(grep -c '^A6_WL3_NEGATIVE,' "$RUNNER_TEMP/a6-wl3.log")" -eq 7
+          test "$(grep -c '^A6_WL3_SBG,' "$RUNNER_TEMP/a6-wl3.log")" -eq 1
+          test "$(grep '^A6_WL3_TEST,' "$RUNNER_TEMP/a6-wl3.log" | grep -c 'oracle=PASS$')" -eq 126
+          test "$(grep '^A6_WL3_NEGATIVE,' "$RUNNER_TEMP/a6-wl3.log" | grep -c 'accepted=false')" -eq 7
+          grep -q '^A6_WL3_SBG,width=1024,family=star4,seed=0,panel=clean,page=23,learned_sparse_gate=true,comparisons=16,bit_disagreements=0,oracle=PASS$' "$RUNNER_TEMP/a6-wl3.log"
+          grep -q '^A6_WL3_COMPLETE,policies=126,structure_exact=126,validation_pass=126,zero_test=126,negative_rejected=7,k8_exhaustive_pass=18,sbg_bit_disagreements=0$' "$RUNNER_TEMP/a6-wl3.log"
