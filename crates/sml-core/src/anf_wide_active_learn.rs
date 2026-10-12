@@ -183,10 +183,7 @@ pub fn fit_selector_anchored_sparse<F>(
 where
     F: FnMut(&[bool]) -> Result<bool, WideAnchorLearnError>,
 {
-    if fan_in == 0
-        || fan_in > learn_limits.max_fan_in
-        || selectors.len() >= fan_in
-    {
+    if fan_in == 0 || fan_in > learn_limits.max_fan_in || selectors.len() >= fan_in {
         return Err(WideAnchorLearnError::InvalidWidth);
     }
     if selectors.is_empty()
@@ -200,8 +197,7 @@ where
     }
     let mut unique = selectors.to_vec();
     unique.sort_unstable();
-    if unique.iter().any(|&selector| selector >= fan_in)
-        || unique.windows(2).any(|p| p[0] == p[1])
+    if unique.iter().any(|&selector| selector >= fan_in) || unique.windows(2).any(|p| p[0] == p[1])
     {
         return Err(WideAnchorLearnError::InvalidSelectors);
     }
@@ -282,6 +278,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toy_tasks::SplitMix64;
     use crate::{
         mor::MorDecision,
         pvp6_sbg::{SbgCoordinate, SbgField},
@@ -289,7 +286,6 @@ mod tests {
         wide_anf_selected_pages::{WideAnfPage, WideAnfPageAtlas},
         PageId,
     };
-    use crate::toy_tasks::SplitMix64;
 
     const SELECTORS: [usize; 4] = [0, 1, 2, 3];
 
@@ -309,13 +305,8 @@ mod tests {
         ];
         // k=8 has some overlapping support ACROSS selectors but no
         // duplicate variables within a term.
-        let gate = WideAnfGate::from_monomials(
-            (0..k).collect(),
-            terms.clone(),
-            k,
-            gate_limits(),
-        )
-        .unwrap();
+        let gate =
+            WideAnfGate::from_monomials((0..k).collect(), terms.clone(), k, gate_limits()).unwrap();
         (gate, terms)
     }
 
@@ -339,7 +330,9 @@ mod tests {
         assert!(fit.logical_queries < 200);
         let mut rng = SplitMix64::new(888);
         for _ in 0..256 {
-            let q = (0..1024).map(|_| rng.next_u64() & 1 != 0).collect::<Vec<_>>();
+            let q = (0..1024)
+                .map(|_| rng.next_u64() & 1 != 0)
+                .collect::<Vec<_>>();
             assert_eq!(fit.gate.evaluate_scalar(&q), oracle.evaluate_scalar(&q));
         }
     }
@@ -379,24 +372,36 @@ mod tests {
             vec![3, 5, 28],
         ];
         invalid_terms.push(vec![0, 1]);
-        let invalid = WideAnfGate::from_monomials(
-            (0..32).collect(),
-            invalid_terms,
-            32,
-            gate_limits(),
-        )
-        .unwrap();
+        let invalid =
+            WideAnfGate::from_monomials((0..32).collect(), invalid_terms, 32, gate_limits())
+                .unwrap();
         let fit = fit_selector_anchored_sparse(
-            32, &SELECTORS, 1, learn_limits(), gate_limits(),
+            32,
+            &SELECTORS,
+            1,
+            learn_limits(),
+            gate_limits(),
             |query| invalid.evaluate_scalar(query).map_err(Into::into),
         )
         .unwrap();
         let mut query = vec![true; 32];
-        assert_eq!(fit.gate.evaluate_scalar(&query), base.evaluate_scalar(&query));
-        assert_ne!(fit.gate.evaluate_scalar(&query), invalid.evaluate_scalar(&query));
+        assert_eq!(
+            fit.gate.evaluate_scalar(&query),
+            base.evaluate_scalar(&query)
+        );
+        assert_ne!(
+            fit.gate.evaluate_scalar(&query),
+            invalid.evaluate_scalar(&query)
+        );
         query[1] = false;
-        assert_eq!(fit.gate.evaluate_scalar(&query), invalid.evaluate_scalar(&query));
-        assert_eq!(fit.gate.evaluate_scalar(&query), teacher_original.evaluate_scalar(&query));
+        assert_eq!(
+            fit.gate.evaluate_scalar(&query),
+            invalid.evaluate_scalar(&query)
+        );
+        assert_eq!(
+            fit.gate.evaluate_scalar(&query),
+            teacher_original.evaluate_scalar(&query)
+        );
     }
 
     #[test]
@@ -416,15 +421,25 @@ mod tests {
             Err(WideAnchorLearnError::InvalidRepetitions)
         );
         assert_eq!(
-            fit_selector_anchored_sparse(16, &SELECTORS, 1,
+            fit_selector_anchored_sparse(
+                16,
+                &SELECTORS,
+                1,
                 WideAnchorLearnLimits::new(2048, 4, 1, 8),
-                gate_limits(), observe),
+                gate_limits(),
+                observe
+            ),
             Err(WideAnchorLearnError::BudgetExceeded)
         );
         assert_eq!(
-            fit_selector_anchored_sparse(16, &SELECTORS, 1,
+            fit_selector_anchored_sparse(
+                16,
+                &SELECTORS,
+                1,
                 WideAnchorLearnLimits::new(2048, 4, 20_000, 1),
-                gate_limits(), observe),
+                gate_limits(),
+                observe
+            ),
             Err(WideAnchorLearnError::HiddenDegreeExceeded)
         );
     }
@@ -432,19 +447,25 @@ mod tests {
     #[test]
     fn truly_fitted_k1024_gate_executes_as_selected_sbg_page() {
         let (oracle, _) = teacher(1024);
-        let fit = fit_selector_anchored_sparse(
-            1024, &SELECTORS, 1, learn_limits(), gate_limits(),
-            |q| oracle.evaluate_scalar(q).map_err(Into::into),
-        )
-        .unwrap();
+        let fit =
+            fit_selector_anchored_sparse(1024, &SELECTORS, 1, learn_limits(), gate_limits(), |q| {
+                oracle.evaluate_scalar(q).map_err(Into::into)
+            })
+            .unwrap();
         let atlas = WideAnfPageAtlas::<1024>::new(
             vec![WideAnfPage {
                 id: PageId(7),
                 gates: vec![fit.gate.clone()],
                 inputs: (0..1024)
-                    .map(|bit| SbgCoordinate { field: SbgField::Value, bit })
+                    .map(|bit| SbgCoordinate {
+                        field: SbgField::Value,
+                        bit,
+                    })
                     .collect(),
-                outputs: vec![SbgCoordinate { field: SbgField::Meaning, bit: 0 }],
+                outputs: vec![SbgCoordinate {
+                    field: SbgField::Meaning,
+                    bit: 0,
+                }],
             }],
             1,
         )
@@ -461,12 +482,18 @@ mod tests {
         };
         for (selector, zero) in [(0, None), (1, Some(72)), (2, Some(712)), (3, None)] {
             let mut q = vec![true; 1024];
-            for &a in &SELECTORS { q[a] = false; }
+            for &a in &SELECTORS {
+                q[a] = false;
+            }
             q[selector] = true;
-            if let Some(index) = zero { q[index] = false; }
+            if let Some(index) = zero {
+                q[index] = false;
+            }
             let mut state = SemanticState::<1024>::zeroed().unwrap();
             for (i, &value) in q.iter().enumerate() {
-                if value { state.value.set(i, true).unwrap(); }
+                if value {
+                    state.value.set(i, true).unwrap();
+                }
             }
             let executed = atlas.execute(&state, &decision, 1, 1).unwrap();
             assert_eq!(
