@@ -348,6 +348,7 @@ struct Metrics {
     map_errors: usize,
     brier_biased_sum: f64,
     brier_uniform_sum: f64,
+    brier_uniform_updated_sum: f64,
 }
 impl Metrics {
     fn combine(&mut self, other: &Self) {
@@ -358,6 +359,7 @@ impl Metrics {
         self.map_errors += other.map_errors;
         self.brier_biased_sum += other.brier_biased_sum;
         self.brier_uniform_sum += other.brier_uniform_sum;
+        self.brier_uniform_updated_sum += other.brier_uniform_updated_sum;
     }
     fn coverage(self) -> f64 {
         self.accepted as f64 / self.evaluated as f64
@@ -368,6 +370,29 @@ impl Metrics {
     fn brier_uniform(self) -> f64 {
         self.brier_uniform_sum / self.evaluated as f64
     }
+    fn brier_uniform_updated(self) -> f64 {
+        self.brier_uniform_updated_sum / self.evaluated as f64
+    }
+}
+
+/// Post-first-run diagnostic, frozen in A6-I2-FAIR-BASELINE-AMENDMENT.
+/// Exact Bayes change of measure from biased weights [4,2,2,1] to a
+/// UNIFORM prior under the SAME TRAIN likelihood; consumes no TEST labels.
+fn updated_uniform_probability_true(pred: &PassivePrediction) -> f64 {
+    let weights = [4.0, 2.0, 2.0, 1.0];
+    let corrected = pred.posterior
+        .iter()
+        .zip(weights)
+        .map(|(&p, w)| p / w)
+        .collect::<Vec<_>>();
+    let sum = corrected.iter().sum::<f64>();
+    corrected
+        .iter()
+        .zip(&pred.candidate_bits)
+        .filter(|(_, &b)| b)
+        .map(|(&p, _)| p / sum)
+        .sum::<f64>()
+        .clamp(0.0, 1.0)
 }
 fn measure_prediction(
     pred: &PassivePrediction,
@@ -379,6 +404,8 @@ fn measure_prediction(
         / pred.candidate_bits.len() as f64;
     let brier_biased = (pred.probability_true - binary_target).powi(2);
     let brier_uniform = (uniform_p - binary_target).powi(2);
+    let brier_uniform_updated =
+        (updated_uniform_probability_true(pred) - binary_target).powi(2);
     Metrics {
         evaluated: 1,
         accepted: usize::from(pred.selective_prediction.is_some()),
@@ -391,6 +418,7 @@ fn measure_prediction(
         map_errors: usize::from(pred.map_prediction != truth),
         brier_biased_sum: brier_biased,
         brier_uniform_sum: brier_uniform,
+        brier_uniform_updated_sum: brier_uniform_updated,
     }
 }
 
@@ -548,11 +576,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                             full_teacher_posterior_pass += 1;
                         }
                         println!(
-                            "A6_I2_TEST,width={width},seed={seed},mode={},panel={},teacher={},teacher_posterior={:.12},samples={},coverage={:.6},selective_errors={},map_errors={},brier_biased={:.9},brier_uniform={:.9},blind_disagreement_accepted={},oracle={}",
+                            "A6_I2_TEST,width={width},seed={seed},mode={},panel={},teacher={},teacher_posterior={:.12},samples={},coverage={:.6},selective_errors={},map_errors={},brier_biased={:.9},brier_uniform={:.9},brier_uniform_updated={:.9},blind_disagreement_accepted={},oracle={}",
                             mode.name(), panel.name(), f.teacher, f.teacher_posterior, OOD,
                             result.coverage(), result.accepted_errors, result.map_errors,
                             result.brier_biased(), result.brier_uniform(),
-                            result.abstained_on_disagreement_violations,
+                            result.brier_uniform_updated(), result.abstained_on_disagreement_violations,
                             if result.accepted_errors == 0 && result.abstained_on_disagreement_violations == 0 { "PASS" } else { "FAIL" }
                         );
                         if mode == Visibility::Blind && f.teacher == 0 {
@@ -610,10 +638,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     for mode in Visibility::ALL {
         let value = by_mode[mode.id() as usize];
         println!(
-            "A6_I2_REGIME,mode={},ood_bits={},coverage={:.9},accepted={},selective_errors={},map_errors={},brier_biased={:.9},brier_uniform={:.9},blind_disagreement_accepted={}",
+            "A6_I2_REGIME,mode={},ood_bits={},coverage={:.9},accepted={},selective_errors={},map_errors={},brier_biased={:.9},brier_uniform={:.9},brier_uniform_updated={:.9},blind_disagreement_accepted={}",
             mode.name(), value.evaluated, value.coverage(), value.accepted,
             value.accepted_errors, value.map_errors, value.brier_biased(),
-            value.brier_uniform(), value.abstained_on_disagreement_violations
+            value.brier_uniform(), value.brier_uniform_updated(),
+            value.abstained_on_disagreement_violations
         );
     }
 
@@ -668,6 +697,19 @@ mod tests {
                 assert_eq!(bank(width, &r).unwrap().len(), 4);
             }
         }
+    }
+
+    #[test]
+    fn updated_uniform_prior_is_a_exact_no_information_control_in_blind_history() {
+        let width = 16;
+        let seed = 0;
+        let map = roles(width, seed);
+        let fitted = fit_positive(width, seed, map, 0, Visibility::Blind, Panel::Noisy).unwrap();
+        let mut out = vec![false; width];
+        out[map[0]] = true;
+        out[map[1]] = true;
+        let pred = fitted.committee.predict(&out, CONFIDENCE).unwrap();
+        assert!((updated_uniform_probability_true(&pred) - 0.5).abs() < 1e-10);
     }
 
     #[test]
