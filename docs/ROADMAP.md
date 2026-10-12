@@ -1415,3 +1415,15 @@ A6-I4 remains a synthetic **known-bank OOD guard**, NOT
 an ANF learner or a human-intuition proof. Use native
 Rust only, without proprietary NVIDIA software beyond
 permitted drivers.
+
+## A6-I5 — higher-order epistemic coverage and falsification (2026-10-12)
+
+The [A6-I5 preregistration](A6-I5-TRIPLE-COVERAGE-PREREGISTRATION.md) and [native results](RESULTS-A6-I5-TRIPLE-COVERAGE.md) qualify an explicit, budgeted third-order input-support guard alongside the real supplied-candidate ANF committee. On **90 native policies** (512 TRAIN each) and **46,080 held-out decisions**, 7,680 triple-trigger errors from A6-I4 are blocked with zero errors on 7,680 retained predictions, but 7,680 **correct** predictions are lost in the included-teacher control. The mandatory fourth-order hidden teacher remains confidently wrong on 7,680/15,360 accepted predictions with **no novelty alarm** even though every triple assignment was seen. All conclusions are restricted to controlled eight-role synthetic teachers embedded in widths 8..128.
+
+Next scientific gates, without promoting A6-I5 to model-quality evidence:
+1. **Adaptive and sparse higher-order observation design:** select interaction subsets using TRAIN-only information, control multiple-testing/selection leakage, and measure OOD missed interactions versus RAM and compute. Never call a partial subset full-width certification.
+2. **Active intervention and bank repair:** issue separately budgeted distinguishing queries when legitimate observation access exists, learn new ANF terms into a candidate bank without hidden support labels, track attempts and corrections against no-intervention controls.
+3. **Native coupled-model evidence:** carry uncertainty and abstention signals through actual MOR-selected SBG/ANF/Delta-KV cycles and test recurrence drift, correlated observations and resource rollback, without replacing existing runtime policies by default.
+4. **Independent replication and scaling:** rerun on new teacher populations/streams, full resource accounting on target device, predeclared baselines and mandatory higher-order counterexamples before considering any SML-1/SML-2 model-level claims.
+
+The k128 exact support scan covers 341,376 triples. With the frozen budget 350,000, k256 and k1024 full-width scans are refused before allocation. No model 25B parameter training, one-million-function bank, or Thor GPU speed evidence follows.

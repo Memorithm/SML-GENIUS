@@ -37,6 +37,7 @@ pub mod anf_sbg_unified;
 pub mod anf_sparse_byte;
 pub mod anf_sparse_readout;
 pub mod anf_three_gate_diagnostic;
+pub mod anf_triple_support;
 pub mod anf_wide_active_learn;
 pub mod anf_wide_overlap_learn;
 pub mod anf_wide_sparse;
