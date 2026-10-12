@@ -1,12 +1,7 @@
 //! Preregistered WideSparseANF k8..k1024 native CPU cost and truth-panel.
 //! A synthetic kernel benchmark, NOT a trained SML model-quality test.
 
-use std::{
-    collections::BTreeSet,
-    error::Error,
-    hint::black_box,
-    time::Instant,
-};
+use std::{collections::BTreeSet, error::Error, hint::black_box, time::Instant};
 
 use sml_core::{
     anf_large::LargeAnfGate,
@@ -45,11 +40,7 @@ fn active_terms(width: usize, family: &str) -> Vec<Vec<usize>> {
             .collect(),
         "full_and" => vec![(0..width).collect()],
         "dense128" if width == 8 => (0..128)
-            .map(|mask| {
-                (0..width)
-                    .filter(|&i| mask & (1 << i) != 0)
-                    .collect()
-            })
+            .map(|mask| (0..width).filter(|&i| mask & (1 << i) != 0).collect())
             .collect(),
         _ => panic!("only preregistered family/width combinations"),
     }
@@ -66,7 +57,9 @@ fn patterned_inputs(width: usize, stream: u64) -> Vec<Vec<u64>> {
         .map(|i| if i % 2 == 0 { u64::MAX } else { 0 })
         .collect();
     patterns[3] = (0..width).map(|i| 1u64 << (i % LANES)).collect();
-    patterns[4] = (0..width).map(|i| 0x5555_aaaa_3333_cccc ^ i as u64).collect();
+    patterns[4] = (0..width)
+        .map(|i| 0x5555_aaaa_3333_cccc ^ i as u64)
+        .collect();
     patterns
 }
 
@@ -92,13 +85,11 @@ fn validate_family(
         for lane in 0..LANES {
             let expected = literal_oracle(terms, source, lane);
             if ((output >> lane) & 1 != 0) != expected {
-                return Err(
-                    format!(
-                        "native k{} vs literal mismatch at pattern {pattern} lane {lane}",
-                        gate.fan_in()
-                    )
-                    .into(),
-                );
+                return Err(format!(
+                    "native k{} vs literal mismatch at pattern {pattern} lane {lane}",
+                    gate.fan_in()
+                )
+                .into());
             }
             compared += 1;
         }
@@ -216,12 +207,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 return Err(format!("duplicate monomial in {family} width={width}").into());
             }
             let started = Instant::now();
-            let gate = WideAnfGate::from_monomials(
-                (0..width).collect(),
-                terms.clone(),
-                width,
-                limits(),
-            )?;
+            let gate =
+                WideAnfGate::from_monomials((0..width).collect(), terms.clone(), width, limits())?;
             let construction_ns = started.elapsed().as_nanos();
             let should_dense = width <= 8 && terms.len() >= (1usize << width).div_ceil(4);
             if (gate.backend() == WideAnfBackend::Dense) != should_dense {
