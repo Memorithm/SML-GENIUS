@@ -263,7 +263,11 @@ fn temporal_witness_inputs(seed: u64, steps: usize, near: bool) -> LaneData {
     }
     for t in 0..steps {
         let from = t * INPUT_BITS;
-        let prior_x4 = if t == 0 { 0 } else { inputs[(t - 1) * INPUT_BITS + 4] };
+        let prior_x4 = if t == 0 {
+            0
+        } else {
+            inputs[(t - 1) * INPUT_BITS + 4]
+        };
         inputs[from + 3] = prior_x4
             ^ if near {
                 disturbance_mask(&mut lag_rng, 5)
@@ -696,7 +700,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         mode,
                     );
                     if train_flips == 0 || validation_flips == 0 {
-                        return Err("hidden-state perturbation unexpectedly empty on TRAIN/VAL".into());
+                        return Err(
+                            "hidden-state perturbation unexpectedly empty on TRAIN/VAL".into()
+                        );
                     }
                     let observed = Observed::new(&train, grid(STRESS_WIDTH));
                     if !task
@@ -704,7 +710,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .iter()
                         .all(|source| observed.sources.contains(source))
                     {
-                        return Err("true source absent from declared 508-source search space".into());
+                        return Err(
+                            "true source absent from declared 508-source search space".into()
+                        );
                     }
                     println!(
                         "A6C12F_INPUT,task={},panel={},seed={},mode={},slot={},rate=1_in_{},train_flips={},validation_flips={},samples={}",
@@ -753,8 +761,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let expected_policies =
         Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * (3 * nseeds + 1);
-    let distinct_datasets =
-        Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * nseeds;
+    let distinct_datasets = Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * nseeds;
     if frozen.len() != expected_policies {
         return Err("frozen policy count differs from preregistered 240".into());
     }
@@ -819,8 +826,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 model.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
                                 Some(native_errors(&model.proposal, &test)?),
                                 Some(native_errors(&model.committed, &test)?),
-                                Some(native_prediction_disagreements(&model.proposal, &teacher, &test)),
-                                Some(native_prediction_disagreements(&model.committed, &teacher, &test)),
+                                Some(native_prediction_disagreements(
+                                    &model.proposal,
+                                    &teacher,
+                                    &test,
+                                )),
+                                Some(native_prediction_disagreements(
+                                    &model.committed,
+                                    &teacher,
+                                    &test,
+                                )),
                                 model.accepted,
                             )
                         } else {
@@ -884,7 +899,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let near_disagreements =
                 native_prediction_disagreements(&true_teacher, &alternate, &near);
             if exact_disagreements != 0 || near_disagreements == 0 {
-                return Err("independent temporal equivalence/disequivalence witness failed".into());
+                return Err(
+                    "independent temporal equivalence/disequivalence witness failed".into(),
+                );
             }
             println!(
                 "A6C12F_EQUIVALENCE,task={},seed={},domain=exact_lag_vs_near_lag,original=j68_x3,alternative=j67_x4,exact_bit_disagreements={},near_bit_disagreements={},samples={}",
@@ -913,8 +930,7 @@ mod tests {
     #[test]
     fn preregistered_census_and_native_search_grid_are_consistent() {
         let mode = StateMode::STRESS[0];
-        let (train, flips) =
-            data_with_mode(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
+        let (train, flips) = data_with_mode(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
         assert!(flips > 0);
         let observed = Observed::new(&train, grid(STRESS_WIDTH));
         assert_eq!(count_combinations(&observed), (128_016, 21_336_000));
@@ -942,8 +958,7 @@ mod tests {
             let mut alternative_rules = task.rules();
             alternative_rules[0].raw = 1;
             let alternative = make_multi_gate_native(WIDTH, &alternative_rules).unwrap();
-            let disagreements =
-                native_prediction_disagreements(&teacher, &alternative, &dataset);
+            let disagreements = native_prediction_disagreements(&teacher, &alternative, &dataset);
             assert!(disagreements > 0);
             assert_eq!(
                 disagreements,
@@ -965,8 +980,7 @@ mod tests {
     #[test]
     fn all_six_state_modes_inject_persistent_bits_at_both_predeclared_rates() {
         for mode in StateMode::STRESS {
-            let (clean, flips) =
-                data_with_mode(65, Task::XorXorXor, Panel::Clean, 512, mode);
+            let (clean, flips) = data_with_mode(65, Task::XorXorXor, Panel::Clean, 512, mode);
             let (noisy, with_label_noise_flips) =
                 data_with_mode(65, Task::XorXorXor, Panel::Noise, 512, mode);
             assert!(flips > 0);
@@ -993,18 +1007,14 @@ mod tests {
                 native_prediction_disagreements(&true_teacher, &alternative, &exact),
                 0
             );
-            assert!(
-                native_prediction_disagreements(&true_teacher, &alternative, &near)
-                    > 0
-            );
+            assert!(native_prediction_disagreements(&true_teacher, &alternative, &near) > 0);
         }
     }
 
     #[test]
     fn short_sketch_and_long_correlations_are_counted_separately() {
         let mode = StateMode::STRESS[0];
-        let (train, _) =
-            data_with_mode(93, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
+        let (train, _) = data_with_mode(93, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, mode);
         let observed = Observed::new(&train, grid(32));
         let (candidates, stats) = rank_sketch_triplets(&observed);
         assert!(stats.pair_probes > 0);
@@ -1020,8 +1030,7 @@ mod tests {
     fn no_native_state_noise_can_be_misreported_as_label_noise() {
         let teacher = make_multi_gate_native(WIDTH, &Task::XorXorXor.rules()).unwrap();
         let mode = StateMode::STRESS[2]; // slot127, 1/256
-        let (clean, flips) =
-            data_with_mode(111, Task::XorXorXor, Panel::Clean, TEST_STEPS, mode);
+        let (clean, flips) = data_with_mode(111, Task::XorXorXor, Panel::Clean, TEST_STEPS, mode);
         assert!(flips > 0);
         assert!(
             native_errors(&teacher, &clean).unwrap() > 0,
