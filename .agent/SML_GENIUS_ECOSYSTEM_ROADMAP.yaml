@@ -889,3 +889,42 @@ PVP6_native_SciRust_PVP3_harness_2026_10_07:
     - deterministic_harness_fixture_is_not_the_frozen_SML_PVP6_corpus
     - native_Thor_execution_and_cross_repository_fixture_adapter_remain_pending
     - no_SML_architecture_default_route_GPU_or_model_quality_claim
+
+elastic_ngram_program_2026_10_12:
+  status: ENG0_and_ENG1a_functional_reference_qualified
+  model_authority: Memorithm/SML-GENIUS
+  generic_resource_controller: Memorithm/ElasticXxx
+  ENG0:
+    pull_request: 523
+    code: crates/sml-core/src/elastic_ngram.rs
+    maximum_byte_context: 7
+    evidence: Witten_Bell_fixed_depth_full_256_class_parity_and_budget_tests
+  ENG1a:
+    pull_request: 525
+    merge_commit: bab562c6c9fe485f045c425e9db4d80e47e00a86
+    code: crates/sml-core/src/elastic_ngram_long.rs
+    protocol: docs/ENG-1A-LONG-CONTEXT-PREREGISTRATION.md
+    maximum_byte_context: 32
+    frozen_implementation_head: 64316f841437a623c5e99ee82cbfd9105915e022
+    dedicated_CI_run: 38309703124
+    general_CI_run: 38309703083
+    result: both_success_at_exact_final_head
+    evidence:
+      - full_suffix_byte_sequence_keys_are_not_hashed_or_truncated
+      - depths_0_through_7_bitwise_match_two_independent_reference_models
+      - twelve_byte_synthetic_distinguishability_fixture_qualified
+      - immutable_fit_and_explicit_logical_context_counter_and_key_budgets_qualified
+      - depth_transition_classified_as_model_semantics_change_not_exact_resource_actuation
+  next_slices:
+    - ENG1b_shared_suffix_trie_and_physical_resource_comparison_issue_526
+    - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
+    - ENG2_generic_ElasticXxx_resource_contract_issue_244
+    - ENG3_heldout_quality_authorized_adaptive_depth_profiles
+    - ENG4_ANF_joint_residual_attribution_on_independent_data
+  boundaries:
+    - functional_equivalence_is_not_language_model_quality_or_latency_RSS_disk_energy_evidence
+    - context_depth_change_may_change_probability_and_requires_model_owned_quality_authorization
+    - ElasticXxx_may_only_plan_generic_resources_and_must_not_own_n_gram_statistics
+    - no_live_ElasticXxx_actuation_or_SML25B_promotion_authorized
+    - existing_A6_E4_and_E5_preregistered_tests_unchanged
+    - final_SML_model_remains_self_sufficient_and_future_harness_separate
