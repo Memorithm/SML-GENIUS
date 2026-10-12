@@ -655,6 +655,8 @@ fn freeze(
     let (rank, true_score, best_false, margin) = if method == Method::Walsh3Stream {
         score_margin(observed, sources, &screen.hypotheses)
     } else { (0, f64::NAN, f64::NAN, f64::NAN) };
+    let null_z = (2.0 * (2.0 * 317_440f64).ln()).sqrt();
+    let z_scale = ((words * LANES) as f64).sqrt();
     let pair_rank = if method == Method::Hybrid && task == Task::AndXorXor {
         rank_pairs(observed).iter().position(|p| {
             observed.sources[p.ids[0]] == sources[1] && observed.sources[p.ids[1]] == sources[2]
@@ -664,12 +666,12 @@ fn freeze(
     let mf = median(times_factor);
     let mt = median(times_total);
     println!(
-        "A6C12H_FROZEN,task={},seed={},rate={},eta={:.8},words={},proxy_bits={},method={},status={},proposals={},proposed={},exact={},accepted={},rank_true_top16={},true_w3_abs={:.8},best_false_w3_abs={:.8},w3_signed_margin={:.8},pair_rank={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_us={:.3};{:.3};{:.3},factor_us={:.3};{:.3};{:.3},total_us={:.3};{:.3};{:.3},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3}",
+        "A6C12H_FROZEN,task={},seed={},rate={},eta={:.8},words={},proxy_bits={},method={},status={},proposals={},proposed={},exact={},accepted={},rank_true_top16={},true_w3_abs={:.8},best_false_w3_abs={:.8},w3_signed_margin={:.8},w3_null_z={:.5},w3_true_z={:.5},w3_best_false_z={:.5},pair_rank={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_us={:.3};{:.3};{:.3},factor_us={:.3};{:.3};{:.3},total_us={:.3};{:.3};{:.3},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3}",
         task.name(),index,rate.name(),rate.eta(),words,words*LANES,method.name(),
         if first_fit.is_some() {"FITTED"} else {"NO_EXACT_GAUSS_OR_EMPTY"},
         screen.hypotheses.len(), proposed, exact,
         first_fit.as_ref().is_some_and(|fit| fit.accepted),
-        rank, true_score, best_false, margin, pair_rank,
+        rank, true_score, best_false, margin, null_z, true_score * z_scale, best_false * z_scale, pair_rank,
         screen.stats.pair_probes, screen.stats.bucket_hits, screen.stats.unique,
         screen.stats.coarse_scored, screen.stats.full_scored,
         times_screen[0], times_screen[1], times_screen[2],
@@ -811,23 +813,28 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut first_empirical_threshold = None;
                 for words in WORD_BUDGETS {
                     let rows = frozen.iter().filter(|r| r.task == task && r.rate == rate && r.method == method && r.words == words).collect::<Vec<_>>();
-                    assert_eq!(rows.len(), SEEDS);
+                    let trials = if scheduled_words(task, rate, SEEDS - 1).contains(&words) {
+                        SEEDS
+                    } else {
+                        CORE_SEEDS
+                    };
+                    assert_eq!(rows.len(), trials);
                     let successes = rows.iter().filter(|r| r.exact && r.fit.as_ref().is_some_and(|fit| fit.accepted)).count();
-                    let (lower, upper) = wilson(successes, SEEDS);
-                    if successes >= 7 && first_empirical_threshold.is_none() {
+                    let (lower, upper) = wilson(successes, trials);
+                    if successes * 8 >= 7 * trials && first_empirical_threshold.is_none() {
                         first_empirical_threshold = Some(words);
                     }
                     let screen = median_vector(rows.iter().map(|r| r.median_screen_us).collect());
                     let factor = median_vector(rows.iter().map(|r| r.median_factor_us).collect());
                     let total = median_vector(rows.iter().map(|r| r.median_total_us).collect());
                     println!(
-                        "A6C12H_SUMMARY,task={},rate={},words={},method={},exact_and_accepted={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
-                        task.name(), rate.name(), words, method.name(), successes, SEEDS, lower, upper,
-                        screen, factor, total, rho, (317_440f64).ln() / (rho*rho)
+                        "A6C12H_SUMMARY,task={},rate={},words={},method={},exact_and_accepted={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},theory_nstar_proxy_bits={:.3}",
+                        task.name(), rate.name(), words, method.name(), successes, trials, lower, upper,
+                        screen, factor, total, rho, theory_nstar(task, rate)
                     );
                 }
                 println!(
-                    "A6C12H_THRESHOLD,task={},rate={},method={},first_words_ge7_of8={:?}",
+                    "A6C12H_THRESHOLD,task={},rate={},method={},first_words_ge7of8_or14of16={:?}",
                     task.name(),rate.name(),method.name(),first_empirical_threshold
                 );
             }
@@ -869,4 +876,44 @@ mod tests {
         let solved = solve_gauss(&o).unwrap();
         assert_eq!(triplet(&o,[solved[0],solved[1],solved[2]]),Task::XorXorXor.sources());
     }
+    #[test]
+    fn extreme_matrix_census_and_theory_windows() {
+        let mut policies = 0usize;
+        let mut datasets = 0usize;
+        for task in TASKS {
+            for index in 0..SEEDS {
+                for rate in NoiseRate::ALL {
+                    let budgets = scheduled_words(task, rate, index);
+                    assert_eq!(budgets.len(), if index < CORE_SEEDS { 10 } else { 3 });
+                    datasets += 1;
+                    for &words in budgets {
+                        assert!(WORD_BUDGETS.contains(&words));
+                        policies += 2;
+                        if rate == NoiseRate::Zero {
+                            policies += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(datasets, TEST_STREAMS);
+        assert_eq!(datasets, 128);
+        assert_eq!(policies, POLICY_COUNT);
+        assert_eq!(policies, 1872);
+        assert!((theory_nstar(Task::XorXorXor, NoiseRate::OneIn5) - 206.18).abs() < 0.2);
+        assert!((theory_nstar(Task::AndXorXor, NoiseRate::TwoIn5) - 66806.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn low_word_sketch_is_total_without_teacher_oracle() {
+        let train = data(19, Task::XorXorXor, NoiseRate::TwoIn5, TRAIN_STEPS);
+        for words in [1usize, 2, 4] {
+            let observed = Observed::new(&prefix(&train, WIDTH + words), grid(128));
+            assert_eq!(observed.p.len(), words);
+            let (candidates, stats) = rank_sketch_triplets(&observed);
+            assert!(stats.pair_probes > 0);
+            assert!(candidates.len() <= TOP_TRIPLES);
+        }
+    }
+
 }
