@@ -268,8 +268,8 @@ mod tests {
         assert_eq!(guard.observed_patterns(0), Some(15));
         guard.seal().unwrap();
         let mut holdout = vec![false; 1024];
-        for i in 4..8 {
-            holdout[i] = true;
+        for bit in &mut holdout[4..8] {
+            *bit = true;
         }
         assert_eq!(
             guard.assess(&holdout).unwrap(),
@@ -301,11 +301,19 @@ mod tests {
         assert_eq!(guard.observed_patterns(0), Some(16));
         let all = [true; 8];
         assert_eq!(guard.assess(&all).unwrap().novel_watches, 0);
-        // h0 XOR x0x1x2x3 differs from h0 at this query.
+        // A genuine, NOT-in-bank higher-order ANF coefficient differs
+        // at all-ones despite all watched configurations being covered.
         let h0 = candidates().remove(0);
+        let missing = WideAnfGate::from_monomials(
+            (0..8).collect(),
+            vec![vec![0], vec![1], vec![0, 1, 2, 3]],
+            8,
+            WideAnfLimits::new(2048, 256, 8192, 8192, 8192),
+        )
+        .unwrap();
         assert_ne!(
             h0.evaluate_scalar(&all).unwrap(),
-            !h0.evaluate_scalar(&all).unwrap()
+            missing.evaluate_scalar(&all).unwrap()
         );
     }
 
