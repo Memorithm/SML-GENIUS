@@ -1,0 +1,75 @@
+name: ENG-1b native Thor workflow safety and parser contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - docs/ENG-1B-THOR-NATIVE-PREREGISTRATION.md
+      - scripts/eng1b/native-thor-five.sh
+      - .github/workflows/eng1b-thor-native.yml
+      - .github/workflows/eng1b-thor-contract.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1b-thor-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  hosted-contract-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact untrusted PR SHA without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Ensure persistent-runner workflow cannot run from PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          native=.github/workflows/eng1b-thor-native.yml
+          test -s docs/ENG-1B-THOR-NATIVE-PREREGISTRATION.md
+          test -s "$native"
+          bash -n scripts/eng1b/native-thor-five.sh
+          grep -Eq '^  push:' "$native"
+          grep -Eq '^  workflow_dispatch:' "$native"
+          ! grep -Eq '^[[:space:]]+pull_request(_target)?:' "$native"
+          grep -Fq "github.repository == 'Memorithm/SML-GENIUS'" "$native"
+          grep -Fq "github.ref == 'refs/heads/main'" "$native"
+          grep -Fq 'runs-on: [self-hosted, Linux, ARM64]' "$native"
+          grep -Eq '^[[:space:]]+ref:[[:space:]]+.*github[.]sha' "$native"
+          grep -Fq 'e058f6a7078b84e8e6d5eb344dc19d715daad646' "$native"
+          grep -Fq 'dd9e59374e4ccaf137ff2e209df8820afc92c825' "$native"
+      - name: Test five-round parser on explicitly FAKE fixed-output sources only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mock="$RUNNER_TEMP/eng1b-FAKE-script.sh"
+          cat > "$mock" <<'MOCK_SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          case "$1" in
+            trie) arm=TRIE; depth=32; contexts=96733; followers=101212; peak=800; p95=80 ;;
+            long) arm=LONG; depth=32; contexts=96733; followers=101212; peak=1000; p95=100 ;;
+            legacy) arm=LEGACY; depth=7; contexts=8946; followers=11346; peak=120; p95=25 ;;
+            *) exit 88 ;;
+          esac
+          if [[ "$MOCK_STOP" == 1 && "$1" == trie ]]; then peak=990; p95=140; fi
+          printf 'ENG1B_MEASURE,arm=%s,depth=%s,train_events=6080,contexts=%s,followers=%s,logical_key_bytes=100,logical_counter_bytes=200,rss_training_kib=111,vmhwm_kib=%s,train_us=300,p50_ns=12,p95_ns=%s,samples=2048,warmup=256,digest=5c4ad424180a35ae,arch=aarch64,integrity=PASS\n' "$arm" "$depth" "$contexts" "$followers" "$peak" "$p95"
+          MOCK_SCRIPT
+          chmod 700 "$mock"
+          echo "ENG1B_PARSER_MOCK_ONLY=TRUE"
+          MOCK_STOP=0 bash scripts/eng1b/native-thor-five.sh "$mock" "$RUNNER_TEMP/mock-pass" > "$RUNNER_TEMP/mock-pass-console.txt"
+          grep -qx 'ENG1B_THOR_RESOURCE_VERDICT=PASS_NATIVE_SYNTHETIC_DIAGNOSTIC_ONLY' "$RUNNER_TEMP/mock-pass/decision.txt"
+          grep -qx 'ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=0.800000,p95_trie_over_long=0.800000,rounds=5' "$RUNNER_TEMP/mock-pass/decision.txt"
+          test "$(tail -n +2 "$RUNNER_TEMP/mock-pass/rounds.csv" | wc -l)" -eq 5
+          MOCK_STOP=1 bash scripts/eng1b/native-thor-five.sh "$mock" "$RUNNER_TEMP/mock-stop" > "$RUNNER_TEMP/mock-stop-console.txt"
+          grep -qx 'ENG1B_THOR_RESOURCE_VERDICT=STOP_RESOURCE_NO_PROMOTION' "$RUNNER_TEMP/mock-stop/decision.txt"
+          grep -qx 'ENG1B_THOR_MEDIAN_RATIOS,VmHWM_trie_over_long=0.990000,p95_trie_over_long=1.400000,rounds=5' "$RUNNER_TEMP/mock-stop/decision.txt"
+          test "$(grep -c ',STOP$' "$RUNNER_TEMP/mock-stop/rounds.csv")" -eq 5
+          test "$(grep -c '^ENG1B_THOR_ROUND' "$RUNNER_TEMP/mock-stop-console.txt")" -eq 5
+          echo "ENG1B_NATIVE_REPORT_PARSER_MOCK_TESTS=PASS,physical_measurements=NONE"

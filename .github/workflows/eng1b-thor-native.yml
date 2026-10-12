@@ -1,0 +1,131 @@
+name: ENG-1b native Thor five-round CPU benchmark
+
+# Trusted integrated main ONLY. Never execute pull-request code on persistent
+# ARM64 hosts. The dedicated PR contract is GitHub-hosted and separate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/eng1b-thor-native.yml
+      - scripts/eng1b/native-thor-five.sh
+      - crates/sml-core/src/elastic_ngram_trie.rs
+      - crates/sml-core/src/bin/sml-eng1b-resource-bench.rs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1b-native-thor-cpu-measurement
+  cancel-in-progress: false
+
+jobs:
+  thor-cpu:
+    if: >-
+      github.repository == 'Memorithm/SML-GENIUS' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 35
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Fail closed on unknown runner or ref before source materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'Memorithm/SML-GENIUS'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$(uname -m)" = 'aarch64'
+          test "$(hostname)" = 'tarek'
+          available="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+          test -n "$available"
+          test "$available" -ge 4194304
+          echo "ENG1B_THOR_HOST_PREFLIGHT=PASS,arch=$(uname -m),host=$(hostname),memavailable_kib=$available"
+      - name: Checkout exact trusted main commit (read-only Git credentials)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: sml-genius
+      - name: Verify untouched scientific source object IDs
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD:crates/sml-core/src/elastic_ngram_trie.rs)" = 'e058f6a7078b84e8e6d5eb344dc19d715daad646'
+          test "$(git rev-parse HEAD:crates/sml-core/src/bin/sml-eng1b-resource-bench.rs)" = 'dd9e59374e4ccaf137ff2e209df8820afc92c825'
+          test -f docs/ENG-1B-THOR-NATIVE-PREREGISTRATION.md
+          test -f scripts/eng1b/native-thor-five.sh
+          bash -n scripts/eng1b/native-thor-five.sh
+          mkdir -p "$RUNNER_TEMP/eng1b-native"
+          {
+            echo "ENG1B_NATIVE_SOURCE_SHA=$GITHUB_SHA"
+            echo "ENG1B_NATIVE_TRIE_BLOB=e058f6a7078b84e8e6d5eb344dc19d715daad646"
+            echo "ENG1B_NATIVE_BENCH_BLOB=dd9e59374e4ccaf137ff2e209df8820afc92c825"
+            echo "ENG1B_NATIVE_HOST=$(hostname)"
+            echo "ENG1B_NATIVE_ARCH=$(uname -m)"
+            echo "ENG1B_NATIVE_CPUS=$(nproc)"
+            echo "ENG1B_NATIVE_PRE_LOADAVG=$(cat /proc/loadavg)"
+            awk '/^MemAvailable:/{print "ENG1B_NATIVE_PRE_MEMAVAILABLE_KIB=" $2}' /proc/meminfo
+          } | tee "$RUNNER_TEMP/eng1b-native/provenance.txt"
+      - name: Isolate Rust/Cargo caches and build directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RUSTUP_HOME=$RUNNER_TEMP/eng1b-rustup" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$RUNNER_TEMP/eng1b-cargo" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/eng1b-target" >> "$GITHUB_ENV"
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Native ARM64 regression test for exact full-byte semantics
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc +1.89.0 --version | tee -a "$RUNNER_TEMP/eng1b-native/provenance.txt"
+          cargo +1.89.0 test --locked -p sml-core --lib elastic_ngram_trie -- --nocapture
+          cargo +1.89.0 test --locked -p sml-core --lib elastic_ngram_long -- --nocapture
+      - name: Compile unchanged release benchmark once on native Thor CPU
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.89.0 build --locked --release -p sml-core --bin sml-eng1b-resource-bench
+          test -x "$CARGO_TARGET_DIR/release/sml-eng1b-resource-bench"
+      - name: Execute 5 frozen matched triples and preserve scientific STOP
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/eng1b/native-thor-five.sh "$CARGO_TARGET_DIR/release/sml-eng1b-resource-bench" "$RUNNER_TEMP/eng1b-native" | tee "$RUNNER_TEMP/eng1b-native/run-console.txt"
+          {
+            echo "ENG1B_NATIVE_POST_LOADAVG=$(cat /proc/loadavg)"
+            awk '/^MemAvailable:/{print "ENG1B_NATIVE_POST_MEMAVAILABLE_KIB=" $2}' /proc/meminfo
+          } | tee -a "$RUNNER_TEMP/eng1b-native/provenance.txt"
+          test "$(grep -c '^ENG1B_THOR_ROUND' "$RUNNER_TEMP/eng1b-native/run-console.txt")" = 5
+          grep -Eq '^ENG1B_THOR_RESOURCE_VERDICT=(PASS_NATIVE_SYNTHETIC_DIAGNOSTIC_ONLY|STOP_RESOURCE_NO_PROMOTION)$' "$RUNNER_TEMP/eng1b-native/decision.txt"
+      - name: Publish source-bound summary without changing any benchmark result
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### ENG-1b native Thor CPU evidence (synthetic, five rounds)'
+            cat "$RUNNER_TEMP/eng1b-native/provenance.txt" 2>/dev/null || true
+            cat "$RUNNER_TEMP/eng1b-native/rounds.csv" 2>/dev/null || true
+            cat "$RUNNER_TEMP/eng1b-native/decision.txt" 2>/dev/null || true
+            echo 'No production/default-route promotion is authorized.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload non-secret raw per-process logs and native provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1b-thor-cpu-${{ github.sha }}
+          path: ${{ runner.temp }}/eng1b-native/
+          if-no-files-found: warn
+          retention-days: 30
