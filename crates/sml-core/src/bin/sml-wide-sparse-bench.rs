@@ -115,7 +115,10 @@ fn bench_gate(
         for index in 0..BENCH_ITERATIONS {
             let chosen = black_box(&patterns[(index + run) % patterns.len()]);
             let value = gate.evaluate_lanes(chosen, &mut scratch)?;
-            checksum ^= black_box(value.rotate_left((index % LANES) as u32));
+            checksum = checksum.wrapping_add(
+                black_box(value.rotate_left((index % LANES) as u32))
+                    ^ (index as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15),
+            );
         }
         *duration = start.elapsed().as_nanos() as f64 / BENCH_ITERATIONS as f64;
     }
