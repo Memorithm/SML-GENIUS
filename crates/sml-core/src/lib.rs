@@ -19,6 +19,7 @@ pub mod anf_credit_multihop;
 pub mod anf_credit_topology;
 pub mod anf_dual_hidden_credit;
 pub mod anf_elastic_capacity;
+pub mod anf_e5_spectral_beam;
 pub mod anf_epistemic_intuition;
 pub mod anf_intermediate_credit;
 pub mod anf_joint_feature_selection;
