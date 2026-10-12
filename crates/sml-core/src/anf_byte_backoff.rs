@@ -335,7 +335,15 @@ mod tests {
         assert!(p0[0] > p0[255]);
         // Signature 4 has no depth-3 observations; its lower-prefix values
         // match address 0 at depth 0..2 exactly.
-        let p_parent = model
+        let shorter = SparseByteBackoff::fit(
+            &training,
+            ByteBackoffConfig {
+                width: 2,
+                max_contexts: 16,
+            },
+        )
+        .unwrap();
+        let p_parent = shorter
             .distribution_dirichlet_with_parent(0, &ng, 0.5, 16.0)
             .unwrap();
         assert_eq!(p_unseen, p_parent);
