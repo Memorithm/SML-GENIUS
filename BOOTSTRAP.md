@@ -765,3 +765,40 @@ SML-25B language evaluation, no Thor GPU acceleration. Require a
 new source-aware and capacity-matched preregistration for future
 experiments with hidden state correlations, masking and expanded k.
 The ANF/SBG/MOR/Delta-KV integration gate remains independent.
+
+## WideSparseANF — fan-in beyond eight without exponential dense storage (2026-10-12)
+
+The `LocalAnfGate` fan-in=8 constant is the **retained low-width dense
+fast-path limit**, not the final SML-GENIUS architectural ceiling. Read the
+[frozen wide-gate protocol](docs/ANF-WIDE-SPARSE-1024-PREREGISTRATION.md),
+the [post-baseline optimization addendum](docs/ANF-WIDE-SPARSE-1024-PERF-AMENDMENT.md)
+and [native Rust evidence](docs/RESULTS-ANF-WIDE-SPARSE-1024.md).
+
+The new public `anf_wide_sparse` module provides `WideAnfGate` and
+`WideAnfNetwork` with **dynamic fan-in and explicit resource budgets**,
+adaptive dense `k<=8` versus sparse active-monomial dispatch, multiword
+u64 masks, shared-prefix AND products, caller-reused 64-lane scratch and a
+native recurrent-network adapter. It interoperates with historical
+`LocalAnfGate`, `LocalAnfNetwork`, and `LargeAnfGate` while leaving
+existing SBG/MOR/Delta-KV routes unchanged. Exactness evidence:
+**22/22** synthetic gate/width truth panels for k8,16,32,64,128,256,1024;
+**2/2** independent N128 native recurrent trajectories; **1/1** legacy
+31-bit sparse bridge; and one actual **N1024 recurrent step containing a
+1024-input gate**.
+
+The measured k1024 `linear32` and `mixed16` sparse functions use just
+32 and 16 active monomials, not `2^1024`. In the qualified native
+benchmark they have logical gate payloads of 13,056 and 11,120 bytes,
+scratch budgets of 33 and 48 u64 words, respectively. High-degree
+`full_and` still requires 1024 shared-prefix AND nodes and costlier
+evaluation (~2.37 microseconds in the optimized CPU run). These timings
+are **micro-kernel evidence only**; different ephemeral runners and
+a checksum instrumentation adjustment prevent attributing all before/
+after speed differences to the O(1) source-bound optimization.
+
+**Keep independent qualification gates:** discovering/learning monomials
+at k>8, routing wide gates through native SBG/MOR/Delta-KV, physical
+AVX/NEON/GPU execution, a K=1,048,576 function bank and SML-25B language
+model quality. A gate width of 1024 is **not** the number of ANF functions
+in a bank, nor a count of active gates per token. Native Rust only;
+no proprietary NVIDIA software stack apart from permitted drivers.
