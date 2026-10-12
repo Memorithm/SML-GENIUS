@@ -922,3 +922,59 @@ whose grammar can actually fit k=4 or 5 hidden gates. Keep quality,
 bank-scale cost, native GPU/Thor performance and SML-25B token
 generation as *independent unqualified goals*. Rust native only,
 with no vendor software stack other than permitted GPU drivers.
+
+## WideSparseANF k8–k1024 native gate and recurrent bridge evidence — 2026-10-12
+
+A standalone [preregistered k8..1024 protocol](ANF-WIDE-SPARSE-1024-PREREGISTRATION.md),
+its append-only [performance amendment](ANF-WIDE-SPARSE-1024-PERF-AMENDMENT.md)
+and the [native measured report](RESULTS-ANF-WIDE-SPARSE-1024.md)
+define the executable transition **away from dense `2^k` coefficient
+storage**. The Rust `anf_wide_sparse` API accepts dynamic input indices,
+canonical active monomials and explicit budgets, uses
+`ceil(k/64)` mask words per monomial, caches repeated prefixes in
+caller-owned `u64` lane scratch, and dispatches dense only for
+`k<=8` with >=25% active coefficients. The old `LocalAnfGate` API
+remains unchanged.
+
+**Qualifying evidence:** 22/22 truth-panel rows across
+k=8,16,32,64,128,256,1024 (8 input patterns ×64 lanes per row);
+2/2 exact 256-step N128 native recurrent-model conversions;
+1/1 LargeAnfGate 31-bit adapter; and a compiled/executed N1024
+recurrent step with a k1024 gate. The 64-lane sparse kernels require
+no dense `2^1024` coefficient table, no resident service, no `unsafe`
+and no NVIDIA SDK. The validated source-bound check is O(1) per
+call after construction; all runtime budgets are checked before
+allocating packed masks and shared-prefix scratch.
+
+**Performance guardrails:** report both before and after results
+with their different runner identities; do not hide the negative
+high-degree case. Post-optimization k1024 linear32 ≈42.739 ns/call,
+mixed16 ≈55.535 ns/call, full degree1024 AND ≈2365.915 ns/call.
+The AND case was ≈1341.112 ns/call in the pre-optimization benchmark,
+so no blanket wide-fan-in acceleration is established. Likewise the
+k8 dense128 reference is retained for comparison, not deprecated.
+Memory metrics are logical *payload* and *scratch* only, not RSS.
+
+**Next engineering gates before SML architecture promotion:**
+1. An explicit MOR/SBG page and Delta-KV dataflow that can execute a
+   selected `WideAnfGate` end-to-end and replay the same state exactly,
+   with native bank-page activation and memory read accounting.
+2. An independent **learning** workflow for wide sparse monomial
+   discovery, fitness on truly held-out outputs, sparsity/degree
+   constraints and bounded train/validation search; evaluating a
+   1024-input polynomial does NOT mean fitting one.
+3. SIMD/ARM-NEON and GPU-native kernel benchmarking on actual hardware
+   with feature parity and zero external proprietary NVIDIA runtime,
+   including scratch, bandwidth, timing and energy/power where measured.
+4. K=1,048,576 **banked functions**, with bounded physical storage,
+   dynamic choice of active pages, 64-lane batched execution and
+   transparent resident versus mapped bytes; bank addresses,
+   functions, physical gates and active monomials must remain separate.
+5. Capacity-matched k4/k5 *hidden gate discovery*, avoiding false
+   inference from the older fixed three-gate structure benchmarks,
+   before moving toward larger free topologies.
+
+No SML-25B perplexity, generated-token throughput, 100M active
+gates, semantic retrieval improvement, general LPN solution or
+worst-case subcubic complexity follows from these synthetic exactness
+and CPU microbenchmark observations.
