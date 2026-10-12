@@ -134,19 +134,15 @@ where
         input[index] = false;
     }
     let attempt = probe.residual(input, learned);
-    if attempt.is_ok_and(|still_one| still_one) {
+    if matches!(attempt, Ok(true)) {
         return Ok(());
     }
-    // If the oracle returned Err we MUST restore before propagating it.
-    // Do not consume/erase the original error via is_ok_and.
+    // Restore before propagating a genuine callback/budget error. Never
+    // convert an oracle error into a fabricated membership observation.
     for &index in &active {
         input[index] = true;
     }
-    // The previous attempt may have failed due to a query budget. Re-asking
-    // would be unsafe; we propagate errors via the caller's budget guard.
-    if probe.physical_queries >= probe.query_limit {
-        return Err(UnanchoredError::Budget);
-    }
+    attempt?;
     if group.len() > 1 {
         let midpoint = group.len() / 2;
         minimize_group(probe, input, &group[..midpoint], learned)?;
@@ -226,6 +222,7 @@ where
                 .collect::<Vec<_>>();
             if !(2..=limits.max_degree).contains(&support.len())
                 || learned.contains(&support)
+                || learned.iter().any(|known| known.iter().any(|i| support.contains(i)))
             {
                 rejected_witnesses += 1;
                 continue;
