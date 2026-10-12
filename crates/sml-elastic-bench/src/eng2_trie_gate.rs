@@ -229,8 +229,7 @@ impl TrainingSnapshot {
         if probe == self.train.as_slice() {
             return Err(AdmissionError::SameDataNotIndependent);
         }
-        let probe_events =
-            counted_events(probe).map_err(|_| AdmissionError::InvalidProbe)?;
+        let probe_events = counted_events(probe).map_err(|_| AdmissionError::InvalidProbe)?;
         if probe_events > ENG2_MAX_VERIFY_EVENTS {
             return Err(AdmissionError::TooManyVerificationEvents);
         }
@@ -270,11 +269,8 @@ impl TrainingSnapshot {
         let outcome = if from == to {
             InspectionOutcome::Noop
         } else {
-            let current = RepresentationState::new(
-                representation(from)?,
-                1,
-                RepresentationEpoch::new(epoch),
-            );
+            let current =
+                RepresentationState::new(representation(from)?, 1, RepresentationEpoch::new(epoch));
             let mut frontier = VersionFrontier::new(current.clone());
             let mut caps = CapabilitySet::default();
             caps.insert(representation(from)?, 1);
@@ -334,8 +330,7 @@ mod tests {
     fn fixture(offset: usize) -> Vec<u8> {
         (0..LANES)
             .flat_map(|lane| {
-                (0..40usize)
-                    .map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + offset) % 23) as u8)
+                (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + offset) % 23) as u8)
             })
             .collect()
     }
@@ -381,15 +376,36 @@ mod tests {
         let mut wrong = train.clone();
         wrong[1] ^= 0xFF;
         assert_eq!(
-            snapshot.inspect(&wrong, &probe, long, trie, TransitionMechanism::Recompute, 1),
+            snapshot.inspect(
+                &wrong,
+                &probe,
+                long,
+                trie,
+                TransitionMechanism::Recompute,
+                1
+            ),
             Err(AdmissionError::WrongTrainSource)
         );
         assert_eq!(
-            snapshot.inspect(&train, &train, long, trie, TransitionMechanism::Recompute, 1),
+            snapshot.inspect(
+                &train,
+                &train,
+                long,
+                trie,
+                TransitionMechanism::Recompute,
+                1
+            ),
             Err(AdmissionError::SameDataNotIndependent)
         );
         assert_eq!(
-            snapshot.inspect(&train, &[0; 64], long, trie, TransitionMechanism::Recompute, 1),
+            snapshot.inspect(
+                &train,
+                &[0; 64],
+                long,
+                trie,
+                TransitionMechanism::Recompute,
+                1
+            ),
             Err(AdmissionError::InvalidProbe)
         );
         assert_eq!(
@@ -408,7 +424,14 @@ mod tests {
             Err(AdmissionError::UnprovenPhysicalReencoder)
         );
         assert_eq!(
-            snapshot.inspect(&train, &probe, long, trie, TransitionMechanism::Recompute, u64::MAX),
+            snapshot.inspect(
+                &train,
+                &probe,
+                long,
+                trie,
+                TransitionMechanism::Recompute,
+                u64::MAX
+            ),
             Err(AdmissionError::EpochOverflow)
         );
         assert_eq!(
@@ -423,7 +446,14 @@ mod tests {
             Err(AdmissionError::InvalidDepth)
         );
         let noop = snapshot
-            .inspect(&train, &probe, long, long, TransitionMechanism::Recompute, 1)
+            .inspect(
+                &train,
+                &probe,
+                long,
+                long,
+                TransitionMechanism::Recompute,
+                1,
+            )
             .unwrap();
         assert_eq!(noop.outcome, InspectionOutcome::Noop);
     }
