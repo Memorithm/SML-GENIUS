@@ -340,7 +340,11 @@ impl WideAnfGate {
         let input_bytes = self.inputs.len() * size_of::<usize>();
         match &self.execution {
             Execution::Dense(gate) => {
-                input_bytes + gate.monomial_count().div_ceil(64) * size_of::<u64>()
+                // The compatibility backend also owns a second Vec of
+                // physical indices; count BOTH logical index payloads.
+                input_bytes
+                    + gate.inputs().len() * size_of::<usize>()
+                    + gate.monomial_count().div_ceil(64) * size_of::<u64>()
             }
             Execution::Sparse(body) => {
                 input_bytes
