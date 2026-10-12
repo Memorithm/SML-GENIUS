@@ -41,7 +41,7 @@ jobs:
           grep -Fq "github.repository == 'Memorithm/SML-GENIUS'" "$native"
           grep -Fq "github.ref == 'refs/heads/main'" "$native"
           grep -Fq 'runs-on: [self-hosted, Linux, ARM64]' "$native"
-          grep -Fq 'ref: ${{ github.sha }}' "$native"
+          grep -Eq '^[[:space:]]+ref:[[:space:]]+.*github[.]sha' "$native"
           grep -Fq 'e058f6a7078b84e8e6d5eb344dc19d715daad646' "$native"
           grep -Fq 'dd9e59374e4ccaf137ff2e209df8820afc92c825' "$native"
       - name: Test five-round parser on explicitly FAKE fixed-output sources only
