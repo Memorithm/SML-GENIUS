@@ -380,7 +380,8 @@ impl Metrics {
 /// UNIFORM prior under the SAME TRAIN likelihood; consumes no TEST labels.
 fn updated_uniform_probability_true(pred: &PassivePrediction) -> f64 {
     let weights = [4.0, 2.0, 2.0, 1.0];
-    let corrected = pred.posterior
+    let corrected = pred
+        .posterior
         .iter()
         .zip(weights)
         .map(|(&p, w)| p / w)
@@ -404,8 +405,7 @@ fn measure_prediction(
         / pred.candidate_bits.len() as f64;
     let brier_biased = (pred.probability_true - binary_target).powi(2);
     let brier_uniform = (uniform_p - binary_target).powi(2);
-    let brier_uniform_updated =
-        (updated_uniform_probability_true(pred) - binary_target).powi(2);
+    let brier_uniform_updated = (updated_uniform_probability_true(pred) - binary_target).powi(2);
     Metrics {
         evaluated: 1,
         accepted: usize::from(pred.selective_prediction.is_some()),
