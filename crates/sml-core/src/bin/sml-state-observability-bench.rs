@@ -656,58 +656,47 @@ fn freeze(
 }
 
 struct FrozenStress {
-    mode: InputMode,
+    mode: StateMode,
     fitted: Frozen,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() > 2 {
-        return Err("usage: sml-temporal-state-bench [seeds:1..=3]".into());
+        return Err("usage: sml-state-observability-bench [seeds:1..=3]".into());
     }
     let nseeds: usize = args.get(1).map_or(Ok(3), |arg| arg.parse())?;
     if !(1..=3).contains(&nseeds) {
         return Err("seed count must be 1..=3".into());
     }
     println!(
-        "A6C12E_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor,panels=clean;noise_1_in_16,modes=near_lag_1_in_32;exact_lag;hidden_state_flip_1_in_256,n=508,train=512,val=512,test=4096,lanes=64,sketch_rounds={SKETCH_ROUNDS},sketch_bits={SKETCH_BITS},top_w2_pairs={TOP_PAIRS}"
+        "A6C12F_CONFIG,seeds={nseeds},tasks=xor_xor_xor;and_xor_xor,panels=clean;noise_1_in_16,slots=0;68;127,rates=1_in_256;1_in_64,n=508,train=512,val=512,test=4096,lanes=64,sketch_rounds={SKETCH_ROUNDS},sketch_bits={SKETCH_BITS},top_w2_pairs={TOP_PAIRS}"
     );
     println!(
-        "A6C12E_PROTOCOL,three_gate_N128=true,temporal_alias_shift=one_step,hidden_state_noise_slot=127,hidden_flip_prob=1_in_256,all_frozen_before_test=true,w3_seed0_only=true"
+        "A6C12F_PROTOCOL,hidden_state_noise_applied_after_native_step=true,bitwise_model_agreement_not_error_count=true,all_frozen_before_test=true,w3_seed0_per_stratum=true,temporal_equivalence_witness_after_freeze=true"
     );
 
     let mut frozen = Vec::<FrozenStress>::new();
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                for mode in InputMode::STRESS {
-                    let (train, train_hidden_flips) = data_with_mode(
+                for mode in StateMode::STRESS {
+                    let (train, train_flips) = data_with_mode(
                         seed(index, task, panel, 0xa6c1_2b11),
                         task,
                         panel,
                         TRAIN_STEPS,
                         mode,
                     );
-                    let (validation, val_hidden_flips) = data_with_mode(
+                    let (validation, validation_flips) = data_with_mode(
                         seed(index, task, panel, 0xa6c1_2b22),
                         task,
                         panel,
                         VAL_STEPS,
                         mode,
                     );
-                    let (lagged_x1_x2, lagged_x3_x4) = delayed_channel_mismatches(&train);
-                    if mode == InputMode::ExactLag && (lagged_x1_x2 != 0 || lagged_x3_x4 != 0) {
-                        return Err(
-                            "exact temporal source generator violated one-step identity".into()
-                        );
-                    }
-                    if mode == InputMode::StateFlip && train_hidden_flips == 0 {
-                        return Err("state disturbance did not flip any bits on TRAIN".into());
-                    }
-                    if mode != InputMode::StateFlip
-                        && (train_hidden_flips != 0 || val_hidden_flips != 0)
-                    {
-                        return Err("unexpected hidden transition disturbances".into());
+                    if train_flips == 0 || validation_flips == 0 {
+                        return Err("hidden-state perturbation unexpectedly empty on TRAIN/VAL".into());
                     }
                     let observed = Observed::new(&train, grid(STRESS_WIDTH));
                     if !task
@@ -715,18 +704,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .iter()
                         .all(|source| observed.sources.contains(source))
                     {
-                        return Err("native source absent from full search space".into());
+                        return Err("true source absent from declared 508-source search space".into());
                     }
                     println!(
-                        "A6C12E_INPUT,task={},panel={},seed={},mode={},lagged_x1_x2_mismatches={},lagged_x3_x4_mismatches={},train_hidden_flips={},validation_hidden_flips={},samples={}",
+                        "A6C12F_INPUT,task={},panel={},seed={},mode={},slot={},rate=1_in_{},train_flips={},validation_flips={},samples={}",
                         task.name(),
                         panel.name(),
                         index,
                         mode.name(),
-                        lagged_x1_x2,
-                        lagged_x3_x4,
-                        train_hidden_flips,
-                        val_hidden_flips,
+                        mode.slot,
+                        1usize << mode.bits,
+                        train_flips,
+                        validation_flips,
                         TRAIN_STEPS * LANES
                     );
                     for method in Method::ALL {
@@ -741,7 +730,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             &observed,
                         )?;
                         println!(
-                            "A6C12E_FROZEN,task={},panel={},seed={},mode={},method={},factor_structures={},screen_seconds={:.6},factor_seconds={:.6},sketch_bucket_hits={},sketch_unique={},sketch_full={},w3_full_correlations={}",
+                            "A6C12F_FROZEN,task={},panel={},seed={},mode={},method={},factor_structures={},screen_seconds={:.6},factor_seconds={:.6},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_full={},w3_full_correlations={}",
                             task.name(),
                             panel.name(),
                             index,
@@ -750,6 +739,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             fit.proposals,
                             fit.screen_seconds,
                             fit.factor_seconds,
+                            fit.sketch.pair_probes,
                             fit.sketch.bucket_hits,
                             fit.sketch.unique,
                             fit.sketch.full_scored,
@@ -761,100 +751,67 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    // 2 tasks x 2 panels x 3 modes x (3*nseeds + 1 seed0 reference).
     let expected_policies =
-        Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * (3 * nseeds + 1);
-    let distinct_datasets = Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * nseeds;
+        Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * (3 * nseeds + 1);
+    let distinct_datasets =
+        Task::ALL.len() * Panel::ALL.len() * StateMode::STRESS.len() * nseeds;
     if frozen.len() != expected_policies {
-        return Err("frozen policy count differs from preregistered plan".into());
+        return Err("frozen policy count differs from preregistered 240".into());
     }
     println!(
-        "A6C12E_ALL_FROZEN,policies={},datasets={}",
+        "A6C12F_ALL_FROZEN,policies={},datasets={}",
         frozen.len(),
         distinct_datasets
     );
 
-    // No TEST data or scores exist until after every source selection is frozen.
+    // At this point EVERY candidate ranking, ANF factorization and
+    // validation-based selection is frozen. No prior TEST data is created.
     for task in Task::ALL {
         for panel in Panel::ALL {
             for index in 0..nseeds {
-                for mode in InputMode::STRESS {
+                for mode in StateMode::STRESS {
                     let heldout_seed = seed(index, task, panel, 0xa6c1_2b33);
-                    let (test, test_hidden_flips) =
+                    let (test, test_flips) =
                         data_with_mode(heldout_seed, task, panel, TEST_STEPS, mode);
-                    let (clean, clean_hidden_flips) =
+                    let (test_clean_labels, clean_flips) =
                         data_with_mode(heldout_seed, task, Panel::Clean, TEST_STEPS, mode);
-                    if test.blocks[0].inputs != clean.blocks[0].inputs {
-                        return Err("label corruption altered raw TEST inputs".into());
+                    if test.blocks[0].inputs != test_clean_labels.blocks[0].inputs {
+                        return Err("label corruption changed input stream".into());
                     }
-                    if test_hidden_flips != clean_hidden_flips {
-                        return Err("hidden state disturbance depended on label noise panel".into());
+                    if test_flips != clean_flips || test_flips == 0 {
+                        return Err("label-noise panel changed hidden disturbance stream".into());
                     }
-                    let true_model = make_multi_gate_native(WIDTH, &task.rules())?;
-                    let deterministic_clean_errors = native_errors(&true_model, &clean)?;
-                    let deterministic_test_errors = native_errors(&true_model, &test)?;
-                    match mode {
-                        InputMode::StateFlip => {
-                            if test_hidden_flips == 0 || deterministic_clean_errors == 0 {
-                                return Err("state noise did not cause a real native transition disturbance".into());
-                            }
-                        }
-                        InputMode::NearLag | InputMode::ExactLag => {
-                            if test_hidden_flips != 0 || deterministic_clean_errors != 0 {
-                                return Err(
-                                    "noiseless native teacher failed temporal oracle".into()
-                                );
-                            }
-                        }
-                    }
-                    // An independent alternative native circuit moves the
-                    // intermediate XOR gate j68/x3 to j67/x4. This is an
-                    // observational-equivalence witness when x3(t)=x4(t-1).
-                    let lagged_alternative_difference = if mode == InputMode::StateFlip {
-                        None
-                    } else {
-                        let mut alternative_rules = task.rules();
-                        alternative_rules[1].gate = 67;
-                        alternative_rules[1].raw = 4;
-                        let alternate_model = make_multi_gate_native(WIDTH, &alternative_rules)?;
-                        let disagreements = native_errors(&alternate_model, &clean)?;
-                        if mode == InputMode::ExactLag && disagreements != 0 {
-                            return Err(
-                                "exact temporal observational-equivalence witness failed".into()
-                            );
-                        }
-                        if mode == InputMode::NearLag && disagreements == 0 {
-                            return Err(
-                                "near-lag controls accidentally became indistinguishable".into()
-                            );
-                        }
-                        Some(disagreements)
-                    };
+                    let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
+                    let teacher_errors = native_errors(&teacher, &test)?;
+                    let teacher_clean_errors = native_errors(&teacher, &test_clean_labels)?;
                     println!(
-                        "A6C12E_WITNESS,task={},panel={},seed={},mode={},alternative_native_errors={:?},deterministic_clean_errors={},deterministic_test_errors={},test_hidden_flips={},samples={}",
+                        "A6C12F_NOISE,task={},panel={},seed={},mode={},slot={},rate=1_in_{},injected_state_flips={},teacher_errors={},teacher_clean_label_errors={},samples={}",
                         task.name(),
                         panel.name(),
                         index,
                         mode.name(),
-                        lagged_alternative_difference,
-                        deterministic_clean_errors,
-                        deterministic_test_errors,
-                        test_hidden_flips,
+                        mode.slot,
+                        1usize << mode.bits,
+                        test_flips,
+                        teacher_errors,
+                        teacher_clean_errors,
                         TEST_STEPS * LANES
                     );
 
-                    for row in frozen.iter().filter(|row| {
-                        row.mode == mode
-                            && row.fitted.task == task
-                            && row.fitted.panel == panel
-                            && row.fitted.seed == index
+                    for record in frozen.iter().filter(|record| {
+                        record.mode == mode
+                            && record.fitted.task == task
+                            && record.fitted.panel == panel
+                            && record.fitted.seed == index
                     }) {
-                        let fit = &row.fitted;
+                        let fit = &record.fitted;
                         let (
                             sources_exact,
                             truths_exact,
                             proposal_errors,
                             selected_errors,
+                            proposal_bit_disagreements,
+                            selected_bit_disagreements,
                             accepted,
                         ) = if let Some(model) = &fit.fit {
                             (
@@ -862,34 +819,41 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 model.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
                                 Some(native_errors(&model.proposal, &test)?),
                                 Some(native_errors(&model.committed, &test)?),
+                                Some(native_prediction_disagreements(&model.proposal, &teacher, &test)),
+                                Some(native_prediction_disagreements(&model.committed, &teacher, &test)),
                                 model.accepted,
                             )
                         } else {
-                            (false, false, None, None, false)
+                            (false, false, None, None, None, None, false)
                         };
                         println!(
-                            "A6C12E_TEST,task={},panel={},seed={},mode={},method={},n={},deterministic_teacher_errors={},deterministic_clean_errors={},test_hidden_flips={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},alternative_native_errors={:?},factor_structures={},pair_rank={},pair_candidates={},triple_candidates={},sketch_bucket_hits={},sketch_unique={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
+                            "A6C12F_TEST,task={},panel={},seed={},mode={},slot={},rate=1_in_{},method={},n={},teacher_errors={},teacher_clean_label_errors={},state_flips={},proposal_errors={:?},selected_errors={:?},proposal_bit_disagreements={:?},selected_bit_disagreements={:?},sources_exact={},truths_exact={},accepted={},factor_structures={},pair_rank={},pair_candidates={},triple_candidates={},sketch_pair_probes={},sketch_bucket_hits={},sketch_unique={},sketch_coarse={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
                             task.name(),
                             panel.name(),
                             index,
                             mode.name(),
+                            mode.slot,
+                            1usize << mode.bits,
                             fit.method.name(),
                             fit.n,
-                            deterministic_test_errors,
-                            deterministic_clean_errors,
-                            test_hidden_flips,
+                            teacher_errors,
+                            teacher_clean_errors,
+                            test_flips,
                             proposal_errors,
                             selected_errors,
+                            proposal_bit_disagreements,
+                            selected_bit_disagreements,
                             sources_exact,
                             truths_exact,
                             accepted,
-                            lagged_alternative_difference,
                             fit.proposals,
                             fit.pair_rank,
                             fit.full_pairs,
                             fit.full_triples,
+                            fit.sketch.pair_probes,
                             fit.sketch.bucket_hits,
                             fit.sketch.unique,
+                            fit.sketch.coarse_scored,
                             fit.sketch.full_scored,
                             fit.screen_seconds,
                             fit.factor_seconds,
@@ -901,10 +865,43 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+
+    // Independent post-freeze causal equivalence witness. True teacher and
+    // a distinct alternative native circuit differ in both gate position
+    // (j68 vs j67) and raw channel (x3 vs x4).
+    for task in Task::ALL {
+        for index in 0..nseeds {
+            let witness_seed = seed(index, task, Panel::Clean, WITNESS_STAGE);
+            let true_teacher = make_multi_gate_native(WIDTH, &task.rules())?;
+            let mut alternative_rules = task.rules();
+            alternative_rules[1].gate = 67;
+            alternative_rules[1].raw = 4;
+            let alternate = make_multi_gate_native(WIDTH, &alternative_rules)?;
+            let exact = temporal_witness_inputs(witness_seed, TEST_STEPS, false);
+            let near = temporal_witness_inputs(witness_seed, TEST_STEPS, true);
+            let exact_disagreements =
+                native_prediction_disagreements(&true_teacher, &alternate, &exact);
+            let near_disagreements =
+                native_prediction_disagreements(&true_teacher, &alternate, &near);
+            if exact_disagreements != 0 || near_disagreements == 0 {
+                return Err("independent temporal equivalence/disequivalence witness failed".into());
+            }
+            println!(
+                "A6C12F_EQUIVALENCE,task={},seed={},domain=exact_lag_vs_near_lag,original=j68_x3,alternative=j67_x4,exact_bit_disagreements={},near_bit_disagreements={},samples={}",
+                task.name(),
+                index,
+                exact_disagreements,
+                near_disagreements,
+                TEST_STEPS * LANES
+            );
+        }
+    }
     println!(
-        "A6C12E_COMPLETE,policies={},distinct_test_datasets={},exact_lag_native_witness_checked=true,hidden_state_transition_noise_checked=true,modes=3,methods=4",
+        "A6C12F_COMPLETE,policies={},distinct_test_datasets={},exact_temporal_witnesses={},near_temporal_controls={},state_noise_modes=6,methods=4",
         frozen.len(),
-        distinct_datasets
+        distinct_datasets,
+        Task::ALL.len() * nseeds,
+        Task::ALL.len() * nseeds
     );
     Ok(())
 }
