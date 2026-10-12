@@ -176,8 +176,16 @@ fn data_with_mode(
     // At t=0, the virtual historical source is zero in the initial state.
     for t in 0..steps {
         let offset = t * INPUT_BITS;
-        let prior_x2 = if t == 0 { 0 } else { inputs[(t - 1) * INPUT_BITS + 2] };
-        let prior_x4 = if t == 0 { 0 } else { inputs[(t - 1) * INPUT_BITS + 4] };
+        let prior_x2 = if t == 0 {
+            0
+        } else {
+            inputs[(t - 1) * INPUT_BITS + 2]
+        };
+        let prior_x4 = if t == 0 {
+            0
+        } else {
+            inputs[(t - 1) * INPUT_BITS + 4]
+        };
         match mode {
             InputMode::NearLag => {
                 inputs[offset + 1] = prior_x2 ^ one_in_32(&mut temporal_rng);
@@ -237,8 +245,16 @@ fn delayed_channel_mismatches(split: &LaneData) -> (u64, u64) {
     let mut x3_vs_prior_x4 = 0u64;
     for t in 0..block.steps {
         let current = t * INPUT_BITS;
-        let earlier_x2 = if t == 0 { 0 } else { block.inputs[(t - 1) * INPUT_BITS + 2] };
-        let earlier_x4 = if t == 0 { 0 } else { block.inputs[(t - 1) * INPUT_BITS + 4] };
+        let earlier_x2 = if t == 0 {
+            0
+        } else {
+            block.inputs[(t - 1) * INPUT_BITS + 2]
+        };
+        let earlier_x4 = if t == 0 {
+            0
+        } else {
+            block.inputs[(t - 1) * INPUT_BITS + 4]
+        };
         x1_vs_prior_x2 += u64::from((block.inputs[current + 1] ^ earlier_x2).count_ones());
         x3_vs_prior_x4 += u64::from((block.inputs[current + 3] ^ earlier_x4).count_ones());
     }
@@ -671,12 +687,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                     let (lagged_x1_x2, lagged_x3_x4) = delayed_channel_mismatches(&train);
                     if mode == InputMode::ExactLag && (lagged_x1_x2 != 0 || lagged_x3_x4 != 0) {
-                        return Err("exact temporal source generator violated one-step identity".into());
+                        return Err(
+                            "exact temporal source generator violated one-step identity".into()
+                        );
                     }
                     if mode == InputMode::StateFlip && train_hidden_flips == 0 {
                         return Err("state disturbance did not flip any bits on TRAIN".into());
                     }
-                    if mode != InputMode::StateFlip && (train_hidden_flips != 0 || val_hidden_flips != 0) {
+                    if mode != InputMode::StateFlip
+                        && (train_hidden_flips != 0 || val_hidden_flips != 0)
+                    {
                         return Err("unexpected hidden transition disturbances".into());
                     }
                     let observed = Observed::new(&train, grid(STRESS_WIDTH));
@@ -734,10 +754,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // 2 tasks x 2 panels x 3 modes x (3*nseeds + 1 seed0 reference).
     let expected_policies =
         Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * (3 * nseeds + 1);
-    let distinct_datasets = Task::ALL.len()
-        * Panel::ALL.len()
-        * InputMode::STRESS.len()
-        * nseeds;
+    let distinct_datasets = Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * nseeds;
     if frozen.len() != expected_policies {
         return Err("frozen policy count differs from preregistered plan".into());
     }
@@ -753,20 +770,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             for index in 0..nseeds {
                 for mode in InputMode::STRESS {
                     let heldout_seed = seed(index, task, panel, 0xa6c1_2b33);
-                    let (test, test_hidden_flips) = data_with_mode(
-                        heldout_seed,
-                        task,
-                        panel,
-                        TEST_STEPS,
-                        mode,
-                    );
-                    let (clean, clean_hidden_flips) = data_with_mode(
-                        heldout_seed,
-                        task,
-                        Panel::Clean,
-                        TEST_STEPS,
-                        mode,
-                    );
+                    let (test, test_hidden_flips) =
+                        data_with_mode(heldout_seed, task, panel, TEST_STEPS, mode);
+                    let (clean, clean_hidden_flips) =
+                        data_with_mode(heldout_seed, task, Panel::Clean, TEST_STEPS, mode);
                     if test.blocks[0].inputs != clean.blocks[0].inputs {
                         return Err("label corruption altered raw TEST inputs".into());
                     }
@@ -784,7 +791,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                         InputMode::NearLag | InputMode::ExactLag => {
                             if test_hidden_flips != 0 || deterministic_clean_errors != 0 {
-                                return Err("noiseless native teacher failed temporal oracle".into());
+                                return Err(
+                                    "noiseless native teacher failed temporal oracle".into()
+                                );
                             }
                         }
                     }
@@ -800,10 +809,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let alternate_model = make_multi_gate_native(WIDTH, &alternative_rules)?;
                         let disagreements = native_errors(&alternate_model, &clean)?;
                         if mode == InputMode::ExactLag && disagreements != 0 {
-                            return Err("exact temporal observational-equivalence witness failed".into());
+                            return Err(
+                                "exact temporal observational-equivalence witness failed".into()
+                            );
                         }
                         if mode == InputMode::NearLag && disagreements == 0 {
-                            return Err("near-lag controls accidentally became indistinguishable".into());
+                            return Err(
+                                "near-lag controls accidentally became indistinguishable".into()
+                            );
                         }
                         Some(disagreements)
                     };
@@ -892,8 +905,13 @@ mod tests {
 
     #[test]
     fn source_grid_and_preregistered_cardinality_are_exact() {
-        let (train, injected) =
-            data_with_mode(11, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, InputMode::ExactLag);
+        let (train, injected) = data_with_mode(
+            11,
+            Task::XorXorXor,
+            Panel::Clean,
+            TRAIN_STEPS,
+            InputMode::ExactLag,
+        );
         assert_eq!(injected, 0);
         let observed = Observed::new(&train, grid(STRESS_WIDTH));
         assert_eq!(count_combinations(&observed), (128_016, 21_336_000));
@@ -921,8 +939,7 @@ mod tests {
             assert_ne!(alternate, task.rules());
             assert_eq!(native_errors(&true_model, &clean).unwrap(), 0);
             assert_eq!(
-                native_errors(&make_multi_gate_native(WIDTH, &alternate).unwrap(), &clean)
-                    .unwrap(),
+                native_errors(&make_multi_gate_native(WIDTH, &alternate).unwrap(), &clean).unwrap(),
                 0
             );
         }
@@ -940,13 +957,19 @@ mod tests {
             alternative[1].gate = 67;
             alternative[1].raw = 4;
             assert_eq!(
-                native_errors(&make_multi_gate_native(WIDTH, &task.rules()).unwrap(), &clean)
-                    .unwrap(),
+                native_errors(
+                    &make_multi_gate_native(WIDTH, &task.rules()).unwrap(),
+                    &clean
+                )
+                .unwrap(),
                 0
             );
             assert!(
-                native_errors(&make_multi_gate_native(WIDTH, &alternative).unwrap(), &clean)
-                    .unwrap()
+                native_errors(
+                    &make_multi_gate_native(WIDTH, &alternative).unwrap(),
+                    &clean
+                )
+                .unwrap()
                     > 0
             );
         }
@@ -991,8 +1014,13 @@ mod tests {
 
     #[test]
     fn sketch_probe_and_full_corr_are_accounted_separately() {
-        let (train, _) =
-            data_with_mode(93, Task::XorXorXor, Panel::Clean, TRAIN_STEPS, InputMode::NearLag);
+        let (train, _) = data_with_mode(
+            93,
+            Task::XorXorXor,
+            Panel::Clean,
+            TRAIN_STEPS,
+            InputMode::NearLag,
+        );
         let observed = Observed::new(&train, grid(32));
         let (triples, stats) = rank_sketch_triplets(&observed);
         assert!(stats.pair_probes > 0);
