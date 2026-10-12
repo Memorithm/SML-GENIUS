@@ -665,3 +665,34 @@ reprojects Delta-KV from their post-expert SBG output plus the current route.
 and the 108-case/456-cycle exact panel with independent std-only arithmetic replay.
 This does not qualify learned page quality, physical speed, persistent checkpoint
 storage, broader geometries or a final model architecture. Old fixtures remain.
+
+## A6-C12d identifiability and screening evidence — 2026-10-12
+
+Before extending three-gate ANF source selection or connecting it to
+SML-GENIUS learned banks, read the preregistered
+[correlated/alias protocol](docs/A6-C12D-CORRELATED-IDENTIFIABILITY-PREREGISTRATION.md)
+and [measured results](docs/RESULTS-A6-C12D-CORRELATED-IDENTIFIABILITY.md).
+
+The native hybrid W2+Sketch-MITM recovered 12/12 exact hidden positions,
+input channels and tables for strongly correlated **but distinct** sources
+within an N128 fixed-ring/three-hidden-gate setup and a 508-candidate pool.
+On the *different* input domain `x1=x2`, 12/12 native alternative-generator
+comparisons yielded **identical** outputs despite distinct hidden input
+channels. The learner matched all 12/12 native TEST outputs but no longer
+matched the generator's arbitrarily chosen input-channel name (0/12).
+
+Scientific contract for future work: **structural parameter equality**,
+**observable functional equivalence**, and **identifiable minimal
+representations** are different gates. When input aliases exist, require a
+formal identifiability diagnostic before interpreting a structural miss.
+Keep native TEST free-running with no teacher forcing, frozen source rankings,
+registered budgets and honest controls. The bounded ~35× improvement over
+exhaustive W3 on eight paired correlated/alias streams is a CPU measurement,
+not a worst-case complexity bound, a universal LPN solution, a language-model
+quality result or million-function-bank scaling.
+
+Next: distinguish non-identifiability from finite-sample failure under
+biased/time-shifted channels and corrupt recurrent state; only then generalize
+to k≥4/5 with an appropriately capable learner. SML remains self-contained;
+RemoteOps is the reference physical control plane, and no proprietary
+NVIDIA software is imported.
