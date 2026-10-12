@@ -1,0 +1,57 @@
+name: A6-I1 epistemic intuition under nonidentifiability
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-i1-epistemic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  epistemic-intuition:
+    if: startsWith(github.head_ref, 'research/a6-i1-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact source SHA without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Enforce strict all-target compilation, Clippy and epistemic-unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_epistemic_intuition -- --nocapture
+          cargo test --locked -p sml-core --bin sml-epistemic-intuition-bench -- --nocapture
+      - name: Run preregistered 252 blinded cells, shifts and intervention arms
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_I1_ENV,sha=$(git rev-parse HEAD),rust=$(rustc --version),arch=$(uname -m),cpus=$(nproc),runner=$RUNNER_NAME"
+          cargo run --locked --release -p sml-core --bin sml-epistemic-intuition-bench 2>&1 | tee "$RUNNER_TEMP/a6-i1.log"
+          test "$(grep -c '^A6_I1_META,' "$RUNNER_TEMP/a6-i1.log")" -eq 84
+          test "$(grep -c '^A6_I1_CELL,' "$RUNNER_TEMP/a6-i1.log")" -eq 252
+          test "$(grep -c '^A6_I1_RESULT,' "$RUNNER_TEMP/a6-i1.log")" -eq 3
+          test "$(grep -c '^A6_I1_CELL,.*regime=matched,' "$RUNNER_TEMP/a6-i1.log")" -eq 84
+          test "$(grep -c '^A6_I1_CELL,.*regime=reversed,' "$RUNNER_TEMP/a6-i1.log")" -eq 84
+          test "$(grep -c '^A6_I1_CELL,.*regime=uninformative,' "$RUNNER_TEMP/a6-i1.log")" -eq 84
+          test "$(grep -c '^A6_I1_CELL,.*passive_disagreements=0,' "$RUNNER_TEMP/a6-i1.log")" -eq 252
+          grep -q '^A6_I1_COMPLETE,meta_fits=84,cells=252,matched_pass=true,reversed_guard_pass=true,uninformative_guard_pass=true,consensus_pass=true,intervention_pass=true,pass=true$' "$RUNNER_TEMP/a6-i1.log"

@@ -1168,3 +1168,68 @@ The local Rust fit timings cannot stand in for collection cost.
 Retain Rust-only native execution, no NVIDIA proprietary software
 beyond permissible GPU drivers, and no premature scaling claims
 from this synthetic degree-bounded active membership setting.
+
+## A6-I1 epistemic ANF intuition — confidence, shift and intervention controls (2026-10-12)
+
+[Prerecorded A6-I1 hypotheses](A6-I1-EPISTEMIC-INTUITION-PREREGISTRATION.md)
+and [native quantitative report](RESULTS-A6-I1-EPISTEMIC-INTUITION.md)
+turn the informal 'intuition' proposal into an operational,
+falsifiable signal: a prior over two ANF functions can improve OOD
+behavior even when their current task's passive observations are
+**provably indistinguishable**.
+
+The test uses two native `WideAnfGate` hypotheses
+`f0=b`, `f1=b XOR x_a x_b`, whose candidates share a randomized
+four-term base ANF. On the passive support `x_a x_b=0`
+the functions coincide identically; on 16 forced OOD
+coactivation queries they differ everywhere. The learner receives
+two candidate gates and a context tag, and learns its
+`P(f1|tag)` from 64 labeled historical tasks per tag using
+Beta(1,1) smoothing, not from truth labels of the current blind
+task. Uncertainty is retained as predictive probability plus
+explicit consensus-only abstention. A targeted active probe is
+measured as a SEPARATE information-acquisition arm.
+
+**Measured 252-cell panel:** 7 k widths, 3 seeds, 2 passive
+censorship regimes, clean vs noisy labels and 3 deployment
+prior-shift conditions. All passive pair comparisons agree,
+86,016 deliberately forced OOD disagreements per regime,
+with **128,700 natural+forced OOD disagreements** in the
+258,048 OOD query panel per regime. On these ambiguous OOD
+cases, the trained contextual prior reaches **87.64% correct
+and 0.10970 Brier** under matching history, compared with
+~50% and Brier 0.25 for uninformed alternatives.
+After **prior reversal**, accuracy collapses to **11.82%**
+and Brier worsens to 0.659; with no real prior signal, accuracy
+is **49.65%** and Brier 0.385. The mean prior confidence
+~86.19% therefore becomes dangerously miscalibrated under
+shift. Selective abstention covers ~50.13% OOD and has zero
+clean output errors on accepted queries, since the true
+teacher is in the two-hypothesis ensemble by construction.
+A separate 1/21-query intervention recovers all hidden
+teacher IDs in this synthetic panel. These numbers do
+NOT demonstrate human intelligence, a general ANF learner,
+or robustness when the candidate family omits the teacher.
+
+**Follow-up preregistered evidence gates:**
+1. >2 bank hypotheses, sparse/elastic model scores and true
+   function sometimes absent from the candidate set; distinguish
+   epistemic consensus from dangerous model misspecification.
+2. Learn useful priors/analogy context from **past performance
+   feedback** or passive recurrent observation, without being
+   given historical hidden function identities.
+3. Online shift detection and adaptive active query budgets;
+   measure Brier, regret, abstention coverage, false certainty,
+   cost of intervention and hard distributional adversaries.
+4. Integrate this belief with actual multi-cycle SBG/MOR/Delta-KV
+   state update and memory provenance without leaking TEST
+   truth into router selection or learner.
+5. Independently validate vocabulary, natural-language
+   generalization and GPU/Thor native inference under
+   Rust-only/software-vendor constraints before any
+   SML-25B or million-ANF active-bank claim.
+
+The next demonstration must deliberately include observable
+failures and uncertainty, not only easy synthetic successes;
+identifiability is an information property, not something
+computational effort alone can eliminate.
