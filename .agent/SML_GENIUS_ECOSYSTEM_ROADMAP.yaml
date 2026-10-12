@@ -1012,7 +1012,34 @@ elastic_ngram_program_2026_10_12:
       - node_edge_pair_memory_caps_must_be_frozen_before_model_scoring
       - do_not_reuse_A6_E3_E4_E5_revealed_test_data_for_confirmation
       - data_fingerprint_success_does_not_imply_depth32_model_capability_or_language_quality
+  ENG2a:
+    status: merged_functional_non_actuating_precommit_guard
+    pull_request: 535
+    merge_commit: e4dc98332c8949336e0956380c2367de51b55289
+    original_preregistration_commit: 82ecf47d6403618de6e924358e4e4e4a533f2b76
+    source: crates/sml-elastic-bench/src/eng2_trie_gate.rs
+    protocol: docs/ENG-2A-TRIE-PRECOMMIT-GATE-PREREGISTRATION.md
+    exact_head: 8f2e3bb7557e52c23e2cea473944165b63bb8b57
+    exact_head_dedicated_CI: 38318809978
+    exact_head_general_CI: 38318809658
+    both_workflow_conclusions: success
+    source_binding: byte_for_byte_retained_TRAIN_not_cryptographic_attestation
+    maximum_checked_TRAIN_events: 8192
+    demonstrated_guard:
+      - full_256_class_bitwise_train_and_independent_probe_oracle_same_depth
+      - model_owns_exact_representation_feasibility
+      - rejects_unproven_physical_Reencode_even_with_generic_attestation
+      - rejects_depth_change_without_separate_quality_authority
+      - rejects_wrong_source_wrong_probe_wrong_epoch_and_poisoned_shadow
+      - generic_VersionFrontier_Recompute_proposed_validated_rolled_back
+      - committed_state_unchanged_and_no_physical_actuator
+    no_promotion:
+      - empirical_bounded_probe_parity_not_universal_formal_equivalence
+      - no_real_mmap_allocator_or_data_residency_transition
+      - no_hard_physical_memory_budget_or_production_inference
+      - not_an_ENG1c_full_corpus_training_capacity_solution
   next_slices:
+    - ENG2b_real_physical_source_bound_residency_codec_and_independent_rollback
     - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
