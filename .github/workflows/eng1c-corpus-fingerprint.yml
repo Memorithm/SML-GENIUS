@@ -1,0 +1,66 @@
+name: ENG-1c stage0 independent French/English corpus fingerprint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/eng1c-corpus-fingerprint.yml
+      - docs/ENG-1C-FR-EN-CORPUS-PREREGISTRATION.md
+      - docs/ENG-1C-FROZEN-CORPORA.md
+      - scripts/eng1c/fingerprint-eng1c.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1c-provenance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  public-fingerprint-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact untrusted PR HEAD without credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Validate source and preregistration identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          test -s docs/ENG-1C-FR-EN-CORPUS-PREREGISTRATION.md
+          bash -n scripts/eng1c/fingerprint-eng1c.sh
+          if bash scripts/eng1c/fingerprint-eng1c.sh invalid /tmp/invalid-eng1c-report; then
+            echo 'ENG1C_INVALID_LANGUAGE_WAS_ACCEPTED' >&2
+            exit 1
+          fi
+          test ! -f /tmp/invalid-eng1c-report
+      - name: Read-only fingerprints, no model evaluation or corpus artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/eng1c-provenance"
+          bash scripts/eng1c/fingerprint-eng1c.sh fr "$RUNNER_TEMP/eng1c-provenance/fr.txt"
+          bash scripts/eng1c/fingerprint-eng1c.sh en "$RUNNER_TEMP/eng1c-provenance/en.txt"
+          test "$(grep -c '^ENG1C_FINGERPRINT,' "$RUNNER_TEMP/eng1c-provenance/fr.txt")" -eq 1
+          test "$(grep -c '^ENG1C_FINGERPRINT,' "$RUNNER_TEMP/eng1c-provenance/en.txt")" -eq 1
+          grep -Eq '^ENG1C_FINGERPRINT,language=FR,ebook=17989,raw_bytes=[0-9]+,raw_sha256=[a-f0-9]{64},body_bytes=[0-9]+,body_sha256=[a-f0-9]{64},.*integrity=PASS$' "$RUNNER_TEMP/eng1c-provenance/fr.txt"
+          grep -Eq '^ENG1C_FINGERPRINT,language=EN,ebook=1342,raw_bytes=[0-9]+,raw_sha256=[a-f0-9]{64},body_bytes=[0-9]+,body_sha256=[a-f0-9]{64},.*integrity=PASS$' "$RUNNER_TEMP/eng1c-provenance/en.txt"
+          test "$(cut -d, -f7 "$RUNNER_TEMP/eng1c-provenance/fr.txt")" != "$(cut -d, -f7 "$RUNNER_TEMP/eng1c-provenance/en.txt")"
+          (
+            cd "$RUNNER_TEMP/eng1c-provenance"
+            sha256sum fr.txt en.txt > manifest.sha256
+          )
+          printf 'ENG1C_STAGE0_SOURCE_SHA=%s\n' "$(git rev-parse HEAD)" | tee "$RUNNER_TEMP/eng1c-provenance/protocol-head.txt"
+      - name: Archive only fingerprint text, never eBook raw/body
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1c-readonly-fr-en-fingerprint
+          path: ${{ runner.temp }}/eng1c-provenance/
+          if-no-files-found: warn
+          retention-days: 30
