@@ -7,7 +7,7 @@ use std::{collections::BTreeSet, error::Error, time::Instant};
 use sml_core::{
     anf_wide_sparse::{WideAnfBackend, WideAnfGate, WideAnfLimits},
     anf_wide_unanchored_learn::{
-        fit_unanchored_disjoint_sparse, UnanchoredError, UnanchoredFit, UnanchoredLimits,
+        fit_unanchored_disjoint_sparse, UnanchoredFit, UnanchoredLimits,
     },
     mor::MorDecision,
     pvp6_sbg::{SbgCoordinate, SbgField},
@@ -171,20 +171,13 @@ fn negative_control(width: usize) -> Result<(), Box<dyn Error>> {
     let mut invalid_terms = base.clone();
     invalid_terms.push((0..width).collect());
     let unsupported = native_teacher(width, invalid_terms)?;
-    let mut rng = SplitMix64::new(seed(width, 0, NOISE_SALT));
     let fit = fit_unanchored_disjoint_sparse(
         width,
         1,
         seed(width, 0, WITNESS_SALT),
         learn_limits(),
         gate_limits(),
-        |q| {
-            let label = unsupported.evaluate_scalar(q)?;
-            // All negative controls use CLEAN TRAIN labels. This rng is
-            // deliberately unused for noise; keep generator identity stable.
-            let _ = &mut rng;
-            Ok(label)
-        },
+        |q| unsupported.evaluate_scalar(q).map_err(Into::into),
     );
     match fit {
         Err(err) => {
