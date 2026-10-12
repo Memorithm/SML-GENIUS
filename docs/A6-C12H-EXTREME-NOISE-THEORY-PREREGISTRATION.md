@@ -1,6 +1,6 @@
 # A6-C12h — Préenregistrement aveugle : frontière d'identifiabilité bruit × échantillons
 
-**Préenregistré avant toute implémentation ou tout résultat de A6-C12h, le 12 octobre 2026.** Cette étude succède à A6-C12g, PR #510, mais **ne modifie pas** sa grille déjà figée, ne remplace pas ses 1232 sorties et ne présente aucun résultat de mesure. La PR #510 reste DRAFT avec GitHub-hosted CI échouant *avant toute étape* ; ce n'est ni une validation ni une invalidation scientifique. La PR A6-C12h est empilée sur sa branche, ne peut être fusionnée avant #510 vérifiée et fusionnée.
+**Préenregistré avant toute implémentation ou tout résultat de A6-C12h, le 12 octobre 2026.** Ce protocole historique précède les PR #510 et #511 fusionnées le 12 octobre 2026 (respectivement 18:44:49 et 18:45:33 UTC). La fusion par instruction explicite ne constitue PAS une qualification expérimentale : les GitHub-hosted runs sur les heads fusionnés échouaient sans runner attribué ni étape exécutée. #510 conserve sa grille figée de 1232 politiques ; #511 apporte un banc distinct de 1872 politiques. **Aucun résultat de campagne complète indépendante n'est attesté par ces fusions.** Les hypothèses et critères scientifiques du protocole restent inchangés.
 
 ## Corrections et limite de l'approximation théorique
 
