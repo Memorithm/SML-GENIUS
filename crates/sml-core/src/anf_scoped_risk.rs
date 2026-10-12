@@ -515,13 +515,13 @@ mod tests {
     #[test]
     fn hamming16_uses_exact_full_input_minimum_not_selected_support() {
         let mut index = Hamming16Guard::new(2).unwrap();
-        index.observe(&vec![false; 16]).unwrap();
+        index.observe(&[false; 16]).unwrap();
         let mut second = vec![true; 16];
         second[3] = false;
         index.observe(&second).unwrap();
         index.seal().unwrap();
-        assert_eq!(index.distance(&vec![false; 16]).unwrap(), 0);
-        assert_eq!(index.distance(&vec![true; 16]).unwrap(), 1);
+        assert_eq!(index.distance(&[false; 16]).unwrap(), 0);
+        assert_eq!(index.distance(&[true; 16]).unwrap(), 1);
         let mut query = vec![false; 16];
         query[2] = true;
         assert_eq!(index.distance(&query).unwrap(), 1);
