@@ -1,0 +1,57 @@
+name: WideSparseANF 8 to 1024 native qualification
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anf-wide-sparse-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  wide-sparse:
+    if: startsWith(github.head_ref, 'research/anf-wide-sparse-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Validate formatting, all targets, clippy and new wide native tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_wide_sparse
+          cargo test --locked -p sml-core --bin sml-wide-sparse-bench
+      - name: Measure native 22-case fan-in scaling and check oracle census
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "WIDE_ANF_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-wide-sparse-bench 2>&1 | tee "$RUNNER_TEMP/wide-sparse.log"
+          test "$(grep -c '^WIDE_ANF_ROW,' "$RUNNER_TEMP/wide-sparse.log")" -eq 22
+          test "$(grep '^WIDE_ANF_ROW,' "$RUNNER_TEMP/wide-sparse.log" | grep -c 'oracle=PASS$')" -eq 22
+          test "$(grep '^WIDE_ANF_ROW,width=1024,' "$RUNNER_TEMP/wide-sparse.log" | grep -c 'backend=sparse')" -eq 3
+          test "$(grep '^WIDE_ANF_ROW,width=8,family=dense128,' "$RUNNER_TEMP/wide-sparse.log" | grep -c 'backend=dense')" -eq 1
+          test "$(grep '^WIDE_ANF_ROW,width=8,.*backend=sparse' "$RUNNER_TEMP/wide-sparse.log" | wc -l)" -eq 3
+          test "$(grep '^WIDE_ANF_BRIDGE_NATIVE,' "$RUNNER_TEMP/wide-sparse.log" | grep -c 'bit_disagreements=0,oracle=PASS$')" -eq 2
+          test "$(grep '^WIDE_ANF_BRIDGE_LARGE,' "$RUNNER_TEMP/wide-sparse.log" | grep -c 'bit_disagreements=0,oracle=PASS$')" -eq 1
+          grep -q '^WIDE_ANF_COMPLETE,rows=22,literal_oracle_pass=22,native_recurrent_bridges=2,existing_large_bridges=1,unsafe_code=forbidden,dense_limit_k8_is_optimization_only=true$' "$RUNNER_TEMP/wide-sparse.log"
