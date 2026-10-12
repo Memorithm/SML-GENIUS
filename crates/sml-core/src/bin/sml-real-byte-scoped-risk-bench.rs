@@ -538,7 +538,7 @@ mod tests {
             slot[usize::from(mask.count_ones() > 1)] = 4;
         }
         let gate = gate_from_counts(&support, &counts).unwrap();
-        for mask in 0..8 {
+        for mask in 0usize..8 {
             let mut bits = [false; 16];
             for (i, &position) in support.iter().enumerate() {
                 bits[position] = mask & (1 << i) != 0;
