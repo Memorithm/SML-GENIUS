@@ -1137,3 +1137,9 @@ from TRAIN only; and real passive SBG/MOR/Delta-KV multi-cycle
 validation. Do not confuse absence of a visible interaction
 with proof of correctness, or synthetic performance with
 SML-25B model quality.
+
+## A6-I5 — empirical strength-three support does not certify generalization (2026-10-12)
+
+Following merged #506 (A6-I4), the opt-in `anf_triple_support::AnfTripleSupportGuard` examines every Boolean pattern of every three-coordinate input subset, under explicit combinatorial and retained-record budgets. Read the [protocol frozen before implementation](docs/A6-I5-TRIPLE-COVERAGE-PREREGISTRATION.md) and the [qualified positive and mandatory negative results](docs/RESULTS-A6-I5-TRIPLE-COVERAGE.md). The first native run verified 90 TRAIN-frozen committees and 46,080 OOD TEST decisions: in the hidden-triple scenario, the pair guard accepted 15,360 / 7,680 erroneous decisions while the triple guard accepted 7,680 / 0 erroneous decisions; with the true candidate present, the triple guard unnecessarily abstained from 7,680 correct decisions. Crucially, on a hidden degree-four interaction whose every triple pattern was seen during TRAIN, the triple guard accepted 15,360 decisions with 7,680 confident errors and zero triple-novelty alarms.
+
+This is an input-coverage gate, not coefficient reconstruction, epistemic correctness, or a general confidence certificate. Exact global strength-three construction refuses k256 or k1024 under the frozen 350,000-triple budget (k128 uses 341,376). Any next candidate must use explicitly budgeted feature/interaction selection and compare the cost of abstention against the cost of additional informative observations, with higher-order negative controls and untouched TEST. The bank remains supplied, not autonomously enriched; no language/SML-25B inference quality or GPU speed has been demonstrated.
