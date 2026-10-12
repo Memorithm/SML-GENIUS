@@ -3,11 +3,7 @@
 //! TRAIN learns only gate subset selection and conditional byte probabilities.
 //! VAL selects policies; TEST is not read or scored until the choices are frozen.
 
-use std::{
-    collections::BTreeSet,
-    error::Error,
-    time::Instant,
-};
+use std::{collections::BTreeSet, error::Error, time::Instant};
 
 use sml_core::{
     anf_char::{CharSplits, ChunkLayout, LANES},
@@ -30,8 +26,7 @@ const REQUIRED_GAIN: f64 = 0.02;
 const REQUIRED_ANF_RAW_ADVANTAGE: f64 = 0.01;
 const TIE_EPSILON: f64 = 1.0e-9;
 const PAIRS: [(usize, usize); 4] = [(0, 1), (1, 2), (2, 3), (0, 3)];
-const TRIPLES: [(usize, usize, usize); 4] =
-    [(0, 1, 2), (1, 2, 3), (0, 2, 3), (0, 1, 3)];
+const TRIPLES: [(usize, usize, usize); 4] = [(0, 1, 2), (1, 2, 3), (0, 2, 3), (0, 1, 3)];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Arm {
@@ -134,9 +129,7 @@ fn gate_value(context: u32, id: usize) -> bool {
         _ => {
             let offset = id - 96;
             let (a, b, c) = TRIPLES[offset / 8];
-            bit(8 * a + offset % 8)
-                ^ bit(8 * b + offset % 8)
-                ^ bit(8 * c + offset % 8)
+            bit(8 * a + offset % 8) ^ bit(8 * b + offset % 8) ^ bit(8 * c + offset % 8)
         }
     }
 }
@@ -305,7 +298,10 @@ fn greedy_select(
                 best_loss = loss;
             }
         }
-        assert!(winner < arm.cap(), "the greedy feature search must choose a gate");
+        assert!(
+            winner < arm.cap(),
+            "the greedy feature search must choose a gate"
+        );
         chosen[stage] = winner;
         losses[stage] = best_loss;
         for (entry, &features) in prefix.iter_mut().zip(masks) {
@@ -325,7 +321,13 @@ fn fit_table(arm: Arm, ids: &[usize], rows: &[TrainRow], masks: &[u128]) -> Tabl
         totals[key] += 1;
     }
     let occupied = totals.iter().filter(|&&v| v != 0).count();
-    Table { arm, ids: ids.to_vec(), counts, totals, occupied }
+    Table {
+        arm,
+        ids: ids.to_vec(),
+        counts,
+        totals,
+        occupied,
+    }
 }
 
 fn make_policies() -> Vec<Policy> {
@@ -333,7 +335,11 @@ fn make_policies() -> Vec<Policy> {
     for bank in 0..6 {
         for alpha_index in 0..ALPHAS.len() {
             for lambda_index in 0..LAMBDAS.len() {
-                policies.push(Policy { bank, alpha_index, lambda_index });
+                policies.push(Policy {
+                    bank,
+                    alpha_index,
+                    lambda_index,
+                });
             }
         }
     }
@@ -377,8 +383,12 @@ fn score_split(
             let mut best2 = 0usize;
             let mut best4 = 0usize;
             for y in 1..BYTE_CLASSES {
-                if ng2[y] > ng2[best2] { best2 = y; }
-                if ng4[y] > ng4[best4] { best4 = y; }
+                if ng2[y] > ng2[best2] {
+                    best2 = y;
+                }
+                if ng4[y] > ng4[best4] {
+                    best4 = y;
+                }
             }
             baselines[0].add(prior[target], unigram_best == target);
             baselines[1].add(ng2[target], best2 == target);
@@ -413,8 +423,10 @@ fn score_split(
                     }
                     sum += p;
                 }
-                if !sum.is_finite() || (sum - 1.0).abs() > 1.0e-8
-                    || !(0.0..=1.0).contains(&truth_prob) || truth_prob == 0.0
+                if !sum.is_finite()
+                    || (sum - 1.0).abs() > 1.0e-8
+                    || !(0.0..=1.0).contains(&truth_prob)
+                    || truth_prob == 0.0
                 {
                     return Err("non-normalized or non-positive 256-way distribution".into());
                 }
@@ -423,12 +435,15 @@ fn score_split(
             observations += 1;
         }
     }
-    if scores.iter().any(|m| m.n != observations)
-        || baselines.iter().any(|m| m.n != observations)
-    {
+    if scores.iter().any(|m| m.n != observations) || baselines.iter().any(|m| m.n != observations) {
         return Err("split scoring denominator mismatch".into());
     }
-    Ok(Scored { baselines, policies: scores, unseen, observations })
+    Ok(Scored {
+        baselines,
+        policies: scores,
+        unseen,
+        observations,
+    })
 }
 
 fn chosen(
@@ -454,7 +469,12 @@ fn chosen(
 fn print_metric(prefix: &str, name: &str, metrics: Metrics) {
     println!(
         "A6_E3_METRIC,split={},model={},events={},bits_per_byte={:.8},correct={},accuracy={:.8}",
-        prefix, name, metrics.n, metrics.bits(), metrics.correct, metrics.accuracy()
+        prefix,
+        name,
+        metrics.n,
+        metrics.bits(),
+        metrics.correct,
+        metrics.accuracy()
     );
 }
 
@@ -559,7 +579,10 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     for (index, bank) in banks.iter().enumerate() {
         println!(
             "A6_E3_COVERAGE,split=VAL,arm={},k={},unseen_events={},total={},unseen_fraction={:.8}",
-            bank.arm.name(), bank.ids.len(), validation.unseen[index], VAL_EVENTS,
+            bank.arm.name(),
+            bank.ids.len(),
+            validation.unseen[index],
+            VAL_EVENTS,
             validation.unseen[index] as f64 / VAL_EVENTS as f64
         );
     }
@@ -568,8 +591,22 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
         let pure = chosen(arm, &policy_grid, &validation.policies, true)?;
         let mixed = chosen(arm, &policy_grid, &validation.policies, false)?;
         winners.push((arm, pure, mixed));
-        print_selected("VAL", "PURE", &policy_grid, &validation.policies, &banks, pure);
-        print_selected("VAL", "MIX", &policy_grid, &validation.policies, &banks, mixed);
+        print_selected(
+            "VAL",
+            "PURE",
+            &policy_grid,
+            &validation.policies,
+            &banks,
+            pure,
+        );
+        print_selected(
+            "VAL",
+            "MIX",
+            &policy_grid,
+            &validation.policies,
+            &banks,
+            mixed,
+        );
     }
     print_metric("VAL", "UNIGRAM", validation.baselines[0]);
     print_metric("VAL", "NGRAM2", validation.baselines[1]);
@@ -581,24 +618,49 @@ fn run(path: &str) -> Result<(), Box<dyn Error>> {
     );
 
     // The ONLY four TEST policies are the two VAL-frozen winners per arm.
-    let selected_policies = winners.iter().flat_map(|&(_, pure, mixed)| {
-        [policy_grid[pure], policy_grid[mixed]]
-    }).collect::<Vec<_>>();
+    let selected_policies = winners
+        .iter()
+        .flat_map(|&(_, pure, mixed)| [policy_grid[pure], policy_grid[mixed]])
+        .collect::<Vec<_>>();
     let testing_started = Instant::now();
-    let test = score_split(&splits.test, &ngram2, &ngram4, &prior, &banks, &selected_policies)?;
+    let test = score_split(
+        &splits.test,
+        &ngram2,
+        &ngram4,
+        &prior,
+        &banks,
+        &selected_policies,
+    )?;
     if test.observations != TEST_EVENTS || test.policies.len() != 4 {
         return Err("unexpected heldout byte count or selected model count".into());
     }
     for (index, bank) in banks.iter().enumerate() {
         println!(
             "A6_E3_COVERAGE,split=TEST,arm={},k={},unseen_events={},total={},unseen_fraction={:.8}",
-            bank.arm.name(), bank.ids.len(), test.unseen[index], TEST_EVENTS,
+            bank.arm.name(),
+            bank.ids.len(),
+            test.unseen[index],
+            TEST_EVENTS,
             test.unseen[index] as f64 / TEST_EVENTS as f64
         );
     }
     for (offset, &(arm, _, _)) in winners.iter().enumerate() {
-        print_selected("TEST", "PURE", &selected_policies, &test.policies, &banks, offset * 2);
-        print_selected("TEST", "MIX", &selected_policies, &test.policies, &banks, offset * 2 + 1);
+        print_selected(
+            "TEST",
+            "PURE",
+            &selected_policies,
+            &test.policies,
+            &banks,
+            offset * 2,
+        );
+        print_selected(
+            "TEST",
+            "MIX",
+            &selected_policies,
+            &test.policies,
+            &banks,
+            offset * 2 + 1,
+        );
         assert_eq!(banks[selected_policies[offset * 2].bank].arm, arm);
         assert_eq!(banks[selected_policies[offset * 2 + 1].bank].arm, arm);
     }
@@ -652,10 +714,12 @@ mod tests {
 
     #[test]
     fn feature_selection_is_train_only_and_alpha_normalizes() {
-        let rows = (0..64usize).map(|i| TrainRow {
-            context: (i as u32).wrapping_mul(0x9e37_79b9),
-            truth: (i % 11) as u8,
-        }).collect::<Vec<_>>();
+        let rows = (0..64usize)
+            .map(|i| TrainRow {
+                context: (i as u32).wrapping_mul(0x9e37_79b9),
+                truth: (i % 11) as u8,
+            })
+            .collect::<Vec<_>>();
         let prior = initial_prior(&rows);
         assert!((prior.iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
         let masks = candidate_masks(&rows);
@@ -664,14 +728,18 @@ mod tests {
             assert_eq!(evaluated, 8 * arm.cap() - 28);
             assert_eq!(ids.iter().copied().collect::<BTreeSet<_>>().len(), 8);
             let bank = fit_table(arm, &ids[..4], &rows, &masks);
-            assert_eq!(bank.totals.iter().map(|&x| x as usize).sum::<usize>(), rows.len());
+            assert_eq!(
+                bank.totals.iter().map(|&x| x as usize).sum::<usize>(),
+                rows.len()
+            );
             for s in 0..bank.totals.len() {
                 let total = f64::from(bank.totals[s]);
                 let alpha = ALPHAS[0];
-                let sum = (0..256usize).map(|y| {
-                    (f64::from(bank.counts[s * 256 + y]) + alpha * prior[y])
-                        / (total + alpha)
-                }).sum::<f64>();
+                let sum = (0..256usize)
+                    .map(|y| {
+                        (f64::from(bank.counts[s * 256 + y]) + alpha * prior[y]) / (total + alpha)
+                    })
+                    .sum::<f64>();
                 assert!((sum - 1.0).abs() < 1.0e-10);
             }
         }
@@ -683,7 +751,10 @@ mod tests {
         assert_eq!(grid.len(), 60);
         assert_eq!(grid.iter().filter(|p| p.lambda_index == 4).count(), 12);
         assert_eq!(grid.iter().filter(|p| p.lambda_index == 0).count(), 12);
-        assert_eq!(ALPHAS.len() * LAMBDAS.len() * K_CHOICES.len() * Arm::ALL.len(), 60);
+        assert_eq!(
+            ALPHAS.len() * LAMBDAS.len() * K_CHOICES.len() * Arm::ALL.len(),
+            60
+        );
         assert_eq!(TRAIN_EVENTS, 346_112);
         assert_eq!(VAL_EVENTS, TEST_EVENTS);
         let p = 0.027f64;
@@ -692,10 +763,12 @@ mod tests {
 
     #[test]
     fn loo_count_aggregation_agrees_with_bruteforce() {
-        let rows = (0..32usize).map(|i| TrainRow {
-            context: (i as u32) ^ ((i as u32 / 3) << 8),
-            truth: (i % 7) as u8,
-        }).collect::<Vec<_>>();
+        let rows = (0..32usize)
+            .map(|i| TrainRow {
+                context: (i as u32) ^ ((i as u32 / 3) << 8),
+                truth: (i % 7) as u8,
+            })
+            .collect::<Vec<_>>();
         let masks = candidate_masks(&rows);
         let prior = initial_prior(&rows);
         let prefix = vec![0u8; rows.len()];
