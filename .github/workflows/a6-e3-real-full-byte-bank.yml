@@ -1,0 +1,102 @@
+name: A6-E3 full-byte native Boolean bank versus RAW32 and ngram4
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e3-byte-bank-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: startsWith(github.head_ref, 'research/a6-e3-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format, check, Clippy warnings-as-errors, native gate and scoring tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --bin sml-real-full-byte-boolean-bank-bench
+          cargo clippy --locked -p sml-core --bin sml-real-full-byte-boolean-bank-bench -- -D warnings
+          cargo test --locked -p sml-core --bin sml-real-full-byte-boolean-bank-bench
+
+  byte-model-evidence:
+    if: startsWith(github.head_ref, 'research/a6-e3-')
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Fetch checksum-pinned public-domain byte corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-char-corpus.sh "$RUNNER_TEMP/frozen-verne.txt"
+          test "$(wc -c < "$RUNNER_TEMP/frozen-verne.txt")" -eq 433036
+          test "$(sha256sum "$RUNNER_TEMP/frozen-verne.txt" | cut -d' ' -f1)" = b51f36fb2baf0847fd3632fbd6ff939b8858abc1d728b5f86c94d99e64766a74
+      - name: Run frozen 2 arms 12 pure and 60 blended VAL then untouched 256-class TEST
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_E3_ENV,sha=$(git rev-parse HEAD),replica=${{ matrix.replica }},runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version)"
+          cargo run --locked --release -p sml-core --bin sml-real-full-byte-boolean-bank-bench -- "$RUNNER_TEMP/frozen-verne.txt" > "$RUNNER_TEMP/a6-e3.log" 2>&1
+          test "$(grep -c '^A6_E3_GREEDY,' "$RUNNER_TEMP/a6-e3.log")" -eq 2
+          test "$(grep -c '^A6_E3_BANK,' "$RUNNER_TEMP/a6-e3.log")" -eq 6
+          test "$(grep -c '^A6_E3_TRAIN,' "$RUNNER_TEMP/a6-e3.log")" -eq 1
+          test "$(grep -c '^A6_E3_VAL_PURE,' "$RUNNER_TEMP/a6-e3.log")" -eq 12
+          test "$(grep -c '^A6_E3_VAL_MIX,' "$RUNNER_TEMP/a6-e3.log")" -eq 60
+          test "$(grep -c '^A6_E3_ALL_FROZEN,' "$RUNNER_TEMP/a6-e3.log")" -eq 1
+          test "$(grep -c '^A6_E3_SELECTED,split=VAL,' "$RUNNER_TEMP/a6-e3.log")" -eq 4
+          test "$(grep -c '^A6_E3_SELECTED,split=TEST,' "$RUNNER_TEMP/a6-e3.log")" -eq 4
+          test "$(grep -c '^A6_E3_COVERAGE,split=VAL,' "$RUNNER_TEMP/a6-e3.log")" -eq 6
+          test "$(grep -c '^A6_E3_COVERAGE,split=TEST,' "$RUNNER_TEMP/a6-e3.log")" -eq 6
+          test "$(grep -c '^A6_E3_METRIC,split=VAL,' "$RUNNER_TEMP/a6-e3.log")" -eq 3
+          test "$(grep -c '^A6_E3_METRIC,split=TEST,' "$RUNNER_TEMP/a6-e3.log")" -eq 3
+          grep -Eq '^A6_E3_COMPLETE,real_corpus=true,task=next_byte_256,train_events=346112,val_events=43008,test_events=43008,val_pure=12,val_mix=60,test_models=4,.*decision=(STOP|RESEARCH_PASS),.*integrity=PASS$' "$RUNNER_TEMP/a6-e3.log"
+          grep -E '^A6_E3_(GREEDY|BANK|TRAIN|SELECTED|METRIC|COVERAGE|ALL_FROZEN|COMPLETE),' "$RUNNER_TEMP/a6-e3.log"
+      - name: Archive full selection and 256-byte TEST trace
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6-e3-byte-bank-replica-${{ matrix.replica }}
+          path: ${{ runner.temp }}/a6-e3.log
+          if-no-files-found: ignore
+          retention-days: 30
