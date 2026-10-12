@@ -6,9 +6,7 @@ use std::{collections::BTreeSet, error::Error, time::Instant};
 
 use sml_core::{
     anf_wide_sparse::{WideAnfBackend, WideAnfGate, WideAnfLimits},
-    anf_wide_unanchored_learn::{
-        fit_unanchored_disjoint_sparse, UnanchoredFit, UnanchoredLimits,
-    },
+    anf_wide_unanchored_learn::{fit_unanchored_disjoint_sparse, UnanchoredFit, UnanchoredLimits},
     mor::MorDecision,
     pvp6_sbg::{SbgCoordinate, SbgField},
     semantic::SemanticState,
