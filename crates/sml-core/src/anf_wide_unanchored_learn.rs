@@ -88,7 +88,11 @@ where
     /// Strict-majority Boolean oracle answer, then XOR locally with learned
     /// terms. No teacher coefficient, support, source or TEST information
     /// can enter the residual evaluator.
-    fn residual(&mut self, input: &[bool], learned: &[Vec<usize>]) -> Result<bool, UnanchoredError> {
+    fn residual(
+        &mut self,
+        input: &[bool],
+        learned: &[Vec<usize>],
+    ) -> Result<bool, UnanchoredError> {
         let next = self
             .physical_queries
             .checked_add(self.repetitions)
@@ -96,7 +100,10 @@ where
         if next > self.query_limit {
             return Err(UnanchoredError::Budget);
         }
-        self.logical_queries = self.logical_queries.checked_add(1).ok_or(UnanchoredError::Budget)?;
+        self.logical_queries = self
+            .logical_queries
+            .checked_add(1)
+            .ok_or(UnanchoredError::Budget)?;
         let mut true_votes = 0usize;
         for _ in 0..self.repetitions {
             self.physical_queries += 1;
@@ -201,7 +208,9 @@ where
     for _ in 0..limits.expected_terms {
         let mut found = false;
         for _ in 0..limits.max_witness_attempts_per_term {
-            witness_attempts = witness_attempts.checked_add(1).ok_or(UnanchoredError::Budget)?;
+            witness_attempts = witness_attempts
+                .checked_add(1)
+                .ok_or(UnanchoredError::Budget)?;
             for bit in &mut input {
                 *bit = rng.next_u64() & 1 != 0;
             }
@@ -222,7 +231,9 @@ where
                 .collect::<Vec<_>>();
             if !(2..=limits.max_degree).contains(&support.len())
                 || learned.contains(&support)
-                || learned.iter().any(|known| known.iter().any(|i| support.contains(i)))
+                || learned
+                    .iter()
+                    .any(|known| known.iter().any(|i| support.contains(i)))
             {
                 rejected_witnesses += 1;
                 continue;
@@ -236,12 +247,8 @@ where
         }
     }
     learned.sort_unstable();
-    let gate = WideAnfGate::from_monomials(
-        (0..fan_in).collect(),
-        learned.clone(),
-        fan_in,
-        gate_limits,
-    )?;
+    let gate =
+        WideAnfGate::from_monomials((0..fan_in).collect(), learned.clone(), fan_in, gate_limits)?;
     Ok(UnanchoredFit {
         gate,
         learned_monomials: learned,
@@ -266,16 +273,16 @@ mod tests {
         let mut terms = if k == 8 {
             vec![vec![0, 1], vec![2, 3], vec![4, 5], vec![6, 7]]
         } else {
-            vec![vec![0, 9], vec![1, 5, 11], vec![2, 6, 10, 12], vec![3, 4, 7, 8, 13]]
+            vec![
+                vec![0, 9],
+                vec![1, 5, 11],
+                vec![2, 6, 10, 12],
+                vec![3, 4, 7, 8, 13],
+            ]
         };
         terms.sort_unstable();
-        let gate = WideAnfGate::from_monomials(
-            (0..k).collect(),
-            terms.clone(),
-            k,
-            gate_limits(),
-        )
-        .unwrap();
+        let gate =
+            WideAnfGate::from_monomials((0..k).collect(), terms.clone(), k, gate_limits()).unwrap();
         (gate, terms)
     }
 
@@ -301,18 +308,12 @@ mod tests {
     fn noisy_majority_does_not_receive_any_selector_or_teacher_support() {
         let (oracle, terms) = teacher(128);
         let mut rng = SplitMix64::new(0x9911);
-        let fit = fit_unanchored_disjoint_sparse(
-            128,
-            21,
-            373,
-            learn_limits(),
-            gate_limits(),
-            |q| {
+        let fit =
+            fit_unanchored_disjoint_sparse(128, 21, 373, learn_limits(), gate_limits(), |q| {
                 let clean = oracle.evaluate_scalar(q)?;
                 Ok(clean ^ (rng.next_u64() & 15 == 0))
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
         assert_eq!(fit.learned_monomials, terms);
         assert_eq!(fit.physical_queries, fit.logical_queries * 21);
     }
@@ -364,7 +365,9 @@ mod tests {
         )
         .unwrap();
         for mask in 0..512usize {
-            let q = (0..16).map(|i| mask & (1 << (i % 9)) != 0).collect::<Vec<_>>();
+            let q = (0..16)
+                .map(|i| mask & (1 << (i % 9)) != 0)
+                .collect::<Vec<_>>();
             assert_eq!(gate_a.evaluate_scalar(&q), gate_b.evaluate_scalar(&q));
         }
     }
