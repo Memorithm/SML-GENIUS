@@ -84,8 +84,6 @@ impl Task {
     }
 }
 
-
-
 // A6-C12g: the two preregistered teacher families are the first two C12c tasks.
 const TASKS: [Task; 2] = [Task::ALL[0], Task::ALL[1]];
 const WORD_BUDGETS: [usize; 7] = [8, 16, 32, 64, 128, 256, 512];
@@ -105,18 +103,27 @@ enum NoiseRate {
 }
 impl NoiseRate {
     const ALL: [Self; 5] = [
-        Self::Zero, Self::OneIn32, Self::OneIn16, Self::OneIn8, Self::OneIn5,
+        Self::Zero,
+        Self::OneIn32,
+        Self::OneIn16,
+        Self::OneIn8,
+        Self::OneIn5,
     ];
     fn name(self) -> &'static str {
         match self {
-            Self::Zero => "0", Self::OneIn32 => "1/32", Self::OneIn16 => "1/16",
-            Self::OneIn8 => "1/8", Self::OneIn5 => "1/5",
+            Self::Zero => "0",
+            Self::OneIn32 => "1/32",
+            Self::OneIn16 => "1/16",
+            Self::OneIn8 => "1/8",
+            Self::OneIn5 => "1/5",
         }
     }
     fn eta(self) -> f64 {
         match self {
-            Self::Zero => 0.0, Self::OneIn32 => 1.0 / 32.0,
-            Self::OneIn16 => 1.0 / 16.0, Self::OneIn8 => 1.0 / 8.0,
+            Self::Zero => 0.0,
+            Self::OneIn32 => 1.0 / 32.0,
+            Self::OneIn16 => 1.0 / 16.0,
+            Self::OneIn8 => 1.0 / 8.0,
             Self::OneIn5 => 0.2,
         }
     }
@@ -148,9 +155,7 @@ fn noise_mask(rate: NoiseRate, rng: &mut SplitMix64) -> u64 {
         NoiseRate::OneIn32 => {
             rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
         }
-        NoiseRate::OneIn16 => {
-            rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64()
-        }
+        NoiseRate::OneIn16 => rng.next_u64() & rng.next_u64() & rng.next_u64() & rng.next_u64(),
         NoiseRate::OneIn8 => rng.next_u64() & rng.next_u64() & rng.next_u64(),
         NoiseRate::OneIn5 => {
             let mut bits = 0u64;
@@ -185,7 +190,12 @@ fn data(stream: u64, task: Task, rate: NoiseRate, steps: usize) -> LaneData {
     LaneData {
         input_bits: INPUT_BITS,
         target_bits: 1,
-        blocks: vec![LaneBlock { steps, inputs, targets, valid: u64::MAX }],
+        blocks: vec![LaneBlock {
+            steps,
+            inputs,
+            targets,
+            valid: u64::MAX,
+        }],
     }
 }
 fn prefix(data: &LaneData, steps: usize) -> LaneData {
@@ -469,18 +479,23 @@ fn count_combinations(o: &Observed) -> (usize, usize) {
     (p * (p - 1) / 2 * 16, p * (p - 1) * (p - 2) / 6 * 64)
 }
 
-
-
 // Exact GF(2) column elimination. Never executed on noisy labels.
 fn lowest_bit(values: &[u64]) -> Option<usize> {
-    values.iter().enumerate().find(|(_, word)| **word != 0)
+    values
+        .iter()
+        .enumerate()
+        .find(|(_, word)| **word != 0)
         .map(|(index, &word)| index * 64 + word.trailing_zeros() as usize)
 }
 fn xor_assign(to: &mut [u64], other: &[u64]) {
-    for (left, right) in to.iter_mut().zip(other) { *left ^= *right; }
+    for (left, right) in to.iter_mut().zip(other) {
+        *left ^= *right;
+    }
 }
 fn solve_gauss(o: &Observed) -> Option<Vec<usize>> {
-    if o.p.is_empty() || o.sources.len() > 128 { return None; }
+    if o.p.is_empty() || o.sources.len() > 128 {
+        return None;
+    }
     let words = o.p.len().min(GAUSS_MAX_WORDS);
     let repwords = o.sources.len().div_ceil(64);
     let mut pivot = vec![None::<(Vec<u64>, Vec<u64>)>; words * LANES];
@@ -511,9 +526,13 @@ fn solve_gauss(o: &Observed) -> Option<Vec<usize>> {
     let selected = (0..o.sources.len())
         .filter(|&i| rep[i / 64] & (1u64 << (i % 64)) != 0)
         .collect::<Vec<_>>();
-    if o.p.iter().enumerate().any(|(t, &p)| {
-        selected.iter().fold(p, |v, &i| v ^ o.columns[i][t]) != 0
-    }) { return None; }
+    if o.p
+        .iter()
+        .enumerate()
+        .any(|(t, &p)| selected.iter().fold(p, |v, &i| v ^ o.columns[i][t]) != 0)
+    {
+        return None;
+    }
     Some(selected)
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -543,7 +562,10 @@ fn propose(o: &Observed, method: Method) -> Screen {
             }
         }
     }
-    Screen { hypotheses: proposals.into_iter().collect(), stats }
+    Screen {
+        hypotheses: proposals.into_iter().collect(),
+        stats,
+    }
 }
 fn median(mut readings: [f64; REPEATS]) -> f64 {
     readings.sort_by(|a, b| a.total_cmp(b));
@@ -555,18 +577,29 @@ fn median_vector(mut readings: Vec<f64>) -> f64 {
     assert!(!readings.is_empty());
     (readings[(len - 1) / 2] + readings[len / 2]) / 2.0
 }
-fn score_margin(o: &Observed, true_sources: [Source; 3], hypotheses: &[[Source; 3]]) -> (usize, f64, f64, f64) {
+fn score_margin(
+    o: &Observed,
+    true_sources: [Source; 3],
+    hypotheses: &[[Source; 3]],
+) -> (usize, f64, f64, f64) {
     let mut indices = [0usize; 3];
     for (i, source) in true_sources.iter().enumerate() {
         indices[i] = o.sources.iter().position(|value| value == source).unwrap();
     }
     let denom = (o.p.len() * LANES) as f64;
     let true_score = triple_correlation(o, indices, o.p.len()) as f64 / denom;
-    let rank = hypotheses.iter().position(|triplet| *triplet == true_sources).map_or(0, |i| i + 1);
-    let best_false = hypotheses.iter().filter(|triplet| **triplet != true_sources).map(|triplet| {
-        let ids = triplet.map(|s| o.sources.iter().position(|x| *x == s).unwrap());
-        triple_correlation(o, ids, o.p.len()) as f64 / denom
-    }).fold(0.0f64, f64::max);
+    let rank = hypotheses
+        .iter()
+        .position(|triplet| *triplet == true_sources)
+        .map_or(0, |i| i + 1);
+    let best_false = hypotheses
+        .iter()
+        .filter(|triplet| **triplet != true_sources)
+        .map(|triplet| {
+            let ids = triplet.map(|s| o.sources.iter().position(|x| *x == s).unwrap());
+            triple_correlation(o, ids, o.p.len()) as f64 / denom
+        })
+        .fold(0.0f64, f64::max);
     (rank, true_score, best_false, true_score - best_false)
 }
 struct Frozen {
@@ -583,9 +616,15 @@ struct Frozen {
     median_total_us: f64,
 }
 fn freeze(
-    task: Task, rate: NoiseRate, index: usize, words: usize, method: Method,
-    train: &LaneData, validation: &LaneData, observed: &Observed,
+    task: Task,
+    rate: NoiseRate,
+    sample: (usize, usize),
+    method: Method,
+    train: &LaneData,
+    validation: &LaneData,
+    observed: &Observed,
 ) -> Result<Frozen, Box<dyn Error>> {
+    let (index, words) = sample;
     let mut times_screen = [0.0f64; REPEATS];
     let mut times_factor = [0.0f64; REPEATS];
     let mut times_total = [0.0f64; REPEATS];
@@ -599,7 +638,12 @@ fn freeze(
         let fit = if screen.hypotheses.is_empty() {
             None
         } else {
-            Some(fit_three_gate_candidates(train, validation, WIDTH, &screen.hypotheses)?)
+            Some(fit_three_gate_candidates(
+                train,
+                validation,
+                WIDTH,
+                &screen.hypotheses,
+            )?)
         };
         times_factor[repeat] = factor_before.elapsed().as_secs_f64() * 1e6;
         times_total[repeat] = times_screen[repeat] + times_factor[repeat];
@@ -607,24 +651,40 @@ fn freeze(
             first_screen = Some(screen);
             first_fit = fit;
         } else {
-            assert_eq!(first_screen.as_ref(), Some(&screen), "screen changed across repetitions");
-            assert_eq!(first_fit.as_ref(), fit.as_ref(), "native fit changed across repetitions");
+            assert_eq!(
+                first_screen.as_ref(),
+                Some(&screen),
+                "screen changed across repetitions"
+            );
+            assert_eq!(
+                first_fit.as_ref(),
+                fit.as_ref(),
+                "native fit changed across repetitions"
+            );
         }
     }
     let screen = first_screen.unwrap();
     let sources = task.sources();
     let exact = first_fit.as_ref().is_some_and(|fit| {
-        fit.proposal_sources == sources && fit.proposal_rules.rules.map(|r| r.truth) == task.truths()
+        fit.proposal_sources == sources
+            && fit.proposal_rules.rules.map(|r| r.truth) == task.truths()
     });
     let proposed = screen.hypotheses.contains(&sources);
     let (rank, true_score, best_false, margin) = if method == Method::Walsh3Stream {
         score_margin(observed, sources, &screen.hypotheses)
-    } else { (0, f64::NAN, f64::NAN, f64::NAN) };
+    } else {
+        (0, f64::NAN, f64::NAN, f64::NAN)
+    };
     let pair_rank = if method == Method::Hybrid && task == Task::AndXorXor {
-        rank_pairs(observed).iter().position(|p| {
-            observed.sources[p.ids[0]] == sources[1] && observed.sources[p.ids[1]] == sources[2]
-        }).map_or(0, |i| i + 1)
-    } else { 0 };
+        rank_pairs(observed)
+            .iter()
+            .position(|p| {
+                observed.sources[p.ids[0]] == sources[1] && observed.sources[p.ids[1]] == sources[2]
+            })
+            .map_or(0, |i| i + 1)
+    } else {
+        0
+    };
     let ms = median(times_screen);
     let mf = median(times_factor);
     let mt = median(times_total);
@@ -643,8 +703,17 @@ fn freeze(
         ms, mf, mt
     );
     Ok(Frozen {
-        task, rate, seed: index, words, method, fit: first_fit, proposed, exact,
-        median_screen_us: ms, median_factor_us: mf, median_total_us: mt,
+        task,
+        rate,
+        seed: index,
+        words,
+        method,
+        fit: first_fit,
+        proposed,
+        exact,
+        median_screen_us: ms,
+        median_factor_us: mf,
+        median_total_us: mt,
     })
 }
 fn native_prediction_disagreements(
@@ -691,7 +760,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: sml-noise-sample-phase-bench (fixed preregistered matrix)".into());
     }
     let sources = grid(128);
-    let sample = Observed::new(&data(0x1234, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS), sources);
+    let sample = Observed::new(
+        &data(0x1234, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS),
+        sources,
+    );
     assert_eq!(count_combinations(&sample), (7_936, 317_440));
     assert_eq!(TEST_STREAMS, 80);
     assert_eq!(POLICY_COUNT, 1232);
@@ -708,10 +780,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let observed = Observed::new(&train, grid(128));
                     assert_eq!(observed.p.len(), words);
                     for method in Method::TWO {
-                        frozen.push(freeze(task, rate, index, words, method, &train, &validation, &observed)?);
+                        frozen.push(freeze(
+                            task,
+                            rate,
+                            (index, words),
+                            method,
+                            &train,
+                            &validation,
+                            &observed,
+                        )?);
                     }
                     if rate == NoiseRate::Zero {
-                        frozen.push(freeze(task, rate, index, words, Method::GaussExact, &train, &validation, &observed)?);
+                        frozen.push(freeze(
+                            task,
+                            rate,
+                            (index, words),
+                            Method::GaussExact,
+                            &train,
+                            &validation,
+                            &observed,
+                        )?);
                     }
                 }
             }
@@ -734,19 +822,40 @@ fn main() -> Result<(), Box<dyn Error>> {
                 distinct_test_datasets += 1;
                 let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
                 let teacher_errors = native_errors(&teacher, &test)?;
-                for (case_idx, case) in frozen.iter().enumerate().filter(|(_, f)| {
-                    f.task == task && f.seed == index && f.rate == rate
-                }) {
-                    let (proposal_errors, committed_errors, proposal_disagreements, committed_disagreements, accepted) = if let Some(fit) = &case.fit {
+                for (case_idx, case) in frozen
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| f.task == task && f.seed == index && f.rate == rate)
+                {
+                    let (
+                        proposal_errors,
+                        committed_errors,
+                        proposal_disagreements,
+                        committed_disagreements,
+                        accepted,
+                    ) = if let Some(fit) = &case.fit {
                         (
                             Some(native_errors(&fit.proposal, &test)?),
                             Some(native_errors(&fit.committed, &test)?),
-                            Some(native_prediction_disagreements(&fit.proposal, &teacher, &test)),
-                            Some(native_prediction_disagreements(&fit.committed, &teacher, &test)),
+                            Some(native_prediction_disagreements(
+                                &fit.proposal,
+                                &teacher,
+                                &test,
+                            )),
+                            Some(native_prediction_disagreements(
+                                &fit.committed,
+                                &teacher,
+                                &test,
+                            )),
                             fit.accepted,
                         )
-                    } else { (None, None, None, None, false) };
-                    let success = case.exact && proposal_disagreements == Some(0) && accepted && committed_disagreements == Some(0);
+                    } else {
+                        (None, None, None, None, false)
+                    };
+                    let success = case.exact
+                        && proposal_disagreements == Some(0)
+                        && accepted
+                        && committed_disagreements == Some(0);
                     test_outcomes[case_idx] = Some(success);
                     println!(
                         "A6C12G_TEST,task={},seed={},rate={},words={},method={},proposed={},exact={},accepted={},native_success={},oracle_errors={},proposal_errors={:?},committed_errors={:?},proposal_bit_disagreements={:?},committed_bit_disagreements={:?},samples={}",
@@ -759,7 +868,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    if test_rows != POLICY_COUNT || distinct_test_datasets != TEST_STREAMS || test_outcomes.iter().any(Option::is_none) {
+    if test_rows != POLICY_COUNT
+        || distinct_test_datasets != TEST_STREAMS
+        || test_outcomes.iter().any(Option::is_none)
+    {
         return Err("A6-C12g TEST census mismatch".into());
     }
 
@@ -768,24 +880,40 @@ fn main() -> Result<(), Box<dyn Error>> {
             let eta = rate.eta();
             let rho = (1.0 - 2.0 * eta).powi(2);
             for method in [Method::Walsh3Stream, Method::Hybrid, Method::GaussExact] {
-                if method == Method::GaussExact && rate != NoiseRate::Zero { continue; }
+                if method == Method::GaussExact && rate != NoiseRate::Zero {
+                    continue;
+                }
                 let mut first_empirical_threshold = None;
                 for words in WORD_BUDGETS {
-                    let rows = frozen.iter().enumerate().filter(|(_, r)| {
-                        r.task == task && r.rate == rate && r.method == method && r.words == words
-                    }).collect::<Vec<_>>();
+                    let rows = frozen
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, r)| {
+                            r.task == task
+                                && r.rate == rate
+                                && r.method == method
+                                && r.words == words
+                        })
+                        .collect::<Vec<_>>();
                     assert_eq!(rows.len(), SEEDS);
-                    let train_exact_accepted = rows.iter().filter(|(_, r)| {
-                        r.exact && r.fit.as_ref().is_some_and(|fit| fit.accepted)
-                    }).count();
-                    let successes = rows.iter().filter(|(i, _)| test_outcomes[*i] == Some(true)).count();
+                    let train_exact_accepted = rows
+                        .iter()
+                        .filter(|(_, r)| r.exact && r.fit.as_ref().is_some_and(|fit| fit.accepted))
+                        .count();
+                    let successes = rows
+                        .iter()
+                        .filter(|(i, _)| test_outcomes[*i] == Some(true))
+                        .count();
                     let (lower, upper) = wilson(successes, SEEDS);
                     if successes >= 7 && first_empirical_threshold.is_none() {
                         first_empirical_threshold = Some(words);
                     }
-                    let screen = median_vector(rows.iter().map(|(_, r)| r.median_screen_us).collect());
-                    let factor = median_vector(rows.iter().map(|(_, r)| r.median_factor_us).collect());
-                    let total = median_vector(rows.iter().map(|(_, r)| r.median_total_us).collect());
+                    let screen =
+                        median_vector(rows.iter().map(|(_, r)| r.median_screen_us).collect());
+                    let factor =
+                        median_vector(rows.iter().map(|(_, r)| r.median_factor_us).collect());
+                    let total =
+                        median_vector(rows.iter().map(|(_, r)| r.median_total_us).collect());
                     println!(
                         "A6C12G_SUMMARY,task={},rate={},words={},method={},train_exact_and_accepted={}/{},native_success={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
                         task.name(), rate.name(), words, method.name(), train_exact_accepted, SEEDS, successes, SEEDS, lower, upper,
@@ -794,7 +922,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 println!(
                     "A6C12G_THRESHOLD,task={},rate={},method={},first_words_ge7_of8={:?}",
-                    task.name(),rate.name(),method.name(),first_empirical_threshold
+                    task.name(),
+                    rate.name(),
+                    method.name(),
+                    first_empirical_threshold
                 );
             }
         }
@@ -809,12 +940,23 @@ mod tests {
     #[test]
     fn fixed_grid_and_noise_stages() {
         assert_eq!(POLICY_COUNT, 1232);
-        let observed = Observed::new(&data(19, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS), grid(128));
+        let observed = Observed::new(
+            &data(19, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS),
+            grid(128),
+        );
         assert_eq!(count_combinations(&observed), (7_936, 317_440));
-        assert!(Task::XorXorXor.sources().iter().all(|source| observed.sources.contains(source)));
+        assert!(Task::XorXorXor
+            .sources()
+            .iter()
+            .all(|source| observed.sources.contains(source)));
         let train = data(20, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS);
         for words in WORD_BUDGETS {
-            assert_eq!(Observed::new(&prefix(&train, WIDTH+words),grid(128)).p.len(),words);
+            assert_eq!(
+                Observed::new(&prefix(&train, WIDTH + words), grid(128))
+                    .p
+                    .len(),
+                words
+            );
         }
     }
     #[test]
@@ -822,17 +964,20 @@ mod tests {
         assert!((NoiseRate::OneIn5.eta() - 0.2).abs() < 1e-12);
         for rate in NoiseRate::ALL {
             let eta = rate.eta();
-            let rho = (1.0-2.0*eta).powi(2);
+            let rho = (1.0 - 2.0 * eta).powi(2);
             assert!(rho >= 0.36 - 1e-10);
         }
-        assert!((wilson(8,8).0 - 0.6755924).abs() < 1e-4);
-        assert!(wilson(0,8).1 > 0.3);
+        assert!((wilson(8, 8).0 - 0.6755924).abs() < 1e-4);
+        assert!(wilson(0, 8).1 > 0.3);
     }
     #[test]
     fn clean_gauss_solve_noisy_is_never_invoked() {
         let train = data(47, Task::XorXorXor, NoiseRate::Zero, TRAIN_STEPS);
-        let o = Observed::new(&train,grid(128));
+        let o = Observed::new(&train, grid(128));
         let solved = solve_gauss(&o).unwrap();
-        assert_eq!(triplet(&o,[solved[0],solved[1],solved[2]]),Task::XorXorXor.sources());
+        assert_eq!(
+            triplet(&o, [solved[0], solved[1], solved[2]]),
+            Task::XorXorXor.sources()
+        );
     }
 }
