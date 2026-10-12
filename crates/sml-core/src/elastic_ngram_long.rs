@@ -154,7 +154,11 @@ impl ElasticNGramLong {
             let chunk = &bytes[lane * layout.chunk..(lane + 1) * layout.chunk];
             for t in 1..chunk.len() {
                 let history = &chunk[..t];
-                for (depth, level) in levels.iter_mut().enumerate().take((t + 1).min(limits.max_depth + 1)) {
+                for (depth, level) in levels
+                    .iter_mut()
+                    .enumerate()
+                    .take((t + 1).min(limits.max_depth + 1))
+                {
                     let suffix = &history[history.len() - depth..];
                     let hist = match level.entry(suffix.to_vec()) {
                         Entry::Occupied(entry) => entry.into_mut(),
@@ -374,10 +378,14 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let long = ElasticNGramLong::train(&train, depth_limits(12)).unwrap();
-        let a = [std::iter::once(0u8).chain(std::iter::repeat_n(0, 11))
-            .collect::<Vec<_>>(),
-                 std::iter::once(1u8).chain(std::iter::repeat_n(0, 11))
-            .collect::<Vec<_>>()];
+        let a = [
+            std::iter::once(0u8)
+                .chain(std::iter::repeat_n(0, 11))
+                .collect::<Vec<_>>(),
+            std::iter::once(1u8)
+                .chain(std::iter::repeat_n(0, 11))
+                .collect::<Vec<_>>(),
+        ];
         let short_a = long.distribution(&a[0], 7).unwrap();
         let short_b = long.distribution(&a[1], 7).unwrap();
         for y in 0..256 {
@@ -388,10 +396,14 @@ mod tests {
         assert!(detailed_a[200] > 0.9);
         assert!(detailed_b[201] > 0.9);
         assert_ne!(detailed_a[200].to_bits(), detailed_b[200].to_bits());
-        assert_eq!(long.classify_depth_transition(7, 12),
-            Ok(DepthTransition::ModelSemanticsChanged));
-        assert_eq!(long.classify_depth_transition(12, 12),
-            Ok(DepthTransition::Unchanged));
+        assert_eq!(
+            long.classify_depth_transition(7, 12),
+            Ok(DepthTransition::ModelSemanticsChanged)
+        );
+        assert_eq!(
+            long.classify_depth_transition(12, 12),
+            Ok(DepthTransition::Unchanged)
+        );
     }
 
     #[test]
@@ -406,29 +418,80 @@ mod tests {
                 assert!((dist.iter().sum::<f64>() - 1.0).abs() < 1.0e-10);
             }
         }
-        assert!(long.score(&different_probe(), 12).unwrap().bits_per_byte.is_finite());
+        assert!(long
+            .score(&different_probe(), 12)
+            .unwrap()
+            .bits_per_byte
+            .is_finite());
         assert_eq!(long, snapshot);
-        assert_eq!(long, ElasticNGramLong::train(&train, depth_limits(32)).unwrap());
+        assert_eq!(
+            long,
+            ElasticNGramLong::train(&train, depth_limits(32)).unwrap()
+        );
         let accounting = long.accounting();
         assert_eq!(accounting.training_events, LANES * 39);
         assert_eq!(long.contexts_by_depth().len(), 33);
         assert_eq!(accounting.follower_key_bytes, accounting.follower_pairs);
-        assert_eq!(accounting.counter_value_bytes,
-            4 * (accounting.contexts + accounting.follower_pairs));
-        assert_eq!(accounting.context_key_bytes,
-            long.levels.iter().flat_map(|map| map.keys()).map(Vec::len).sum::<usize>());
+        assert_eq!(
+            accounting.counter_value_bytes,
+            4 * (accounting.contexts + accounting.follower_pairs)
+        );
+        assert_eq!(
+            accounting.context_key_bytes,
+            long.levels
+                .iter()
+                .flat_map(|map| map.keys())
+                .map(Vec::len)
+                .sum::<usize>()
+        );
     }
 
     #[test]
     fn limits_and_invalid_query_fail_closed_without_partial_model() {
         let train = patterned();
         let invalid = [
-            (LongNGramLimits { max_depth: 33, ..LongNGramLimits::default() }, LongNGramError::InvalidLimits),
-            (LongNGramLimits { max_events: 1, ..LongNGramLimits::default() }, LongNGramError::TooManyEvents),
-            (LongNGramLimits { max_contexts: 1, ..LongNGramLimits::default() }, LongNGramError::TooManyContexts),
-            (LongNGramLimits { max_follower_pairs: 1, ..LongNGramLimits::default() }, LongNGramError::TooManyFollowerPairs),
-            (LongNGramLimits { max_context_key_bytes: 1, ..LongNGramLimits::default() }, LongNGramError::TooManyKeyBytes),
-            (LongNGramLimits { max_context_key_bytes: 0, ..LongNGramLimits::default() }, LongNGramError::InvalidLimits),
+            (
+                LongNGramLimits {
+                    max_depth: 33,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::InvalidLimits,
+            ),
+            (
+                LongNGramLimits {
+                    max_events: 1,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::TooManyEvents,
+            ),
+            (
+                LongNGramLimits {
+                    max_contexts: 1,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::TooManyContexts,
+            ),
+            (
+                LongNGramLimits {
+                    max_follower_pairs: 1,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::TooManyFollowerPairs,
+            ),
+            (
+                LongNGramLimits {
+                    max_context_key_bytes: 1,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::TooManyKeyBytes,
+            ),
+            (
+                LongNGramLimits {
+                    max_context_key_bytes: 0,
+                    ..LongNGramLimits::default()
+                },
+                LongNGramError::InvalidLimits,
+            ),
         ];
         for (limits, error) in invalid {
             assert_eq!(ElasticNGramLong::train(&train, limits), Err(error));
@@ -438,8 +501,13 @@ mod tests {
             Err(LongNGramError::InvalidCorpus)
         );
         let fitted = ElasticNGramLong::train(&train, depth_limits(16)).unwrap();
-        assert_eq!(fitted.distribution(&[0; 32], 17), Err(LongNGramError::InvalidDepth));
-        assert_eq!(fitted.classify_depth_transition(16, 17),
-            Err(LongNGramError::InvalidDepth));
+        assert_eq!(
+            fitted.distribution(&[0; 32], 17),
+            Err(LongNGramError::InvalidDepth)
+        );
+        assert_eq!(
+            fitted.classify_depth_transition(16, 17),
+            Err(LongNGramError::InvalidDepth)
+        );
     }
 }
