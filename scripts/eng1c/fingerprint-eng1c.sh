@@ -44,9 +44,15 @@ curl --proto '=https' --tlsv1.2 --retry 5 --retry-connrefused \
   --connect-timeout 15 --max-time 120 \
   "$url" -o "$tmp/raw.txt"
 
-grep -Fxq "$expected_title" "$tmp/raw.txt"
-grep -Fxq "$expected_language" "$tmp/raw.txt"
 tr -d '\r' < "$tmp/raw.txt" > "$tmp/lf.txt"
+if ! grep -Fxq "$expected_title" "$tmp/lf.txt"; then
+  echo "ENG1C_PUBLIC_HEADER_TITLE_MISMATCH,ebook=$book" >&2
+  exit 1
+fi
+if ! grep -Fxq "$expected_language" "$tmp/lf.txt"; then
+  echo "ENG1C_PUBLIC_HEADER_LANGUAGE_MISMATCH,ebook=$book" >&2
+  exit 1
+fi
 
 start_re='^\*\*\* START OF THE PROJECT GUTENBERG EBOOK '
 end_re='^\*\*\* END OF THE PROJECT GUTENBERG EBOOK '
