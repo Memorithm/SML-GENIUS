@@ -1,8 +1,8 @@
 //! Transactional routed wide-sparse ANF experts; existing large/PVP6 paths remain independent.
 use crate::{
-    wide_anf_selected_pages::{WideAnfPageAtlas, WidePageError, WidePageTrace},
     pvp6_sbg_routing::{RoutedSemantic, RoutedSemanticError},
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState},
+    wide_anf_selected_pages::{WideAnfPageAtlas, WidePageError, WidePageTrace},
 };
 use std::sync::Arc;
 
