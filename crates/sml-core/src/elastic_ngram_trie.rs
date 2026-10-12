@@ -198,9 +198,7 @@ impl ElasticNGramTrie {
                             index
                         }
                     };
-                    let child_node = nodes
-                        .get_mut(child as usize)
-                        .ok_or(TrieError::BrokenTrie)?;
+                    let child_node = nodes.get_mut(child as usize).ok_or(TrieError::BrokenTrie)?;
                     child_node.observe(target, &mut follower_pairs, limits.max_follower_pairs)?;
                     parent = child;
                 }
@@ -280,7 +278,11 @@ impl ElasticNGramTrie {
     /// Exact 256-class probability vector at an explicit model-owned depth.
     /// No allocation on the normal lookup path; caller-supplied depth is
     /// clamped only to available HISTORY, never silently lowered by policy.
-    pub fn distribution(&self, history: &[u8], query_depth: usize) -> Result<[f64; 256], TrieError> {
+    pub fn distribution(
+        &self,
+        history: &[u8],
+        query_depth: usize,
+    ) -> Result<[f64; 256], TrieError> {
         if query_depth > self.max_depth {
             return Err(TrieError::InvalidDepth);
         }
@@ -405,7 +407,10 @@ mod tests {
         .unwrap();
         assert_eq!(trie.contexts_by_depth(), long.contexts_by_depth());
         assert_eq!(trie.accounting().nodes, long.accounting().contexts);
-        assert_eq!(trie.accounting().follower_pairs, long.accounting().follower_pairs);
+        assert_eq!(
+            trie.accounting().follower_pairs,
+            long.accounting().follower_pairs
+        );
 
         let histories = [
             &train[0..24],
@@ -567,7 +572,10 @@ mod tests {
         assert_eq!(no_history.accounting().nodes, 1);
         assert_eq!(no_history.accounting().edges, 0);
         let trie = ElasticNGramTrie::train(&train, trie_limits(32)).unwrap();
-        assert_eq!(trie.distribution(&[0u8; 34], 33), Err(TrieError::InvalidDepth));
+        assert_eq!(
+            trie.distribution(&[0u8; 34], 33),
+            Err(TrieError::InvalidDepth)
+        );
         assert_eq!(
             trie.classify_depth_transition(32, 33),
             Err(TrieError::InvalidDepth)
@@ -578,8 +586,15 @@ mod tests {
             assert!(probs.iter().all(|&p| p.is_finite() && p > 0.0));
             assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1.0e-10);
         }
-        assert!(trie.score(&fixture(true), 32).unwrap().bits_per_byte.is_finite());
+        assert!(trie
+            .score(&fixture(true), 32)
+            .unwrap()
+            .bits_per_byte
+            .is_finite());
         assert_eq!(trie, before);
-        assert_eq!(trie, ElasticNGramTrie::train(&train, trie_limits(32)).unwrap());
+        assert_eq!(
+            trie,
+            ElasticNGramTrie::train(&train, trie_limits(32)).unwrap()
+        );
     }
 }
