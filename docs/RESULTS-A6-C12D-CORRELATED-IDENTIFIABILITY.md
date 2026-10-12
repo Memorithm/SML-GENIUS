@@ -11,7 +11,7 @@ Les masques de corrélation utilisent un flux PRNG distinct des entrées brutes 
 - **NEAR_ALIAS** : `x1=x2 XOR e1` et `x3=x4 XOR e2` avec `e1,e2~Bernoulli(1/32)` indépendants. Sur les 12 TRAIN mesurés, le taux de différence moyen vaut **3,1189 %** pour x1/x2 et **3,1069 %** pour x3/x4. Les canaux sont donc fortement corrélés, sans être identiques.
 - **EXACT_ALIAS** : `x1=x2` sur chaque pas et chaque voie ; x3/x4 restent indépendants (différence observée **50,0341 %** en moyenne). Pour la première porte j20, lire x1 ou x2 est **observablement équivalent**. L'identification **du nom du canal d'origine** n'a alors pas de solution unique, même avec davantage de données, sur ce domaine d'entrées.
 
-Les deux configurations sont **appariées sur les graines brutes**. Il existe 12 cellules tâche×panneau×graine et 24 jeux TEST par mode, au sens **24 datasets au total pour les deux modes** (12 par mode), et non 24 répliques indépendantes.
+Les deux configurations sont **appariées sur les graines brutes**. Il existe 12 cellules tâche×panneau×graine, donc **12 jeux TEST par mode et 24 datasets au total pour les deux modes**, appariés sur les graines de base : ce ne sont pas 24 répliques indépendantes.
 
 ## 2. H1 — Forte corrélation, sources encore identifiables : réussite 12/12
 
