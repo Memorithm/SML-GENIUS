@@ -39,7 +39,7 @@ jobs:
           git rev-parse HEAD
           cargo fmt --all -- --check
           cargo clippy --locked -p sml-core -p sml-elastic-bench --all-targets -- -D warnings
-          cargo test --locked -p sml-core --lib elastic_ngram
+          cargo test --locked -p sml-core --lib elastic_ngram_packed
           cargo test --locked -p sml-elastic-bench
       - name: Frozen Candide corpus
         shell: bash

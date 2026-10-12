@@ -36,6 +36,8 @@ pub enum ByteBackoffError {
     SignatureOutsideDomain,
     ContextBudgetExceeded,
     CounterOverflow,
+    InvalidParentDistribution,
+    InvalidHyperparameter,
 }
 
 impl std::fmt::Display for ByteBackoffError {
@@ -169,6 +171,53 @@ impl SparseByteBackoff {
         Ok(probability)
     }
 
+    /// A6-E5: normalized 256-way Dirichlet hierarchy over the SAME frozen
+    /// TRAIN-only sparse prefixes used by the existing Witten-Bell readout.
+    ///
+    /// The root is the caller-frozen NG4 distribution, not a synthetic uniform
+    /// prior. At each observed prefix with n>0, interpolate
+    /// (n*p_local + tau*p_parent)/(n+tau), p_local=(count+alpha)/(n+256alpha).
+    /// Unseen prefixes preserve their parent exactly. This method cannot
+    /// establish by itself that the supplied NG predictor was fitted OOF.
+    pub fn distribution_dirichlet_with_parent(
+        &self,
+        signature: u64,
+        ng_parent: &[f64; BYTE_CLASSES],
+        alpha: f64,
+        tau: f64,
+    ) -> Result<[f64; BYTE_CLASSES], ByteBackoffError> {
+        if !valid(signature, self.width) {
+            return Err(ByteBackoffError::SignatureOutsideDomain);
+        }
+        if !alpha.is_finite() || alpha <= 0.0 || !tau.is_finite() || tau <= 0.0 {
+            return Err(ByteBackoffError::InvalidHyperparameter);
+        }
+        if ng_parent
+            .iter()
+            .any(|&p| !p.is_finite() || p <= 0.0 || p > 1.0)
+            || (ng_parent.iter().sum::<f64>() - 1.0).abs() > 1.0e-9
+        {
+            return Err(ByteBackoffError::InvalidParentDistribution);
+        }
+        let mut probability = *ng_parent;
+        for (depth, level) in self.levels.iter().enumerate() {
+            let Some(counts) = level.get(&prefix(signature, depth)) else {
+                continue;
+            };
+            let n = f64::from(counts.total);
+            if n == 0.0 {
+                continue;
+            }
+            let denominator = n + alpha * BYTE_CLASSES as f64;
+            let weight = n / (n + tau);
+            for (byte, p) in probability.iter_mut().enumerate() {
+                let local = (f64::from(counts.counts[byte]) + alpha) / denominator;
+                *p = weight * local + (1.0 - weight) * *p;
+            }
+        }
+        Ok(probability)
+    }
+
     pub fn stored_contexts(&self) -> usize {
         self.contexts
     }
@@ -259,6 +308,90 @@ mod tests {
         // Existing binary API remains available and learns its own 2-class task.
         let binary = SparseBinaryReadout::fit(&[0, 1, 1], &[false, true, true], 1).unwrap();
         assert!(binary.predict_one(1).unwrap() > binary.predict_one(0).unwrap());
+    }
+
+    #[test]
+    fn a6_e5_dirichlet_parent_is_normalized_and_zero_support_uses_backoff() {
+        let mut training = Vec::new();
+        for _ in 0..100 {
+            training.push((0u64, 0u8));
+            training.push((1u64, 255u8));
+        }
+        let model = SparseByteBackoff::fit(
+            &training,
+            ByteBackoffConfig {
+                width: 3,
+                max_contexts: 16,
+            },
+        )
+        .unwrap();
+        let mut ng = [0.1 / 255.0; BYTE_CLASSES];
+        ng[42] = 0.9;
+        let before = model.clone();
+        let p0 = model
+            .distribution_dirichlet_with_parent(0, &ng, 0.5, 16.0)
+            .unwrap();
+        let p_unseen = model
+            .distribution_dirichlet_with_parent(4, &ng, 0.5, 16.0)
+            .unwrap();
+        assert!(p0[0] > p0[255]);
+        // Signature 4 has no depth-3 observations; its lower-prefix values
+        // match address 0 at depth 0..2 exactly.
+        let shorter = SparseByteBackoff::fit(
+            &training,
+            ByteBackoffConfig {
+                width: 2,
+                max_contexts: 16,
+            },
+        )
+        .unwrap();
+        let p_parent = shorter
+            .distribution_dirichlet_with_parent(0, &ng, 0.5, 16.0)
+            .unwrap();
+        assert_eq!(p_unseen, p_parent);
+        for probability in [p0, p_unseen] {
+            assert!(probability.iter().all(|p| p.is_finite() && *p > 0.0));
+            assert!((probability.iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
+        }
+        assert_eq!(model, before);
+        assert!((ng.iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn a6_e5_dirichlet_is_separate_from_witten_bell_and_fail_closed() {
+        let model = SparseByteBackoff::fit(
+            &[(0u64, 0u8), (0, 0), (1, 1)],
+            ByteBackoffConfig {
+                width: 1,
+                max_contexts: 5,
+            },
+        )
+        .unwrap();
+        let ng = [1.0 / BYTE_CLASSES as f64; BYTE_CLASSES];
+        let wb = model.distribution(0).unwrap();
+        let db = model
+            .distribution_dirichlet_with_parent(0, &ng, 4.0, 16.0)
+            .unwrap();
+        assert_ne!(wb, db);
+        assert!((db.iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
+        let mut bad = ng;
+        bad[0] = f64::NAN;
+        assert_eq!(
+            model.distribution_dirichlet_with_parent(0, &bad, 4.0, 16.0),
+            Err(ByteBackoffError::InvalidParentDistribution)
+        );
+        assert_eq!(
+            model.distribution_dirichlet_with_parent(0, &ng, -1.0, 16.0),
+            Err(ByteBackoffError::InvalidHyperparameter)
+        );
+        assert_eq!(
+            model.distribution_dirichlet_with_parent(0, &ng, 4.0, f64::NAN),
+            Err(ByteBackoffError::InvalidHyperparameter)
+        );
+        assert_eq!(
+            model.distribution_dirichlet_with_parent(2, &ng, 4.0, 16.0),
+            Err(ByteBackoffError::SignatureOutsideDomain)
+        );
     }
 
     #[test]

@@ -30,7 +30,9 @@ git revision `958ce6301730ceeec4bb1252ff12222e5bb7d431` (crates
 `memorithm-elastic-core`, `memorithm-elastic-eir`). Same owner, same
 PolyForm Noncommercial 1.0.0 license; no model runtime depends on it.
 
-## Frozen model: `sml_core::elastic_ngram::ElasticNgram`
+## Frozen model: `sml_core::elastic_ngram_packed::ElasticNgram`
+
+_Erratum (before any frozen-corpus run): the module was named `elastic_ngram` at preregistration; it was renamed `elastic_ngram_packed` because `main` gained an unrelated ENG-0 `elastic_ngram` module. No criterion, parameter or behaviour changed._
 
 - Interpolated Witten-Bell byte n-gram over the existing `ChunkLayout`
   (64 lanes, context reset at chunk starts, first byte of a chunk is not

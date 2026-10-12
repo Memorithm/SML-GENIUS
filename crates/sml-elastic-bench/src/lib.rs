@@ -3,7 +3,7 @@
 //! EL-NG1: qualifies the ElasticXxx representation-transition control plane
 //! on an exactly accounted, SML-owned byte n-gram.
 //!
-//! The model ([`sml_core::elastic_ngram::ElasticNgram`]) stays dependency-free
+//! The model ([`sml_core::elastic_ngram_packed::ElasticNgram`]) stays dependency-free
 //! in `sml-core`; this crate is the only place ElasticXxx is linked, pinned to
 //! an exact git revision. It checks what the control plane does *and what it
 //! does not do*: ElasticXxx validates structure (epochs, capabilities,
@@ -26,7 +26,7 @@ use elastic_core::{
 };
 use sml_core::anf_char::CharSplits;
 use sml_core::char_baselines::NGramModel;
-use sml_core::elastic_ngram::{ElasticNgram, ElasticNgramError, WIDTHS};
+use sml_core::elastic_ngram_packed::{ElasticNgram, ElasticNgramError, WIDTHS};
 
 /// Result type used throughout the bench.
 pub type BenchResult<T> = Result<T, Box<dyn Error>>;
