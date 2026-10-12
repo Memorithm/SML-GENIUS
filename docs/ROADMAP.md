@@ -879,3 +879,46 @@ three-gate N128 synthetic result to free graphs, memory banks of millions
 of ANF functions, SML-25B language quality, GPU/VRAM/throughput claims,
 or a general parity-with-noise solution. Native Rust remains the required
 implementation boundary; no NVIDIA software dependencies beyond drivers.
+
+## A6-C12f six-state-noise and strict native-output equivalence — 2026-10-12
+
+The [frozen protocol](A6-C12F-STATE-NOISE-OBSERVABILITY-PREREGISTRATION.md)
+and [measured report](RESULTS-A6-C12F-STATE-NOISE-OBSERVABILITY.md)
+extend the native N128 fixed-ring **three-gate** source discovery benchmarks.
+The new observable-equivalence gate compares two independently executed
+networks' **output bits** on the same held-out inputs, without using TEST labels
+or relying on equality of aggregate loss counts. These are fundamentally
+different checks: matching held-out error counts is not a proof of equal
+output functions.
+
+Across 2 native tasks, clean/label-noisy panels, 3 seeds, 3 perturbed
+state slots (0/68/127) and 2 hidden-transition flip probabilities
+(1/256 or 1/64), the hybrid W2+Sketch-MITM learner recovered all **72/72**
+original sources/positions/truth tables, and its independently executed
+selected models disagreed with the deterministic reference on **zero bits
+in 72/72 held-out streams**. A separate causal certificate establishes
+that moving the middle XOR injection from j68/x3 to j67/x4 is
+observationally equivalent **under x3(t)=x4(t-1) with zero initial history**
+(6/6 native exact-lag witnesses), but distinguishable when the temporal
+constraint is imperfect (6/6 controls). The certificate describes a
+specific pair, NOT a complete equivalence-class enumeration.
+
+The teacher's actual **persisted** hidden-state transitions are
+stochastically perturbed; zero output disagreements between the learned
+and deterministic reference do **not** mean that either predicts the
+random disturbance. On clean-label stochastic targets, observed XOR³
+error increased from ~6% at 1/256 to ~19% at 1/64, versus ~0.76%
+to ~2.97% for AND→XOR→XOR. The 24 matched n508 W3 exhaustive
+references averaged 5,573.193 ms total fit vs 158.610 ms for the hybrid,
+a measured **35.138×** ratio on these native synthetic cases, **not
+a worst-case complexity guarantee**. 508 refers only to candidate
+sources, not to the number of state bits/gates.
+
+**Next gates**: new classes under simultaneous hidden-slot flips and
+temporally correlated noise; input masking/identifiability analyses;
+observation-class representations and matched validation beyond
+error-count equality; only then a separately preregistered learner
+whose grammar can actually fit k=4 or 5 hidden gates. Keep quality,
+bank-scale cost, native GPU/Thor performance and SML-25B token
+generation as *independent unqualified goals*. Rust native only,
+with no vendor software stack other than permitted GPU drivers.
