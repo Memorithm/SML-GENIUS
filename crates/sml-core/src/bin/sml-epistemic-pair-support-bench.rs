@@ -222,8 +222,7 @@ fn fit_one(
         TRAIN_STEPS,
     )?;
     let mut marginal = AnfMarginalSupportGuard::new(width, TRAIN_STEPS)?;
-    let mut pair =
-        AnfPairSupportGuard::new(width, TRAIN_STEPS, MAX_PAIR_SLOTS, MAX_MISSING_PAIRS)?;
+    let mut pair = AnfPairSupportGuard::new(width, TRAIN_STEPS, MAX_PAIR_SLOTS, MAX_MISSING_PAIRS)?;
     let mut rng = SplitMix64::new(seed(width, index, scenario, TRAIN_SALT));
     let mut noise_rng = SplitMix64::new(seed(width, index, scenario, NOISE_SALT));
     let mut flips = 0usize;
@@ -259,7 +258,10 @@ fn fit_one(
         return Err("pair censor failed to show both marginals without joint 11".into());
     }
     if scenario.triple_censored()
-        && (seen_triple111 || seen_triple_pair.iter().any(|patterns| patterns.contains(&false)))
+        && (seen_triple111
+            || seen_triple_pair
+                .iter()
+                .any(|patterns| patterns.contains(&false)))
     {
         return Err("triple negative did not hide 111 while covering EVERY pair".into());
     }
@@ -319,29 +321,16 @@ impl Metrics {
 }
 
 fn evaluate_one(frozen: &Frozen) -> Result<Metrics, Box<dyn Error>> {
-    let mut rng = SplitMix64::new(seed(
-        frozen.width,
-        frozen.index,
-        frozen.scenario,
-        TEST_SALT,
-    ));
+    let mut rng = SplitMix64::new(seed(frozen.width, frozen.index, frozen.scenario, TEST_SALT));
     let mut m = Metrics::default();
     let started = Instant::now();
     for step in 0..TEST_STEPS {
-        let input = test_input(
-            &mut rng,
-            frozen.width,
-            &frozen.roles,
-            frozen.scenario,
-            step,
-        );
+        let input = test_input(&mut rng, frozen.width, &frozen.roles, frozen.scenario, step);
         let truth = frozen.teacher.evaluate_scalar(&input)?;
-        let pair = frozen.pair.predict_guarded(
-            &frozen.committee,
-            &input,
-            SELECT_CONF,
-            BANK_ERROR_MAX,
-        )?;
+        let pair =
+            frozen
+                .pair
+                .predict_guarded(&frozen.committee, &input, SELECT_CONF, BANK_ERROR_MAX)?;
         let marginal = frozen.marginal.assess(&input)?;
         if pair.bank_adequate != frozen.bank_adequate {
             return Err("bank adequacy changed between TRAIN and TEST".into());
@@ -525,10 +514,15 @@ mod tests {
             for step in 0..TRAIN_STEPS {
                 let p = train_input(&mut rng, width, &roles, Scenario::PairCensoredAbsent, step);
                 seen_pair[usize::from(p[roles[6]]) * 2 + usize::from(p[roles[7]])] = true;
-                let x = train_input(&mut rng, width, &roles, Scenario::TripleCensoredAbsent, step);
+                let x = train_input(
+                    &mut rng,
+                    width,
+                    &roles,
+                    Scenario::TripleCensoredAbsent,
+                    step,
+                );
                 assert!(!(x[roles[5]] && x[roles[6]] && x[roles[7]]));
-                for (slot, (a, b)) in [(5usize, 6usize), (5, 7), (6, 7)].into_iter().enumerate()
-                {
+                for (slot, (a, b)) in [(5usize, 6usize), (5, 7), (6, 7)].into_iter().enumerate() {
                     seen_triple_pair[slot]
                         [usize::from(x[roles[a]]) * 2 + usize::from(x[roles[b]])] = true;
                 }
