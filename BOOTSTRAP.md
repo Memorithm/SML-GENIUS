@@ -957,3 +957,50 @@ a million learned ANF functions or demonstrated SML-25B quality.
 The next evidence gate should study passive observations and
 identifiability of rare interaction supports under memory and
 recurrence, not silently generalize the active-oracle results.
+
+## A6-I1 epistemic intuition and observational nonidentifiability — 2026-10-12
+
+Read [the preregistered protocol](docs/A6-I1-EPISTEMIC-INTUITION-PREREGISTRATION.md)
+and [full experimental results](docs/RESULTS-A6-I1-EPISTEMIC-INTUITION.md).
+The `anf_epistemic_intuition` Rust module is a bounded, uncertainty-aware
+**two-hypothesis WideAnfGate belief**, with `ContextualPrior` learned
+from earlier **fully labeled tasks**, predicted output probabilities,
+explicit hypothesis agreement/disagreement, consensus-only abstention
+and a separate, charged active-intervention classifier.
+
+The test **constructively proves an identifiability limit**:
+`f1(x)=f0(x) XOR x_a x_b`, with the passive context always satisfying
+`x_a x_b=0`. No amount of observations from that support can
+distinguish their task-local identities, even under independent
+readout label noise. A conditional prior from the histories of
+**other tasks**, provided with a context tag, can nonetheless improve
+prediction on context-shifted unseen inputs **if the prior is stable**.
+Over 7 widths k8..1024, 3 seeds, 2 passive censoring modes, 2
+label-noise panels and 3 deployment regimes, 252 blinded cells
+confirmed exact passive equivalence, 16 OOD forced-disagreement
+queries per blind task and honest negative controls.
+
+Native context-conditioned forced predictions on the OOD
+hypothesis-disagreement subset were **87.6379% accurate under
+matched historical priors** versus ~50% for pooled/uniform controls.
+They failed **catastrophically under inverted priors: 11.8151%**;
+without contextual signal accuracy was **49.6503%**, close to chance.
+Calibrated confidence under MATCHED had ~1.45 percentage-point gap,
+but ~74.37 points under REVERSED. Consensus-only output covered
+~50.13% of OOD queries, with **zero clean errors**, abstaining
+on all hypothesis disagreements. A SEPARATE targeted intervention
+with 1 clean/21 noisy observations disambiguated all 5376 blind
+tasks per regime in the tested corpus; intervention is additional
+information, NOT passive intuition.
+
+**No learned human-like cognitive intuition is demonstrated.**
+Both candidate functions are provided by the benchmark and
+include the true teacher by construction; historical tasks carry
+their true candidate identity, and the context tag is given.
+Prior-shift detection is NOT solved by local observations. Future
+tests require >2 hypotheses including true-model-missing cases,
+meta-history with feedback instead of oracle identity labels,
+adaptive change detection/intervention, and passive recurrent
+SBG/MOR/Delta-KV observation streams before any SML-25B claim.
+Retain native Rust, restricted GPU vendor software and strong
+rollback/CI contracts.
