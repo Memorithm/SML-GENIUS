@@ -642,8 +642,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         VAL_STEPS,
                         mode,
                     );
-                    let (input_difference_12, input_difference_34) =
-                        input_pair_differences(&train);
+                    let (input_difference_12, input_difference_34) = input_pair_differences(&train);
                     if mode == InputMode::ExactAlias && input_difference_12 != 0 {
                         return Err("EXACT_ALIAS generator violated x1 == x2".into());
                     }
@@ -699,10 +698,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     // Two tasks, two label panels, two input modes, (3 strategies on each
     // seed + one W3 reference on seed0). For 3 seeds: exactly 80 policies.
-    let expected_frozen = Task::ALL.len()
-        * Panel::ALL.len()
-        * InputMode::STRESS.len()
-        * (3 * nseeds + 1);
+    let expected_frozen =
+        Task::ALL.len() * Panel::ALL.len() * InputMode::STRESS.len() * (3 * nseeds + 1);
     if frozen.len() != expected_frozen {
         return Err("A6-C12d frozen count mismatches preregistration".into());
     }
@@ -719,20 +716,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             for index in 0..nseeds {
                 for mode in InputMode::STRESS {
                     let heldout_seed = seed(index, task, panel, 0xa6c1_2b33);
-                    let test = data_with_mode(
-                        heldout_seed,
-                        task,
-                        panel,
-                        TEST_STEPS,
-                        mode,
-                    );
-                    let clean = data_with_mode(
-                        heldout_seed,
-                        task,
-                        Panel::Clean,
-                        TEST_STEPS,
-                        mode,
-                    );
+                    let test = data_with_mode(heldout_seed, task, panel, TEST_STEPS, mode);
+                    let clean = data_with_mode(heldout_seed, task, Panel::Clean, TEST_STEPS, mode);
                     if test.blocks[0].inputs != clean.blocks[0].inputs {
                         return Err("label corruption altered the generated raw inputs".into());
                     }
@@ -769,18 +754,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                             && row.fitted.seed == index
                     }) {
                         let fit = &row.fitted;
-                        let (sources_exact, truths_exact, proposal_errors, selected_errors, accepted) =
-                            if let Some(model) = &fit.fit {
-                                (
-                                    model.proposal_sources == task.sources(),
-                                    model.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
-                                    Some(native_errors(&model.proposal, &test)?),
-                                    Some(native_errors(&model.committed, &test)?),
-                                    model.accepted,
-                                )
-                            } else {
-                                (false, false, None, None, false)
-                            };
+                        let (
+                            sources_exact,
+                            truths_exact,
+                            proposal_errors,
+                            selected_errors,
+                            accepted,
+                        ) = if let Some(model) = &fit.fit {
+                            (
+                                model.proposal_sources == task.sources(),
+                                model.proposal_rules.rules.map(|rule| rule.truth) == task.truths(),
+                                Some(native_errors(&model.proposal, &test)?),
+                                Some(native_errors(&model.committed, &test)?),
+                                model.accepted,
+                            )
+                        } else {
+                            (false, false, None, None, false)
+                        };
                         println!(
                             "A6C12D_TEST,task={},panel={},seed={},mode={},method={},oracle_errors={},proposal_errors={:?},selected_errors={:?},sources_exact={},truths_exact={},accepted={},alias_native_mismatches={},factor_structures={},pair_rank={},sketch_bucket_hits={},sketch_unique={},sketch_full={},screen_seconds={:.6},factor_seconds={:.6},w3_full_correlations={},samples={}",
                             task.name(),
@@ -893,13 +883,19 @@ mod tests {
             assert_eq!(input_pair_differences(&clean).0, 0);
             assert_ne!(alternative, task.rules());
             assert_eq!(
-                native_errors(&make_multi_gate_native(WIDTH, &alternative).unwrap(), &clean)
-                    .unwrap(),
+                native_errors(
+                    &make_multi_gate_native(WIDTH, &alternative).unwrap(),
+                    &clean
+                )
+                .unwrap(),
                 0
             );
             assert_eq!(
-                native_errors(&make_multi_gate_native(WIDTH, &task.rules()).unwrap(), &clean)
-                    .unwrap(),
+                native_errors(
+                    &make_multi_gate_native(WIDTH, &task.rules()).unwrap(),
+                    &clean
+                )
+                .unwrap(),
                 0
             );
         }
@@ -935,5 +931,4 @@ mod tests {
             assert!(different > 0);
         }
     }
-
 }
