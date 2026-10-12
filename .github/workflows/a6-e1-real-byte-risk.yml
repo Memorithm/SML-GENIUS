@@ -1,0 +1,66 @@
+name: A6-E1 real next-space ANF versus ngram risk-coverage qualification
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e1-byte-utility-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  real-byte-risk:
+    if: startsWith(github.head_ref, 'research/a6-e1-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only exact PR SHA checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89 toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Strict Rust, algebraic rank and risk-curve unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib anf_scoped_risk -- --nocapture
+          cargo test --locked -p sml-core --lib distinct_learned_sparse_input_supports_share_a_global_source -- --nocapture
+          cargo test --locked -p sml-core --bin sml-real-byte-scoped-risk-bench -- --nocapture
+      - name: Fetch SHA256-pinned public-domain real French text
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/fetch-char-corpus.sh "$RUNNER_TEMP/frozen-verne.txt"
+          test "$(wc -c < "$RUNNER_TEMP/frozen-verne.txt")" -eq 433036
+          echo "A6_E1_CORPUS,sha256=$(sha256sum "$RUNNER_TEMP/frozen-verne.txt" | cut -d' ' -f1),bytes=433036"
+      - name: Fit 4 learned ANF candidates and evaluate all 32 risk-coverage policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "A6_E1_ENV,sha=$(git rev-parse HEAD),runner=$RUNNER_NAME,arch=$(uname -m),rust=$(rustc --version),cpus=$(nproc)"
+          cargo run --locked --release -p sml-core --bin sml-real-byte-scoped-risk-bench -- "$RUNNER_TEMP/frozen-verne.txt" 2>&1 | tee "$RUNNER_TEMP/a6-e1.log"
+          test "$(grep -c '^A6_E1_LEARNED,' "$RUNNER_TEMP/a6-e1.log")" -eq 4
+          test "$(grep -c '^A6_E1_FROZEN,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
+          test "$(grep -c '^A6_E1_CURVE,split=VAL,' "$RUNNER_TEMP/a6-e1.log")" -eq 32
+          test "$(grep -c '^A6_E1_CURVE,split=TEST,' "$RUNNER_TEMP/a6-e1.log")" -eq 32
+          test "$(grep -c '^A6_E1_CONTROL,split=VAL,' "$RUNNER_TEMP/a6-e1.log")" -eq 5
+          test "$(grep -c '^A6_E1_CONTROL,split=TEST,' "$RUNNER_TEMP/a6-e1.log")" -eq 5
+          test "$(grep -c '^A6_E1_POLICY_FROZEN,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
+          test "$(grep -c '^A6_E1_TEST_BASELINES,' "$RUNNER_TEMP/a6-e1.log")" -eq 1
+          grep -Eq '^A6_E1_COMPLETE,real_corpus=true,policies=32,val_rows=32,test_rows=32,task=next_space_binary,.*decision=(RESEARCH_PASS|STOP),oracle=PASS$' "$RUNNER_TEMP/a6-e1.log"

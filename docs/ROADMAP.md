@@ -1473,3 +1473,18 @@ performance benchmark, nor native Thor GPU evidence.
 5. Truly learned variable-width page banks, adversarial
    large-degree interactions, million-address function storage
    and physical ARM/NEON/Thor tests under Rust/native policies.
+
+## A6-E1 — model-level relevance before another order-of-support escalation (2026-10-12)
+
+**Verified negative STOP**, not a production model promotion. See [the preregistered real-byte protocol](A6-E1-REAL-BYTE-SUPPORT-RISK-PREREGISTRATION.md) and [the measured positive/negative native report](RESULTS-A6-E1-REAL-BYTE-SUPPORT-RISK.md). A6-E1 uses a real SHA256-pinned public-domain French text corpus, four **TRAIN-learned** native ANF experts with different candidate-specific input supports, full-16-bit TRAIN-nearest Hamming support, conditional degree-1/2 GF(2) design-rank diagnostics, 32 VAL-chosen selective-risk policies, and explicit ngram4 fallback on every abstention. A separate mandatory counterexample proves that full pairwise covering-array patterns do **not** imply identification even for a degree-one parity teacher.
+
+Historical A5 **full-next-byte** score: Witten–Bell context4 **2.019 bits/byte**, best ANF **2.474 bits/byte**. This A6-E1 **binary-next-space** test is a distinct task and must not be numerically compared to A5: on 43,136 binary TEST events, ngram4 **0.21751656 bits/event** decisively beat the committee **2.52933653** and the selected ANF+fallback policy **2.52734408** (99.895679% coverage). Increasing gate count or raising guard degree cannot be presented as progress while the underlying hard Boolean committee is grossly miscalibrated on real data.
+
+**Immediate model-oriented follow-up, ordered by evidence:**
+1. Redesign a **calibrated, normalized learned ANF probability model** (TRAIN count estimates, sparse backoff and a selectable nonconstant feature learning signal). Preserve existing ngrams and ngram4, plus a majority baseline, on the *same* frozen real-data splits; compare all-token loss, not accuracy only where predicting.
+2. Evaluate risk-versus-coverage as a diagnostic, with candidate-support-scoped interactions, full-input novelty and a known-grammar degree hypothesis **explicitly conditional** on realizability and GF(2) full-rank evidence. No inferred teacher-support injection, TEST threshold tuning or implicit guarantee from covering arrays.
+3. **End-to-end gate:** first beat a predeclared competent baseline with held-out actual log-loss and matched resource accounting; expand to a full **256-byte** predictive task and an independent corpus before any SML-2 consideration. A previous auxiliary binary subtask success alone would not suffice.
+4. Maintain two outcomes: scientifically valid **STOP** when the model loses (as it does here) and promotion only if all preregistered criteria hold. Do not change experiment thresholds based on TEST, hide zero-monomial learned gates or characterize failure as confidence protection success.
+5. Once model-level quality is demonstrated, compare resource-bounded flat/Pascal SIMD/WGPU kernels from SciRust, FLAT-ATTENTION and NNIS on the actual model workload, preserving SML's hardware-sovereignty and self-sufficient model/harness separation.
+
+The existing A6-I3/I4/I5 and A6-I6 (#508) guards are useful bounded negative controls, not a logical progression toward 25B without a generalization-positive model.
