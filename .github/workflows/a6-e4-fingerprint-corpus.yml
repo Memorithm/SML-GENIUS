@@ -1,0 +1,61 @@
+name: A6-E4 independent French corpus fingerprint before model code
+
+on:
+  pull_request:
+    branches:
+      - main
+      - research/a6-e3-native-boolean-feature-byte
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a6-e4-dataset-pin-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fingerprint:
+    if: startsWith(github.head_ref, 'research/a6-e4-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Read-only exact PR SHA checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Fingerprint French Gutenberg 4650 without evaluating any model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          url='https://www.gutenberg.org/cache/epub/4650/pg4650.txt'
+          curl --proto '=https' --tlsv1.2 --retry 5 --retry-connrefused --location --silent --show-error --fail "$url" -o "$RUNNER_TEMP/candide4650-source.txt"
+          test "$(grep -c '^\*\*\* START OF' "$RUNNER_TEMP/candide4650-source.txt")" -eq 1
+          test "$(grep -c '^\*\*\* END OF' "$RUNNER_TEMP/candide4650-source.txt")" -eq 1
+          tr -d '\r' < "$RUNNER_TEMP/candide4650-source.txt" |
+            awk '/^\*\*\* START OF/{body=1;next} /^\*\*\* END OF/{body=0} body' > "$RUNNER_TEMP/candide4650-body.txt"
+          bytes="$(wc -c < "$RUNNER_TEMP/candide4650-body.txt")"
+          test "$bytes" -gt 50000
+          raw_sha="$(sha256sum "$RUNNER_TEMP/candide4650-source.txt" | cut -d' ' -f1)"
+          body_sha="$(sha256sum "$RUNNER_TEMP/candide4650-body.txt" | cut -d' ' -f1)"
+          a=$((bytes * 8 / 10))
+          b=$((bytes * 9 / 10))
+          train_size="$a"
+          val_size="$((b-a))"
+          test_size="$((bytes-b))"
+          train_events="$((64 * (train_size / 64 - 4)))"
+          val_events="$((64 * (val_size / 64 - 4)))"
+          test_events="$((64 * (test_size / 64 - 4)))"
+          test "$train_events" -gt 0
+          test "$val_events" -gt 0
+          test "$test_events" -gt 0
+          printf 'A6E4_DATASET_FINGERPRINT,commit=%s,source_url=%s,raw_sha256=%s,normalized_bytes=%s,body_sha256=%s,train_events=%s,val_events=%s,test_events=%s\n'             "$(git rev-parse HEAD)" "$url" "$raw_sha" "$bytes" "$body_sha"             "$train_events" "$val_events" "$test_events" |
+            tee "$RUNNER_TEMP/a6e4-provenance.csv"
+      - name: Retain checksum manifest only, never the corpus
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a6-e4-independent-corpus-provenance
+          path: ${{ runner.temp }}/a6e4-provenance.csv
+          retention-days: 30
