@@ -113,9 +113,6 @@ impl NoiseRate {
             Self::OneIn8 => "1/8", Self::OneIn5 => "1/5",
         }
     }
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|&r| r == self).unwrap()
-    }
     fn eta(self) -> f64 {
         match self {
             Self::Zero => 0.0, Self::OneIn32 => 1.0 / 32.0,
@@ -646,7 +643,7 @@ fn freeze(
         ms, mf, mt
     );
     Ok(Frozen {
-        task, rate, seed: index, words, method, fit, proposed, exact,
+        task, rate, seed: index, words, method, fit: first_fit, proposed, exact,
         median_screen_us: ms, median_factor_us: mf, median_total_us: mt,
     })
 }
@@ -725,7 +722,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     println!("A6C12G_ALL_FROZEN,policies=1232,test_datasets=80");
 
-    // The very first TEST generator call is below, after all 1232 policies were frozen.
+    // Only TEST outcomes, not TRAIN/VAL exactness alone, define empirical success.
+    // TEST data are generated exclusively after the full 1232-fit freeze.
+    let mut test_outcomes = vec![None; POLICY_COUNT];
     let mut test_rows = 0usize;
     let mut distinct_test_datasets = 0usize;
     for task in TASKS {
@@ -735,7 +734,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 distinct_test_datasets += 1;
                 let teacher = make_multi_gate_native(WIDTH, &task.rules())?;
                 let teacher_errors = native_errors(&teacher, &test)?;
-                for case in frozen.iter().filter(|f| f.task == task && f.seed == index && f.rate == rate) {
+                for (case_idx, case) in frozen.iter().enumerate().filter(|(_, f)| {
+                    f.task == task && f.seed == index && f.rate == rate
+                }) {
                     let (proposal_errors, committed_errors, proposal_disagreements, committed_disagreements, accepted) = if let Some(fit) = &case.fit {
                         (
                             Some(native_errors(&fit.proposal, &test)?),
@@ -746,6 +747,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         )
                     } else { (None, None, None, None, false) };
                     let success = case.exact && proposal_disagreements == Some(0) && accepted && committed_disagreements == Some(0);
+                    test_outcomes[case_idx] = Some(success);
                     println!(
                         "A6C12G_TEST,task={},seed={},rate={},words={},method={},proposed={},exact={},accepted={},native_success={},oracle_errors={},proposal_errors={:?},committed_errors={:?},proposal_bit_disagreements={:?},committed_bit_disagreements={:?},samples={}",
                         task.name(),index,rate.name(),case.words,case.method.name(),
@@ -757,7 +759,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    if test_rows != POLICY_COUNT || distinct_test_datasets != TEST_STREAMS {
+    if test_rows != POLICY_COUNT || distinct_test_datasets != TEST_STREAMS || test_outcomes.iter().any(Option::is_none) {
         return Err("A6-C12g TEST census mismatch".into());
     }
 
@@ -769,19 +771,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if method == Method::GaussExact && rate != NoiseRate::Zero { continue; }
                 let mut first_empirical_threshold = None;
                 for words in WORD_BUDGETS {
-                    let rows = frozen.iter().filter(|r| r.task == task && r.rate == rate && r.method == method && r.words == words).collect::<Vec<_>>();
+                    let rows = frozen.iter().enumerate().filter(|(_, r)| {
+                        r.task == task && r.rate == rate && r.method == method && r.words == words
+                    }).collect::<Vec<_>>();
                     assert_eq!(rows.len(), SEEDS);
-                    let successes = rows.iter().filter(|r| r.exact && r.fit.as_ref().is_some_and(|fit| fit.accepted)).count();
+                    let train_exact_accepted = rows.iter().filter(|(_, r)| {
+                        r.exact && r.fit.as_ref().is_some_and(|fit| fit.accepted)
+                    }).count();
+                    let successes = rows.iter().filter(|(i, _)| test_outcomes[*i] == Some(true)).count();
                     let (lower, upper) = wilson(successes, SEEDS);
                     if successes >= 7 && first_empirical_threshold.is_none() {
                         first_empirical_threshold = Some(words);
                     }
-                    let screen = median_vector(rows.iter().map(|r| r.median_screen_us).collect());
-                    let factor = median_vector(rows.iter().map(|r| r.median_factor_us).collect());
-                    let total = median_vector(rows.iter().map(|r| r.median_total_us).collect());
+                    let screen = median_vector(rows.iter().map(|(_, r)| r.median_screen_us).collect());
+                    let factor = median_vector(rows.iter().map(|(_, r)| r.median_factor_us).collect());
+                    let total = median_vector(rows.iter().map(|(_, r)| r.median_total_us).collect());
                     println!(
-                        "A6C12G_SUMMARY,task={},rate={},words={},method={},exact_and_accepted={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
-                        task.name(), rate.name(), words, method.name(), successes, SEEDS, lower, upper,
+                        "A6C12G_SUMMARY,task={},rate={},words={},method={},train_exact_and_accepted={}/{},native_success={}/{},wilson95_lower={:.6},wilson95_upper={:.6},median_screen_us={:.3},median_factor_us={:.3},median_total_us={:.3},rho_proxy={:.6},ln_m_over_rho2={:.3}",
+                        task.name(), rate.name(), words, method.name(), train_exact_accepted, SEEDS, successes, SEEDS, lower, upper,
                         screen, factor, total, rho, (317_440f64).ln() / (rho*rho)
                     );
                 }
