@@ -184,12 +184,12 @@ fn gate_from_counts(support: &[usize], counts: &[[u32; 2]]) -> Result<WideAnfGat
         WideAnfLimits::new(16, 256, 8192, 8192, 8192),
     )?;
     // Independent table-oracle check on all 2^k Boolean selected assignments.
-    for mask in 0..(1 << k) {
+    for (mask, &expected) in truth.iter().enumerate() {
         let mut input = [false; 16];
         for (local, &physical) in support.iter().enumerate() {
             input[physical] = mask & (1 << local) != 0;
         }
-        if gate.evaluate_scalar(&input)? != truth[mask] {
+        if gate.evaluate_scalar(&input)? != expected {
             return Err("Möbius gate does not reproduce TRAIN majority table".into());
         }
     }
