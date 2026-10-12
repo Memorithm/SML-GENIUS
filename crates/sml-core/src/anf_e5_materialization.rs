@@ -137,7 +137,11 @@ pub struct CompiledTruthTable {
 
 impl CompiledTruthTable {
     pub fn evaluate(&self, source: &[bool]) -> Result<bool, PlannerError> {
-        if self.input_positions.iter().any(|&index| index >= source.len()) {
+        if self
+            .input_positions
+            .iter()
+            .any(|&index| index >= source.len())
+        {
             return Err(PlannerError::SourceTooShort);
         }
         let address = self
@@ -150,9 +154,11 @@ impl CompiledTruthTable {
         if address >= self.addresses {
             return Err(PlannerError::SourceTooShort);
         }
-        Ok(self.blocks[address / BITS_PER_BLOCK].0[(address % BITS_PER_BLOCK) / 64]
-            & (1u64 << (address % 64))
-            != 0)
+        Ok(
+            self.blocks[address / BITS_PER_BLOCK].0[(address % BITS_PER_BLOCK) / 64]
+                & (1u64 << (address % 64))
+                != 0,
+        )
     }
 
     pub fn logical_payload_bytes(&self) -> usize {
@@ -256,13 +262,18 @@ mod tests {
         assert_eq!(compiled.logical_payload_bytes(), plan.predicted_table_bytes);
         assert!(compiled.allocated_payload_bytes() <= profile().max_materialization_ram_bytes);
         for input in 0usize..32 {
-            let source = (0..5).map(|b| input & (1usize << b) != 0).collect::<Vec<_>>();
+            let source = (0..5)
+                .map(|b| input & (1usize << b) != 0)
+                .collect::<Vec<_>>();
             assert_eq!(
                 compiled.evaluate(&source).unwrap(),
                 gate.evaluate_scalar(&source).unwrap()
             );
         }
-        assert_eq!(compiled.evaluate(&[true]), Err(PlannerError::SourceTooShort));
+        assert_eq!(
+            compiled.evaluate(&[true]),
+            Err(PlannerError::SourceTooShort)
+        );
     }
 
     #[test]
@@ -270,15 +281,24 @@ mod tests {
         let gate = test_gate();
         let mut p = profile();
         p.expected_queries = 1;
-        assert_eq!(choose_execution(&gate, p).unwrap().choice, ExecChoice::Direct);
+        assert_eq!(
+            choose_execution(&gate, p).unwrap().choice,
+            ExecChoice::Direct
+        );
         assert!(materialize_if_profitable(&gate, p).unwrap().1.is_none());
         p = profile();
         p.max_materialization_l3_bytes = 32;
-        assert_eq!(choose_execution(&gate, p).unwrap().choice, ExecChoice::Direct);
+        assert_eq!(
+            choose_execution(&gate, p).unwrap().choice,
+            ExecChoice::Direct
+        );
         p.max_materialization_l3_bytes = 4096;
         p.direct_ns_per_query = 1;
         p.lookup_ns_per_query = 2;
-        assert_eq!(choose_execution(&gate, p).unwrap().choice, ExecChoice::Direct);
+        assert_eq!(
+            choose_execution(&gate, p).unwrap().choice,
+            ExecChoice::Direct
+        );
     }
 
     #[test]
@@ -300,9 +320,15 @@ mod tests {
         let gate = test_gate();
         let mut p = profile();
         p.expected_queries = 0;
-        assert_eq!(choose_execution(&gate, p), Err(PlannerError::InvalidProfile));
+        assert_eq!(
+            choose_execution(&gate, p),
+            Err(PlannerError::InvalidProfile)
+        );
         p = profile();
         p.lookup_ns_per_query = 0;
-        assert_eq!(choose_execution(&gate, p), Err(PlannerError::InvalidProfile));
+        assert_eq!(
+            choose_execution(&gate, p),
+            Err(PlannerError::InvalidProfile)
+        );
     }
 }
