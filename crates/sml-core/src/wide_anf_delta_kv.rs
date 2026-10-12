@@ -4,8 +4,8 @@ use crate::{
     delta_kv_dynamic::{
         DeltaKvDynamicCycleEvidence, DeltaKvDynamicRekeyError, DeltaKvDynamicRekeyKernel,
     },
-    wide_anf_routed::{WideRoutedError, WideRoutedExperts},
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState},
+    wide_anf_routed::{WideRoutedError, WideRoutedExperts},
     PageId,
 };
 use std::sync::Arc;
@@ -130,8 +130,7 @@ mod tests {
         delta_kv::{DeltaKvCounters, DeltaKvMemory, DELTA_KV_SCALE},
         delta_kv_recurrent::DeltaKvRecurrentPolicy,
         delta_kv_semantic::{
-            DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector,
-            DeltaKvSourceProvenance,
+            DeltaKvSemanticProjectionPolicy, DeltaKvSemanticProjector, DeltaKvSourceProvenance,
         },
         mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId},
         mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
@@ -213,20 +212,10 @@ mod tests {
     }
 
     fn atlas() -> WideAnfPageAtlas<S> {
-        let all_k1024 = WideAnfGate::from_monomials(
-            (0..S).collect(),
-            vec![(0..S).collect()],
-            S,
-            limits(),
-        )
-        .unwrap();
-        let one = WideAnfGate::from_monomials(
-            vec![0],
-            vec![vec![]],
-            1,
-            limits(),
-        )
-        .unwrap();
+        let all_k1024 =
+            WideAnfGate::from_monomials((0..S).collect(), vec![(0..S).collect()], S, limits())
+                .unwrap();
+        let one = WideAnfGate::from_monomials(vec![0], vec![vec![]], 1, limits()).unwrap();
         WideAnfPageAtlas::new(
             vec![
                 WideAnfPage {
@@ -323,8 +312,7 @@ mod tests {
     }
 
     fn routed() -> WideRoutedExperts<Identity, S> {
-        let routing =
-            RoutedSemantic::new(Identity { calls: 0 }, context(), 4).unwrap();
+        let routing = RoutedSemantic::new(Identity { calls: 0 }, context(), 4).unwrap();
         WideRoutedExperts::new(routing, atlas(), 4)
             .unwrap()
             .with_trace_word_budget(4)
@@ -352,14 +340,19 @@ mod tests {
             let actual = looped.rewrite(&state, depth).unwrap();
             assert_eq!(actual, manual_post_memory);
             assert_eq!(looped.cycles().len(), depth as usize);
-            assert_eq!(looped.cycles().last().unwrap().post_expert, manual_intermediate.state);
+            assert_eq!(
+                looped.cycles().last().unwrap().post_expert,
+                manual_intermediate.state
+            );
             assert_eq!(looped.cycles().last().unwrap().output, actual.state);
             assert_eq!(
                 looped.cycles().last().unwrap().selected,
                 decision.selected_experts
             );
-            assert_eq!(looped.cycles().last().unwrap().memory.key_q12,
-                manual_memory.cycle_evidence().last().unwrap().key_q12);
+            assert_eq!(
+                looped.cycles().last().unwrap().memory.key_q12,
+                manual_memory.cycle_evidence().last().unwrap().key_q12
+            );
             assert_eq!(looped.experts(), &manual_experts);
             assert_eq!(looped.memory(), &manual_memory);
             assert_eq!(looped.experts().used_gates(), depth as usize);
