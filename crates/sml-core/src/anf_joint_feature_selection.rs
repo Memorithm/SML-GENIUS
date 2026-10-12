@@ -194,10 +194,12 @@ impl JointModel {
         let address = signature(features, &self.selected);
         let n = f64::from(self.totals[address]);
         let denominator = n + self.alpha * self.classes as f64;
-        Ok(self.counts[address * self.classes..(address + 1) * self.classes]
-            .iter()
-            .map(|&count| (f64::from(count) + self.alpha) / denominator)
-            .collect())
+        Ok(
+            self.counts[address * self.classes..(address + 1) * self.classes]
+                .iter()
+                .map(|&count| (f64::from(count) + self.alpha) / denominator)
+                .collect(),
+        )
     }
 }
 
@@ -375,10 +377,22 @@ mod tests {
     #[test]
     fn full_byte_posterior_is_normalized_and_non_mutating() {
         let rows = [
-            JointRow { features: 0, label: 0 },
-            JointRow { features: 1, label: 16 },
-            JointRow { features: 2, label: 255 },
-            JointRow { features: 3, label: 16 },
+            JointRow {
+                features: 0,
+                label: 0,
+            },
+            JointRow {
+                features: 1,
+                label: 16,
+            },
+            JointRow {
+                features: 2,
+                label: 255,
+            },
+            JointRow {
+                features: 3,
+                label: 16,
+            },
         ];
         let report = fit_joint(&rows, cfg(2, 256, 2)).unwrap();
         let snapshot = report.clone();
@@ -402,11 +416,23 @@ mod tests {
         invalid.max_selected = 9;
         assert_eq!(fit_joint(&train, invalid), Err(JointError::InvalidConfig));
         assert_eq!(
-            fit_joint(&[JointRow { features: 8, label: 0 }], cfg(3, 2, 2)),
+            fit_joint(
+                &[JointRow {
+                    features: 8,
+                    label: 0
+                }],
+                cfg(3, 2, 2)
+            ),
             Err(JointError::FeatureOutsideDomain)
         );
         assert_eq!(
-            fit_joint(&[JointRow { features: 0, label: 2 }], cfg(3, 2, 2)),
+            fit_joint(
+                &[JointRow {
+                    features: 0,
+                    label: 2
+                }],
+                cfg(3, 2, 2)
+            ),
             Err(JointError::TargetOutsideDomain)
         );
         let fitted = fit_joint(&train, cfg(3, 2, 2)).unwrap();
