@@ -103,7 +103,9 @@ impl WalshResidualProbe {
             return Err(SpectralError::InvalidTarget);
         }
         if baseline.len() != self.classes
-            || baseline.iter().any(|&p| !p.is_finite() || !(0.0..=1.0).contains(&p))
+            || baseline
+                .iter()
+                .any(|&p| !p.is_finite() || !(0.0..=1.0).contains(&p))
             || (baseline.iter().sum::<f64>() - 1.0).abs() > 1.0e-9
         {
             return Err(SpectralError::InvalidProbability);
@@ -171,10 +173,7 @@ pub struct ConjoinedParities {
 
 impl ConjoinedParities {
     pub fn new(mut masks: Vec<u32>) -> Result<Self, SpectralError> {
-        if masks.is_empty()
-            || masks.len() > MAX_PARITY_TERMS
-            || masks.contains(&0)
-        {
+        if masks.is_empty() || masks.len() > MAX_PARITY_TERMS || masks.contains(&0) {
             return Err(SpectralError::InvalidConfiguration);
         }
         masks.sort_unstable();
@@ -347,9 +346,8 @@ fn score_gate(
         }
         let state = usize::from(gate.evaluate(row.context));
         let denom = f64::from(totals[state]) + cfg.alpha * cfg.classes as f64;
-        let local = (f64::from(counts[state * cfg.classes + usize::from(row.truth)])
-            + cfg.alpha)
-            / denom;
+        let local =
+            (f64::from(counts[state * cfg.classes + usize::from(row.truth)]) + cfg.alpha) / denom;
         let hybrid = (1.0 - cfg.mixture_lambda) * baseline + cfg.mixture_lambda * local;
         improvement += (hybrid / baseline).ln();
     }
@@ -406,7 +404,9 @@ pub fn discover_beam(
 
     let mut ranked = ranked_walsh.to_vec();
     if ranked.len() > MAX_WALSH_MASKS
-        || ranked.iter().any(|r| r.mask == 0 || !r.residual_l2.is_finite() || r.residual_l2 < 0.0)
+        || ranked
+            .iter()
+            .any(|r| r.mask == 0 || !r.residual_l2.is_finite() || r.residual_l2 < 0.0)
     {
         return Err(SpectralError::InvalidMask);
     }
@@ -457,7 +457,10 @@ pub fn discover_beam(
             measured.push((gate, score));
         }
         measured.sort_by(|left, right| {
-            right.1.adjusted_nats.total_cmp(&left.1.adjusted_nats)
+            right
+                .1
+                .adjusted_nats
+                .total_cmp(&left.1.adjusted_nats)
                 .then_with(|| left.0.cmp(&right.0))
         });
         measured.truncate(cfg.beam_width);
@@ -519,7 +522,10 @@ mod tests {
         );
         assert_eq!(probe.samples(), 0);
         probe.observe(1, 1, &[0.4, 0.6]).unwrap();
-        assert_eq!(probe.observe(0, 0, &[0.5, 0.5]), Err(SpectralError::SampleBudget));
+        assert_eq!(
+            probe.observe(0, 0, &[0.5, 0.5]),
+            Err(SpectralError::SampleBudget)
+        );
     }
 
     #[test]
@@ -554,8 +560,14 @@ mod tests {
             }
         }
         let masks = [
-            WalshCandidate { mask: 1, residual_l2: 0.3 },
-            WalshCandidate { mask: 2, residual_l2: 0.3 },
+            WalshCandidate {
+                mask: 1,
+                residual_l2: 0.3,
+            },
+            WalshCandidate {
+                mask: 2,
+                residual_l2: 0.3,
+            },
         ];
         let cfg = BeamConfig {
             classes: 2,
@@ -590,8 +602,14 @@ mod tests {
             }
         }
         let masks = [
-            WalshCandidate { mask: 1, residual_l2: 0.0 },
-            WalshCandidate { mask: 2, residual_l2: 0.0 },
+            WalshCandidate {
+                mask: 1,
+                residual_l2: 0.0,
+            },
+            WalshCandidate {
+                mask: 2,
+                residual_l2: 0.0,
+            },
         ];
         let cfg = BeamConfig {
             classes: 2,
@@ -614,11 +632,21 @@ mod tests {
             seed_pool: 0,
             ..BeamConfig::default()
         };
-        let gate = [WalshCandidate { mask: 1, residual_l2: 0.1 }];
+        let gate = [WalshCandidate {
+            mask: 1,
+            residual_l2: 0.1,
+        }];
         assert_eq!(
             discover_beam(
-                &[GateRow { context: 0, truth: 0 }],
-                &[InnerValidationRow { context: 0, truth: 0, baseline_truth: 0.5 }],
+                &[GateRow {
+                    context: 0,
+                    truth: 0
+                }],
+                &[InnerValidationRow {
+                    context: 0,
+                    truth: 0,
+                    baseline_truth: 0.5
+                }],
                 &gate,
                 cfg
             ),
