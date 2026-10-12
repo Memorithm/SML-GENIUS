@@ -1,0 +1,17 @@
+[package]
+name = "sml-elastic-bench"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "EL-NG1: qualifies the ElasticXxx representation-transition control plane on an exactly accounted SML-owned n-gram. Not part of the model runtime."
+
+[lints]
+workspace = true
+
+[dependencies]
+sml-core = { path = "../sml-core" }
+# Control plane under test, pinned to an exact revision (same owner, same license).
+elastic-core = { package = "memorithm-elastic-core", git = "https://github.com/Memorithm/ElasticXxx", rev = "958ce6301730ceeec4bb1252ff12222e5bb7d431" }
+elastic-eir = { package = "memorithm-elastic-eir", git = "https://github.com/Memorithm/ElasticXxx", rev = "958ce6301730ceeec4bb1252ff12222e5bb7d431" }

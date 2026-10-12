@@ -50,6 +50,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "memorithm-elastic-core"
+version = "0.1.0"
+source = "git+https://github.com/Memorithm/ElasticXxx?rev=958ce6301730ceeec4bb1252ff12222e5bb7d431#958ce6301730ceeec4bb1252ff12222e5bb7d431"
+
+[[package]]
+name = "memorithm-elastic-eir"
+version = "0.1.0"
+source = "git+https://github.com/Memorithm/ElasticXxx?rev=958ce6301730ceeec4bb1252ff12222e5bb7d431#958ce6301730ceeec4bb1252ff12222e5bb7d431"
+dependencies = [
+ "memorithm-elastic-core",
+]
+
+[[package]]
 name = "mmap-guard"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,6 +100,15 @@ version = "0.1.0"
 name = "sml-decision"
 version = "0.1.0"
 dependencies = [
+ "sml-core",
+]
+
+[[package]]
+name = "sml-elastic-bench"
+version = "0.1.0"
+dependencies = [
+ "memorithm-elastic-core",
+ "memorithm-elastic-eir",
  "sml-core",
 ]
 

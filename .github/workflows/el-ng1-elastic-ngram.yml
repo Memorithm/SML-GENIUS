@@ -1,0 +1,58 @@
+name: EL-NG1 ElasticNGram control-plane qualification
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: el-ng1-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  elastic-ngram:
+    if: startsWith(github.head_ref, 'research/el-ng-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only exact HEAD
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 with rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format, strict Clippy and unit oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          cargo fmt --all -- --check
+          cargo clippy --locked -p sml-core -p sml-elastic-bench --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib elastic_ngram_packed
+          cargo test --locked -p sml-elastic-bench
+      - name: Frozen Candide corpus
+        shell: bash
+        run: bash scripts/fetch-candide-corpus.sh data/char/candide-4650-frozen.txt
+      - name: Run the preregistered EL-NG1 protocol
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -p sml-elastic-bench -- data/char/candide-4650-frozen.txt | tee el-ng1-report.txt
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: el-ng1-report
+          path: el-ng1-report.txt
+          if-no-files-found: warn
