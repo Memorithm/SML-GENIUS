@@ -230,12 +230,15 @@ impl AnfPairSupportGuard {
         if input.len() != self.fan_in() {
             return Err(AnfPairSupportError::Width);
         }
-        let missing = self.missing.as_ref().ok_or(AnfPairSupportError::NotSealed)?;
+        let missing = self
+            .missing
+            .as_ref()
+            .ok_or(AnfPairSupportError::NotSealed)?;
         let novel_pairs = missing
             .iter()
             .filter(|pair| {
-                let mask = 1u8 << ((usize::from(input[pair.left]) << 1)
-                    | usize::from(input[pair.right]));
+                let mask =
+                    1u8 << ((usize::from(input[pair.left]) << 1) | usize::from(input[pair.right]));
                 pair.missing_mask & mask != 0
             })
             .count();
@@ -329,7 +332,9 @@ mod tests {
         let mut query = vec![false; 8];
         query[6] = true;
         query[7] = true;
-        let evidence = guard.predict_guarded(&committee, &query, 0.90, 0.125).unwrap();
+        let evidence = guard
+            .predict_guarded(&committee, &query, 0.90, 0.125)
+            .unwrap();
         assert_eq!(evidence.pair.novel_pairs, 1);
         assert_eq!(evidence.committee.selective_prediction, Some(false));
         assert_eq!(evidence.guarded_prediction, None);
@@ -358,7 +363,9 @@ mod tests {
         unseen[5] = true;
         unseen[6] = true;
         unseen[7] = true;
-        let guarded = guard.predict_guarded(&committee, &unseen, 0.90, 0.125).unwrap();
+        let guarded = guard
+            .predict_guarded(&committee, &unseen, 0.90, 0.125)
+            .unwrap();
         assert!(guarded.pair.pairwise_supported);
         assert_eq!(guarded.pair.novel_pairs, 0);
         assert_eq!(guarded.guarded_prediction, Some(false));
@@ -377,7 +384,10 @@ mod tests {
             Err(AnfPairSupportError::Budget)
         );
         let mut guard = AnfPairSupportGuard::new(8, 1, 600_000, 8_192).unwrap();
-        assert_eq!(guard.assess(&[false; 8]), Err(AnfPairSupportError::NotSealed));
+        assert_eq!(
+            guard.assess(&[false; 8]),
+            Err(AnfPairSupportError::NotSealed)
+        );
         assert_eq!(guard.seal(), Err(AnfPairSupportError::EmptyTraining));
         let original = guard.clone();
         assert_eq!(guard.observe(&[false; 7]), Err(AnfPairSupportError::Width));
