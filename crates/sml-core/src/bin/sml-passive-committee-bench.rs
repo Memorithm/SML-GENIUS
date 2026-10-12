@@ -171,7 +171,12 @@ impl Trace {
             trigger_b: false,
         }
     }
-    fn transition(&mut self, state: bool, activation_denominator: usize, exit_denominator: usize) -> bool {
+    fn transition(
+        &mut self,
+        state: bool,
+        activation_denominator: usize,
+        exit_denominator: usize,
+    ) -> bool {
         if state {
             self.rng.below(exit_denominator) != 0
         } else {
@@ -396,16 +401,21 @@ fn assert_stratum(
     mode: Visibility,
     panel: Panel,
 ) -> Result<(), Box<dyn Error>> {
-    let records = frozen.iter().filter(|r| {
-        r.width == width && r.seed == seed && r.mode == mode && r.panel == panel
-    }).collect::<Vec<_>>();
+    let records = frozen
+        .iter()
+        .filter(|r| r.width == width && r.seed == seed && r.mode == mode && r.panel == panel)
+        .collect::<Vec<_>>();
     if records.len() != TEACHERS {
         return Err("stratum has incorrect number of teachers".into());
     }
     let expected = mode.expected_classes();
     for row in &records {
         if row.committee.observed_equivalence_classes() != expected {
-            return Err(format!("expected {expected} exact passive classes in {}", mode.name()).into());
+            return Err(format!(
+                "expected {expected} exact passive classes in {}",
+                mode.name()
+            )
+            .into());
         }
     }
     let identical = |a: usize, b: usize| -> bool {
@@ -418,7 +428,11 @@ fn assert_stratum(
         Visibility::Full => (0..4).all(|teacher| records[teacher].teacher_posterior >= 0.99),
     };
     if !passed {
-        return Err(format!("passive equivalence or FULL identification failed in {}", mode.name()).into());
+        return Err(format!(
+            "passive equivalence or FULL identification failed in {}",
+            mode.name()
+        )
+        .into());
     }
     println!(
         "A6_I2_STRATUM,width={width},seed={seed},mode={},panel={},hypotheses=4,signature_classes={expected},observational_pairs_equivalent=true,full_teacher_posterior_at_least_0_99={},oracle=PASS",
@@ -504,9 +518,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             for mode in Visibility::ALL {
                 for panel in Panel::ALL {
                     strata_count += 1;
-                    let subset = frozen.iter().filter(|f| {
-                        f.width == width && f.seed == seed && f.mode == mode && f.panel == panel
-                    }).collect::<Vec<_>>();
+                    let subset = frozen
+                        .iter()
+                        .filter(|f| {
+                            f.width == width && f.seed == seed && f.mode == mode && f.panel == panel
+                        })
+                        .collect::<Vec<_>>();
                     if subset.len() != 4 {
                         return Err("unbalanced teacher stratum".into());
                     }
@@ -547,13 +564,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            for negative in negatives.iter().filter(|f| f.width == width && f.seed == seed) {
+            for negative in negatives
+                .iter()
+                .filter(|f| f.width == width && f.seed == seed)
+            {
                 let mut accepted_wrong = 0usize;
                 let mut accepted = 0usize;
                 let mut all_errors = 0usize;
                 for q in &inputs {
                     let pred = negative.committee.predict(q, CONFIDENCE)?;
-                    let out_of_bank_truth = pred.candidate_bits[0] ^ (q[role_map[6]] && q[role_map[7]]);
+                    let out_of_bank_truth =
+                        pred.candidate_bits[0] ^ (q[role_map[6]] && q[role_map[7]]);
                     all_errors += usize::from(pred.map_prediction != out_of_bank_truth);
                     if let Some(prediction) = pred.selective_prediction {
                         accepted += 1;
@@ -624,7 +645,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         blind.accepted_errors, full.accepted_errors, if passed { "PASS" } else { "FAIL" }
     );
     if !passed {
-        return Err("A6-I2 frozen passive uncertainty, prior and missing-teacher stress failed".into());
+        return Err(
+            "A6-I2 frozen passive uncertainty, prior and missing-teacher stress failed".into(),
+        );
     }
     Ok(())
 }
@@ -655,7 +678,10 @@ mod tests {
             let map = roles(width, seed);
             let f = fit_positive(width, seed, map, 0, mode, Panel::Clean).unwrap();
             assert_eq!(f.committee.samples(), TRAIN);
-            assert_eq!(f.committee.observed_equivalence_classes(), mode.expected_classes());
+            assert_eq!(
+                f.committee.observed_equivalence_classes(),
+                mode.expected_classes()
+            );
         }
     }
 
