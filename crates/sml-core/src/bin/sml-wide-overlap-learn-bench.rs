@@ -78,28 +78,15 @@ fn gate_limits() -> WideAnfLimits {
 
 fn role_supports(width: usize, family: Family) -> Vec<Vec<usize>> {
     match (width, family) {
-        (8, Family::Star4) => vec![
-            vec![0, 1],
-            vec![0, 2],
-            vec![0, 3],
-            vec![0, 4],
-        ],
+        (8, Family::Star4) => vec![vec![0, 1], vec![0, 2], vec![0, 3], vec![0, 4]],
         (_, Family::Star4) => vec![
             vec![0, 1],
             vec![0, 2, 3],
             vec![0, 4, 5, 6],
             vec![0, 7, 8, 9, 10],
         ],
-        (8, Family::Chain3) => vec![
-            vec![0, 1],
-            vec![1, 2],
-            vec![2, 3],
-        ],
-        (_, Family::Chain3) => vec![
-            vec![0, 1],
-            vec![1, 2, 3],
-            vec![3, 4, 5, 6],
-        ],
+        (8, Family::Chain3) => vec![vec![0, 1], vec![1, 2], vec![2, 3]],
+        (_, Family::Chain3) => vec![vec![0, 1], vec![1, 2, 3], vec![3, 4, 5, 6]],
         (_, Family::Nested2) => vec![vec![0, 1], vec![0, 1, 2, 3, 4]],
     }
 }
@@ -121,7 +108,10 @@ fn truth(width: usize, family: Family, index: usize) -> Vec<Vec<usize>> {
     let mut monomials = role_supports(width, family)
         .into_iter()
         .map(|role| {
-            let mut term = role.into_iter().map(|position| permutation[position]).collect::<Vec<_>>();
+            let mut term = role
+                .into_iter()
+                .map(|position| permutation[position])
+                .collect::<Vec<_>>();
             term.sort_unstable();
             term
         })
@@ -166,7 +156,10 @@ fn validate(
         errors += difference(original, candidate, &assignment)?;
         samples += 1;
     }
-    let used = terms.iter().flat_map(|t| t.iter().copied()).collect::<BTreeSet<_>>();
+    let used = terms
+        .iter()
+        .flat_map(|t| t.iter().copied())
+        .collect::<BTreeSet<_>>();
     for background in [false, true] {
         for mask in 0..16usize {
             assignment.fill(background);
@@ -286,9 +279,15 @@ fn replay_learned_sbg(frozen: &[Frozen]) -> Result<usize, Box<dyn Error>> {
             id: PageId(23),
             gates: vec![fitted.gate.clone()],
             inputs: (0..1024)
-                .map(|bit| SbgCoordinate { field: SbgField::Value, bit })
+                .map(|bit| SbgCoordinate {
+                    field: SbgField::Value,
+                    bit,
+                })
                 .collect(),
-            outputs: vec![SbgCoordinate { field: SbgField::Meaning, bit: 0 }],
+            outputs: vec![SbgCoordinate {
+                field: SbgField::Meaning,
+                bit: 0,
+            }],
         }],
         1,
     )
@@ -388,7 +387,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     } else {
                         (None, 0)
                     };
-                    let exact = model.as_ref().is_some_and(|x| x.learned_monomials == true_terms);
+                    let exact = model
+                        .as_ref()
+                        .is_some_and(|x| x.learned_monomials == true_terms);
                     println!(
                         "A6_WL3_FROZEN,width={width},family={},seed={index},panel={panel},true_term_count={},recovered_terms={},structure_exact={exact},fit_error={fit_error:?},validation_errors={val_errors:?},validation_samples={val_samples},query_logical={},query_physical={},witness_attempts={},candidate_rejections={},mobius_certificates={},zero_residual_probes={},train_noise_flips={flipped},payload_bytes={},scratch_words={},fit_ms={fit_ms:.6},accepted={}",
                         family.name(),
@@ -405,9 +406,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                         val_errors == Some(0),
                     );
                     frozen.push(Frozen {
-                        width, family, index, noisy, original: original.clone(),
-                        true_terms: true_terms.clone(), model, fit_error,
-                        val_errors, val_samples, fit_ms, train_noise_flips: flipped,
+                        width,
+                        family,
+                        index,
+                        noisy,
+                        original: original.clone(),
+                        true_terms: true_terms.clone(),
+                        model,
+                        fit_error,
+                        val_errors,
+                        val_samples,
+                        fit_ms,
+                        train_noise_flips: flipped,
                     });
                 }
             }
@@ -448,14 +458,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             (None, None)
         };
-        let exact = row.model.as_ref().is_some_and(|m| m.learned_monomials == row.true_terms);
+        let exact = row
+            .model
+            .as_ref()
+            .is_some_and(|m| m.learned_monomials == row.true_terms);
         structural += usize::from(exact);
         validation_pass += usize::from(row.val_errors == Some(0));
         test_pass += usize::from(test_errors == Some(0));
         if exhaustive == Some(0) {
             exhaustive_pass += 1;
         }
-        let passed = exact && row.val_errors == Some(0) && test_errors == Some(0)
+        let passed = exact
+            && row.val_errors == Some(0)
+            && test_errors == Some(0)
             && (row.width != 8 || exhaustive == Some(0));
         println!(
             "A6_WL3_TEST,width={},family={},seed={},panel={panel},true_term_count={},recovered_terms={},structure_exact={exact},fit_error={:?},validation_errors={:?},validation_samples={},bit_disagreements={test_errors:?},test_samples={TEST_RANDOM},k8_exhaustive_errors={exhaustive:?},query_physical={},train_noise_flips={},fit_ms={:.6},oracle={}",
@@ -479,8 +494,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "A6_WL3_COMPLETE,policies=126,structure_exact={structural},validation_pass={validation_pass},zero_test={test_pass},negative_rejected={negatives_pass},k8_exhaustive_pass={exhaustive_pass},sbg_bit_disagreements={sbg_disagree}"
     );
-    if structural != 126 || validation_pass != 126 || test_pass != 126
-        || negatives_pass != 7 || exhaustive_pass != 18 || sbg_disagree != 0
+    if structural != 126
+        || validation_pass != 126
+        || test_pass != 126
+        || negatives_pass != 7
+        || exhaustive_pass != 18
+        || sbg_disagree != 0
     {
         return Err("A6-WL3 preregistered identification/rejection criteria failed".into());
     }
