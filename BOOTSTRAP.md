@@ -868,3 +868,45 @@ interacting monomials under explicit observability and resource
 constraints, then replay the fit inside true recurrent SBG/MOR/
 Delta-KV model loops with passive input streams and held-out tasks.
 Keep Rust-only and vendor software restrictions unchanged.
+
+## A6-WL2 selector-free sparse ANF support recovery — 2026-10-12
+
+The [pre-registered design](docs/A6-WL2-UNANCHORED-ANF-PREREGISTRATION.md)
+and [native scientific evidence](docs/RESULTS-A6-WL2-UNANCHORED-ANF.md)
+advance beyond A6-WL1's four PUBLIC selector positions. The new
+`anf_wide_unanchored_learn::fit_unanchored_disjoint_sparse` learns
+the **full unordered variable support** of four positive GF(2)
+ANF monomials **without a designated selector variable**.
+
+**Important identifiability correction:** choosing which factor
+of an AND is called a selector is unobservable from its truth table,
+because Boolean conjunction is commutative. Instead evaluate exact
+supports and autonomous held-out output bits.
+
+The learner's **strong announced prior** is four nonempty, positive,
+pairwise-DISJOINT monomials of degree 2..5 and an active membership
+oracle; an adaptive residual-positive witness is minimized by
+group-deletion to a degree-bounded monomial. It does NOT learn
+overlapping/negated terms, unknown number of monomials, or passive
+language sequence dependencies. TRAIN noise p=1/16 is controlled
+using **21 strict-majority observations** per logical query.
+
+The bounded k=8,16,32,64,128,256,1024 native experiment recovered
+**42/42 exact supports** across 21 distinct teacher structures
+(3 seeds×2 TRAIN panels), passed all 42 separate 544-case VAL panels
+and 42 independent-stage 4096-case TEST validations (0/172032
+prediction-bit disagreements), 6/6 exhaustive k8 truth tables,
+and rejected 7/7 targeted fifth high-degree AND controls. A truly
+**learned k1024 WideAnfGate** was inserted into the MOR-decision-
+selected WideAnfPageAtlas and passed 16/16 SBG output checks.
+On k1024 391.3 logical queries and 8218 physical noisy
+observations were measured on average. These are local synthetic
+membership callbacks, not production access to an interactive
+teacher of arbitrary tasks.
+
+Keep separate scientific gates for overlapping supports, multiple
+monomials interacting under XOR, passive/online learning, unknown
+sparse cardinality, native k4/k5 hidden recurrent gate discovery,
+MOR policy learning and bank-level SML-25B validation. The current
+API is purely Rust, retains the old engines and requires no
+proprietary NVIDIA software other than allowed GPU drivers.
