@@ -79,11 +79,7 @@ impl ResidentNGram {
         }
     }
 
-    fn distribution(
-        &self,
-        history: &[u8],
-        depth: usize,
-    ) -> Result<[f64; 256], HeapSwapError> {
+    fn distribution(&self, history: &[u8], depth: usize) -> Result<[f64; 256], HeapSwapError> {
         match self {
             Self::Full(model) => model
                 .distribution(history, depth)
@@ -256,11 +252,8 @@ impl HeapNGramRuntime {
         let train_events = events(source)?;
         let profile = NGramProfile::new(format, depth);
         let active = Box::new(ResidentNGram::fit(source, profile)?);
-        let initial = RepresentationState::new(
-            representation(profile)?,
-            1,
-            RepresentationEpoch::new(0),
-        );
+        let initial =
+            RepresentationState::new(representation(profile)?, 1, RepresentationEpoch::new(0));
         Ok(Self {
             train: source.to_vec(),
             active,
@@ -499,8 +492,7 @@ mod tests {
     fn fixture(seed: usize) -> Vec<u8> {
         (0..LANES)
             .flat_map(|lane| {
-                (0..40usize)
-                    .map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + seed) % 23) as u8)
+                (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + seed) % 23) as u8)
             })
             .collect()
     }
@@ -539,7 +531,10 @@ mod tests {
         assert_eq!(forward.pre_swap_probability_cells, 2 * LANES * 39 * 256);
         assert_eq!(forward.post_swap_probability_cells, 2 * LANES * 39 * 256);
         assert_eq!(runtime.active_profile().format, NGramFormat::SharedTrie);
-        assert_ne!(runtime.active.as_ref() as *const ResidentNGram, before_pointer);
+        assert_ne!(
+            runtime.active.as_ref() as *const ResidentNGram,
+            before_pointer
+        );
         assert_eq!(bits_at(&runtime, history), initial);
         assert!(!runtime.has_pending_transition());
 
@@ -659,13 +654,7 @@ mod tests {
         // for a subsequent actual successful switch.
         assert_eq!(
             runtime
-                .switch(
-                    &train,
-                    &probe,
-                    target,
-                    TransitionMechanism::Recompute,
-                    0
-                )
+                .switch(&train, &probe, target, TransitionMechanism::Recompute, 0)
                 .unwrap()
                 .epoch_after,
             1
@@ -687,8 +676,7 @@ mod tests {
                 0,
                 Inject::PoisonShadow
             ),
-            Err(HeapSwapError::ClassMismatch { .. })
-                | Err(HeapSwapError::ModelBuild(_))
+            Err(HeapSwapError::ClassMismatch { .. }) | Err(HeapSwapError::ModelBuild(_))
         ));
         assert_eq!(runtime.active.as_ref() as *const ResidentNGram, ptr);
         assert_eq!(runtime.epoch(), 0);
@@ -699,8 +687,8 @@ mod tests {
         let train = fixture(0);
         let probe = fixture(7);
         for depth in [0, 4, 7, 12, 32] {
-            let mut runtime = HeapNGramRuntime::fit(&train, depth, NGramFormat::FullSuffix)
-                .unwrap();
+            let mut runtime =
+                HeapNGramRuntime::fit(&train, depth, NGramFormat::FullSuffix).unwrap();
             let before = bits_at(&runtime, &probe[..39]);
             runtime
                 .switch(
