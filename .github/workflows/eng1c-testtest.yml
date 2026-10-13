@@ -1,0 +1,96 @@
+name: ENG-1c TESTTEST prospective multi-author confirmation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testtest-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  panel-language:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'research/eng1c-testtest-')
+    name: "TESTTEST independent ${{ matrix.language }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [FR, EN]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Registered protocol, paired inference and independent model oracles
+        run: |
+          test -s docs/ENG-1C-TESTTEST-PREREGISTRATION.md
+          bash -n scripts/eng1c/run-testtest.sh
+          cargo fmt --all -- --check
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib paired_panel
+          cargo test --locked -p sml-core --lib eng1c_val1_ladder
+          cargo test --locked -p sml-core --bin sml-eng1c-testtest
+          cargo build --locked --release -p sml-core --bin sml-eng1c-testtest
+      - name: Six admitted authors, DEV seal then TEST, no favorable-subset verdict
+        env:
+          TESTTEST_LANGUAGE: ${{ matrix.language }}
+        run: |
+          bash scripts/eng1c/run-testtest.sh "$RUNNER_TEMP/testtest" "$TESTTEST_LANGUAGE"
+          test "$(find "$RUNNER_TEMP/testtest/evidence" -name '*-test.tsv' | wc -l)" -eq 6
+      - name: Retain compact sealed evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: testtest-${{ matrix.language }}
+          path: ${{ runner.temp }}/testtest/evidence/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+  paired-panel:
+    needs: panel-language
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: testtest-*
+          path: ${{ runner.temp }}/panel
+          merge-multiple: true
+      - name: Verify complete checked panel and apply frozen scientific gate
+        env:
+          CARGO_INCREMENTAL: "0"
+          RUSTFLAGS: "-D warnings"
+        run: |
+          cargo build --locked --release -p sml-core --bin sml-eng1c-testtest
+          target/release/sml-eng1c-testtest analyze scripts/eng1c/testtest-manifest.tsv \
+            "$RUNNER_TEMP/panel" "$RUNNER_TEMP/panel/panel.tsv"
+          cat "$RUNNER_TEMP/panel/panel.tsv"
+          grep -Eq '^DECISION\s+(PANEL_CONFIRMATION_PASS|PANEL_SUPERIORITY_NOT_ESTABLISHED)\s' "$RUNNER_TEMP/panel/panel.tsv"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: testtest-complete-panel
+          path: ${{ runner.temp }}/panel/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
