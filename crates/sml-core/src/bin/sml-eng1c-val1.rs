@@ -4,18 +4,13 @@
 //! 2/4/8 share one immutable depth32 Witten-Bell store. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
-use std::{
-    error::Error,
-    fs,
-    path::Path,
-    time::Instant,
-};
+use std::{error::Error, fs, path::Path, time::Instant};
 
 use sml_core::{
     anf_char::{ChunkLayout, LANES},
     elastic_ngram_paged::{
-        build_paged, training_sha256, EvidenceDepthReadout, PagedBuild, PagedLimits,
-        PagedNGram, ENG1C_VAL_DEPTHS,
+        build_paged, training_sha256, EvidenceDepthReadout, PagedBuild, PagedLimits, PagedNGram,
+        ENG1C_VAL_DEPTHS,
     },
     elastic_ngram_paged_sha::hex,
 };
@@ -84,10 +79,7 @@ fn vmhwm_kib() -> Result<u64, Box<dyn Error>> {
     if fields.next() != Some("VmHWM:") {
         return Err("malformed VmHWM".into());
     }
-    let amount = fields
-        .next()
-        .ok_or("empty Linux VmHWM")?
-        .parse::<u64>()?;
+    let amount = fields.next().ok_or("empty Linux VmHWM")?.parse::<u64>()?;
     if amount == 0 || fields.next() != Some("kB") || fields.next().is_some() {
         return Err("invalid Linux process VmHWM".into());
     }
@@ -296,8 +288,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     let gated = best_index(&stats, 4..7);
     let selected = best_index(&stats, 0..7);
     let adaptive_gain = stats[fixed].bpb() - stats[gated].bpb();
-    let (gate_lo, gate_hi) =
-        paired_lane_interval(&stats[fixed], &stats[gated], lane_tokens);
+    let (gate_lo, gate_hi) = paired_lane_interval(&stats[fixed], &stats[gated], lane_tokens);
     let verdict = if adaptive_gain >= 0.01 && gate_lo > 0.0 {
         "PROVISIONAL_VAL_GAIN"
     } else {
@@ -371,8 +362,10 @@ mod tests {
         }
         assert_eq!(best_index(&stats, 0..4), 0);
         assert_eq!(best_index(&stats, 4..7), 4);
-        assert_eq!(paired_lane_interval(&stats[0], &stats[1], 39),
-                   paired_lane_interval(&stats[0], &stats[1], 39));
+        assert_eq!(
+            paired_lane_interval(&stats[0], &stats[1], 39),
+            paired_lane_interval(&stats[0], &stats[1], 39)
+        );
         assert_eq!(paired_lane_interval(&stats[0], &stats[0], 39), (0.0, 0.0));
         assert_eq!(frozen("FR").unwrap().val_events, 74_688);
         assert_eq!(frozen("EN").unwrap().val_events, 73_728);
