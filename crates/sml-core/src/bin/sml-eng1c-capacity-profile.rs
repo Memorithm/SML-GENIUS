@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn oracle_all_predeclared_depths_match_actual_immutable_ENG1b_fits() {
+    fn oracle_all_predeclared_depths_match_actual_immutable_eng1b_fits() {
         let corpus = fixture();
         for depth in DEPTH_LADDER {
             let candidate = inspect(&corpus, depth, Caps::default()).unwrap();
