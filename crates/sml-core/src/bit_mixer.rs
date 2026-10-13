@@ -6,6 +6,15 @@
 //! refines the result with an adaptive probability map. Everything learns
 //! while coding: there is no frozen TRAIN count table.
 //!
+//! [`Architecture::V4`] (`bmx-v4`, the default) adds two things to the
+//! classic `bmx-v2`/`bmx-v3` design, at the same table memory:
+//! * collision-checked context slots: each slot stores 5 check bits of its
+//!   context hash; a slot whose check differs is read as unseen and reset on
+//!   update, instead of lending another context's statistics;
+//! * three mixer weight sets, selected by the partial byte, by the previous
+//!   byte × match state, and by the classes (bits 7-5) of the two previous
+//!   bytes × bit position, combined by a small learned final mixer.
+//!
 //! Determinism: integer arithmetic only (no floating point anywhere in the
 //! prediction or update path), fixed hash functions and fixed table sizes.
 //! Two predictors built with the same [`MixerConfig`] and fed the same bits
@@ -75,6 +84,26 @@ impl SideInputs {
     }
 }
 
+/// Predictor architecture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Architecture {
+    /// One weight set selected by the partial byte, unchecked slots
+    /// (`bmx-v2` / `bmx-v3`).
+    Classic,
+    /// Collision-checked slots and three weight sets with a learned final
+    /// mixer (`bmx-v4`).
+    V4,
+}
+
+/// Number of check bits stored in each `bmx-v4` context slot.
+const CHECK_BITS: u32 = 5;
+const CHECK_MASK: u32 = (1 << CHECK_BITS) - 1;
+/// Weight sets of the `bmx-v4` mixer: partial byte, previous byte × match
+/// state, byte classes of t-1 and t-2 × bit position.
+const SETS_V4: [usize; 3] = [256, 256 * 4, 8 * 8 * 8];
+/// Final-mixer inputs: the three set outputs and a bias.
+const FINAL_INPUTS: usize = SETS_V4.len() + 1;
+
 /// Which Boolean mask contexts the predictor uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskSet {
@@ -82,11 +111,6 @@ pub enum MaskSet {
     None,
     /// The frozen [`V3_MASKS`].
     V3,
-}
-
-impl MaskSet {
-    /// Every released mask set, newest first (for decoding by identity).
-    pub const RELEASED: [Self; 2] = [Self::V3, Self::None];
 }
 
 impl MaskSet {
@@ -143,6 +167,8 @@ pub struct MixerConfig {
     pub mixer_rate: i32,
     /// Boolean mask contexts.
     pub mask_set: MaskSet,
+    /// Mixer architecture.
+    pub architecture: Architecture,
 }
 
 impl Default for MixerConfig {
@@ -153,11 +179,28 @@ impl Default for MixerConfig {
             counter_limit: 127,
             mixer_rate: 6,
             mask_set: MaskSet::V3,
+            architecture: Architecture::V4,
         }
     }
 }
 
 impl MixerConfig {
+    /// Every released configuration, newest first: `bmx-v4`, `bmx-v3`,
+    /// `bmx-v2` (for decoding a container by its stored identity).
+    #[must_use]
+    pub fn released() -> [Self; 3] {
+        let v4 = Self::default();
+        let v3 = Self {
+            architecture: Architecture::Classic,
+            ..v4
+        };
+        let v2 = Self {
+            mask_set: MaskSet::None,
+            ..v3
+        };
+        [v4, v3, v2]
+    }
+
     /// Stable text identity, recorded in coded containers.
     #[must_use]
     pub fn label(&self) -> String {
@@ -171,12 +214,17 @@ impl MixerConfig {
             "orders=1,2,3,4,6,8+word+o0+match;table_bits={};match_bits={};limit={};rate={}",
             self.table_bits, self.match_bits, self.counter_limit, self.mixer_rate
         );
-        // Without masks the identity is byte-identical to the released
-        // bmx-v2 label, so existing containers stay decodable.
-        if masks.is_empty() {
-            format!("bmx-v2:{base}")
-        } else {
-            format!("bmx-v3:{base};masks={}", masks_label(masks))
+        // Classic identities are byte-identical to the released bmx-v2 and
+        // bmx-v3 labels, so existing containers stay decodable.
+        match (self.architecture, masks.is_empty()) {
+            (Architecture::Classic, true) => format!("bmx-v2:{base}"),
+            (Architecture::Classic, false) => {
+                format!("bmx-v3:{base};masks={}", masks_label(masks))
+            }
+            (Architecture::V4, _) => format!(
+                "bmx-v4:{base};masks={};check_bits={CHECK_BITS};sets=c0,c1xmatch,class2xbit;final=learned",
+                masks_label(masks)
+            ),
         }
     }
 
@@ -184,6 +232,8 @@ impl MixerConfig {
         (10..=24).contains(&self.table_bits)
             && (10..=24).contains(&self.match_bits)
             && (1..=1023).contains(&self.counter_limit)
+            // Checked slots store a 7-bit count.
+            && (self.architecture == Architecture::Classic || self.counter_limit <= 127)
             && (1..=1024).contains(&self.mixer_rate)
     }
 }
@@ -270,6 +320,31 @@ impl CounterTable {
         self.slots[index & self.mask] & 1023
     }
 
+    /// Checked slot layout (`bmx-v4`): 20-bit probability << 12 | 7-bit
+    /// count << 5 | 5 check bits. Returns `(p12, count)`; a slot holding
+    /// another check value reads as unseen.
+    fn p_checked(&self, index: usize, check: u32) -> (i32, u32) {
+        let slot = self.slots[index & self.mask];
+        if slot & CHECK_MASK != check {
+            return (2048, 0);
+        }
+        ((slot >> 20) as i32, (slot >> CHECK_BITS) & 127)
+    }
+
+    fn update_checked(&mut self, index: usize, check: u32, bit: bool, limit: u32) {
+        let slot = &mut self.slots[index & self.mask];
+        if *slot & CHECK_MASK != check {
+            *slot = (1 << 31) | check;
+        }
+        let limit = limit.min(127);
+        let n = (*slot >> CHECK_BITS) & 127;
+        let p = i64::from(*slot >> 12);
+        let target = if bit { (1i64 << 20) - 1 } else { 0 };
+        let p = (p + (((target - p) * reciprocal(n)) >> 16)).clamp(0, (1 << 20) - 1);
+        let n = if n < limit { n + 1 } else { limit };
+        *slot = ((p as u32) << 12) | (n << CHECK_BITS) | check;
+    }
+
     fn update(&mut self, index: usize, bit: bool, limit: u32) {
         let slot = &mut self.slots[index & self.mask];
         let n = *slot & 1023;
@@ -327,6 +402,24 @@ fn hash(a: u32, b: u32) -> u32 {
     h ^ (h >> 13)
 }
 
+/// Dot product of `inputs` with weight row `row` of `weights`.
+fn dot_row(inputs: &[i32], weights: &[i32], row: usize) -> i64 {
+    let n = inputs.len();
+    inputs
+        .iter()
+        .zip(&weights[row * n..(row + 1) * n])
+        .map(|(&x, &w)| i64::from(x) * i64::from(w))
+        .sum()
+}
+
+/// One gradient step on weight row `row` for scaled error `err`.
+fn train_row(weights: &mut [i32], inputs: &[i32], row: usize, err: i32) {
+    let n = inputs.len();
+    for (w, &x) in weights[row * n..(row + 1) * n].iter_mut().zip(inputs) {
+        *w = w.saturating_add(((i64::from(x) * i64::from(err) + 0x2000) >> 14) as i32);
+    }
+}
+
 // ------------------------------------------------------------- predictor
 
 /// The adaptive Boolean predictor. Feed it bits in coding order.
@@ -355,7 +448,6 @@ pub struct BitMixer {
     side_adapter: Apm,
     side_slot: usize,
     n_hashed: usize,
-    n_inputs: usize,
     byte_hashes: Vec<u32>,
     word_hash: u32,
     c0: u32,
@@ -363,6 +455,16 @@ pub struct BitMixer {
     // per-bit state
     inputs: Vec<i32>,
     slots: Vec<usize>,
+    /// Check values of the current slots (`bmx-v4`).
+    checks: Vec<u32>,
+    /// `bmx-v4` extra weight sets (empty for the classic architecture).
+    extra_weights: [Vec<i32>; 2],
+    /// Selected row of each `bmx-v4` weight set.
+    selectors: [usize; 3],
+    /// Stretched output and probability of each `bmx-v4` weight set.
+    set_out: [i32; 3],
+    set_p: [i32; 3],
+    final_weights: Vec<i32>,
     match_slot: usize,
     mixer_p: i32,
     final_p: i32,
@@ -460,19 +562,40 @@ impl BitMixer {
             side_adapter: Apm::new(CONFIDENCE_BUCKETS),
             side_slot: 0,
             n_hashed,
-            n_inputs,
             byte_hashes: vec![0; n_hashed],
             word_hash: 0,
             c0: 1,
             bit_pos: 0,
             inputs: vec![0; n_inputs],
             slots: vec![0; n_hashed],
+            checks: vec![0; n_hashed],
+            extra_weights: match config.architecture {
+                Architecture::Classic => [Vec::new(), Vec::new()],
+                Architecture::V4 => [
+                    vec![0; SETS_V4[1] * n_inputs],
+                    vec![0; SETS_V4[2] * n_inputs],
+                ],
+            },
+            selectors: [0; 3],
+            set_out: [0; 3],
+            set_p: [2048; 3],
+            final_weights: match config.architecture {
+                Architecture::Classic => Vec::new(),
+                // Start as the plain average of the three sets, no bias.
+                Architecture::V4 => (0..256 * FINAL_INPUTS)
+                    .map(|i| if i % FINAL_INPUTS < 3 { 21_845 } else { 0 })
+                    .collect(),
+            },
             match_slot: 0,
             mixer_p: 2048,
             final_p: 2048,
         };
         let initial = (1 << 16) / n_inputs as i32;
-        for w in &mut mixer.weights {
+        for w in mixer
+            .weights
+            .iter_mut()
+            .chain(mixer.extra_weights.iter_mut().flatten())
+        {
             *w = initial;
         }
         mixer.predict();
@@ -513,10 +636,19 @@ impl BitMixer {
 
     fn predict(&mut self) {
         let c0 = self.c0;
+        let checked = self.config.architecture == Architecture::V4;
         for (i, slot) in self.slots.iter_mut().enumerate() {
-            *slot = hash(self.byte_hashes[i], c0) as usize;
-            let raw = self.tables[i].p(*slot);
-            let bucket = confidence_bucket(self.tables[i].count(*slot));
+            let h = hash(self.byte_hashes[i], c0);
+            *slot = h as usize;
+            let (raw, count) = if checked {
+                // Check bits come from the top of the hash; the slot index
+                // uses at most the low 24 bits.
+                self.checks[i] = (h >> (32 - CHECK_BITS)) & CHECK_MASK;
+                self.tables[i].p_checked(*slot, self.checks[i])
+            } else {
+                (self.tables[i].p(*slot), self.tables[i].count(*slot))
+            };
+            let bucket = confidence_bucket(count);
             let adapted = self.adapters[i].refine(raw, bucket, &self.logistic);
             self.inputs[i] = self.logistic.stretch(adapted.clamp(1, 4095));
         }
@@ -555,20 +687,48 @@ impl BitMixer {
                 self.logistic.stretch(adapted.clamp(1, 4095))
             };
         }
-        let base = c0 as usize * self.n_inputs;
-        let dot: i64 = self
-            .inputs
-            .iter()
-            .zip(&self.weights[base..base + self.n_inputs])
-            .map(|(&x, &w)| i64::from(x) * i64::from(w))
-            .sum();
-        self.mixer_p = squash((dot >> 16) as i32).clamp(1, 4095);
         let c1 = usize::from(self.history.last().copied().unwrap_or(0));
         let c2 = usize::from(if self.history.len() >= 2 {
             self.history[self.history.len() - 2]
         } else {
             0
         });
+        let dot = dot_row(&self.inputs, &self.weights, c0 as usize);
+        match self.config.architecture {
+            Architecture::Classic => {
+                self.mixer_p = squash((dot >> 16) as i32).clamp(1, 4095);
+            }
+            Architecture::V4 => {
+                let match_state = match (self.match_slot != usize::MAX, self.match_len) {
+                    (false, _) => 0,
+                    (true, 0..=15) => 1,
+                    (true, 16..=31) => 2,
+                    _ => 3,
+                };
+                self.selectors = [
+                    c0 as usize,
+                    (c1 << 2) | match_state,
+                    ((c2 >> 5) << 6) | ((c1 >> 5) << 3) | self.bit_pos as usize,
+                ];
+                let dots = [
+                    dot,
+                    dot_row(&self.inputs, &self.extra_weights[0], self.selectors[1]),
+                    dot_row(&self.inputs, &self.extra_weights[1], self.selectors[2]),
+                ];
+                for ((out, p), dot) in self.set_out.iter_mut().zip(&mut self.set_p).zip(dots) {
+                    *out = ((dot >> 16) as i32).clamp(-2047, 2047);
+                    *p = squash(*out).clamp(1, 4095);
+                }
+                let row = &self.final_weights[c0 as usize * FINAL_INPUTS..][..FINAL_INPUTS];
+                let final_in = [self.set_out[0], self.set_out[1], self.set_out[2], 256];
+                let d: i64 = final_in
+                    .iter()
+                    .zip(row)
+                    .map(|(&x, &w)| i64::from(x) * i64::from(w))
+                    .sum();
+                self.mixer_p = squash(((d >> 16) as i32).clamp(-2047, 2047)).clamp(1, 4095);
+            }
+        }
         let a1 = self
             .apm_order1
             .refine(self.mixer_p, (c1 << 8) | c0 as usize, &self.logistic);
@@ -581,17 +741,41 @@ impl BitMixer {
     pub fn update(&mut self, bit: bool) {
         let limit = self.config.counter_limit;
         // Mixer.
-        let err = ((i32::from(bit) << 12) - self.mixer_p) * self.config.mixer_rate;
-        let base = self.c0 as usize * self.n_inputs;
-        for (w, &x) in self.weights[base..base + self.n_inputs]
-            .iter_mut()
-            .zip(&self.inputs)
-        {
-            *w = w.saturating_add(((i64::from(x) * i64::from(err) + 0x2000) >> 14) as i32);
+        let rate = self.config.mixer_rate;
+        let target = i32::from(bit) << 12;
+        match self.config.architecture {
+            Architecture::Classic => {
+                let err = (target - self.mixer_p) * rate;
+                train_row(&mut self.weights, &self.inputs, self.c0 as usize, err);
+            }
+            Architecture::V4 => {
+                let err = (target - self.set_p[0]) * rate;
+                train_row(&mut self.weights, &self.inputs, self.selectors[0], err);
+                for ((weights, &row), &p) in self
+                    .extra_weights
+                    .iter_mut()
+                    .zip(&self.selectors[1..])
+                    .zip(&self.set_p[1..])
+                {
+                    train_row(weights, &self.inputs, row, (target - p) * rate);
+                }
+                let final_in = [self.set_out[0], self.set_out[1], self.set_out[2], 256];
+                let err = (target - self.mixer_p) * 2;
+                let row =
+                    &mut self.final_weights[self.selectors[0] * FINAL_INPUTS..][..FINAL_INPUTS];
+                for (w, &x) in row.iter_mut().zip(&final_in) {
+                    *w = w.saturating_add(((i64::from(x) * i64::from(err) + 0x2000) >> 14) as i32);
+                }
+            }
         }
         // Counters and maps.
+        let checked = self.config.architecture == Architecture::V4;
         for (i, &slot) in self.slots.iter().enumerate() {
-            self.tables[i].update(slot, bit, limit);
+            if checked {
+                self.tables[i].update_checked(slot, self.checks[i], bit, limit);
+            } else {
+                self.tables[i].update(slot, bit, limit);
+            }
             self.adapters[i].update(bit);
         }
         self.order0.update(self.c0 as usize, bit, limit);
@@ -852,10 +1036,12 @@ mod tests {
         let data = text(30_000);
         let v2 = MixerConfig {
             mask_set: MaskSet::None,
+            architecture: Architecture::Classic,
             ..small()
         };
         let v3 = MixerConfig {
             mask_set: MaskSet::V3,
+            architecture: Architecture::Classic,
             ..small()
         };
         assert_eq!(V3_MASKS.len(), 2);
@@ -905,13 +1091,26 @@ mod tests {
                 mixer_rate: 0,
                 ..MixerConfig::default()
             },
+            // bmx-v4 slots hold a 7-bit count.
+            MixerConfig {
+                counter_limit: 128,
+                ..MixerConfig::default()
+            },
         ] {
             assert!(BitMixer::try_new(bad).is_err());
         }
-        let v2 = MixerConfig {
-            mask_set: MaskSet::None,
-            ..MixerConfig::default()
-        };
+        let [v4, v3, v2] = MixerConfig::released();
+        assert!(BitMixer::try_new(MixerConfig {
+            counter_limit: 128,
+            ..v3
+        })
+        .is_ok());
+        assert_eq!(v4, MixerConfig::default());
+        assert!(v4.label().starts_with("bmx-v4:") && v4.label().contains(";check_bits=5;"));
+        assert_eq!(
+            v3.label(),
+            "bmx-v3:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6;masks=e0e0e0e0e0e0e0e0,ffe0e0e0e0e00000"
+        );
         assert_eq!(
             v2.label(),
             "bmx-v2:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6"
@@ -921,6 +1120,63 @@ mod tests {
         assert_eq!(BitMixer::new(v2).side_table.slots.len(), 2);
         assert!(
             BitMixer::try_with_masks(v2, &[[0xFF, 0, 0, 0, 0, 0, 0, 0]; MAX_MASKS + 1]).is_err()
+        );
+    }
+    #[test]
+    fn checked_slots_isolate_colliding_contexts() {
+        let mut table = CounterTable::new(10);
+        // Same slot index, two different check values.
+        let (a, b) = (5u32, 17u32);
+        for _ in 0..40 {
+            table.update_checked(3, a, true, 127);
+        }
+        let (p, n) = table.p_checked(3, a);
+        assert!(p > 3900 && n == 40, "{p} {n}");
+        // The other context reads the slot as unseen, not as a confident 1.
+        assert_eq!(table.p_checked(3, b), (2048, 0));
+        // Its first update replaces the slot.
+        table.update_checked(3, b, false, 127);
+        let (p, n) = table.p_checked(3, b);
+        assert!(p < 2048 && n == 1, "{p} {n}");
+        assert_eq!(table.p_checked(3, a), (2048, 0));
+        // Counts saturate at the 7-bit limit.
+        for _ in 0..300 {
+            table.update_checked(4, a, true, 127);
+        }
+        assert_eq!(table.p_checked(4, a).1, 127);
+    }
+
+    #[test]
+    fn v4_mixer_changes_predictions_round_trips_and_binds_identity() {
+        let data = text(30_000);
+        let v4 = small();
+        let v3 = MixerConfig {
+            architecture: Architecture::Classic,
+            ..v4
+        };
+        assert_eq!(v4.architecture, Architecture::V4);
+        let mut a = BitMixer::new(v3);
+        let mut b = BitMixer::new(v4);
+        let mut differ = 0usize;
+        for &byte in &data[..2_000] {
+            for shift in (0..8).rev() {
+                differ += usize::from(a.p12() != b.p12());
+                let bit = (byte >> shift) & 1 == 1;
+                a.update(bit);
+                b.update(bit);
+            }
+        }
+        assert!(differ > 8_000, "v4 must change predictions ({differ})");
+        let id = v4.label();
+        let encoded = encode_with_predictor(&data, id.as_bytes(), &mut BitMixer::new(v4)).unwrap();
+        assert!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v3))
+                .is_err()
+        );
+        assert_eq!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v4))
+                .unwrap(),
+            data
         );
     }
 }

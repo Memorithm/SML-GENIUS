@@ -25,7 +25,7 @@ use std::{
 };
 
 use sml_core::{
-    bit_mixer::{BitMixer, MaskSet, MixerConfig},
+    bit_mixer::{BitMixer, MixerConfig},
     bool_coder::{
         container_model_id, decode_bytes, decode_with_predictor, encode_bytes,
         encode_with_predictor, CoderError,
@@ -256,16 +256,10 @@ fn decode_mix(args: &[String]) -> Result<()> {
     let container = read(Path::new(&args[3]))?;
     let stored = container_model_id(&container)?;
     // Select the released configuration whose identity the container
-    // carries, so older (bmx-v2) archives remain decodable.
-    let (config, id) = MaskSet::RELEASED
-        .iter()
-        .map(|&mask_set| {
-            let config = MixerConfig {
-                mask_set,
-                ..MixerConfig::default()
-            };
-            (config, mix_id(&prime, config))
-        })
+    // carries, so older (bmx-v2, bmx-v3) archives remain decodable.
+    let (config, id) = MixerConfig::released()
+        .into_iter()
+        .map(|config| (config, mix_id(&prime, config)))
         .find(|(_, id)| id.as_slice() == stored)
         .ok_or("PRIME or mixer configuration differs from the one used to encode")?;
     let started = Instant::now();
@@ -319,6 +313,10 @@ mod tests {
     /// 1fdb900) for `golden_text()` without priming.
     const BMX_V2_GOLDEN: &[u8] = include_bytes!("../../tests/fixtures/bmx-v2-golden.bmx");
 
+    /// Container written by the released bmx-v3 `encode-mix` (main at
+    /// e89dcd6) for `golden_text()` without priming.
+    const BMX_V3_GOLDEN: &[u8] = include_bytes!("../../tests/fixtures/bmx-v3-golden.bmx");
+
     fn golden_text() -> Vec<u8> {
         (0..800)
             .flat_map(|k: u32| {
@@ -345,13 +343,34 @@ mod tests {
         .unwrap();
         assert_eq!(fs::read(&out).unwrap(), golden_text());
         // The v2 configuration still produces the released bytes exactly.
-        let v2 = MixerConfig {
-            mask_set: MaskSet::None,
-            ..MixerConfig::default()
-        };
+        let v2 = MixerConfig::released()[2];
         let mut mixer = BitMixer::try_new(v2).unwrap();
         let encoded = encode_with_predictor(&golden_text(), &mix_id(&[], v2), &mut mixer).unwrap();
         assert_eq!(encoded.container, BMX_V2_GOLDEN);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn released_bmx_v3_containers_still_decode_and_v3_encoding_is_unchanged() {
+        let root = std::env::temp_dir().join(format!("bmx3-golden-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let s = |p: &Path| p.display().to_string();
+        let packed = root.join("golden.bmx");
+        let out = root.join("golden.txt");
+        fs::write(&packed, BMX_V3_GOLDEN).unwrap();
+        run(&[
+            "x".into(),
+            "decode-mix".into(),
+            "-".into(),
+            s(&packed),
+            s(&out),
+        ])
+        .unwrap();
+        assert_eq!(fs::read(&out).unwrap(), golden_text());
+        let v3 = MixerConfig::released()[1];
+        let mut mixer = BitMixer::try_new(v3).unwrap();
+        let encoded = encode_with_predictor(&golden_text(), &mix_id(&[], v3), &mut mixer).unwrap();
+        assert_eq!(encoded.container, BMX_V3_GOLDEN);
         fs::remove_dir_all(root).unwrap();
     }
 

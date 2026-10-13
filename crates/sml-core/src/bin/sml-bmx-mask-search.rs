@@ -14,7 +14,7 @@
 use std::{error::Error, fs, sync::Arc, thread};
 
 use sml_core::{
-    bit_mixer::{masks_label, BitMixer, ByteMask, MaskSet, MixerConfig, MAX_MASKS},
+    bit_mixer::{masks_label, Architecture, BitMixer, ByteMask, MaskSet, MixerConfig, MAX_MASKS},
     bool_coder::BitPredictor,
 };
 
@@ -87,6 +87,9 @@ fn run(args: &[String]) -> Result<()> {
     let config = MixerConfig {
         table_bits: args[1].parse()?,
         mask_set: MaskSet::None,
+        // The frozen V3_MASKS were searched with the classic mixer; keep it
+        // so a rerun reproduces them.
+        architecture: Architecture::Classic,
         ..MixerConfig::default()
     };
     let rounds: usize = args[2].parse()?;
@@ -208,6 +211,7 @@ mod tests {
             table_bits: 16,
             match_bits: 12,
             mask_set: MaskSet::None,
+            architecture: Architecture::Classic,
             ..MixerConfig::default()
         };
         let sets = vec![(Vec::new(), data)];
