@@ -4,6 +4,7 @@
 //! 2/4/8 share one immutable depth32 Witten-Bell store.
 //! Explicit --explore-counts-16-32 adds post-hoc 16/32 arms on exposed VAL.
 //! --explore-counts-64-128 adds two further exploratory arms (eleven total).
+//! --explore-counts-256-512 selects thirteen arms, --explore-counts-1024 fourteen.
 //! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
@@ -18,7 +19,7 @@ use sml_core::{
     elastic_ngram_paged_sha::hex,
 };
 
-const POLICY_NAMES: [&str; 11] = [
+const POLICY_NAMES: [&str; 14] = [
     "FIXED_4",
     "FIXED_7",
     "FIXED_12",
@@ -30,8 +31,11 @@ const POLICY_NAMES: [&str; 11] = [
     "MIN_COUNT_32",
     "MIN_COUNT_64",
     "MIN_COUNT_128",
+    "MIN_COUNT_256",
+    "MIN_COUNT_512",
+    "MIN_COUNT_1024",
 ];
-const EVIDENCE_MIN_COUNTS: [u64; 7] = [2, 4, 8, 16, 32, 64, 128];
+const EVIDENCE_MIN_COUNTS: [u64; 10] = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
 const FROZEN_POLICIES: usize = 7;
 const BOOTSTRAP_REPETITIONS: usize = 2048;
 const BOOTSTRAP_SEED: u64 = 0xE1C5_2026_1013_B001;
@@ -41,6 +45,8 @@ enum EvaluationMode {
     Frozen,
     Explore16_32,
     Explore64_128,
+    Explore256_512,
+    Explore1024,
 }
 
 impl EvaluationMode {
@@ -48,6 +54,8 @@ impl EvaluationMode {
         match flag {
             Some("--explore-counts-16-32") => Self::Explore16_32,
             Some("--explore-counts-64-128") => Self::Explore64_128,
+            Some("--explore-counts-256-512") => Self::Explore256_512,
+            Some("--explore-counts-1024") => Self::Explore1024,
             _ => Self::Frozen,
         }
     }
@@ -56,7 +64,9 @@ impl EvaluationMode {
         match self {
             Self::Frozen => FROZEN_POLICIES,
             Self::Explore16_32 => 9,
-            Self::Explore64_128 => POLICY_NAMES.len(),
+            Self::Explore64_128 => 11,
+            Self::Explore256_512 => 13,
+            Self::Explore1024 => POLICY_NAMES.len(),
         }
     }
 
@@ -65,6 +75,8 @@ impl EvaluationMode {
             Self::Frozen => "ENG1C_VAL1",
             Self::Explore16_32 => "ENG1C_VAL1_X16_32",
             Self::Explore64_128 => "ENG1C_VAL1_X64_128",
+            Self::Explore256_512 => "ENG1C_VAL1_X256_512",
+            Self::Explore1024 => "ENG1C_VAL1_X1024",
         }
     }
 }
@@ -287,7 +299,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -391,7 +403,7 @@ mod tests {
 
     #[test]
     fn exploratory_threshold_boundaries_are_inclusive_and_monotone() {
-        for threshold in [16, 32, 64, 128] {
+        for threshold in [16, 32, 64, 128, 256, 512, 1024] {
             assert_eq!(
                 evidence_choice(&fabricated([99, threshold - 1, 0, 0]), threshold),
                 0
@@ -421,7 +433,8 @@ mod tests {
     fn exploratory_scoring_preserves_original_seven_arms_on_real_store() {
         let root = std::env::temp_dir().join(format!("sml-val1-x1632-{}", std::process::id()));
         fs::create_dir(&root).unwrap();
-        let train = b"abcdefghabcdefghabcdefghabcdefghabcdefghabcdefgh".repeat(LANES);
+        // Enough repeated TRAIN contexts to exercise the 1024-occurrence arm.
+        let train = b"abcdefghabcdefghabcdefghabcdefghabcdefghabcdefgh".repeat(LANES * 4);
         let val = b"abcdefghabcdefgh".repeat(LANES);
         let source = training_sha256(&train);
         let store = root.join("store");
@@ -446,6 +459,19 @@ mod tests {
         assert_eq!(original.len(), 7);
         assert_eq!(exploratory.len(), 9);
         assert_eq!(expanded.len(), 11);
+        let stage1 =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore256_512).unwrap();
+        let stage2 = evaluate_val(&mut model, &val, events, EvaluationMode::Explore1024).unwrap();
+        assert_eq!(stage1.len(), 13);
+        assert_eq!(stage2.len(), 14);
+        for previous in [&original, &exploratory, &expanded, &stage1] {
+            for (a, b) in previous.iter().zip(&stage2) {
+                assert_eq!(a.lane_bits, b.lane_bits);
+                assert_eq!(a.tokens, b.tokens);
+                assert_eq!(a.correct, b.correct);
+                assert_eq!(a.selected_depths, b.selected_depths);
+            }
+        }
         for (a, b) in exploratory.iter().zip(&expanded) {
             assert_eq!(a.lane_bits, b.lane_bits);
             assert_eq!(a.tokens, b.tokens);
@@ -457,7 +483,7 @@ mod tests {
             assert_eq!(a.correct, b.correct);
             assert_eq!(a.selected_depths, b.selected_depths);
         }
-        for row in &expanded[7..] {
+        for row in &stage2[7..] {
             assert_eq!(row.tokens, events);
             assert_eq!(row.selected_depths.iter().sum::<u64>(), events);
             assert!(row.selected_depths[2] + row.selected_depths[3] > 0);

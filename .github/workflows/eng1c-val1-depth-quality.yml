@@ -76,11 +76,11 @@ jobs:
           verdicts='PROVISIONAL_VAL_GAIN|VAL_STOP_NOT_PROVEN'
           quality_source=VAL_ONLY
           if [[ "$VAL_EXPLORATORY" == true ]]; then
-            test -s docs/ENG-1C-VAL1-X64-128-EXPLORATORY-PROTOCOL.md
-            exploration_args=(--explore-counts-64-128)
-            prefix=ENG1C_VAL1_X64_128
-            policies=11
-            arms="$arms MIN_COUNT_16 MIN_COUNT_32 MIN_COUNT_64 MIN_COUNT_128"
+            test -s docs/ENG-1C-VAL1-X256-512-1024-EXPLORATORY-PROTOCOL.md
+            exploration_args=(--explore-counts-1024)
+            prefix=ENG1C_VAL1_X1024
+            policies=14
+            arms="$arms MIN_COUNT_16 MIN_COUNT_32 MIN_COUNT_64 MIN_COUNT_128 MIN_COUNT_256 MIN_COUNT_512 MIN_COUNT_1024"
             verdicts='EXPLORATORY_VAL_GAIN|EXPLORATORY_VAL_STOP_NOT_PROVEN'
             quality_source=EXPOSED_VAL_EXPLORATORY
           fi
