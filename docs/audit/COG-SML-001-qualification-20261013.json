@@ -1,0 +1,40 @@
+{
+  "schema": "memorithm.audit-proof.v1",
+  "finding": "COG-SML-001",
+  "repository": "Memorithm/SML-GENIUS",
+  "status": "technical_candidate_waiting_exact_CI_and_review_production_ACL_unqualified",
+  "observed_at": "2026-10-13T18:56:50.557Z",
+  "base_sha": "618549cee0fd0981a5fe7f6ad36efec6ae1628ca",
+  "candidate": {
+    "sha": "f7c242ab1507c8014a924afcd8853dad9b910c17",
+    "tree": "cd6b372df58714dc3993880f221711d2bb68cca3",
+    "branch": "audit/cog-sml-001-authenticated-weight-admission"
+  },
+  "pull_request": 559,
+  "authentication_owner": "Memorithm/SciRust-Verify@662a30dc774dd19c68a79bed3889036a91930123",
+  "local_validation": {
+    "workspace_passed": 1505,
+    "failed": 0,
+    "workspace_ignored_owner_test": 1,
+    "explicit_live_owner_test_passed": 1,
+    "fmt": "success",
+    "locked_all_targets_clippy": "success",
+    "test_environment": "Rust1.89; incremental/debug symbols disabled in fresh target after disk exhaustion; assertion/optimization levels unchanged",
+    "qualified_base": "618549cee0fd0981a5fe7f6ad36efec6ae1628ca"
+  },
+  "scope": {
+    "actual_SSHSIG_authentication": true,
+    "independent_fixture_ACL": true,
+    "exact_code_release_publisher_and_byte_binding": true,
+    "immutable_RAM_commit_after_disk_tampering": true,
+    "production_publisher_ACL": false,
+    "actual_external_distribution_consumer": false,
+    "scientific_qualification": "not_evaluated",
+    "merge_authorization": false
+  },
+  "acceptance": {
+    "closure": false,
+    "reason": "A development signer and separate admission gate do not qualify organizational production publisher ACL or an external consumer."
+  },
+  "private_docs": "docs/EXTERNAL-WEIGHT-ADMISSION.md"
+}
