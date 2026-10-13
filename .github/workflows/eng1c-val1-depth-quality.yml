@@ -76,11 +76,11 @@ jobs:
           verdicts='PROVISIONAL_VAL_GAIN|VAL_STOP_NOT_PROVEN'
           quality_source=VAL_ONLY
           if [[ "$VAL_EXPLORATORY" == true ]]; then
-            test -s docs/ENG-1C-VAL1-X256-512-1024-EXPLORATORY-PROTOCOL.md
-            exploration_args=(--explore-counts-1024)
-            prefix=ENG1C_VAL1_X1024
-            policies=14
-            arms="$arms MIN_COUNT_16 MIN_COUNT_32 MIN_COUNT_64 MIN_COUNT_128 MIN_COUNT_256 MIN_COUNT_512 MIN_COUNT_1024"
+            test -s docs/ENG-1C-VAL1-LANG-FR140-EN75-EXPLORATORY-PROTOCOL.md
+            exploration_args=(--explore-language-counts-140-75)
+            prefix=ENG1C_VAL1_LANG140_75
+            policies=15
+            arms="$arms MIN_COUNT_16 MIN_COUNT_32 MIN_COUNT_64 MIN_COUNT_128 MIN_COUNT_256 MIN_COUNT_512 MIN_COUNT_1024 LANG_COUNT_FR140_EN75"
             verdicts='EXPLORATORY_VAL_GAIN|EXPLORATORY_VAL_STOP_NOT_PROVEN'
             quality_source=EXPOSED_VAL_EXPLORATORY
           fi
@@ -121,6 +121,11 @@ jobs:
           done
           grep -Eq "^${prefix}_DECISION,language=(FR|EN),.*adaptive_science=($verdicts),test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS$" "$root/evidence/val-policies.txt"
           grep -Eq "^${prefix}_META,language=(FR|EN),.*quality_source=$quality_source,integrity=PASS$" "$root/evidence/val-policies.txt"
+          if [[ "$VAL_EXPLORATORY" == true ]]; then
+            expected_count=140
+            if [[ "$VAL_LANGUAGE" == EN ]]; then expected_count=75; fi
+            grep -Eq "^${prefix}_META,language=$VAL_LANGUAGE,.*language_min_count=$expected_count," "$root/evidence/val-policies.txt"
+          fi
           ( cd "$root/evidence" && sha256sum source-identity.txt val-policies.txt > manifest.sha256 )
           echo 'ENG1C_VAL1_SCIENCE_NEGATIVE_RESULT_ALLOWED=TRUE' >> "$root/evidence/environment.txt"
           echo 'ENG1C_VAL1_NO_MODEL_MUTATION_ON_VAL=TRUE' >> "$root/evidence/environment.txt"

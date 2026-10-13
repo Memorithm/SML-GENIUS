@@ -5,6 +5,7 @@
 //! Explicit --explore-counts-16-32 adds post-hoc 16/32 arms on exposed VAL.
 //! --explore-counts-64-128 adds two further exploratory arms (eleven total).
 //! --explore-counts-256-512 selects thirteen arms, --explore-counts-1024 fourteen.
+//! --explore-language-counts-140-75 adds a FR140/EN75 arm (fifteen total).
 //! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
@@ -19,7 +20,7 @@ use sml_core::{
     elastic_ngram_paged_sha::hex,
 };
 
-const POLICY_NAMES: [&str; 14] = [
+const POLICY_NAMES: [&str; 15] = [
     "FIXED_4",
     "FIXED_7",
     "FIXED_12",
@@ -34,6 +35,7 @@ const POLICY_NAMES: [&str; 14] = [
     "MIN_COUNT_256",
     "MIN_COUNT_512",
     "MIN_COUNT_1024",
+    "LANG_COUNT_FR140_EN75",
 ];
 const EVIDENCE_MIN_COUNTS: [u64; 10] = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
 const FROZEN_POLICIES: usize = 7;
@@ -47,6 +49,7 @@ enum EvaluationMode {
     Explore64_128,
     Explore256_512,
     Explore1024,
+    Language140_75,
 }
 
 impl EvaluationMode {
@@ -56,6 +59,7 @@ impl EvaluationMode {
             Some("--explore-counts-64-128") => Self::Explore64_128,
             Some("--explore-counts-256-512") => Self::Explore256_512,
             Some("--explore-counts-1024") => Self::Explore1024,
+            Some("--explore-language-counts-140-75") => Self::Language140_75,
             _ => Self::Frozen,
         }
     }
@@ -66,7 +70,8 @@ impl EvaluationMode {
             Self::Explore16_32 => 9,
             Self::Explore64_128 => 11,
             Self::Explore256_512 => 13,
-            Self::Explore1024 => POLICY_NAMES.len(),
+            Self::Explore1024 => 14,
+            Self::Language140_75 => POLICY_NAMES.len(),
         }
     }
 
@@ -77,7 +82,16 @@ impl EvaluationMode {
             Self::Explore64_128 => "ENG1C_VAL1_X64_128",
             Self::Explore256_512 => "ENG1C_VAL1_X256_512",
             Self::Explore1024 => "ENG1C_VAL1_X1024",
+            Self::Language140_75 => "ENG1C_VAL1_LANG140_75",
         }
+    }
+}
+
+fn language_min_count(language: &str) -> Result<u64, &'static str> {
+    match language {
+        "FR" => Ok(140),
+        "EN" => Ok(75),
+        _ => Err("unknown pinned language for occurrence gate"),
     }
 }
 
@@ -208,11 +222,13 @@ fn evaluate_val(
     val: &[u8],
     expected_events: u64,
     mode: EvaluationMode,
+    language: &str,
 ) -> Result<Vec<PolicyStats>, Box<dyn Error>> {
     let layout = ChunkLayout::new(val.len())?;
     if layout.tokens() != expected_events {
         return Err("VAL 64-lane denominator drift".into());
     }
+    let language_count = language_min_count(language)?;
     let policy_count = mode.policy_count();
     let mut stats = vec![PolicyStats::default(); policy_count];
     for lane in 0..LANES {
@@ -223,6 +239,8 @@ fn evaluate_val(
             let choices: [usize; POLICY_NAMES.len()] = std::array::from_fn(|policy| {
                 if policy < 4 {
                     policy
+                } else if policy == POLICY_NAMES.len() - 1 {
+                    evidence_choice(&ladder, language_count)
                 } else {
                     evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[policy - 4])
                 }
@@ -299,7 +317,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024|--explore-language-counts-140-75] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -341,7 +359,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Opening validates the counted file, sparse index and source SHA256.
     let mut model = PagedNGram::open(Path::new(&args[4]), source)?;
     let val_at = Instant::now();
-    let stats = evaluate_val(&mut model, &val, corpus.val_events, mode)?;
+    let stats = evaluate_val(&mut model, &val, corpus.val_events, mode, corpus.language)?;
     let val_ms = val_at.elapsed().as_millis();
     let full_process_peak_kib = vmhwm_kib()?;
     let lane_tokens = layout.chunk as u64 - 1;
@@ -362,8 +380,16 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         "VAL_STOP_NOT_PROVEN"
     };
 
+    let language_count_metadata = if mode == EvaluationMode::Language140_75 {
+        format!(
+            ",language_min_count={}",
+            language_min_count(corpus.language)?
+        )
+    } else {
+        String::new()
+    };
     println!(
-        "{output_prefix}_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32,counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source={},integrity=PASS",
+        "{output_prefix}_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32{language_count_metadata},counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source={},integrity=PASS",
         corpus.language, corpus.train_bytes, hex(&source), val.len(),
         corpus.val_events, metadata.count_store_bytes, metadata.sparse_index_bytes,
         metadata.contexts, metadata.follower_pairs, build_ms, val_ms,
@@ -400,6 +426,68 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn language_gate_routes_train_evidence_between_75_and_140() {
+        let root = std::env::temp_dir().join(format!("sml-val1-language-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let train = b"abcdefghabcdefgh".repeat(LANES);
+        let source = training_sha256(&train);
+        let store = root.join("store");
+        assert!(matches!(
+            build_paged(
+                &train,
+                32,
+                &store,
+                &root.join("sort"),
+                PagedLimits::default()
+            )
+            .unwrap(),
+            PagedBuild::Published(_)
+        ));
+        let mut model = PagedNGram::open(&store, source).unwrap();
+        let events = ChunkLayout::new(train.len()).unwrap().tokens();
+        let fr = evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "FR",
+        )
+        .unwrap();
+        let en = evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "EN",
+        )
+        .unwrap();
+        // This seven-byte suffix has exactly 128 TRAIN occurrences: EN qualifies, FR does not.
+        assert_eq!(
+            model.depth_ladder_readout(b"abcdefg").unwrap()[1].context_events,
+            128
+        );
+        assert_eq!(fr[14].selected_depths, [events, 0, 0, 0]);
+        assert_eq!(en[14].selected_depths[1], 128);
+        assert_eq!(en[14].selected_depths[2..], [0, 0]);
+        for (a, b) in fr[..14].iter().zip(&en[..14]) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.selected_depths, b.selected_depths);
+            assert_eq!(a.correct, b.correct);
+        }
+        assert!(evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "UNKNOWN"
+        )
+        .is_err());
+        assert_eq!(model.metadata().source_sha256, source);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn exploratory_threshold_boundaries_are_inclusive_and_monotone() {
@@ -451,21 +539,44 @@ mod tests {
         ));
         let mut model = PagedNGram::open(&store, source).unwrap();
         let events = ChunkLayout::new(val.len()).unwrap().tokens();
-        let original = evaluate_val(&mut model, &val, events, EvaluationMode::Frozen).unwrap();
+        let original =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Frozen, "FR").unwrap();
         let exploratory =
-            evaluate_val(&mut model, &val, events, EvaluationMode::Explore16_32).unwrap();
-        let expanded =
-            evaluate_val(&mut model, &val, events, EvaluationMode::Explore64_128).unwrap();
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore16_32, "FR").unwrap();
+        let expanded = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Explore64_128,
+            "FR",
+        )
+        .unwrap();
         assert_eq!(original.len(), 7);
         assert_eq!(exploratory.len(), 9);
         assert_eq!(expanded.len(), 11);
-        let stage1 =
-            evaluate_val(&mut model, &val, events, EvaluationMode::Explore256_512).unwrap();
-        let stage2 = evaluate_val(&mut model, &val, events, EvaluationMode::Explore1024).unwrap();
+        let stage1 = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Explore256_512,
+            "FR",
+        )
+        .unwrap();
+        let stage2 =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore1024, "FR").unwrap();
         assert_eq!(stage1.len(), 13);
         assert_eq!(stage2.len(), 14);
-        for previous in [&original, &exploratory, &expanded, &stage1] {
-            for (a, b) in previous.iter().zip(&stage2) {
+        let language_arm = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Language140_75,
+            "FR",
+        )
+        .unwrap();
+        assert_eq!(language_arm.len(), 15);
+        for previous in [&original, &exploratory, &expanded, &stage1, &stage2] {
+            for (a, b) in previous.iter().zip(&language_arm) {
                 assert_eq!(a.lane_bits, b.lane_bits);
                 assert_eq!(a.tokens, b.tokens);
                 assert_eq!(a.correct, b.correct);
@@ -483,7 +594,7 @@ mod tests {
             assert_eq!(a.correct, b.correct);
             assert_eq!(a.selected_depths, b.selected_depths);
         }
-        for row in &stage2[7..] {
+        for row in &language_arm[7..] {
             assert_eq!(row.tokens, events);
             assert_eq!(row.selected_depths.iter().sum::<u64>(), events);
             assert!(row.selected_depths[2] + row.selected_depths[3] > 0);
