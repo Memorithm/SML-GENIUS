@@ -1,0 +1,12 @@
+{
+  "source_head": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+  "works": 12,
+  "policy_rows": 300,
+  "summary_group_arm_rows": 300,
+  "legacy_dev_bits_bitwise_equal": 48,
+  "train_store_index_hashes_equal": 24,
+  "selection_and_old_gate_depth_counts": "PASS",
+  "summary_independent_math_fsum_tolerance": 1e-12,
+  "test": "UNREAD",
+  "integrity": "PASS"
+}
