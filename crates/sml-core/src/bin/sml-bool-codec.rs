@@ -256,7 +256,7 @@ fn decode_mix(args: &[String]) -> Result<()> {
     let container = read(Path::new(&args[3]))?;
     let stored = container_model_id(&container)?;
     // Select the released configuration whose identity the container
-    // carries, so older (bmx-v2, bmx-v3) archives remain decodable.
+    // carries, so older (bmx-v2, bmx-v3, bmx-v4) archives remain decodable.
     let (config, id) = MixerConfig::released()
         .into_iter()
         .map(|config| (config, mix_id(&prime, config)))
@@ -316,6 +316,9 @@ mod tests {
     /// Container written by the released bmx-v3 `encode-mix` (main at
     /// e89dcd6) for `golden_text()` without priming.
     const BMX_V3_GOLDEN: &[u8] = include_bytes!("../../tests/fixtures/bmx-v3-golden.bmx");
+    /// Container written by the released bmx-v4 encoder (main at 618549c)
+    /// for `golden_text()` without priming.
+    const BMX_V4_GOLDEN: &[u8] = include_bytes!("../../tests/fixtures/bmx-v4-golden.bmx");
 
     fn golden_text() -> Vec<u8> {
         (0..800)
@@ -343,7 +346,7 @@ mod tests {
         .unwrap();
         assert_eq!(fs::read(&out).unwrap(), golden_text());
         // The v2 configuration still produces the released bytes exactly.
-        let v2 = MixerConfig::released()[2];
+        let v2 = MixerConfig::released()[3];
         let mut mixer = BitMixer::try_new(v2).unwrap();
         let encoded = encode_with_predictor(&golden_text(), &mix_id(&[], v2), &mut mixer).unwrap();
         assert_eq!(encoded.container, BMX_V2_GOLDEN);
@@ -367,10 +370,34 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(fs::read(&out).unwrap(), golden_text());
-        let v3 = MixerConfig::released()[1];
+        let v3 = MixerConfig::released()[2];
         let mut mixer = BitMixer::try_new(v3).unwrap();
         let encoded = encode_with_predictor(&golden_text(), &mix_id(&[], v3), &mut mixer).unwrap();
         assert_eq!(encoded.container, BMX_V3_GOLDEN);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn released_bmx_v4_containers_still_decode_and_v4_encoding_is_unchanged() {
+        let root = std::env::temp_dir().join(format!("bmx4-golden-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let s = |p: &Path| p.display().to_string();
+        let packed = root.join("golden.bmx");
+        let out = root.join("golden.txt");
+        fs::write(&packed, BMX_V4_GOLDEN).unwrap();
+        run(&[
+            "x".into(),
+            "decode-mix".into(),
+            "-".into(),
+            s(&packed),
+            s(&out),
+        ])
+        .unwrap();
+        assert_eq!(fs::read(&out).unwrap(), golden_text());
+        let v4 = MixerConfig::released()[1];
+        let mut mixer = BitMixer::try_new(v4).unwrap();
+        let encoded = encode_with_predictor(&golden_text(), &mix_id(&[], v4), &mut mixer).unwrap();
+        assert_eq!(encoded.container, BMX_V4_GOLDEN);
         fs::remove_dir_all(root).unwrap();
     }
 
