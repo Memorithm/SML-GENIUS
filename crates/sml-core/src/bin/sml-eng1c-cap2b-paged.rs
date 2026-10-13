@@ -4,19 +4,11 @@
 //! fixed, TRAIN-derived structural/probability probes. It does NOT compute
 //! TRAIN/VAL/TEST loss or select depth/quality policies.
 
-use std::{
-    error::Error,
-    fs,
-    hint::black_box,
-    path::Path,
-    time::Instant,
-};
+use std::{error::Error, fs, hint::black_box, path::Path, time::Instant};
 
 use sml_core::{
     anf_char::LANES,
-    elastic_ngram_paged::{
-        build_paged, training_sha256, PagedBuild, PagedLimits, PagedNGram,
-    },
+    elastic_ngram_paged::{build_paged, training_sha256, PagedBuild, PagedLimits, PagedNGram},
     elastic_ngram_paged_sha::hex,
 };
 
@@ -70,7 +62,10 @@ fn vmhwm_kib() -> Result<u64, Box<dyn Error>> {
     if parts.next() != Some("VmHWM:") {
         return Err("invalid VmHWM field".into());
     }
-    let kib = parts.next().ok_or("missing memory quantity")?.parse::<u64>()?;
+    let kib = parts
+        .next()
+        .ok_or("missing memory quantity")?
+        .parse::<u64>()?;
     if kib == 0 || parts.next() != Some("kB") || parts.next().is_some() {
         return Err("invalid physical RSS peak quantity".into());
     }
@@ -205,7 +200,10 @@ mod tests {
 
     #[test]
     fn cap2b_pinned_cardinality_contract_and_probes_are_deterministic() {
-        assert_eq!(expected_cardinality("FR", 32), Some((14_281_533, 14_878_280)));
+        assert_eq!(
+            expected_cardinality("FR", 32),
+            Some((14_281_533, 14_878_280))
+        );
         assert_eq!(expected_cardinality("EN", 12), Some((2_477_266, 2_995_126)));
         assert_eq!(expected_cardinality("EN", 3), None);
         assert_eq!(frozen("FR").unwrap().train_bytes, 598_284);
