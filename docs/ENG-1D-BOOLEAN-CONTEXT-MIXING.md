@@ -266,15 +266,19 @@ aux bits bruts, sur les trois ensembles de réglage (référence 25 465,5 o).
 | bits 7-5 des 8 octets | −0,01 % | −0,10 % (meilleur cas) |
 | bits 7-6 des 8 octets | −0,05 % | −0,09 % |
 | bit 7 des 8 octets | −0,03 % | −0,06 % |
-| bit 0 des 8 octets (témoin sans sens) | −0,05 % | −0,05 % |
+| bit 0 des 8 octets | −0,05 % | −0,05 % |
 | octets 0 et 1 entiers (bijection de `t-1, t-2`) | +0,00 % | +0,01 % |
 | octets 0 et 2 entiers (bijection de `t-1, t-3`) | −0,05 % | −0,05 % |
 | les 19 projections | — | de +0,01 % à −0,10 % |
 
-Tout contexte supplémentaire, même sans signification, gagne environ
-0,05 % ; la meilleure projection de Pascal ne fait que 0,05 % de mieux que
-ce plancher, ce qui ne paie ni une table de plus (16 Mio) ni le temps de
-calcul. Les projections qui gardent des octets entiers égalent les octets
-bruts correspondants, comme prévu. Conclusion : la projection de Pascal
-n'apporte pas d'information exploitable au mélangeur ; elle n'est pas
-intégrée.
+Aucune projection ne gagne plus de 0,10 % ; le meilleur cas (bits 7-5 des
+8 octets de sortie) fait 0,09 point de mieux que le même masque sur les
+bits bruts, déjà présent dans `V3`. Des masques bruts simples (bit 0 ou
+octets `t-1, t-3`) gagnent autant que la plupart des projections, environ
+0,05 %. Ces écarts, mesurés une seule fois sans témoin aléatoire, sont trop
+petits pour être distingués de l'effet d'une entrée supplémentaire
+quelconque, et ne paieraient de toute façon ni une table de plus (16 Mio)
+ni le temps de calcul. Les projections qui gardent des octets entiers
+égalent les octets bruts correspondants, comme prévu. Conclusion : sur ces
+ensembles, la projection de Pascal n'apporte pas de gain exploitable au
+mélangeur ; elle n'est pas intégrée.
