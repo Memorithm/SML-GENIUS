@@ -1234,7 +1234,7 @@ elastic_ngram_program_2026_10_12:
 
 external_weight_admission_audit_20261013:
   finding: COG-SML-001
-  status: technical_candidate_CI_production_ACL_and_consumer_unqualified
+  status: technical_adapter_integrated_qualified_production_acceptance_open
   pull_request: 559
   base_sha: 618549cee0fd0981a5fe7f6ad36efec6ae1628ca
   candidate_sha: f7c242ab1507c8014a924afcd8853dad9b910c17
@@ -1258,3 +1258,31 @@ external_weight_admission_audit_20261013:
   merge_authorization_from_admission: false
   model_sovereignty_and_final_holdouts: unchanged
   private_proof_branch: audit/cog-sml-001-qualification-20261013
+
+  integrated_sha: 7afb6a38a7ebae0ba1b1e6de941b10b95716b472
+  integrated_required_checks: 3_success
+  integrated_owner_artifact: 11840962233
+  integrated_owner_archive_SHA256: 4c971014eb0580ad277b696b7e3cac8c3aba4e8d6989af037d50509430dfb66f
+  integrated_archive_and_exact_receipt_verified: true
+
+trusted_RSI_review_adapter_audit_20261013:
+  finding: COG-SML-003
+  status: candidate_CI_and_review_pending
+  pull_request: 561
+  candidate_sha: 7cd668983f61643b0893c92ff0c5eb3e2c43784a
+  validated_base: 0dd6290aa4aff194e7828a2b51f249ba045f9cd2
+  contract: sml.rsi-trusted-review@1.0.0
+  owner: SciRust_Verify_detached_SSHSIG_at_662a30dc774dd19c68a79bed3889036a91930123
+  delivered:
+    - fixed_primary_GitHub_TLS_same_repository_main_PR_observations_before_and_after_review
+    - independently_admitted_evaluator_authentication_and_bounded_aggregate_metadata_binding
+    - original_evidence_ID_uniqueness_selection_protected_separation_and_source_freshness
+    - reuse_unchanged_native_RSI_baseline_eligibility_library
+    - Development_fixtures_Other_class_only
+    - opaque_human_review_receipt_without_merge_authority
+  local_validation: {workspace_passed: 1511, failed: 0, fmt: success, strict_locked_Clippy: success, existing_real_owner_weight_test: success}
+  live_private_provider_qualification: not_claimed_until_dedicated_exact_CI
+  scientific_qualification: not_evaluated
+  merge_authorization_from_review: false
+  model_core_RSI_dependencies_and_scientific_holdouts: unchanged
+  private_proof_branch: audit/cog-sml-003-qualification-20261013
