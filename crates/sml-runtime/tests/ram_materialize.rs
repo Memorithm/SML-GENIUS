@@ -18,6 +18,33 @@ use sml_runtime::{
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
+#[test]
+fn retained_catalog_enforces_crc_unique_identity_and_budget_before_commit() {
+    let bytes = build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, 8, &[0xa5]).unwrap();
+    assert!(
+        WeightArtifactCatalog::from_retained_bytes(vec![bytes.clone(), bytes.clone()]).is_err()
+    );
+    let mut damaged = bytes.clone();
+    *damaged.last_mut().unwrap() ^= 1;
+    assert!(WeightArtifactCatalog::from_retained_bytes(vec![damaged]).is_err());
+    let catalog = WeightArtifactCatalog::from_retained_bytes(vec![bytes]).unwrap();
+    let runtime = ram_runtime();
+    let plan = runtime.planner().plan_cycle(&[PageId(0)], 1).unwrap();
+    let budget = RamMaterializationBudget {
+        max_files_read: 0,
+        ..RamMaterializationBudget::default()
+    };
+    assert!(runtime.stage(&plan, &catalog, budget).is_err());
+    assert_eq!(runtime.ram_page_count(), 0);
+    assert_eq!(runtime.planner().generation(), 0);
+    let stage = runtime
+        .stage(&plan, &catalog, RamMaterializationBudget::default())
+        .unwrap();
+    assert_eq!(stage.report().files_read, 0);
+    assert_eq!(stage.report().retained_artifacts_read, 1);
+    assert_eq!(stage.page(PageId(0)).unwrap().payload(), &[0xa5]);
+}
+
 struct TempDir {
     path: PathBuf,
 }
