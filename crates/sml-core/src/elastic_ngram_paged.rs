@@ -861,6 +861,21 @@ impl EscapePolicy {
         }
     }
 
+    /// Inverse of [`Self::label`]; the result is validated.
+    pub fn from_label(label: &str) -> Result<Self, PagedError> {
+        let parse = |v: &str| {
+            v.parse::<f64>()
+                .map_err(|_| PagedError::InvalidEscapePolicy)
+        };
+        let policy = match label.split_once(':') {
+            None if label == "wb" => Self::WittenBell,
+            Some(("swb", v)) => Self::ScaledWittenBell { beta: parse(v)? },
+            Some(("dir", v)) => Self::Dirichlet { tau: parse(v)? },
+            _ => return Err(PagedError::InvalidEscapePolicy),
+        };
+        policy.validate()
+    }
+
     /// Stable text label used in records, e.g. `wb`, `swb:4`, `dir:16`.
     #[must_use]
     pub fn label(self) -> String {
@@ -1009,6 +1024,19 @@ impl PagedNGram {
     }
 
     pub fn distribution(&mut self, history: &[u8], depth: usize) -> Result<[f64; 256], PagedError> {
+        self.distribution_with(history, depth, EscapePolicy::WittenBell)
+    }
+
+    /// Full next-byte distribution at maximum context `depth` under an
+    /// explicit escape policy. `WittenBell` reproduces [`Self::distribution`]
+    /// bit for bit.
+    pub fn distribution_with(
+        &mut self,
+        history: &[u8],
+        depth: usize,
+        policy: EscapePolicy,
+    ) -> Result<[f64; 256], PagedError> {
+        let policy = policy.validate()?;
         if depth > self.metadata.max_depth {
             return Err(PagedError::InvalidDepth);
         }
@@ -1016,9 +1044,9 @@ impl PagedNGram {
         for d in 0..=depth.min(history.len()) {
             if let Some((count, followers)) = self.context_histogram(history, d)? {
                 let n = count as f64;
-                let distinct = followers.len() as f64;
-                let den = n + distinct;
-                let scale = distinct / den;
+                let escape = policy.escape_mass(followers.len());
+                let den = n + escape;
+                let scale = escape / den;
                 for p in &mut probabilities {
                     *p *= scale;
                 }
@@ -1476,6 +1504,41 @@ mod tests {
     }
 
     #[test]
+    fn eng1d_distribution_with_matches_ladder_for_every_policy() {
+        let train = corpus(0);
+        let probe = corpus(13);
+        let root = TestRoot::new("eng1d-distribution-with");
+        let mut model = published(&root, &train);
+        for lane in (0..LANES).step_by(8) {
+            let chunk = &probe[lane * 40..(lane + 1) * 40];
+            for t in 1..40 {
+                let history = &chunk[..t];
+                for policy in ENG1D_POLICIES {
+                    let ladder = model.depth_ladder_readout_with(history, policy).unwrap();
+                    for (i, &depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+                        let direct = model.distribution_with(history, depth, policy).unwrap();
+                        for (a, b) in direct.iter().zip(&ladder[i].probabilities) {
+                            assert_eq!(a.to_bits(), b.to_bits());
+                        }
+                    }
+                }
+                let frozen = model.distribution(history, 7).unwrap();
+                let generic = model
+                    .distribution_with(history, 7, EscapePolicy::WittenBell)
+                    .unwrap();
+                assert!(frozen
+                    .iter()
+                    .zip(&generic)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()));
+            }
+        }
+        assert!(matches!(
+            model.distribution_with(&train[..4], 4, EscapePolicy::Dirichlet { tau: 0.0 }),
+            Err(PagedError::InvalidEscapePolicy)
+        ));
+    }
+
+    #[test]
     fn eng1d_invalid_escape_parameters_fail_closed() {
         let train = corpus(0);
         let root = TestRoot::new("eng1d-invalid-policy");
@@ -1502,6 +1565,18 @@ mod tests {
             "swb:6"
         );
         assert_eq!(EscapePolicy::Dirichlet { tau: 0.5 }.label(), "dir:0.5");
+        for policy in ENG1D_POLICIES {
+            assert_eq!(EscapePolicy::from_label(&policy.label()), Ok(policy));
+        }
+        for bad in [
+            "", "wb:1", "swb", "swb:x", "dir:-2", "dir:0", "kn:1", "swb:inf",
+        ] {
+            assert_eq!(
+                EscapePolicy::from_label(bad),
+                Err(PagedError::InvalidEscapePolicy),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
