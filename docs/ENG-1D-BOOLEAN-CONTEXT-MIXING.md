@@ -242,3 +242,39 @@ Limites : sélecteurs des jeux de poids choisis à la main, une seule passe
 d'essais ; mêmes trois textes d'évaluation, choisis par disponibilité (pas
 un panel, aucun texte littéraire français). La confirmation passe par un
 panel préregistré.
+
+## Projection de Pascal GF(2) des contextes : résultat négatif
+
+Question : des contextes pris sur la transformée de Pascal modulo 2
+(`pascal_gf2::pascal_gf2_in_place`, `y[n] = XOR x[k]` sur les sous-masques
+`k` de `n`) des 64 bits des 8 derniers octets apportent-ils de
+l'information au-delà des masques sur bits bruts ?
+
+Structure : l'octet `k` de la sortie vaut Pascal₈ du XOR des octets
+passés dont la position est un sous-masque de `k` (par exemple
+`t-1 ⊕ t-2 ⊕ t-3 ⊕ t-4` pour `k = 3`). La transformée étant inversible,
+une table de compteurs indexée par tous ses bits apprend exactement la
+même chose que sur les bits bruts ; seule une **projection** (ne garder
+qu'une partie des bits de sortie) peut créer des contextes nouveaux.
+
+Mesure (essai jetable, non intégré) : 19 projections, chacune ajoutée
+comme contexte à `bmx-v4` + `V3_MASKS`, comparées au même masque appliqué
+aux bits bruts, sur les trois ensembles de réglage (référence 25 465,5 o).
+
+| Projection | Bits bruts | Pascal |
+|---|---:|---:|
+| bits 7-5 des 8 octets | −0,01 % | −0,10 % (meilleur cas) |
+| bits 7-6 des 8 octets | −0,05 % | −0,09 % |
+| bit 7 des 8 octets | −0,03 % | −0,06 % |
+| bit 0 des 8 octets (témoin sans sens) | −0,05 % | −0,05 % |
+| octets 0 et 1 entiers (bijection de `t-1, t-2`) | +0,00 % | +0,01 % |
+| octets 0 et 2 entiers (bijection de `t-1, t-3`) | −0,05 % | −0,05 % |
+| les 19 projections | — | de +0,01 % à −0,10 % |
+
+Tout contexte supplémentaire, même sans signification, gagne environ
+0,05 % ; la meilleure projection de Pascal ne fait que 0,05 % de mieux que
+ce plancher, ce qui ne paie ni une table de plus (16 Mio) ni le temps de
+calcul. Les projections qui gardent des octets entiers égalent les octets
+bruts correspondants, comme prévu. Conclusion : la projection de Pascal
+n'apporte pas d'information exploitable au mélangeur ; elle n'est pas
+intégrée.
