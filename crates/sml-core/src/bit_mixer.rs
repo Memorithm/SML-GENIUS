@@ -715,9 +715,9 @@ impl BitMixer {
                     dot_row(&self.inputs, &self.extra_weights[0], self.selectors[1]),
                     dot_row(&self.inputs, &self.extra_weights[1], self.selectors[2]),
                 ];
-                for k in 0..3 {
-                    self.set_out[k] = ((dots[k] >> 16) as i32).clamp(-2047, 2047);
-                    self.set_p[k] = squash(self.set_out[k]).clamp(1, 4095);
+                for ((out, p), dot) in self.set_out.iter_mut().zip(&mut self.set_p).zip(dots) {
+                    *out = ((dot >> 16) as i32).clamp(-2047, 2047);
+                    *p = squash(*out).clamp(1, 4095);
                 }
                 let row = &self.final_weights[c0 as usize * FINAL_INPUTS..][..FINAL_INPUTS];
                 let final_in = [self.set_out[0], self.set_out[1], self.set_out[2], 256];
@@ -751,14 +751,13 @@ impl BitMixer {
             Architecture::V4 => {
                 let err = (target - self.set_p[0]) * rate;
                 train_row(&mut self.weights, &self.inputs, self.selectors[0], err);
-                for k in 0..2 {
-                    let err = (target - self.set_p[k + 1]) * rate;
-                    train_row(
-                        &mut self.extra_weights[k],
-                        &self.inputs,
-                        self.selectors[k + 1],
-                        err,
-                    );
+                for ((weights, &row), &p) in self
+                    .extra_weights
+                    .iter_mut()
+                    .zip(&self.selectors[1..])
+                    .zip(&self.set_p[1..])
+                {
+                    train_row(weights, &self.inputs, row, (target - p) * rate);
                 }
                 let final_in = [self.set_out[0], self.set_out[1], self.set_out[2], 256];
                 let err = (target - self.mixer_p) * 2;
