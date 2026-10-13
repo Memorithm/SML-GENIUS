@@ -3,10 +3,6 @@ name: Production weight publication
 on:
   push:
     branches: [main]
-    paths:
-      - crates/sml-publication/**
-      - policy/production-weight-publishers.allowed_signers
-      - .github/workflows/production-weight-publication.yml
 permissions:
   contents: read
 
