@@ -1,0 +1,118 @@
+name: ENG-1c VAL1 frozen independent FR EN Witten-Bell depth log loss
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1c-val1-depth-science-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  train-count-evidence-val:
+    if: startsWith(github.head_ref, 'research/eng1c-val1-')
+    name: "Heldout VAL evidence ${{ matrix.language }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [FR, EN]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact PR head with no persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89 rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Predeclared scientific protocol, full oracle and strict Rust contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          test -s docs/ENG-1C-VAL1-FIXED-EVIDENCE-DEPTH-PREREGISTRATION.md
+          bash -n scripts/eng1c/fetch-val1-splits.sh
+          if bash scripts/eng1c/fetch-val1-splits.sh WRONG "$RUNNER_TEMP/WRONG-TRAIN" "$RUNNER_TEMP/WRONG-VAL"; then
+            echo 'ENG1C_VAL1_UNKNOWN_SOURCE_WAS_ADMITTED' >&2
+            exit 1
+          fi
+          test ! -e "$RUNNER_TEMP/WRONG-TRAIN"
+          test ! -e "$RUNNER_TEMP/WRONG-VAL"
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib eng1c_val1_ladder -- --nocapture
+          cargo test --locked -p sml-core --bin sml-eng1c-val1
+          cargo test --locked -p sml-core --lib elastic_ngram_trie
+      - name: Compile frozen Rust release VAL evaluator
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-core --bin sml-eng1c-val1
+          test -x target/release/sml-eng1c-val1
+      - name: Independent full VAL log loss from exact full TRAIN model
+        shell: bash
+        env:
+          VAL_LANGUAGE: ${{ matrix.language }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eng1c-val1"
+          mkdir -p "$root/private" "$root/evidence"
+          cleanup() { rm -rf -- "$root/private"; }
+          trap cleanup EXIT
+          echo "ENG1C_VAL1_SOURCE_HEAD=$(git rev-parse HEAD)" | tee "$root/evidence/environment.txt"
+          echo "ENG1C_VAL1_ARCH=$(uname -m)" | tee -a "$root/evidence/environment.txt"
+          rustc --version | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_VAL1_FROZEN_CANDIDATES=FIXED_4,FIXED_7,FIXED_12,FIXED_32,MIN_COUNT_2,MIN_COUNT_4,MIN_COUNT_8' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_VAL1_MIN_BOOTSTRAP=2048_WITH_64_LANE_RESAMPLE' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_VAL1_TEST=UNREAD' | tee -a "$root/evidence/environment.txt"
+          bash scripts/eng1c/fetch-val1-splits.sh "$VAL_LANGUAGE" \
+            "$root/private/TRAIN" "$root/private/VAL" | tee "$root/evidence/source-identity.txt"
+          test "$(find "$root/private" -maxdepth 1 -type f | wc -l)" -eq 2
+          set +e
+          (
+            ulimit -v 262144
+            timeout --signal=TERM --kill-after=5s 3000 \
+              target/release/sml-eng1c-val1 \
+              "$VAL_LANGUAGE" "$root/private/TRAIN" "$root/private/VAL" \
+              "$root/private/store-d32" "$root/private/sort"
+          ) > "$root/evidence/val-policies.txt" 2> "$root/private/errors.txt"
+          status=$?
+          set -e
+          if [[ "$status" != 0 ]]; then
+            cat "$root/private/errors.txt" >&2
+            echo "ENG1C_VAL1_INCOMPLETE_SCIENTIFIC_EVALUATION,exit=$status" >&2
+            exit "$status"
+          fi
+          cat "$root/evidence/val-policies.txt"
+          test "$(grep -c '^ENG1C_VAL1_META,' "$root/evidence/val-policies.txt")" -eq 1
+          test "$(grep -c '^ENG1C_VAL1_POLICY,' "$root/evidence/val-policies.txt")" -eq 7
+          test "$(grep -c '^ENG1C_VAL1_DECISION,' "$root/evidence/val-policies.txt")" -eq 1
+          for policy in FIXED_4 FIXED_7 FIXED_12 FIXED_32 MIN_COUNT_2 MIN_COUNT_4 MIN_COUNT_8; do
+            test "$(grep -c "policy=$policy," "$root/evidence/val-policies.txt")" -eq 1
+          done
+          grep -Eq '^ENG1C_VAL1_DECISION,language=(FR|EN),.*adaptive_science=(PROVISIONAL_VAL_GAIN|VAL_STOP_NOT_PROVEN),test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS$' "$root/evidence/val-policies.txt"
+          grep -Eq '^ENG1C_VAL1_META,language=(FR|EN),.*quality_source=VAL_ONLY,integrity=PASS$' "$root/evidence/val-policies.txt"
+          ( cd "$root/evidence" && sha256sum source-identity.txt val-policies.txt > manifest.sha256 )
+          echo 'ENG1C_VAL1_SCIENCE_NEGATIVE_RESULT_ALLOWED=TRUE' >> "$root/evidence/environment.txt"
+          echo 'ENG1C_VAL1_NO_MODEL_MUTATION_ON_VAL=TRUE' >> "$root/evidence/environment.txt"
+      - name: Retain only aggregate VAL scores and source hashes, no text, tokens or TEST
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1c-val1-quality-${{ matrix.language }}
+          path: ${{ runner.temp }}/eng1c-val1/evidence/
+          if-no-files-found: warn
+          retention-days: 30
