@@ -1,0 +1,13 @@
+{
+  "source_head": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "architecture": "x86_64",
+  "workers": 2,
+  "virtual_limit_kib": 262144,
+  "timeout_seconds_per_work": 3000,
+  "quality_source": "EXPLORATORY_DEV_ONLY",
+  "test": "UNREAD",
+  "binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+  "manifest_sha256": "ffd768bfe236eb1c7e9cee689d84c50702d551315dfe3327ed9dced10074e990",
+  "protocol_sha256": "878d198885365959fb7a1b3fbfe7193a06b0a1135b7a519382ea65e52580851b"
+}

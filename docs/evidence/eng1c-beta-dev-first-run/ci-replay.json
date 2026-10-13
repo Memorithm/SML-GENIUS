@@ -1,0 +1,146 @@
+{
+  "source_head": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+  "workflow_run_id": 38404751855,
+  "artifact_id": 11816854300,
+  "artifact_sha256": "1ab14dc627b6c0648ce37d176626eb5dbc77db3f994cffe41f5129ce5764f481",
+  "checks": [
+    {
+      "name": "beta-dev-panel",
+      "head_sha": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38404751855/job/115327030618"
+    },
+    {
+      "name": "rust",
+      "head_sha": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38404751633/job/115321519028"
+    },
+    {
+      "name": "fmt",
+      "head_sha": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38404751633/job/115321348984"
+    },
+    {
+      "name": "Beta DEV only FR",
+      "head_sha": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38404751855/job/115321330137"
+    },
+    {
+      "name": "Beta DEV only EN",
+      "head_sha": "493467e0bed69cc3dcf480aa330d1bc7ac3715c1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38404751855/job/115321329576"
+    }
+  ],
+  "test": "UNREAD",
+  "summary_byte_identical": true,
+  "policy_rows_byte_identical": 300,
+  "selection_records_byte_identical": 12,
+  "works": [
+    {
+      "id": "17489",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "5711",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "13846",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "65434",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "16234",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "16825",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "98",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "84",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "2944",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "34901",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "1228",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    },
+    {
+      "id": "14474",
+      "policies_equal": 25,
+      "selection_equal": true,
+      "train_store_index_hashes_equal": true,
+      "local_binary_sha256": "b68a14de21c897cdf2aa8ea785c26174edf3eb8e9865ded2a77dfd08e20b0e14",
+      "hosted_binary_sha256": "b412148945319d9694b56e09906ecd199f187ada5ceb1ac6965271ad3d9ac624"
+    }
+  ],
+  "integrity": "PASS"
+}
