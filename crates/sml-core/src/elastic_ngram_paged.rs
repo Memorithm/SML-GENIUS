@@ -390,7 +390,7 @@ impl StoreCounters {
             return Err(PagedError::Quota(PagedQuota::CountedData));
         }
         let mut next_index = self.index_entries;
-        if self.pairs.is_multiple_of(PAGE_ROWS as u64) {
+        if self.pairs % PAGE_ROWS as u64 == 0 {
             next_index = next_index.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
             if next_index > limits.max_index_entries {
                 return Err(PagedError::Quota(PagedQuota::SparseIndex));
@@ -416,7 +416,7 @@ impl StoreCounters {
             }
             self.last_context = Some(context);
         }
-        if self.pairs.is_multiple_of(PAGE_ROWS as u64) {
+        if self.pairs % PAGE_ROWS as u64 == 0 {
             sparse.write_all(key)?;
             sparse.write_all(&self.pairs.to_le_bytes())?;
             self.index_entries = next_index;
