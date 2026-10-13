@@ -199,10 +199,11 @@ fn write_run(
     }
 
     records.sort_unstable();
-    let path = scratch
-        .directory
-        .join(format!("run-{:04}.bin", runs.len()));
-    let file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+    let path = scratch.directory.join(format!("run-{:04}.bin", runs.len()));
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
     let mut writer = BufWriter::with_capacity(65_536, file);
     let mut digest = ORDERED_HASH_INITIAL;
     for key in records.iter() {
@@ -277,10 +278,7 @@ struct Counts {
 }
 
 fn merge_count(runs: &[RunManifest], expected: MultisetChecksum) -> Result<Counts, ScanError> {
-    let mut readers: Vec<RunReader> = runs
-        .iter()
-        .map(RunReader::open)
-        .collect::<Result<_, _>>()?;
+    let mut readers: Vec<RunReader> = runs.iter().map(RunReader::open).collect::<Result<_, _>>()?;
     let mut pending: BinaryHeap<Reverse<(Record, usize)>> = BinaryHeap::new();
     for (i, reader) in readers.iter_mut().enumerate() {
         if let Some(rec) = reader.next()? {
@@ -326,7 +324,9 @@ fn merge_count(runs: &[RunManifest], expected: MultisetChecksum) -> Result<Count
             pending.push(Reverse((next, reader_id)));
         }
     }
-    let expected_rows = runs.iter().try_fold(0usize, |a, r| a.checked_add(r.count))
+    let expected_rows = runs
+        .iter()
+        .try_fold(0usize, |a, r| a.checked_add(r.count))
         .ok_or(ScanError::ArithmeticOverflow)?;
     if count.rows != expected_rows {
         return Err(ScanError::IncorrectRecordCount);
@@ -360,10 +360,12 @@ enum ScanResult {
 }
 
 fn expected_records(events_per_lane: usize, depth: usize) -> Result<usize, ScanError> {
-    let per_lane = (1..=events_per_lane).try_fold(0usize, |sum, t| {
-        sum.checked_add(1 + t.min(depth))
-    }).ok_or(ScanError::ArithmeticOverflow)?;
-    per_lane.checked_mul(LANES).ok_or(ScanError::ArithmeticOverflow)
+    let per_lane = (1..=events_per_lane)
+        .try_fold(0usize, |sum, t| sum.checked_add(1 + t.min(depth)))
+        .ok_or(ScanError::ArithmeticOverflow)?;
+    per_lane
+        .checked_mul(LANES)
+        .ok_or(ScanError::ArithmeticOverflow)
 }
 
 fn scan(
@@ -425,9 +427,7 @@ fn scan(
             completed_events += 1;
         }
     }
-    if let Some(kind) =
-        write_run(&mut buf, &scratch, &mut runs, &mut scratch_bytes, limits)?
-    {
+    if let Some(kind) = write_run(&mut buf, &scratch, &mut runs, &mut scratch_bytes, limits)? {
         return Ok(ScanResult::QuotaStop {
             kind,
             completed_events,
@@ -481,7 +481,9 @@ fn frozen(language: &str) -> Option<Corpus> {
 
 fn vmhwm_kib() -> Result<u64, Box<dyn Error>> {
     let proc = fs::read_to_string("/proc/self/status")?;
-    let line = proc.lines().find(|line| line.starts_with("VmHWM:"))
+    let line = proc
+        .lines()
+        .find(|line| line.starts_with("VmHWM:"))
         .ok_or("Linux VmHWM missing")?;
     let mut tokens = line.split_whitespace();
     if tokens.next() != Some("VmHWM:") {
@@ -497,7 +499,9 @@ fn vmhwm_kib() -> Result<u64, Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() != 5 {
-        return Err("usage: sml-eng1c-cap2-external FR|EN depth <TRAIN-file> <NEW-private-workdir>".into());
+        return Err(
+            "usage: sml-eng1c-cap2-external FR|EN depth <TRAIN-file> <NEW-private-workdir>".into(),
+        );
     }
     let corpus = frozen(&args[1]).ok_or("unknown frozen corpus")?;
     let depth = args[2].parse::<usize>()?;
@@ -586,15 +590,22 @@ mod tests {
                 &data,
                 depth,
                 &format!("oracle-{depth}"),
-                Limits { records_per_run: 1000, ..Limits::default() },
+                Limits {
+                    records_per_run: 1000,
+                    ..Limits::default()
+                },
             );
             let ScanResult::Full(result) = r else {
                 panic!("unexpected quota STOP for oracle");
             };
             let fitted = ElasticNGramTrie::train(
                 &data,
-                TrieLimits { max_depth: depth, ..TrieLimits::default() },
-            ).unwrap();
+                TrieLimits {
+                    max_depth: depth,
+                    ..TrieLimits::default()
+                },
+            )
+            .unwrap();
             assert_eq!(result.train_events, LANES * 39);
             assert_eq!(result.contexts, fitted.accounting().nodes);
             assert_eq!(result.pairs, fitted.accounting().follower_pairs);
@@ -617,18 +628,30 @@ mod tests {
     fn two_plus_run_sort_merge_matches_full_buffer_mode() {
         let data = fixture();
         let a = run_fixture(
-            &data, 12, "one-buffer",
-            Limits { records_per_run: SORT_RECORDS, ..Limits::default() },
+            &data,
+            12,
+            "one-buffer",
+            Limits {
+                records_per_run: SORT_RECORDS,
+                ..Limits::default()
+            },
         );
         let b = run_fixture(
-            &data, 12, "many-buffers",
-            Limits { records_per_run: 311, ..Limits::default() },
+            &data,
+            12,
+            "many-buffers",
+            Limits {
+                records_per_run: 311,
+                ..Limits::default()
+            },
         );
-        let (ScanResult::Full(a), ScanResult::Full(b)) = (a,b) else {
+        let (ScanResult::Full(a), ScanResult::Full(b)) = (a, b) else {
             panic!("unexpected quota stop");
         };
-        assert_eq!((a.contexts, a.pairs, a.rows, a.checksum),
-                   (b.contexts, b.pairs, b.rows, b.checksum));
+        assert_eq!(
+            (a.contexts, a.pairs, a.rows, a.checksum),
+            (b.contexts, b.pairs, b.rows, b.checksum)
+        );
         assert!(b.runs > 1);
         assert_eq!(a.runs, 1);
     }
@@ -637,15 +660,39 @@ mod tests {
     fn strict_file_budget_and_run_limit_return_partial_scientific_stop() {
         let data = fixture();
         let disk = run_fixture(
-            &data, 12, "disk-stop",
-            Limits { records_per_run: 10, scratch_bytes: 1, ..Limits::default() },
+            &data,
+            12,
+            "disk-stop",
+            Limits {
+                records_per_run: 10,
+                scratch_bytes: 1,
+                ..Limits::default()
+            },
         );
-        assert!(matches!(disk, ScanResult::QuotaStop { kind: Stop::Disk, .. }));
+        assert!(matches!(
+            disk,
+            ScanResult::QuotaStop {
+                kind: Stop::Disk,
+                ..
+            }
+        ));
         let runs = run_fixture(
-            &data, 12, "run-stop",
-            Limits { records_per_run: 10, max_runs: 1, ..Limits::default() },
+            &data,
+            12,
+            "run-stop",
+            Limits {
+                records_per_run: 10,
+                max_runs: 1,
+                ..Limits::default()
+            },
         );
-        assert!(matches!(runs, ScanResult::QuotaStop { kind: Stop::RunCount, .. }));
+        assert!(matches!(
+            runs,
+            ScanResult::QuotaStop {
+                kind: Stop::RunCount,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -657,25 +704,65 @@ mod tests {
         let mut chunk = vec![record(&data[..2], 33, 1), record(&data[..2], 55, 0)];
         let mut peak = 0u64;
         let mut checksums = MultisetChecksum::default();
-        for item in &chunk { checksums.insert(item); }
-        write_run(&mut chunk, &scratch, &mut runs, &mut peak, Limits::default()).unwrap();
+        for item in &chunk {
+            checksums.insert(item);
+        }
+        write_run(
+            &mut chunk,
+            &scratch,
+            &mut runs,
+            &mut peak,
+            Limits::default(),
+        )
+        .unwrap();
         assert_eq!(merge_count(&runs, checksums).unwrap().rows, 2);
         let mut bytes = fs::read(&runs[0].path).unwrap();
         bytes[3] ^= 0x80;
         fs::write(&runs[0].path, bytes).unwrap();
-        assert!(matches!(merge_count(&runs, checksums), Err(ScanError::IncorrectChecksum) | Err(ScanError::UnsortedInput)));
+        assert!(matches!(
+            merge_count(&runs, checksums),
+            Err(ScanError::IncorrectChecksum) | Err(ScanError::UnsortedInput)
+        ));
     }
 
     #[test]
     fn invalid_source_depth_limits_and_directory_reuse_fail_closed() {
         let data = fixture();
-        assert_eq!(scan(&data, 3, &work("bad-depth"), Limits::default()), Err(ScanError::InvalidDepth));
-        assert_eq!(scan(&[0u8; LANES], 0, &work("bad-corpus"), Limits::default()), Err(ScanError::InvalidCorpus));
-        assert_eq!(scan(&vec![0u8; LANES * 10500], 0, &work("huge"), Limits::default()), Err(ScanError::TrainEventsOverScanCeiling));
-        assert_eq!(scan(&data, 4, &work("bad-limits"), Limits { records_per_run: 0, ..Limits::default() }), Err(ScanError::InvalidLimits));
+        assert_eq!(
+            scan(&data, 3, &work("bad-depth"), Limits::default()),
+            Err(ScanError::InvalidDepth)
+        );
+        assert_eq!(
+            scan(&[0u8; LANES], 0, &work("bad-corpus"), Limits::default()),
+            Err(ScanError::InvalidCorpus)
+        );
+        assert_eq!(
+            scan(
+                &vec![0u8; LANES * 10500],
+                0,
+                &work("huge"),
+                Limits::default()
+            ),
+            Err(ScanError::TrainEventsOverScanCeiling)
+        );
+        assert_eq!(
+            scan(
+                &data,
+                4,
+                &work("bad-limits"),
+                Limits {
+                    records_per_run: 0,
+                    ..Limits::default()
+                }
+            ),
+            Err(ScanError::InvalidLimits)
+        );
         let directory = work("exists");
         fs::create_dir(&directory).unwrap();
-        assert_eq!(scan(&data, 0, &directory, Limits::default()), Err(ScanError::Io));
+        assert_eq!(
+            scan(&data, 0, &directory, Limits::default()),
+            Err(ScanError::Io)
+        );
         fs::remove_dir(&directory).unwrap();
     }
 }
