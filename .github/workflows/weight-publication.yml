@@ -1,0 +1,45 @@
+name: External weight admission
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  owner-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/SciRust-Verify
+          ref: 662a30dc774dd19c68a79bed3889036a91930123
+          path: owner
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.98.1
+      - name: Compile exact authentication owner
+        run: cargo build --locked --manifest-path owner/Cargo.toml -p scirust-verify-cli
+      - name: Compile SML with its MSRV
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Qualify live signatures, ACL and RAM byte continuity
+        env:
+          SML_PUBLICATION_OWNER: ${{ github.workspace }}/owner/target/debug/scirust-verify
+          SML_PUBLICATION_CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-publication --test owner_e2e -- --ignored --nocapture | tee "$RUNNER_TEMP/weight-admission.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: weight-admission-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/weight-admission.log
+          if-no-files-found: error

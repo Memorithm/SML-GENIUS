@@ -7,6 +7,7 @@ members = [
     "crates/sml-runtime",
     "crates/sml-rsi",
     "crates/sml-elastic-bench",
+    "crates/sml-publication",
 ]
 resolver = "2"
 

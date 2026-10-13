@@ -1,0 +1,18 @@
+[package]
+name = "sml-publication"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+sml-core = { path = "../sml-core" }
+sml-runtime = { path = "../sml-runtime" }
+sml-store = { path = "../sml-store" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+[lints]
+workspace = true
