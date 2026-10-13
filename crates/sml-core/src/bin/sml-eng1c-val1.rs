@@ -1,7 +1,9 @@
 //! ENG-1c/VAL1: frozen independent real-text validation log-loss.
 //!
 //! Fixed depths 4/7/12/32 and model-owned exact TRAIN occurrence policies
-//! 2/4/8 share one immutable depth32 Witten-Bell store. This program never
+//! 2/4/8 share one immutable depth32 Witten-Bell store.
+//! Explicit --explore-counts-16-32 adds post-hoc 16/32 arms on exposed VAL.
+//! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
 use std::{error::Error, fs, path::Path, time::Instant};
@@ -15,7 +17,7 @@ use sml_core::{
     elastic_ngram_paged_sha::hex,
 };
 
-const POLICY_NAMES: [&str; 7] = [
+const POLICY_NAMES: [&str; 9] = [
     "FIXED_4",
     "FIXED_7",
     "FIXED_12",
@@ -23,8 +25,11 @@ const POLICY_NAMES: [&str; 7] = [
     "MIN_COUNT_2",
     "MIN_COUNT_4",
     "MIN_COUNT_8",
+    "MIN_COUNT_16",
+    "MIN_COUNT_32",
 ];
-const EVIDENCE_MIN_COUNTS: [u64; 3] = [2, 4, 8];
+const EVIDENCE_MIN_COUNTS: [u64; 5] = [2, 4, 8, 16, 32];
+const FROZEN_POLICIES: usize = 7;
 const BOOTSTRAP_REPETITIONS: usize = 2048;
 const BOOTSTRAP_SEED: u64 = 0xE1C5_2026_1013_B001;
 
@@ -154,12 +159,18 @@ fn evaluate_val(
     model: &mut PagedNGram,
     val: &[u8],
     expected_events: u64,
-) -> Result<[PolicyStats; 7], Box<dyn Error>> {
+    exploratory: bool,
+) -> Result<Vec<PolicyStats>, Box<dyn Error>> {
     let layout = ChunkLayout::new(val.len())?;
     if layout.tokens() != expected_events {
         return Err("VAL 64-lane denominator drift".into());
     }
-    let mut stats: [PolicyStats; 7] = std::array::from_fn(|_| PolicyStats::default());
+    let policy_count = if exploratory {
+        POLICY_NAMES.len()
+    } else {
+        FROZEN_POLICIES
+    };
+    let mut stats = vec![PolicyStats::default(); policy_count];
     for lane in 0..LANES {
         let chunk = &val[lane * layout.chunk..(lane + 1) * layout.chunk];
         for t in 1..chunk.len() {
@@ -173,9 +184,11 @@ fn evaluate_val(
                 evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[0]),
                 evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[1]),
                 evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[2]),
+                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[3]),
+                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[4]),
             ];
             let true_next_byte = chunk[t];
-            for (policy, &depth_index) in choices.iter().enumerate() {
+            for (policy, &depth_index) in choices.iter().take(policy_count).enumerate() {
                 stats[policy].record(lane, true_next_byte, &ladder[depth_index]);
             }
         }
@@ -237,8 +250,19 @@ fn paired_lane_interval(
 }
 
 fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
+    let exploratory = args.get(1).is_some_and(|a| a == "--explore-counts-16-32");
+    let output_prefix = if exploratory {
+        "ENG1C_VAL1_X16_32"
+    } else {
+        "ENG1C_VAL1"
+    };
+    let mut normalized = args.to_vec();
+    if exploratory {
+        normalized.remove(1);
+    }
+    let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -280,33 +304,40 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Opening validates the counted file, sparse index and source SHA256.
     let mut model = PagedNGram::open(Path::new(&args[4]), source)?;
     let val_at = Instant::now();
-    let stats = evaluate_val(&mut model, &val, corpus.val_events)?;
+    let stats = evaluate_val(&mut model, &val, corpus.val_events, exploratory)?;
     let val_ms = val_at.elapsed().as_millis();
     let full_process_peak_kib = vmhwm_kib()?;
     let lane_tokens = layout.chunk as u64 - 1;
     let fixed = best_index(&stats, 0..4);
-    let gated = best_index(&stats, 4..7);
-    let selected = best_index(&stats, 0..7);
+    let gated = best_index(&stats, 4..stats.len());
+    let selected = best_index(&stats, 0..stats.len());
     let adaptive_gain = stats[fixed].bpb() - stats[gated].bpb();
     let (gate_lo, gate_hi) = paired_lane_interval(&stats[fixed], &stats[gated], lane_tokens);
     let verdict = if adaptive_gain >= 0.01 && gate_lo > 0.0 {
-        "PROVISIONAL_VAL_GAIN"
+        if exploratory {
+            "EXPLORATORY_VAL_GAIN"
+        } else {
+            "PROVISIONAL_VAL_GAIN"
+        }
+    } else if exploratory {
+        "EXPLORATORY_VAL_STOP_NOT_PROVEN"
     } else {
         "VAL_STOP_NOT_PROVEN"
     };
 
     println!(
-        "ENG1C_VAL1_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32,counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source=VAL_ONLY,integrity=PASS",
+        "{output_prefix}_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32,counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source={},integrity=PASS",
         corpus.language, corpus.train_bytes, hex(&source), val.len(),
         corpus.val_events, metadata.count_store_bytes, metadata.sparse_index_bytes,
         metadata.contexts, metadata.follower_pairs, build_ms, val_ms,
-        build_peak_kib, full_process_peak_kib
+        build_peak_kib, full_process_peak_kib,
+        if exploratory { "EXPOSED_VAL_EXPLORATORY" } else { "VAL_ONLY" }
     );
     for (i, score) in stats.iter().enumerate() {
         let (lo, hi) = paired_lane_interval(&stats[0], score, lane_tokens);
         let improvement = stats[0].bpb() - score.bpb();
         println!(
-            "ENG1C_VAL1_POLICY,language={},policy={},tokens={},total_bits={:.12},bpb={:.12},accuracy={:.12},delta_bpb_vs_FIXED_4={:.12},paired_boot_low={:.12},paired_boot_high={:.12},selected_depth4={},selected_depth7={},selected_depth12={},selected_depth32={},integrity=PASS",
+            "{output_prefix}_POLICY,language={},policy={},tokens={},total_bits={:.12},bpb={:.12},accuracy={:.12},delta_bpb_vs_FIXED_4={:.12},paired_boot_low={:.12},paired_boot_high={:.12},selected_depth4={},selected_depth7={},selected_depth12={},selected_depth32={},integrity=PASS",
             corpus.language, POLICY_NAMES[i], score.tokens, score.bits(), score.bpb(),
             score.accuracy(), improvement, lo, hi,
             score.selected_depths[0], score.selected_depths[1],
@@ -314,7 +345,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         );
     }
     println!(
-        "ENG1C_VAL1_DECISION,language={},best_fixed={},best_gated={},best_overall={},best_fixed_bpb={:.12},best_gated_bpb={:.12},gated_gain_bpb={:.12},paired_gate_low={:.12},paired_gate_high={:.12},adaptive_science={},test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS",
+        "{output_prefix}_DECISION,language={},best_fixed={},best_gated={},best_overall={},best_fixed_bpb={:.12},best_gated_bpb={:.12},gated_gain_bpb={:.12},paired_gate_low={:.12},paired_gate_high={:.12},adaptive_science={},test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS",
         corpus.language, POLICY_NAMES[fixed], POLICY_NAMES[gated], POLICY_NAMES[selected],
         stats[fixed].bpb(), stats[gated].bpb(), adaptive_gain, gate_lo, gate_hi, verdict
     );
@@ -332,6 +363,75 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exploratory_threshold_boundaries_are_inclusive_and_monotone() {
+        for threshold in [16, 32] {
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold - 1, 0, 0]), threshold),
+                0
+            );
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold, 0, 0]), threshold),
+                1
+            );
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold, threshold, 0]), threshold),
+                2
+            );
+            assert_eq!(
+                evidence_choice(
+                    &fabricated([99, threshold, threshold, threshold]),
+                    threshold
+                ),
+                3
+            );
+        }
+        let ladder = fabricated([99, 32, 16, 15]);
+        assert_eq!(evidence_choice(&ladder, 16), 2);
+        assert_eq!(evidence_choice(&ladder, 32), 1);
+    }
+
+    #[test]
+    fn exploratory_scoring_preserves_original_seven_arms_on_real_store() {
+        let root = std::env::temp_dir().join(format!("sml-val1-x1632-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let train = b"abcdefghabcdefghabcdefghabcdefghabcdefghabcdefgh".repeat(LANES);
+        let val = b"abcdefghabcdefgh".repeat(LANES);
+        let source = training_sha256(&train);
+        let store = root.join("store");
+        assert!(matches!(
+            build_paged(
+                &train,
+                32,
+                &store,
+                &root.join("sort"),
+                PagedLimits::default()
+            )
+            .unwrap(),
+            PagedBuild::Published(_)
+        ));
+        let mut model = PagedNGram::open(&store, source).unwrap();
+        let events = ChunkLayout::new(val.len()).unwrap().tokens();
+        let original = evaluate_val(&mut model, &val, events, false).unwrap();
+        let exploratory = evaluate_val(&mut model, &val, events, true).unwrap();
+        assert_eq!(original.len(), 7);
+        assert_eq!(exploratory.len(), 9);
+        for (a, b) in original.iter().zip(&exploratory) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.tokens, b.tokens);
+            assert_eq!(a.correct, b.correct);
+            assert_eq!(a.selected_depths, b.selected_depths);
+        }
+        for row in &exploratory[7..] {
+            assert_eq!(row.tokens, events);
+            assert_eq!(row.selected_depths.iter().sum::<u64>(), events);
+            assert!(row.selected_depths[2] + row.selected_depths[3] > 0);
+        }
+        assert_eq!(model.metadata().source_sha256, source);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn fabricated(evidence: [u64; 4]) -> [EvidenceDepthReadout; 4] {
         std::array::from_fn(|i| EvidenceDepthReadout {
@@ -361,7 +461,7 @@ mod tests {
             row.lane_bits = std::array::from_fn(|lane| (lane + i) as f64);
         }
         assert_eq!(best_index(&stats, 0..4), 0);
-        assert_eq!(best_index(&stats, 4..7), 4);
+        assert_eq!(best_index(&stats, 4..stats.len()), 4);
         assert_eq!(
             paired_lane_interval(&stats[0], &stats[1], 39),
             paired_lane_interval(&stats[0], &stats[1], 39)

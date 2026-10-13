@@ -1,0 +1,14 @@
+date=2026-10-13
+execution=local_workspace_not_Thor
+system=Linux-6.18.44-x86_64-with-glibc2.39
+compiler=rustc 1.89.0 (29483883e 2025-08-04)
+preregistration_commit=f18c666ec72cf9ad9f563008fc4e4cde6b3f3686
+parent_head=a9a8a8f4e30656c0810c4c8297b65ea6bd49c1b4
+source_path=crates/sml-core/src/bin/sml-eng1c-val1.rs
+source_sha256=994b80400c22f3022fea011f646677efd8f66710fecde07be922d463ce860fd6
+binary_sha256=5d72f7c7490d3bc1ed0be9ffc7974eb5e771eb29d3c49e5ecb399e29a96db780
+virtual_memory_limit_kib=262144
+timeout_seconds=3000
+quality_source=EXPOSED_VAL_EXPLORATORY
+test_scoring=NOT_PERFORMED
+test_file=NOT_CREATED

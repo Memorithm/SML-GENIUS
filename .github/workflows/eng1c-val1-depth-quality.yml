@@ -66,8 +66,24 @@ jobs:
         shell: bash
         env:
           VAL_LANGUAGE: ${{ matrix.language }}
+          VAL_EXPLORATORY: ${{ github.head_ref == 'research/eng1c-val1-explore-counts-16-32' }}
         run: |
           set -euo pipefail
+          prefix=ENG1C_VAL1
+          policies=7
+          arms='FIXED_4 FIXED_7 FIXED_12 FIXED_32 MIN_COUNT_2 MIN_COUNT_4 MIN_COUNT_8'
+          exploration_args=()
+          verdicts='PROVISIONAL_VAL_GAIN|VAL_STOP_NOT_PROVEN'
+          quality_source=VAL_ONLY
+          if [[ "$VAL_EXPLORATORY" == true ]]; then
+            test -s docs/ENG-1C-VAL1-X16-32-EXPLORATORY-PROTOCOL.md
+            exploration_args=(--explore-counts-16-32)
+            prefix=ENG1C_VAL1_X16_32
+            policies=9
+            arms="$arms MIN_COUNT_16 MIN_COUNT_32"
+            verdicts='EXPLORATORY_VAL_GAIN|EXPLORATORY_VAL_STOP_NOT_PROVEN'
+            quality_source=EXPOSED_VAL_EXPLORATORY
+          fi
           root="$RUNNER_TEMP/eng1c-val1"
           mkdir -p "$root/private" "$root/evidence"
           cleanup() { rm -rf -- "$root/private"; }
@@ -75,7 +91,7 @@ jobs:
           echo "ENG1C_VAL1_SOURCE_HEAD=$(git rev-parse HEAD)" | tee "$root/evidence/environment.txt"
           echo "ENG1C_VAL1_ARCH=$(uname -m)" | tee -a "$root/evidence/environment.txt"
           rustc --version | tee -a "$root/evidence/environment.txt"
-          echo 'ENG1C_VAL1_FROZEN_CANDIDATES=FIXED_4,FIXED_7,FIXED_12,FIXED_32,MIN_COUNT_2,MIN_COUNT_4,MIN_COUNT_8' | tee -a "$root/evidence/environment.txt"
+          echo "${prefix}_CANDIDATES=$arms" | tee -a "$root/evidence/environment.txt"
           echo 'ENG1C_VAL1_MIN_BOOTSTRAP=2048_WITH_64_LANE_RESAMPLE' | tee -a "$root/evidence/environment.txt"
           echo 'ENG1C_VAL1_TEST=UNREAD' | tee -a "$root/evidence/environment.txt"
           bash scripts/eng1c/fetch-val1-splits.sh "$VAL_LANGUAGE" \
@@ -85,7 +101,7 @@ jobs:
           (
             ulimit -v 262144
             timeout --signal=TERM --kill-after=5s 3000 \
-              target/release/sml-eng1c-val1 \
+              target/release/sml-eng1c-val1 "${exploration_args[@]}" \
               "$VAL_LANGUAGE" "$root/private/TRAIN" "$root/private/VAL" \
               "$root/private/store-d32" "$root/private/sort"
           ) > "$root/evidence/val-policies.txt" 2> "$root/private/errors.txt"
@@ -97,14 +113,14 @@ jobs:
             exit "$status"
           fi
           cat "$root/evidence/val-policies.txt"
-          test "$(grep -c '^ENG1C_VAL1_META,' "$root/evidence/val-policies.txt")" -eq 1
-          test "$(grep -c '^ENG1C_VAL1_POLICY,' "$root/evidence/val-policies.txt")" -eq 7
-          test "$(grep -c '^ENG1C_VAL1_DECISION,' "$root/evidence/val-policies.txt")" -eq 1
-          for policy in FIXED_4 FIXED_7 FIXED_12 FIXED_32 MIN_COUNT_2 MIN_COUNT_4 MIN_COUNT_8; do
+          test "$(grep -c "^${prefix}_META," "$root/evidence/val-policies.txt")" -eq 1
+          test "$(grep -c "^${prefix}_POLICY," "$root/evidence/val-policies.txt")" -eq "$policies"
+          test "$(grep -c "^${prefix}_DECISION," "$root/evidence/val-policies.txt")" -eq 1
+          for policy in $arms; do
             test "$(grep -c "policy=$policy," "$root/evidence/val-policies.txt")" -eq 1
           done
-          grep -Eq '^ENG1C_VAL1_DECISION,language=(FR|EN),.*adaptive_science=(PROVISIONAL_VAL_GAIN|VAL_STOP_NOT_PROVEN),test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS$' "$root/evidence/val-policies.txt"
-          grep -Eq '^ENG1C_VAL1_META,language=(FR|EN),.*quality_source=VAL_ONLY,integrity=PASS$' "$root/evidence/val-policies.txt"
+          grep -Eq "^${prefix}_DECISION,language=(FR|EN),.*adaptive_science=($verdicts),test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS$" "$root/evidence/val-policies.txt"
+          grep -Eq "^${prefix}_META,language=(FR|EN),.*quality_source=$quality_source,integrity=PASS$" "$root/evidence/val-policies.txt"
           ( cd "$root/evidence" && sha256sum source-identity.txt val-policies.txt > manifest.sha256 )
           echo 'ENG1C_VAL1_SCIENCE_NEGATIVE_RESULT_ALLOWED=TRUE' >> "$root/evidence/environment.txt"
           echo 'ENG1C_VAL1_NO_MODEL_MUTATION_ON_VAL=TRUE' >> "$root/evidence/environment.txt"
