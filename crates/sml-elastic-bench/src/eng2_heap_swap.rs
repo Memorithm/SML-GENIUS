@@ -383,13 +383,8 @@ impl HeapNGramRuntime {
 
         // A different model is really materialized on the heap. No code path
         // accepts an unqualified physical codec or depth downgrade.
-        let mut material_source: Vec<u8> = Vec::new();
-        let source = if injection == Inject::PoisonShadow {
-            material_source = vec![200; self.train.len()];
-            material_source.as_slice()
-        } else {
-            self.train.as_slice()
-        };
+        let poisoned = (injection == Inject::PoisonShadow).then(|| vec![200; self.train.len()]);
+        let source = poisoned.as_deref().unwrap_or(&self.train);
         let new_resident = Box::new(ResidentNGram::fit(source, target)?);
         let (target_contexts, target_pairs) = new_resident.accounting();
         if (before_contexts, before_pairs) != (target_contexts, target_pairs) {
