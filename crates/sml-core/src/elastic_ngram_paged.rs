@@ -40,6 +40,7 @@ pub const MAX_PAGED_DATA_BYTES: u64 = 805_306_368;
 pub const MAX_PAGED_TOTAL_BYTES: u64 = 2_147_483_648;
 
 type Record = [u8; SOURCE_RECORD_BYTES];
+type ContextHistogram = (u64, Vec<(u8, u32)>);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PagedLimits {
@@ -622,7 +623,6 @@ fn parse_manifest(path: &Path) -> Result<PagedMetadata, PagedError> {
         parse_hex(&next("counts_sha256")?).ok_or(PagedError::CorruptManifest)?;
     let sparse_index_sha256 =
         parse_hex(&next("index_sha256")?).ok_or(PagedError::CorruptManifest)?;
-    drop(next);
     if lines.next().is_some()
         || max_depth > MAX_PAGED_DEPTH
         || train_events == 0
@@ -872,7 +872,7 @@ impl PagedNGram {
         &mut self,
         history: &[u8],
         depth: usize,
-    ) -> Result<Option<(u64, Vec<(u8, u32)>)>, PagedError> {
+    ) -> Result<Option<ContextHistogram>, PagedError> {
         let mut query = [0u8; SOURCE_RECORD_BYTES];
         query[0] = depth as u8;
         if depth > 0 {
