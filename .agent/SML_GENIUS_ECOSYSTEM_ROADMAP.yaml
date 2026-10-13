@@ -1066,9 +1066,49 @@ elastic_ngram_program_2026_10_12:
       - transient_simultaneous_allocations_are_not_hard_RSS_budget_enforced
       - no_NVIDIA_GPU_driver_actuator_or_real_ElasticXxx_generic_resource_provider
       - no_model_quality_or_depth_adaptation_or_SML25B_default_route
+  ENG1c_CAP1:
+    status: merged_exact_TRAIN_only_real_text_context_capacity_results
+    pull_request: 537
+    merge_commit: b8be02118576d19d13cdff22b4ebda3e8177ce49
+    preregistration_commit: d3aaa138d7344d557bcbe4428b396818a337b028
+    protocol: docs/ENG-1C-CAP1-FULL-TRAIN-CAPACITY-PREREGISTRATION.md
+    scanner: crates/sml-core/src/bin/sml-eng1c-capacity-profile.rs
+    scanner_blob: ffe4b88707b299bf748c47303866311242379e17
+    measured_report: docs/RESULTS-ENG-1C-CAP1-FULL-TRAIN-CAPACITY.md
+    source_head_measured: e82652a80d8f8102d987f377e7ed1475e3c014f3
+    first_CAP1_run: 38354832307
+    first_CAP1_evidence_artifact: 11792736149
+    final_head: 5529565808a5335df595036116c67ec70786766a
+    final_CAP1_run: 38355064197
+    final_general_CI: 38355064137
+    final_checks: both_success
+    preregistered_depths: [0, 2, 4, 7, 12, 16, 24, 32]
+    maximum_stored_nodes: 250000
+    maximum_distinct_follower_pairs: 500000
+    nontraining_scanner_event_ceiling: 650000
+    actual_model_event_cap_unchanged: 500000
+    french:
+      completed_depth4: {contexts: 40329, follower_pairs: 117282, all_train_events: 598208}
+      node_cap_stop_depth7_after_completed_events: 201178
+      node_cap_stop_depth12_after_completed_events: 38757
+      node_cap_stop_depth16_after_completed_events: 23481
+      node_cap_stop_depth24_after_completed_events: 13090
+      node_cap_stop_depth32_after_completed_events: 9089
+    english:
+      completed_depth4: {contexts: 41802, follower_pairs: 118117, all_train_events: 590272}
+      node_cap_stop_depth7_after_completed_events: 194828
+      node_cap_stop_depth12_after_completed_events: 40660
+      node_cap_stop_depth16_after_completed_events: 22767
+      node_cap_stop_depth24_after_completed_events: 13288
+      node_cap_stop_depth32_after_completed_events: 9482
+    all_full_train_model_profiles: CAPACITY_STOP_due_to_existing_500000_event_limit
+    no_ENG1c_model_training_or_VAL_TEST_scoring: true
+    context_cardinality_after_early_NODE_STOP: unknown_not_extrapolated
+    physical_process_VmHWM_is_partial_scanner_not_full_model_memory: true
+    scientific_next_step: CAP2_exact_large_corpus_trie_with_explicit_hard_memory_and_transfer_budget
   next_slices:
     - ENG2b_H2_source_epoch_bound_provider_with_hard_peak_budget_concurrent_reader_safety_crash_rollback
-    - ENG1c_full_corpus_capacity_preflight_without_TEST_or_model_scoring
+    - ENG1c_CAP2_full_corpus_exact_trie_capacity_and_source_bound_hard_peak_budget_before_any_model_loss
     - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
