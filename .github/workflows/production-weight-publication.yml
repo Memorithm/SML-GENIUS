@@ -1,0 +1,117 @@
+name: Production weight publication
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/sml-publication/**
+      - policy/production-weight-publishers.allowed_signers
+      - .github/workflows/production-weight-publication.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-weight-publication-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-and-consume:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact SML revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout exact authentication owner
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/SciRust-Verify
+          ref: 662a30dc774dd19c68a79bed3889036a91930123
+          path: owner
+          persist-credentials: false
+      - name: Checkout exact external consumer
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: d6b679e696f5e1b1d3c004c7c95c36c0ea1584d2
+          path: hub
+          persist-credentials: false
+      - name: Build authentication owner
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.98.1
+      - run: cargo build --locked --manifest-path owner/Cargo.toml -p scirust-verify-cli
+      - name: Build production publisher and admission gate
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --locked -p sml-publication --bins
+      - name: Publish with organizational identity and consume externally
+        shell: bash
+        env:
+          SML_PRODUCTION_SIGNING_KEY: ${{ secrets.SML_PRODUCTION_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SML_PRODUCTION_SIGNING_KEY"
+          umask 077
+          key="$RUNNER_TEMP/sml-production-identity"
+          printf '%s\n' "$SML_PRODUCTION_SIGNING_KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+
+          trust="$RUNNER_TEMP/operator-trust"
+          dossier="$RUNNER_TEMP/production-dossier"
+          mkdir -p "$trust"
+          cp policy/production-weight-publishers.allowed_signers "$trust/allowed_signers"
+          chmod 0600 "$trust/allowed_signers"
+          owner="$GITHUB_WORKSPACE/owner/target/debug/scirust-verify"
+          publication_id="sml-main-${GITHUB_SHA}"
+          run_id="$(target/debug/sml-production-publisher \
+            "$dossier" "$owner" "$key" "$GITHUB_SHA" "$publication_id")"
+
+          owner_sha="$(sha256sum "$owner" | cut -d' ' -f1)"
+          signers_sha="$(sha256sum "$trust/allowed_signers" | cut -d' ' -f1)"
+          jq -n \
+            --arg code_sha "$GITHUB_SHA" \
+            --arg publication_id "$publication_id" \
+            --arg publisher "memorithm-sml-production" \
+            --arg verifier_sha256 "$owner_sha" \
+            --arg allowed_signers_sha256 "$signers_sha" \
+            '{schema_version: 1, code_sha: $code_sha, publication_id: $publication_id, publishers: [$publisher], verifier_sha256: $verifier_sha256, allowed_signers_sha256: $allowed_signers_sha256}' \
+            > "$trust/policy.json"
+          chmod 0600 "$trust/policy.json"
+
+          python3 hub/scripts/sml_weight_external_consumer.py \
+            --executable "$GITHUB_WORKSPACE/target/debug/sml-publication" \
+            --dossier "$dossier" \
+            --run-id "$run_id" \
+            --owner "$owner" \
+            --policy "$trust/policy.json" \
+            --allowed-signers "$trust/allowed_signers" \
+            --expected-code-sha "$GITHUB_SHA" \
+            --expected-publication-id "$publication_id" \
+            | tee "$RUNNER_TEMP/external-consumer-receipt.json"
+
+          jq -e \
+            --arg code_sha "$GITHUB_SHA" \
+            --arg publication_id "$publication_id" \
+            '.schema == "scirust-hub.sml-weight-admission-receipt/v1"
+             and .code_sha == $code_sha
+             and .publication_id == $publication_id
+             and .publisher == "memorithm-sml-production"
+             and .scientific_qualification == "not_evaluated"
+             and .merge_authorization == false' \
+            "$RUNNER_TEMP/external-consumer-receipt.json"
+      - name: Retain production admission evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-weight-admission-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/external-consumer-receipt.json
+            ${{ runner.temp }}/production-dossier
+          if-no-files-found: error
+          retention-days: 30
