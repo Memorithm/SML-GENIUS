@@ -1107,9 +1107,56 @@ elastic_ngram_program_2026_10_12:
     physical_process_VmHWM_is_partial_scanner_not_full_model_memory: true
     scientific_next_step: CAP2_exact_large_corpus_trie_with_explicit_hard_memory_and_transfer_budget
     CAP2_tracking_issue: 538
+  ENG1c_CAP2a:
+    status: complete_exact_full_TRAIN_external_suffix_cardinality_qualified_with_model_capacity_STOP
+    pull_request: 539
+    merge_commit: 6a0f7e20c980abb6a2f8c3530722cae33308e180
+    preregistration_commit: 38aac3c5ffe7b0a342e3a9872732960f42641067
+    code: crates/sml-core/src/bin/sml-eng1c-cap2-external.rs
+    code_blob: f2bb9b20d8df775f6778a0afe362569e704aee7d
+    results: docs/RESULTS-ENG-1C-CAP2A-EXACT-FULL-TRAIN-INDEX.md
+    final_head: 888b2705c8aa8473a2a39c4a088982d3c705d1d2
+    final_dedicated_CI: 38357154238
+    final_general_CI: 38357154028
+    all_exact_head_checks: success
+    original_dedicated_run: 38356769038
+    source_and_final_runs_structurally_equal: true
+    artifact_FR_first: 11792759706
+    artifact_EN_first: 11792079967
+    preregistered_depths: [0, 2, 4, 7, 12, 16, 24, 32]
+    exact_key_record_bytes: 34
+    sorted_records_per_run: 262144
+    maximum_simultaneous_sorted_files: 96
+    disk_scratch_quota_bytes: 1073741824
+    OS_virtual_memory_limit_KiB: 262144
+    independent_linux_process_VmHWM_not_equivalent_to_model_RSS: true
+    french:
+      total_TRAIN_events: 598208
+      depth4: {contexts: 40329, follower_pairs: 117282}
+      depth7: {contexts: 491517, follower_pairs: 799782}
+      depth12: {contexts: 2597815, follower_pairs: 3131101}
+      depth16: {contexts: 4816161, follower_pairs: 5395227}
+      depth24: {contexts: 9522629, follower_pairs: 10117697}
+      depth32: {contexts: 14281533, follower_pairs: 14878280, records: 19709120, sorted_runs: 76, scratch_bytes: 670110080}
+    english:
+      total_TRAIN_events: 590272
+      depth4: {contexts: 41802, follower_pairs: 118117}
+      depth7: {contexts: 471036, follower_pairs: 759560}
+      depth12: {contexts: 2477266, follower_pairs: 2995126}
+      depth16: {contexts: 4641299, follower_pairs: 5208546}
+      depth24: {contexts: 9257014, follower_pairs: 9841222}
+      depth32: {contexts: 13932625, follower_pairs: 14519708, records: 19447232, sorted_runs: 75, scratch_bytes: 661205888}
+    noncryptographic_record_multiset_checksums_match_in_both_final_runs: true
+    source_raw_and_body_sha256_pinned_and_verified_before_TRAIN: true
+    model_training: NOT_EXECUTED
+    validation_and_test_labels_scored: false
+    actual_fitted_model_event_cap_500000: UNCHANGED
+    actual_fitted_model_node_cap_250000: UNCHANGED
+    current_full_corpus_model_admission: STOP
+    CAP2b_paged_exact_Witten_Bell_count_store_issue: 540
   next_slices:
     - ENG2b_H2_source_epoch_bound_provider_with_hard_peak_budget_concurrent_reader_safety_crash_rollback
-    - ENG1c_CAP2_full_corpus_exact_trie_capacity_and_source_bound_hard_peak_budget_before_any_model_loss
+    - ENG1c_CAP2b_model_queryable_exact_paged_count_store_issue_540_before_any_VAL_TEST_quality
     - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
