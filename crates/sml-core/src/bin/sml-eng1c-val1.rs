@@ -3,6 +3,7 @@
 //! Fixed depths 4/7/12/32 and model-owned exact TRAIN occurrence policies
 //! 2/4/8 share one immutable depth32 Witten-Bell store.
 //! Explicit --explore-counts-16-32 adds post-hoc 16/32 arms on exposed VAL.
+//! --explore-counts-64-128 adds two further exploratory arms (eleven total).
 //! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
@@ -17,7 +18,7 @@ use sml_core::{
     elastic_ngram_paged_sha::hex,
 };
 
-const POLICY_NAMES: [&str; 9] = [
+const POLICY_NAMES: [&str; 11] = [
     "FIXED_4",
     "FIXED_7",
     "FIXED_12",
@@ -27,11 +28,46 @@ const POLICY_NAMES: [&str; 9] = [
     "MIN_COUNT_8",
     "MIN_COUNT_16",
     "MIN_COUNT_32",
+    "MIN_COUNT_64",
+    "MIN_COUNT_128",
 ];
-const EVIDENCE_MIN_COUNTS: [u64; 5] = [2, 4, 8, 16, 32];
+const EVIDENCE_MIN_COUNTS: [u64; 7] = [2, 4, 8, 16, 32, 64, 128];
 const FROZEN_POLICIES: usize = 7;
 const BOOTSTRAP_REPETITIONS: usize = 2048;
 const BOOTSTRAP_SEED: u64 = 0xE1C5_2026_1013_B001;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EvaluationMode {
+    Frozen,
+    Explore16_32,
+    Explore64_128,
+}
+
+impl EvaluationMode {
+    fn from_flag(flag: Option<&str>) -> Self {
+        match flag {
+            Some("--explore-counts-16-32") => Self::Explore16_32,
+            Some("--explore-counts-64-128") => Self::Explore64_128,
+            _ => Self::Frozen,
+        }
+    }
+
+    fn policy_count(self) -> usize {
+        match self {
+            Self::Frozen => FROZEN_POLICIES,
+            Self::Explore16_32 => 9,
+            Self::Explore64_128 => POLICY_NAMES.len(),
+        }
+    }
+
+    fn output_prefix(self) -> &'static str {
+        match self {
+            Self::Frozen => "ENG1C_VAL1",
+            Self::Explore16_32 => "ENG1C_VAL1_X16_32",
+            Self::Explore64_128 => "ENG1C_VAL1_X64_128",
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 struct Corpus {
@@ -159,34 +195,26 @@ fn evaluate_val(
     model: &mut PagedNGram,
     val: &[u8],
     expected_events: u64,
-    exploratory: bool,
+    mode: EvaluationMode,
 ) -> Result<Vec<PolicyStats>, Box<dyn Error>> {
     let layout = ChunkLayout::new(val.len())?;
     if layout.tokens() != expected_events {
         return Err("VAL 64-lane denominator drift".into());
     }
-    let policy_count = if exploratory {
-        POLICY_NAMES.len()
-    } else {
-        FROZEN_POLICIES
-    };
+    let policy_count = mode.policy_count();
     let mut stats = vec![PolicyStats::default(); policy_count];
     for lane in 0..LANES {
         let chunk = &val[lane * layout.chunk..(lane + 1) * layout.chunk];
         for t in 1..chunk.len() {
             // Exactly one traversal of each observed TRAIN count layer.
             let ladder = model.depth_ladder_readout(&chunk[..t])?;
-            let choices = [
-                0usize,
-                1,
-                2,
-                3,
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[0]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[1]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[2]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[3]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[4]),
-            ];
+            let choices: [usize; POLICY_NAMES.len()] = std::array::from_fn(|policy| {
+                if policy < 4 {
+                    policy
+                } else {
+                    evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[policy - 4])
+                }
+            });
             let true_next_byte = chunk[t];
             for (policy, &depth_index) in choices.iter().take(policy_count).enumerate() {
                 stats[policy].record(lane, true_next_byte, &ladder[depth_index]);
@@ -250,19 +278,16 @@ fn paired_lane_interval(
 }
 
 fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
-    let exploratory = args.get(1).is_some_and(|a| a == "--explore-counts-16-32");
-    let output_prefix = if exploratory {
-        "ENG1C_VAL1_X16_32"
-    } else {
-        "ENG1C_VAL1"
-    };
+    let mode = EvaluationMode::from_flag(args.get(1).map(String::as_str));
+    let exploratory = mode != EvaluationMode::Frozen;
+    let output_prefix = mode.output_prefix();
     let mut normalized = args.to_vec();
     if exploratory {
         normalized.remove(1);
     }
     let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -304,7 +329,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Opening validates the counted file, sparse index and source SHA256.
     let mut model = PagedNGram::open(Path::new(&args[4]), source)?;
     let val_at = Instant::now();
-    let stats = evaluate_val(&mut model, &val, corpus.val_events, exploratory)?;
+    let stats = evaluate_val(&mut model, &val, corpus.val_events, mode)?;
     let val_ms = val_at.elapsed().as_millis();
     let full_process_peak_kib = vmhwm_kib()?;
     let lane_tokens = layout.chunk as u64 - 1;
@@ -366,7 +391,7 @@ mod tests {
 
     #[test]
     fn exploratory_threshold_boundaries_are_inclusive_and_monotone() {
-        for threshold in [16, 32] {
+        for threshold in [16, 32, 64, 128] {
             assert_eq!(
                 evidence_choice(&fabricated([99, threshold - 1, 0, 0]), threshold),
                 0
@@ -413,17 +438,26 @@ mod tests {
         ));
         let mut model = PagedNGram::open(&store, source).unwrap();
         let events = ChunkLayout::new(val.len()).unwrap().tokens();
-        let original = evaluate_val(&mut model, &val, events, false).unwrap();
-        let exploratory = evaluate_val(&mut model, &val, events, true).unwrap();
+        let original = evaluate_val(&mut model, &val, events, EvaluationMode::Frozen).unwrap();
+        let exploratory =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore16_32).unwrap();
+        let expanded =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore64_128).unwrap();
         assert_eq!(original.len(), 7);
         assert_eq!(exploratory.len(), 9);
-        for (a, b) in original.iter().zip(&exploratory) {
+        assert_eq!(expanded.len(), 11);
+        for (a, b) in exploratory.iter().zip(&expanded) {
             assert_eq!(a.lane_bits, b.lane_bits);
             assert_eq!(a.tokens, b.tokens);
             assert_eq!(a.correct, b.correct);
             assert_eq!(a.selected_depths, b.selected_depths);
         }
-        for row in &exploratory[7..] {
+        for (a, b) in original.iter().zip(&expanded) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.correct, b.correct);
+            assert_eq!(a.selected_depths, b.selected_depths);
+        }
+        for row in &expanded[7..] {
             assert_eq!(row.tokens, events);
             assert_eq!(row.selected_depths.iter().sum::<u64>(), events);
             assert!(row.selected_depths[2] + row.selected_depths[3] > 0);

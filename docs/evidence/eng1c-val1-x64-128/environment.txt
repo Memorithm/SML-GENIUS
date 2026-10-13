@@ -1,0 +1,17 @@
+date=2026-10-13
+execution=local_workspace_not_Thor
+system=Linux-6.18.44-x86_64-with-glibc2.39
+compiler=rustc 1.89.0 (29483883e 2025-08-04)
+protocol_commit=8c48115e7369de1bee48b59d45e3c179527714dd
+parent_head=cb089ce6644f76f2d7c8a8544f2b94a381336a93
+source_path=crates/sml-core/src/bin/sml-eng1c-val1.rs
+source_sha256=48c3f0764aefa7e6bc62bc78ea2f232509fdd2f38ddf72b3f2d58fe16f9c0d90
+binary_sha256=509b2f7d9b2ebe972b35d94ef1e9b153d26f5b16267077f31ea6870d0197d43a
+virtual_memory_limit_kib=262144
+timeout_seconds=3000
+quality_source=EXPOSED_VAL_EXPLORATORY
+data_transport=reused_prior_hash_verified_local_TRAIN_VAL_splits
+TRAIN_VAL_hashes_independently_rechecked_before_scoring=true
+test_scoring=NOT_PERFORMED
+test_file=NOT_CREATED
+local_fmt_clippy_workspace_tests_pre_push=PASS
