@@ -2,7 +2,8 @@
 use sml_core::{
     anf_char::{ChunkLayout, LANES},
     elastic_ngram_paged::{
-        build_paged, EvidenceDepthReadout, PagedBuild, PagedLimits, PagedNGram, ENG1C_VAL_DEPTHS,
+        build_paged, EscapePolicy, EvidenceDepthReadout, PagedBuild, PagedLimits, PagedNGram,
+        ENG1C_VAL_DEPTHS,
     },
     elastic_ngram_paged_sha::{hex, sha256},
     paired_panel::{holm_two_pass, paired_group_interval, paired_summary},
@@ -653,13 +654,111 @@ fn analyze(obs: &[Observation]) -> Result<String> {
     text.push_str(&format!("DECISION\t{verdict}\tunits=12\toriginal_TEST=UNREAD\tscope=HISTORICAL_FR_EN_PANEL_ONLY\tintegrity=PASS\n"));
     Ok(text)
 }
+// ---------------------------------------------------------------- ENG-1d
+// Exploratory DEV-only grid of escape policies x depths on the TESTTEST
+// works. It reuses the frozen manifest/source checks, builds the same TRAIN
+// store as `seal`, and scores ONLY the DEV slice. TEST is hashed by the
+// manifest check (as in `seal`) but never scored. Outputs are exploration
+// for a future preregistration on NEW works, never a confirmation.
+const GRID_SCHEMA: &str = "eng1d-dev-grid-v1";
+const GRID_DEPTHS: [usize; 12] = [2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 32];
+fn grid_policies() -> Vec<EscapePolicy> {
+    let mut policies = vec![EscapePolicy::WittenBell];
+    for beta in [1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0] {
+        policies.push(EscapePolicy::ScaledWittenBell { beta });
+    }
+    for tau in [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0] {
+        policies.push(EscapePolicy::Dirichlet { tau });
+    }
+    policies
+}
+/// Total DEV bits per (policy, GRID_DEPTHS index), summed per lane then
+/// across lanes exactly like `score`, so the `wb` row at 4/7/12/32 is
+/// bitwise comparable with a seal's `dev_bits*`.
+fn dev_grid_bits(
+    model: &mut PagedNGram,
+    dev: &[u8],
+    policies: &[EscapePolicy],
+) -> Result<(Vec<[f64; GRID_DEPTHS.len()]>, u64)> {
+    let layout = ChunkLayout::new(dev.len())?;
+    let mut total = vec![[0.0f64; GRID_DEPTHS.len()]; policies.len()];
+    let mut tokens = 0u64;
+    for lane in 0..LANES {
+        let chunk = &dev[lane * layout.chunk..(lane + 1) * layout.chunk];
+        let mut lane_bits = vec![[0.0f64; GRID_DEPTHS.len()]; policies.len()];
+        for t in 1..chunk.len() {
+            let ladders = model.target_ladders(&chunk[..t], chunk[t], policies)?;
+            for (bits, ladder) in lane_bits.iter_mut().zip(&ladders) {
+                for (slot, &depth) in bits.iter_mut().zip(&GRID_DEPTHS) {
+                    *slot -= ladder.by_depth[depth].log2();
+                }
+            }
+            tokens += 1;
+        }
+        for (sum, lane) in total.iter_mut().zip(&lane_bits) {
+            for (s, l) in sum.iter_mut().zip(lane) {
+                *s += l;
+            }
+        }
+    }
+    if tokens != layout.tokens() || total.iter().flatten().any(|x| !x.is_finite() || *x < 0.0) {
+        return Err("incomplete DEV grid".into());
+    }
+    Ok((total, tokens))
+}
+fn dev_grid(i: &Inputs, work_dir: &Path, output: &Path) -> Result<()> {
+    let digest_path = PathBuf::from(format!("{}.sha256", output.display()));
+    if output.exists() || digest_path.exists() {
+        return Err("grid destination exists".into());
+    }
+    fs::create_dir_all(work_dir)?;
+    let train = &i.bytes[i.splits.train.clone()];
+    let store = work_dir.join(format!("{}-grid-store", i.work.id));
+    let scratch = work_dir.join(format!("{}-grid-sort", i.work.id));
+    let PagedBuild::Published(meta) =
+        build_paged(train, 32, &store, &scratch, PagedLimits::default())?
+    else {
+        return Err("capacity stop".into());
+    };
+    let mut model = PagedNGram::open(&store, sha256(train))?;
+    let policies = grid_policies();
+    let (bits, tokens) = dev_grid_bits(&mut model, &i.bytes[i.splits.dev.clone()], &policies)?;
+    let mut data = String::new();
+    for (k, v) in [
+        ("schema", GRID_SCHEMA.to_string()),
+        ("id", i.work.id.clone()),
+        ("language", i.work.language.clone()),
+        ("manifest_sha256", i.manifest_sha.clone()),
+        ("binary_sha256", binary_sha()?),
+        ("fingerprint", i.fingerprint.clone()),
+        ("train_bytes", train.len().to_string()),
+        ("dev_tokens", tokens.to_string()),
+        ("store_sha256", hex(&meta.count_store_sha256)),
+        ("index_sha256", hex(&meta.sparse_index_sha256)),
+        ("test_scored", "NO".to_string()),
+    ] {
+        data.push_str(&format!("{k}\t{v}\n"));
+    }
+    for (policy, row) in policies.iter().zip(&bits) {
+        for (depth, value) in GRID_DEPTHS.iter().zip(row) {
+            data.push_str(&format!("grid\t{}\t{depth}\t{value}\n", policy.label()));
+        }
+    }
+    data.push_str("integrity\tPASS\n");
+    fresh(output, &data)?;
+    fresh(
+        &digest_path,
+        &format!("{}\n", hex(&sha256(data.as_bytes()))),
+    )
+}
 fn run(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
         Some("fingerprint") if args.len()==4=>fingerprint_all(Path::new(&args[2]),Path::new(&args[3])),
         Some("seal") if args.len()==7=>{ let i=inputs(Path::new(&args[2]),Path::new(&args[3]),&args[5])?; seal(&i,Path::new(&args[4]),Path::new(&args[6])) },
         Some("test") if args.len()==8=>{ let i=inputs(Path::new(&args[2]),Path::new(&args[3]),&args[5])?; test(&i,Path::new(&args[4]),Path::new(&args[6]),Path::new(&args[7])) },
+        Some("dev-grid") if args.len()==7=>{ let i=inputs(Path::new(&args[2]),Path::new(&args[3]),&args[5])?; dev_grid(&i,Path::new(&args[4]),Path::new(&args[6])) },
         Some("analyze") if args.len()==5=>{let obs=observations(Path::new(&args[2]),Path::new(&args[3]))?; fresh(Path::new(&args[4]),&analyze(&obs)?)},
-        _=>Err("usage: sml-eng1c-testtest fingerprint RAW_DIR NEW_MANIFEST | seal MANIFEST RAW_DIR WORK_DIR ID NEW_SEAL | test MANIFEST RAW_DIR WORK_DIR ID SEAL NEW_RESULT | analyze MANIFEST EVIDENCE_DIR NEW_REPORT".into())
+        _=>Err("usage: sml-eng1c-testtest fingerprint RAW_DIR NEW_MANIFEST | seal MANIFEST RAW_DIR WORK_DIR ID NEW_SEAL | test MANIFEST RAW_DIR WORK_DIR ID SEAL NEW_RESULT | analyze MANIFEST EVIDENCE_DIR NEW_REPORT | dev-grid MANIFEST RAW_DIR WORK_DIR ID NEW_GRID".into())
     }
 }
 fn main() {
@@ -716,6 +815,73 @@ mod tests {
             (0..600000, 1200000..1232768, 1600000..1665536)
         );
     }
+    #[test]
+    fn eng1d_dev_grid_scores_only_dev_and_reproduces_sealed_dev_bits() {
+        let root = std::env::temp_dir().join(format!("eng1d-grid-fixture-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let work = roster().unwrap().remove(0);
+        let text: String = (0..1600)
+            .map(|k| format!("le {} de la {} ", k % 37, (k * 7) % 23))
+            .collect();
+        let content = format!("Title: {}\r\nAuthor: {}\r\nLanguage: French\r\n*** START OF THE PROJECT GUTENBERG EBOOK FIXTURE ***\r\n{text}\r\n*** END OF THE PROJECT GUTENBERG EBOOK FIXTURE ***\r\n", work.title, work.author);
+        let raw = content.as_bytes();
+        let mut bytes = body(raw, &work).unwrap();
+        let sp = splits(bytes.len()).unwrap();
+        let i = Inputs {
+            work,
+            manifest_sha: "a".repeat(64),
+            fingerprint: fingerprint(&roster().unwrap()[0], raw).unwrap(),
+            splits: sp.clone(),
+            bytes: bytes.clone(),
+        };
+        let seal_path = root.join("seal.tsv");
+        seal(&i, &root.join("s"), &seal_path).unwrap();
+        let grid_path = root.join("grid.tsv");
+        dev_grid(&i, &root.join("g"), &grid_path).unwrap();
+        assert!(
+            dev_grid(&i, &root.join("g2"), &grid_path).is_err(),
+            "no overwrite"
+        );
+        let text = fs::read_to_string(&grid_path).unwrap();
+        assert_eq!(
+            fs::read_to_string(format!("{}.sha256", grid_path.display())).unwrap(),
+            format!("{}\n", hex(&sha256(text.as_bytes())))
+        );
+        let (_, s) = record(&seal_path, &SEAL_KEYS).unwrap();
+        for (k, depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+            let line = format!("grid\twb\t{depth}\t{}\n", s[6 + k]);
+            assert!(
+                text.contains(&line),
+                "wb row must equal sealed DEV bits: {line}"
+            );
+        }
+        let rows = text.lines().filter(|l| l.starts_with("grid\t")).count();
+        assert_eq!(rows, grid_policies().len() * GRID_DEPTHS.len());
+        assert!(text.contains("test_scored\tNO\n") && text.ends_with("integrity\tPASS\n"));
+
+        // TEST bytes cannot influence the grid: scramble TEST, same output.
+        for b in &mut bytes[sp.test.clone()] {
+            *b = b.wrapping_mul(31).wrapping_add(7);
+        }
+        let scrambled = Inputs {
+            work: i.work.clone(),
+            manifest_sha: i.manifest_sha.clone(),
+            fingerprint: i.fingerprint.clone(),
+            splits: sp,
+            bytes,
+        };
+        let other = root.join("grid-scrambled.tsv");
+        dev_grid(&scrambled, &root.join("g3"), &other).unwrap();
+        let strip = |t: &str| {
+            t.lines()
+                .filter(|l| l.starts_with("grid\t"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(strip(&text), strip(&fs::read_to_string(&other).unwrap()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn synthetic_two_phase_roundtrip_and_corruption_rejection() {
         let root = std::env::temp_dir().join(format!("testtest-fixture-{}", std::process::id()));

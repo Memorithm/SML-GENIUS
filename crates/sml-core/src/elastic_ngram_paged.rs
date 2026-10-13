@@ -120,6 +120,7 @@ pub enum PagedError {
     CorruptManifest,
     CorruptSparseIndex,
     InvalidProbability,
+    InvalidEscapePolicy,
     Io,
     Quota(PagedQuota),
 }
@@ -813,6 +814,73 @@ pub struct EvidenceDepthReadout {
     pub context_events: u64,
 }
 
+/// ENG-1d: how much probability mass each observed context hands to its
+/// shorter suffix. With escape mass `e`, an observed context with `n` TRAIN
+/// events updates `p <- (n_y + e * p_shorter) / (n + e)`.
+///
+/// * `WittenBell`: `e = U` (distinct followers). Bitwise identical to the
+///   frozen ENG-1c readout.
+/// * `ScaledWittenBell { beta }`: `e = beta * U`. `beta > 1` trusts sparse
+///   long contexts less.
+/// * `Dirichlet { tau }`: `e = tau`, the fixed-concentration parent form of
+///   A6-E5 `anf_byte_backoff::distribution_dirichlet_with_parent` (local
+///   smoothing `alpha` omitted: the parent already gives full support).
+///
+/// The policy never sees the target byte; it is a frozen model setting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EscapePolicy {
+    WittenBell,
+    ScaledWittenBell { beta: f64 },
+    Dirichlet { tau: f64 },
+}
+
+impl EscapePolicy {
+    /// Rejects non-finite or non-positive parameters.
+    pub fn validate(self) -> Result<Self, PagedError> {
+        let ok = match self {
+            Self::WittenBell => true,
+            Self::ScaledWittenBell { beta } => beta.is_finite() && beta > 0.0,
+            Self::Dirichlet { tau } => tau.is_finite() && tau > 0.0,
+        };
+        if ok {
+            Ok(self)
+        } else {
+            Err(PagedError::InvalidEscapePolicy)
+        }
+    }
+
+    /// Escape mass for a context with `distinct` observed followers.
+    #[must_use]
+    pub fn escape_mass(self, distinct: usize) -> f64 {
+        let distinct = distinct as f64;
+        match self {
+            Self::WittenBell => distinct,
+            Self::ScaledWittenBell { beta } => beta * distinct,
+            Self::Dirichlet { tau } => tau,
+        }
+    }
+
+    /// Stable text label used in records, e.g. `wb`, `swb:4`, `dir:16`.
+    #[must_use]
+    pub fn label(self) -> String {
+        match self {
+            Self::WittenBell => "wb".into(),
+            Self::ScaledWittenBell { beta } => format!("swb:{beta}"),
+            Self::Dirichlet { tau } => format!("dir:{tau}"),
+        }
+    }
+}
+
+/// Target-only readout of one escape policy: `by_depth[d]` is the
+/// probability of the target byte with maximum context depth `d`
+/// (depths deeper than the history repeat the deepest available value),
+/// `context_events[d]` the TRAIN events of the depth-`d` suffix (0 if absent).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetLadder {
+    pub by_depth: [f64; MAX_PAGED_DEPTH + 1],
+    pub context_events: [u64; MAX_PAGED_DEPTH + 1],
+}
+
 #[derive(Clone)]
 struct IndexRow {
     key: Record,
@@ -974,6 +1042,17 @@ impl PagedNGram {
         &mut self,
         history: &[u8],
     ) -> Result<[EvidenceDepthReadout; 4], PagedError> {
+        self.depth_ladder_readout_with(history, EscapePolicy::WittenBell)
+    }
+
+    /// Same ladder under an explicit escape policy. `WittenBell` reproduces
+    /// [`Self::depth_ladder_readout`] bit for bit.
+    pub fn depth_ladder_readout_with(
+        &mut self,
+        history: &[u8],
+        policy: EscapePolicy,
+    ) -> Result<[EvidenceDepthReadout; 4], PagedError> {
+        let policy = policy.validate()?;
         if self.metadata.max_depth < ENG1C_VAL_DEPTHS[3] {
             return Err(PagedError::InvalidDepth);
         }
@@ -988,9 +1067,9 @@ impl PagedNGram {
             let histogram = self.context_histogram(history, d)?;
             let exact_total = if let Some((count, followers)) = histogram {
                 let n = count as f64;
-                let distinct = followers.len() as f64;
-                let den = n + distinct;
-                let scale = distinct / den;
+                let escape = policy.escape_mass(followers.len());
+                let den = n + escape;
+                let scale = escape / den;
                 for p in &mut probabilities {
                     *p *= scale;
                 }
@@ -1024,6 +1103,70 @@ impl PagedNGram {
             }
         }
         Ok(result)
+    }
+
+    /// ENG-1d scoring fast path: probability of `target` only, at every depth
+    /// 0..=max_depth, for several escape policies, reading each context
+    /// histogram once. It applies the same per-element operations as the
+    /// full readout, so each value is bitwise equal to the matching entry of
+    /// [`Self::depth_ladder_readout_with`] (about 256x less arithmetic per
+    /// level). `target` is used only to read out the result.
+    pub fn target_ladders(
+        &mut self,
+        history: &[u8],
+        target: u8,
+        policies: &[EscapePolicy],
+    ) -> Result<Vec<TargetLadder>, PagedError> {
+        for policy in policies {
+            policy.validate()?;
+        }
+        let max_depth = self.metadata.max_depth.min(MAX_PAGED_DEPTH);
+        let top = max_depth.min(history.len());
+        let mut current = vec![1.0 / 256.0; policies.len()];
+        let mut ladders = vec![
+            TargetLadder {
+                by_depth: [0.0; MAX_PAGED_DEPTH + 1],
+                context_events: [0; MAX_PAGED_DEPTH + 1],
+            };
+            policies.len()
+        ];
+        for d in 0..=top {
+            let histogram = self.context_histogram(history, d)?;
+            let mut events = 0;
+            if let Some((count, followers)) = histogram {
+                events = count;
+                let n = count as f64;
+                let frequency = followers
+                    .iter()
+                    .find(|(label, _)| *label == target)
+                    .map_or(0, |(_, f)| *f);
+                for (p, policy) in current.iter_mut().zip(policies) {
+                    let escape = policy.escape_mass(followers.len());
+                    let den = n + escape;
+                    *p *= escape / den;
+                    if frequency > 0 {
+                        *p += f64::from(frequency) / den;
+                    }
+                }
+            }
+            for (ladder, p) in ladders.iter_mut().zip(&current) {
+                ladder.by_depth[d] = *p;
+                ladder.context_events[d] = events;
+            }
+        }
+        for ladder in &mut ladders {
+            let deepest = ladder.by_depth[top];
+            for slot in &mut ladder.by_depth[top + 1..] {
+                *slot = deepest;
+            }
+            if ladder.by_depth[..=max_depth]
+                .iter()
+                .any(|p| !p.is_finite() || *p <= 0.0 || *p > 1.0)
+            {
+                return Err(PagedError::InvalidProbability);
+            }
+        }
+        Ok(ladders)
     }
 
     pub fn score(&mut self, bytes: &[u8], depth: usize) -> Result<ByteScore, PagedError> {
@@ -1089,6 +1232,206 @@ mod tests {
                 (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + seed) % 23) as u8)
             })
             .collect()
+    }
+
+    /// Independent brute-force oracle: lane-local TRAIN counts, then the
+    /// escape-policy recursion written from the formula, not from the store.
+    fn oracle_target(
+        train: &[u8],
+        history: &[u8],
+        target: u8,
+        depth: usize,
+        escape: &dyn Fn(usize) -> f64,
+    ) -> f64 {
+        let chunk = train.len() / LANES;
+        let mut p = 1.0 / 256.0;
+        for d in 0..=depth.min(history.len()) {
+            let context = &history[history.len() - d..];
+            let mut followers = [0u32; 256];
+            for lane in 0..LANES {
+                let lane_bytes = &train[lane * chunk..(lane + 1) * chunk];
+                for t in d.max(1)..lane_bytes.len() {
+                    if &lane_bytes[t - d..t] == context {
+                        followers[usize::from(lane_bytes[t])] += 1;
+                    }
+                }
+            }
+            let n: u32 = followers.iter().sum();
+            if n == 0 {
+                continue;
+            }
+            let distinct = followers.iter().filter(|&&f| f > 0).count();
+            let e = escape(distinct);
+            p = (f64::from(followers[usize::from(target)]) + e * p) / (f64::from(n) + e);
+        }
+        p
+    }
+
+    fn published(root: &TestRoot, train: &[u8]) -> PagedNGram {
+        let target = root.output("published");
+        let built = build_paged(
+            train,
+            32,
+            &target,
+            &root.output("sort"),
+            PagedLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(built, PagedBuild::Published(_)));
+        PagedNGram::open(&target, training_sha256(train)).unwrap()
+    }
+
+    const ENG1D_POLICIES: [EscapePolicy; 5] = [
+        EscapePolicy::WittenBell,
+        EscapePolicy::ScaledWittenBell { beta: 1.0 },
+        EscapePolicy::ScaledWittenBell { beta: 6.0 },
+        EscapePolicy::Dirichlet { tau: 0.5 },
+        EscapePolicy::Dirichlet { tau: 32.0 },
+    ];
+
+    #[test]
+    fn eng1d_witten_bell_policy_reproduces_frozen_ladder_bitwise() {
+        let train = corpus(0);
+        let probe = corpus(13);
+        let root = TestRoot::new("eng1d-wb-parity");
+        let mut model = published(&root, &train);
+        for lane in 0..LANES {
+            let chunk = &probe[lane * 40..(lane + 1) * 40];
+            for t in 1..40 {
+                let history = &chunk[..t];
+                let frozen = model.depth_ladder_readout(history).unwrap();
+                let generic = model
+                    .depth_ladder_readout_with(history, EscapePolicy::WittenBell)
+                    .unwrap();
+                let scaled_one = model
+                    .depth_ladder_readout_with(
+                        history,
+                        EscapePolicy::ScaledWittenBell { beta: 1.0 },
+                    )
+                    .unwrap();
+                let fast = model
+                    .target_ladders(history, chunk[t], &[EscapePolicy::WittenBell])
+                    .unwrap();
+                for (i, &depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+                    for label in 0..256 {
+                        assert_eq!(
+                            frozen[i].probabilities[label].to_bits(),
+                            generic[i].probabilities[label].to_bits()
+                        );
+                        assert_eq!(
+                            frozen[i].probabilities[label].to_bits(),
+                            scaled_one[i].probabilities[label].to_bits()
+                        );
+                    }
+                    assert_eq!(frozen[i].context_events, generic[i].context_events);
+                    assert_eq!(
+                        fast[0].by_depth[depth].to_bits(),
+                        frozen[i].probabilities[usize::from(chunk[t])].to_bits(),
+                        "depth {depth} lane {lane} t {t}"
+                    );
+                    if depth <= history.len() {
+                        assert_eq!(fast[0].context_events[depth], frozen[i].context_events);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn eng1d_every_policy_matches_full_readout_and_independent_oracle() {
+        let train = corpus(0);
+        let probe = corpus(13);
+        let root = TestRoot::new("eng1d-policy-oracle");
+        let mut model = published(&root, &train);
+        let mut checked = 0usize;
+        for source in [&train, &probe] {
+            for lane in (0..LANES).step_by(4) {
+                let chunk = &source[lane * 40..(lane + 1) * 40];
+                for t in 1..40 {
+                    let history = &chunk[..t];
+                    let target = chunk[t];
+                    let fast = model
+                        .target_ladders(history, target, &ENG1D_POLICIES)
+                        .unwrap();
+                    for (policy, ladder) in ENG1D_POLICIES.iter().zip(&fast) {
+                        let full = model.depth_ladder_readout_with(history, *policy).unwrap();
+                        for (i, &depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+                            let sum: f64 = full[i].probabilities.iter().sum();
+                            assert!((sum - 1.0).abs() <= 1e-10);
+                            assert_eq!(
+                                ladder.by_depth[depth].to_bits(),
+                                full[i].probabilities[usize::from(target)].to_bits()
+                            );
+                        }
+                        for depth in [0, 3, 9, 32] {
+                            let reference = oracle_target(&train, history, target, depth, &|u| {
+                                policy.escape_mass(u)
+                            });
+                            let got = ladder.by_depth[depth];
+                            assert!(
+                                (got - reference).abs() <= 1e-12 * reference.max(1e-300),
+                                "{policy:?} depth {depth}: {got} vs {reference}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 10_000);
+    }
+
+    #[test]
+    fn eng1d_invalid_escape_parameters_fail_closed() {
+        let train = corpus(0);
+        let root = TestRoot::new("eng1d-invalid-policy");
+        let mut model = published(&root, &train);
+        for bad in [
+            EscapePolicy::ScaledWittenBell { beta: 0.0 },
+            EscapePolicy::ScaledWittenBell { beta: f64::NAN },
+            EscapePolicy::Dirichlet { tau: -1.0 },
+            EscapePolicy::Dirichlet { tau: f64::INFINITY },
+        ] {
+            assert_eq!(bad.validate(), Err(PagedError::InvalidEscapePolicy));
+            assert_eq!(
+                model.target_ladders(&train[..5], train[5], &[EscapePolicy::WittenBell, bad]),
+                Err(PagedError::InvalidEscapePolicy)
+            );
+            assert!(matches!(
+                model.depth_ladder_readout_with(&train[..5], bad),
+                Err(PagedError::InvalidEscapePolicy)
+            ));
+        }
+        assert_eq!(EscapePolicy::WittenBell.label(), "wb");
+        assert_eq!(
+            EscapePolicy::ScaledWittenBell { beta: 6.0 }.label(),
+            "swb:6"
+        );
+        assert_eq!(EscapePolicy::Dirichlet { tau: 0.5 }.label(), "dir:0.5");
+    }
+
+    #[test]
+    fn eng1d_large_escape_mass_moves_deep_prediction_toward_shallow() {
+        // Escape mass is a frozen model setting: as it grows, the deep
+        // estimate converges to the shallower one; it never uses the target.
+        let train = corpus(0);
+        let root = TestRoot::new("eng1d-escape-limit");
+        let mut model = published(&root, &train);
+        let history = &train[..12];
+        let target = train[12];
+        let ladders = model
+            .target_ladders(
+                history,
+                target,
+                &[
+                    EscapePolicy::Dirichlet { tau: 1e12 },
+                    EscapePolicy::WittenBell,
+                ],
+            )
+            .unwrap();
+        let huge = &ladders[0];
+        assert!((huge.by_depth[12] - 1.0 / 256.0).abs() < 1e-9);
+        assert_eq!(huge.context_events, ladders[1].context_events);
     }
 
     #[test]
