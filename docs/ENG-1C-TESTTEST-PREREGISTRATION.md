@@ -12,7 +12,8 @@ previously unused works, six authors per language and three declared genres?
 The population is a convenience panel of historical Gutenberg FR/EN prose.
 Even a positive verdict is evidence on this panel, never a theorem of universal
 superiority, a comparison with all language models, or an SML25B promotion.
-The Dumas/Austen works, their authors, their VAL and their original untouched
+The Dumas/Austen works, their authors, the exposed Verne study, the Flaubert
+work reserved for A6-E5, their VAL and their original untouched
 TEST are excluded. Nothing in this study opens the original TEST.
 
 ## Frozen corpus roster
@@ -24,7 +25,7 @@ URLs and author/title identities are in `scripts/eng1c/testtest-roster.tsv`.
 
 | Language | Stratum | Authors (Gutenberg identifiers) |
 |---|---|---|
-| FR | novel | Jules Verne (800), Gustave Flaubert (14155) |
+| FR | novel | Victor Hugo (17489), Émile Zola (5711) |
 | FR | essay | René Descartes (13846), Jean-Jacques Rousseau (65434) |
 | FR | science | Claude Bernard (16234), Jean-Henri Fabre (16825) |
 | EN | novel | Charles Dickens (98), Mary Shelley (84) |
