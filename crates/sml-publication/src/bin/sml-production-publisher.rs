@@ -28,7 +28,7 @@ fn owner(executable: &Path, root: &Path, args: &[&str]) -> Result<Value, String>
         .map_err(|error| format!("invalid owner response: {error}"))
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.len() != 5 {
         return Err(
@@ -92,7 +92,11 @@ level = "required"
     let report = owner(
         &owner_binary,
         root,
-        &["verify", root.to_str().ok_or("invalid dossier path")?, "--json"],
+        &[
+            "verify",
+            root.to_str().ok_or("invalid dossier path")?,
+            "--json",
+        ],
     )?;
     if report["overall_verdict"] != "PASS" {
         return Err("production dossier verification did not pass".into());
