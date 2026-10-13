@@ -1230,3 +1230,31 @@ elastic_ngram_program_2026_10_12:
     - no_live_ElasticXxx_actuation_or_SML25B_promotion_authorized
     - existing_A6_E4_and_E5_preregistered_tests_unchanged
     - final_SML_model_remains_self_sufficient_and_future_harness_separate
+
+
+external_weight_admission_audit_20261013:
+  finding: COG-SML-001
+  status: technical_candidate_CI_production_ACL_and_consumer_unqualified
+  pull_request: 559
+  base_sha: 618549cee0fd0981a5fe7f6ad36efec6ae1628ca
+  candidate_sha: f7c242ab1507c8014a924afcd8853dad9b910c17
+  adapter: optional_sml_publication_operator_tool
+  owner: SciRust_Verify_detached_SSHSIG_at_662a30dc774dd19c68a79bed3889036a91930123
+  scope:
+    - independent_operator_publisher_ACL_and_exact_code_release_bundle_manifest_weight_binding
+    - immutable_retained_weight_bytes_through_existing_cold_RAM_stage_commit
+    - existing_CRC32C_and_SMLW_v1_unchanged
+    - model_core_runtime_do_not_depend_on_optional_tool_or_external_owner
+  local_validation: {workspace_passed: 1505, failed: 0, explicit_real_owner_test_passed: 1}
+  candidate_owner_run: 38450667033
+  candidate_owner_artifact: 11839419969
+  candidate_owner_archive_SHA256: 6e238ad21537d3f7eef51b6403664e5bef1dd6e504c4f3d9cdfb6e3ed0ce0aec
+  artifact_downloaded_and_exact_code_receipt_verified: true
+  finding_closure: false
+  remaining_acceptance:
+    - independently_provisioned_and_qualified_actual_organizational_publisher_ACL
+    - actual_external_consumer_routes_through_admission_gate
+  scientific_qualification: not_evaluated
+  merge_authorization_from_admission: false
+  model_sovereignty_and_final_holdouts: unchanged
+  private_proof_branch: audit/cog-sml-001-qualification-20261013
