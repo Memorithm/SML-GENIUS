@@ -78,20 +78,29 @@ Authenticating a publisher does not qualify learned weights, license rights,
 model quality, or the truth of its provenance assertions. Keep the existing
 scientific and final evaluation gates.
 
-## Qualification and remaining deployment gate
+## Qualification and production deployment gate
 
-The dedicated hosted workflow builds SciRust-Verify at
+The hosted development workflow builds SciRust-Verify at
 `662a30dc774dd19c68a79bed3889036a91930123` and explicitly executes the owner
-integration test that is otherwise ignored by ordinary workspace tests. It
-makes an ephemeral development signer, qualifies live signatures and independent
-ACL checks, tests negative controls, and commits the exact admitted payload into
-RAM after the on-disk file has changed. Its private key is deleted with the test
-directory and never retained as an artifact. This is a development fixture, not
-an organizational production publisher or publication ACL qualification.
+integration test that is otherwise ignored by ordinary workspace tests. It uses
+an ephemeral development signer for negative controls and RAM byte continuity.
 
-External distribution/activation remains blocked until an operator provisions
-and qualifies the real publisher ACL, independently pins the intended code and
-release, and routes the actual external consumer through this gate. No existing
-release/distribution service was observed in this repository; this PR therefore
-does not claim that such a service was qualified or that the audit finding is
-already closed.
+The separate `Production weight publication` workflow is the organizational
+path. It runs only for integrated `main` code or an explicit trusted dispatch,
+loads the private identity from the repository Actions secret
+`SML_PRODUCTION_SIGNING_KEY`, and admits only the committed
+`memorithm-sml-production` public key. The private key is written with mode
+0600 under the hosted runner's temporary directory, deleted at step exit, and
+never uploaded.
+
+That workflow independently constructs the policy from the exact SML commit,
+publication identity, trusted owner digest, and allowed-signers digest. It pins
+the external SciRust Hub consumer at
+`d6b679e696f5e1b1d3c004c7c95c36c0ea1584d2`, then requires the versioned
+`scirust-hub.sml-weight-admission-receipt/v1` receipt with the exact
+organizational principal and immutable code revision. The retained artifact
+contains the signed dossier and external receipt, never the private identity.
+
+A publisher authentication receipt still reports
+`scientific_qualification=not_evaluated` and `merge_authorization=false`.
+Scientific promotion and deployment remain separate decisions.
