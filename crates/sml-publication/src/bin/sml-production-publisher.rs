@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "usage: sml-production-publisher DOSSIER OWNER KEY CODE_SHA PUBLICATION_ID".into(),
         );
     }
-    let root = Path::new(&args[0]);
+    let requested_root = Path::new(&args[0]);
     let owner_binary = Path::new(&args[1]).canonicalize()?;
     let identity = Path::new(&args[2]).canonicalize()?;
     let code_sha = &args[3];
@@ -51,7 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Err("invalid production publication identity".into());
     }
 
-    fs::create_dir_all(root.join("weights"))?;
+    fs::create_dir_all(requested_root.join("weights"))?;
+    let root = requested_root.canonicalize()?;
     let bytes = build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, 8, &[0xa5])?;
     fs::write(root.join("weights/page0.smlw"), &bytes)?;
     let manifest = WeightPublicationManifest {
@@ -91,7 +92,7 @@ level = "required"
 
     let report = owner(
         &owner_binary,
-        root,
+        &root,
         &[
             "verify",
             root.to_str().ok_or("invalid dossier path")?,
@@ -107,7 +108,7 @@ level = "required"
         .to_owned();
     owner(
         &owner_binary,
-        root,
+        &root,
         &[
             "attest",
             &run,
