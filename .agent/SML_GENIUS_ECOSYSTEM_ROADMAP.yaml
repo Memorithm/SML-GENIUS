@@ -1267,7 +1267,7 @@ external_weight_admission_audit_20261013:
 
 trusted_RSI_review_adapter_audit_20261013:
   finding: COG-SML-003
-  status: merged_exact_candidate_qualified_waiting_integrated_full_CI
+  status: resolved_integrated_primary_owner_metadata_adapter_native_consumer_qualified
   pull_request: 561
   candidate_sha: 956de0ede29ff58b790f2551bd252108c7566cd7
   validated_base: 0dd6290aa4aff194e7828a2b51f249ba045f9cd2
@@ -1297,4 +1297,11 @@ trusted_RSI_review_adapter_audit_20261013:
   integrated_artifact: 11846245398
   integrated_archive_SHA256: 165661d1670f4d49cc4468c6f58c8a0ddc247f031131dc985e3bb09f447ffe6a
   both_archives_downloaded_digest_and_source_verified: true
-  finding_closure: false
+  finding_closure: true
+  integrated_required_checks: 4_success
+  integrated_workspace_tests: {passed: 1511, failed: 0, ignored_in_generic_suite: 2}
+  integrated_native_RSI_tests: {passed: 87, failed: 0}
+  both_ignored_live_owner_provider_tests_selected_and_passed_in_dedicated_gates: true
+  closure_scope: first_trusted_metadata_adapter_and_native_consumer_not_domain_truth_or_production_model_promotion
+  protected_domain_validation_and_final_holdouts: unchanged
+  private_qualification_commit: f388b163daec75bd2f9399465fbdcf9374ec39fb
