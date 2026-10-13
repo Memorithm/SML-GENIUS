@@ -2,8 +2,8 @@
   "schema": "memorithm.audit-proof.v1",
   "finding": "COG-SML-001",
   "repository": "Memorithm/SML-GENIUS",
-  "status": "technical_candidate_waiting_exact_CI_and_review_production_ACL_unqualified",
-  "observed_at": "2026-10-13T18:56:50.557Z",
+  "status": "technical_adapter_integrated_qualified_production_acceptance_open",
+  "observed_at": "2026-10-13T19:25:45.656Z",
   "base_sha": "618549cee0fd0981a5fe7f6ad36efec6ae1628ca",
   "candidate": {
     "sha": "f7c242ab1507c8014a924afcd8853dad9b910c17",
@@ -34,7 +34,80 @@
   },
   "acceptance": {
     "closure": false,
-    "reason": "A development signer and separate admission gate do not qualify organizational production publisher ACL or an external consumer."
+    "technical_adapter_qualified": true,
+    "reason": "Actual organizational publisher ACL and external consumer acceptance remain unqualified."
   },
-  "private_docs": "docs/EXTERNAL-WEIGHT-ADMISSION.md"
+  "private_docs": "docs/EXTERNAL-WEIGHT-ADMISSION.md",
+  "integrated": {
+    "sha": "7afb6a38a7ebae0ba1b1e6de941b10b95716b472",
+    "checks": [
+      {
+        "id": 115487122262,
+        "name": "rust",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "7afb6a38a7ebae0ba1b1e6de941b10b95716b472",
+        "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38452580520/job/115487122262"
+      },
+      {
+        "id": 115486989706,
+        "name": "fmt",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "7afb6a38a7ebae0ba1b1e6de941b10b95716b472",
+        "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38452580520/job/115486989706"
+      },
+      {
+        "id": 115486988298,
+        "name": "owner-admission",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "7afb6a38a7ebae0ba1b1e6de941b10b95716b472",
+        "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38452580500/job/115486988298"
+      }
+    ],
+    "owner_artifact": {
+      "run": 38452580500,
+      "id": 11840962233,
+      "archive_sha256": "4c971014eb0580ad277b696b7e3cac8c3aba4e8d6989af037d50509430dfb66f",
+      "downloaded_and_exact_receipt_verified": true,
+      "scope": "development_fixture_not_organizational_publisher",
+      "scientific_qualification": "not_evaluated",
+      "merge_authorization": false
+    }
+  },
+  "candidate_checks": [
+    {
+      "id": 115480535795,
+      "name": "rust",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f7c242ab1507c8014a924afcd8853dad9b910c17",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38450666791/job/115480535795"
+    },
+    {
+      "id": 115480412907,
+      "name": "owner-admission",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f7c242ab1507c8014a924afcd8853dad9b910c17",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38450667033/job/115480412907"
+    },
+    {
+      "id": 115480412526,
+      "name": "fmt",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f7c242ab1507c8014a924afcd8853dad9b910c17",
+      "url": "https://github.com/Memorithm/SML-GENIUS/actions/runs/38450666791/job/115480412526"
+    }
+  ],
+  "nonapplicable_research_checks": {
+    "skipped": 63,
+    "reason": "Unchanged research-branch conditions; no scientific or holdout qualification inferred."
+  },
+  "review": {
+    "completed": true,
+    "threads": 0
+  }
 }
