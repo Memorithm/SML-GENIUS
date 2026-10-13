@@ -1,0 +1,43 @@
+{
+  "schema": "memorithm.audit-proof.v1",
+  "finding": "COG-SML-003",
+  "repository": "Memorithm/SML-GENIUS",
+  "status": "candidate_waiting_exact_primary_owner_consumer_CI_and_review",
+  "observed_at": "2026-10-13T19:57:12.576Z",
+  "base_sha": "0dd6290aa4aff194e7828a2b51f249ba045f9cd2",
+  "candidate": {
+    "sha": "7cd668983f61643b0893c92ff0c5eb3e2c43784a",
+    "tree": "dc1a14b82dd2f2d8eddb345fae79ff7320b87673",
+    "branch": "audit/cog-sml-003-trusted-review-adapter"
+  },
+  "pull_request": 561,
+  "owner": "Memorithm/SciRust-Verify@662a30dc774dd19c68a79bed3889036a91930123",
+  "contract": "sml.rsi-trusted-review@1.0.0",
+  "local_validation": {
+    "passed": 1511,
+    "failed": 0,
+    "ignored": 2,
+    "summaries": 214,
+    "refreshed_workspace_passed": 1511,
+    "fmt": "success",
+    "locked_strict_all_targets_clippy": "success",
+    "shared_real_owner_weight_gate": "passed",
+    "local_private_live_provider": "not_claimed_dedicated_exact_CI_required"
+  },
+  "scope": {
+    "primary_GitHub_client": "fixed_HTTPS_repository_ID_open_same_repo_main_PR_checked_twice",
+    "evidence": "authenticated_bounded_aggregate_metadata_only_original_source_ids_unique",
+    "native_consumer": "unchanged_sml_rsi_baseline_eligibility",
+    "development_fixtures": "Other_class_only_no_model_architecture_qualification",
+    "scientific_qualification": "not_evaluated",
+    "merge_authorization": false
+  },
+  "acceptance": {
+    "closure": false,
+    "reason": "Exact candidate provider/owner/full gates, review, guarded merge and integrated qualification remain required."
+  },
+  "limitations": [
+    "Authenticating aggregate assertions does not re-execute domain checks or prove protected-data independence.",
+    "No actual model promotion, final-label access, producer rights or production publisher acceptance is established."
+  ]
+}
