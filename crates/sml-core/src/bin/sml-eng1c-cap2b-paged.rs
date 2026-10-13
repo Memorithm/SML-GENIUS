@@ -72,7 +72,7 @@ fn vmhwm_kib() -> Result<u64, Box<dyn Error>> {
     Ok(kib)
 }
 
-fn train_history<'a>(bytes: &'a [u8], index: usize) -> &'a [u8] {
+fn train_history(bytes: &[u8], index: usize) -> &[u8] {
     let len = bytes.len() / LANES;
     let lane = (index * 17) % LANES;
     let t = 1 + (index * 13) % (len - 1);
