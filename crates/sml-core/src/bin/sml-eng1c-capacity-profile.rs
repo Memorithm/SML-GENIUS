@@ -10,7 +10,7 @@ use std::error::Error;
 
 use sml_core::{
     anf_char::{ChunkLayout, LANES},
-    elastic_ngram_trie::{ElasticNGramTrie, TrieLimits, MAX_TRIE_EVENTS},
+    elastic_ngram_trie::MAX_TRIE_EVENTS,
 };
 
 const SCAN_EVENT_CEILING: usize = 650_000;
@@ -268,6 +268,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sml_core::elastic_ngram_trie::{ElasticNGramTrie, TrieLimits};
 
     fn fixture() -> Vec<u8> {
         (0..LANES)
