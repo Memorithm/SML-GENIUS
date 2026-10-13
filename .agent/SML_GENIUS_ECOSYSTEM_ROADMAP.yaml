@@ -1154,9 +1154,69 @@ elastic_ngram_program_2026_10_12:
     actual_fitted_model_node_cap_250000: UNCHANGED
     current_full_corpus_model_admission: STOP
     CAP2b_paged_exact_Witten_Bell_count_store_issue: 540
+  ENG1c_CAP2b:
+    status: merged_full_TRAIN_source_bound_exact_paged_Witten_Bell_store_qualified
+    pull_request: 541
+    merge_commit: 9a89a577915c8e03f0bddf006e41e6b293fb8ebf
+    protocol: docs/ENG-1C-CAP2B-PAGED-STORE-PREREGISTRATION.md
+    results: docs/RESULTS-ENG-1C-CAP2B-PAGED-FULL-TRAIN.md
+    source: crates/sml-core/src/elastic_ngram_paged.rs
+    full_corpus_depth32_contexts: {FR: 14281533, EN: 13932625}
+    full_corpus_depth32_follower_pairs: {FR: 14878280, EN: 14519708}
+    full_corpus_depth32_counted_bytes: {FR: 565374640, EN: 551748904}
+    full_corpus_depth32_sparse_index_bytes: {FR: 2440998, EN: 2382156}
+    source_identity: frozen_exact_TRAIN_sha256
+    atomic_published_paged_readout: success
+    exact_small_fixture_256_class_oracles: success
+    quality_on_heldout_VAL_TEST: not_part_of_CAP2b
+    no_default_inference_or_physical_ElasticXxx_actuation: true
+  ENG1c_VAL1:
+    status: merged_preregistered_real_language_VAL_science_negative
+    pull_request: 542
+    merge_commit: a9a8a8f4e30656c0810c4c8297b65ea6bd49c1b4
+    frozen_before_code_commit: 5122a0357d5c64dd17826ab64f4a74e203058c6b
+    final_HEAD: 32f5f2182086543124325c709300b08c8abf847b
+    final_dedicated_CI: 38368566252
+    final_general_CI: 38368566266
+    results: docs/RESULTS-ENG-1C-VAL1-REAL-TEXT-DEPTH-LOGLOSS.md
+    all_final_CI_checks: success
+    observed_contexts: two_independent_frozen_books_FR_Dumas_EN_Austen
+    frozen_candidates: [FIXED_4, FIXED_7, FIXED_12, FIXED_32, MIN_COUNT_2, MIN_COUNT_4, MIN_COUNT_8]
+    test_labels: UNREAD
+    french:
+      VAL_next_byte_events: 74688
+      fixed4_bpb: 2.063036593417
+      fixed7_bpb: 2.217821236034
+      fixed12_bpb: 2.666834
+      fixed32_bpb: 2.815443
+      best_count_gate: MIN_COUNT_8
+      best_count_gate_bpb: 2.089344543258
+      gated_minus_fixed4_bpb: 0.026307949842
+      scientific_verdict: VAL_STOP_NOT_PROVEN
+    english:
+      VAL_next_byte_events: 73728
+      fixed4_bpb: 1.876564702039
+      fixed7_bpb: 2.020676414311
+      fixed12_bpb: 2.499990
+      fixed32_bpb: 2.665924
+      best_count_gate: MIN_COUNT_8
+      best_count_gate_bpb: 1.913076323341
+      gated_minus_fixed4_bpb: 0.036511621302
+      scientific_verdict: VAL_STOP_NOT_PROVEN
+    interpretation:
+      - identical_full_TRAIN_and_same_64_lane_VAL_target_denominator_for_all_seven_arms
+      - count_only_depth_selector_is_worse_than_fixed4_on_both_VAL_corpora
+      - argmax_accuracy_higher_at_depth7_does_not_improve_proper_log_loss
+      - adaptive_gate_uses_full_depth32_storage_and_does_not_save_disk_bytes
+      - paired_bootstrap_both_below_zero_for_gate_gain
+      - this_does_not_refute_all_loss_aware_adaptive_depth_models
+      - do_not_retune_thresholds_on_exposed_Dumas_Austen_VAL_and_call_it_independent
+      - no_ENG3_ANF_PPM_CTW_or_SML25B_prediction_promotion
+    next_scientific_issue: 543
   next_slices:
+    - ENG1d_fresh_corpus_TRAIN_OOF_loss_aware_arbiter_and_raw_ANF_controls_issue_543
+    - ENG1c_separate_confirmatory_TEST_for_frozen_FIXED4_only_after_new_preregistration
     - ENG2b_H2_source_epoch_bound_provider_with_hard_peak_budget_concurrent_reader_safety_crash_rollback
-    - ENG1c_CAP2b_model_queryable_exact_paged_count_store_issue_540_before_any_VAL_TEST_quality
     - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
