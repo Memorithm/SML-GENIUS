@@ -1,0 +1,24 @@
+{
+  "source_head": "65d76ad7f229a544054f79da161cf43e49b907cd",
+  "workflow_run": 38393099708,
+  "FR_job": 115281483380,
+  "EN_job": 115281483479,
+  "pooled_job": 115292888685,
+  "checks": [
+    "rust:success",
+    "fmt:success",
+    "TESTTEST independent FR:success",
+    "TESTTEST independent EN:success",
+    "paired-panel:success"
+  ],
+  "artifact_id": 11812042274,
+  "artifact_zip_sha256": "b5898f1087ca2d1c62a4fff327ee56585e54594ce7d8bf916eb138b6cc2b4311",
+  "records_compared": 24,
+  "equal_fields": "all source, store/index hashes, selected depth, DEV losses and TEST predictive statistics",
+  "expected_different_fields": [
+    "binary_sha256",
+    "seal_sha256"
+  ],
+  "panel_report_byte_identical": true,
+  "interpretation": "replication of the same frozen TEST panel; not additional independent authors"
+}

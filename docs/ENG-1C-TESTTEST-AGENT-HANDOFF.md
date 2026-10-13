@@ -268,6 +268,14 @@ Sans epsilon, les égalités mathématiques de sommes peuvent être perturbées
 par l’arrondi flottant : le contrat exact f64 est déclaré, et cette convention
 doit être auditée. Les fixtures analytiques contrôlent des cas exacts simples.
 
+La faible taille des groupes rend le filtre discret particulièrement
+contraignant. Exemple analytique, six gains : tous à +1 donne p=1/64 ;
+cinq à +1 et un à −0,01 donne p=1/32 ; quatre à +1 et deux à −0,01 donne
+p=1/16. Ces valeurs viennent de l’énumération des 64 sommes en arithmétique
+rationnelle, pas de la campagne. Elles montrent que la condition « au
+moins quatre victoires » ne suffit pas à passer le filtre statistique.
+L’agent devra auditer les contraintes conjointes et leur puissance.
+
 Le seuil 0,01 reprend l’exigence d’effet pratique du programme ENG-1c.
 **Ce n’est pas une conséquence du bootstrap ni un seuil dérivé d’une analyse
 de puissance.** Un petit gain réel pourrait échouer ce critère.
@@ -315,6 +323,12 @@ global est négatif sous les hypothèses déclarées. On n’ajoute pas après
 coup un nouveau test unilatéral pour annoncer une supériorité inverse.
 Ce résultat n’établit ni que toute adaptation est inutile, ni que le
 classique est universellement supérieur.
+
+Profondeurs effectivement choisies par l’adaptatif, sur 745 088 cibles :
+719 077 à profondeur 4, 25 025 à profondeur 7, 986 à profondeur 12 et **zéro
+à profondeur 32**. Ce panel ne fournit donc pas une mesure de l’utilité de
+la profondeur 32 dans la politique adaptative. Les quatre bras classiques
+32/12/7/4 ont néanmoins leurs pertes TEST conservées comme diagnostics.
 
 Voir `docs/RESULTS-ENG-1C-TESTTEST-FIRST-PANEL.md` : douze scores détaillés,
 six strates, événements, gaps et résidus, lien vers les 24 records de
@@ -366,6 +380,21 @@ les tests workspace exécutés avant publication. Les SHA256 sont des
 identités/checksums, pas signatures ni attestations contre un hôte hostile.
 Les records de résultats doivent être archivés durablement dans Git ;
 les artefacts CI temporaires ne remplacent pas cet archivage.
+
+Qualification achevée au commit exact `65d76ad7f229a544054f79da161cf43e49b907cd` :
+les cinq contrôles actifs sont verts, run
+[38393099708](https://github.com/Memorithm/SML-GENIUS/actions/runs/38393099708).
+Les 24 records CI ont été comparés au local : sources, store/index,
+sélections DEV et scores identiques ; hashes de binaires/sceaux distincts
+selon la compilation, comme prévu. `panel.tsv` est identique octet par octet.
+Les records hébergés et la qualification sont conservés avec les résultats.
+Cela confirme la reproductibilité sur ces mêmes TEST, pas une nouvelle
+confirmation sur de nouvelles œuvres.
+
+La PR de résultats corrige aussi un défaut de relance CI : le téléchargement
+par motif `testtest-*` aurait repris l’ancien artefact global en plus des
+artefacts FR/EN. La collecte utilise maintenant deux noms explicites,
+`testtest-FR` et `testtest-EN`. Aucun réglage modèle/statistique ne change.
 
 ## 13. Reproduire sans modifier le protocole
 

@@ -50,6 +50,11 @@ de la sélection indépendante, pas d’un choix effectué après TEST. Les
 quatre pertes classiques TEST restent disponibles comme diagnostics,
 sans nouvelle sélection du gagnant sur TEST.
 
+L’adaptatif choisit profondeur 4 sur 719 077 cibles, profondeur 7 sur
+25 025, profondeur 12 sur 986 et profondeur 32 sur zéro cible. La présence
+du store profondeur 32 ne signifie donc pas que cette profondeur a été
+utilisée par le candidat dans ce panel.
+
 ## Résultats par auteur
 
 Bits/octet : plus faible est meilleur. Gain = perte classique sélectionnée
@@ -139,6 +144,25 @@ les bornes de gate, les sources/sceaux corrompus, les panels incomplets,
 les probabilités sign-flip exactes, le bootstrap reproductible et une
 inversion entre moyenne auteur et moyenne pondérée par tokens.
 Le hook obligatoire Rust 1.89 fmt/Clippy strict/tests workspace a réussi.
+
+La [campagne CI 38393099708](https://github.com/Memorithm/SML-GENIUS/actions/runs/38393099708)
+a terminé les deux langues et l’analyse globale au commit exact
+`65d76ad7f229a544054f79da161cf43e49b907cd`. Les cinq contrôles actifs
+(`rust`, `fmt`, FR, EN, `paired-panel`) sont verts. Les 24 records hébergés
+reproduisent exactement toutes les identités de source/store, sélections
+DEV, pertes et profondeurs de la campagne locale ; seuls les hashes de
+binaire et des sceaux qui les incluent diffèrent comme attendu. Le rapport
+global `panel.tsv` est identique octet par octet. L’archive CI et ses records
+sont conservés dans `evidence/eng1c-testtest-first-run/hosted-ci/`, avec
+empreinte ZIP et compte rendu de qualification. Il s’agit d’une réplication
+du même panel TEST, pas de douze nouveaux auteurs indépendants.
+
+Le workflow de collecte est corrigé dans la PR de résultats : les artefacts
+FR et EN sont téléchargés par noms explicites. Le motif initial `testtest-*`
+pouvait, lors d’une relance du même run, sélectionner aussi le précédent
+`testtest-complete-panel`, qui contient déjà `panel.tsv`, puis déclencher le
+refus volontaire de réécriture du rapport. Cette correction concerne
+uniquement la collecte CI ; les modèles, scores et critères restent figés.
 
 Une œuvre à la fois par langue, au plus deux workers, limite virtuelle
 262 144 KiB et délai de 3 000 secondes par phase. Même index complet
