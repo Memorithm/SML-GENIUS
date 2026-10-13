@@ -424,7 +424,8 @@ impl BitMixer {
             return Err("invalid Boolean mask list");
         }
         let n_hashed = N_FIXED + masks.len();
-        let n_inputs = n_hashed + N_EXTRA + if side.is_some() { 2 } else { 0 };
+        let side_present = side.is_some();
+        let n_inputs = n_hashed + N_EXTRA + if side_present { 2 } else { 0 };
         let logistic = Logistic::new();
         let apm_order1 = Apm::new(256 * 256);
         let apm_order2 = Apm::new(1 << 16);
@@ -450,7 +451,12 @@ impl BitMixer {
             side,
             side_inputs,
             side_apm: Apm::new(8),
-            side_table: CounterTable::new(config.table_bits.min(20)),
+            // Side state is only sized when a side model is present.
+            side_table: CounterTable::new(if side_present {
+                config.table_bits.min(20)
+            } else {
+                1
+            }),
             side_adapter: Apm::new(CONFIDENCE_BUCKETS),
             side_slot: 0,
             n_hashed,
@@ -911,6 +917,8 @@ mod tests {
             "bmx-v2:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6"
         );
         assert!(BitMixer::try_with_masks(v2, &[[0; 8]]).is_err());
+        // Without a side model no side table is sized.
+        assert_eq!(BitMixer::new(v2).side_table.slots.len(), 2);
         assert!(
             BitMixer::try_with_masks(v2, &[[0xFF, 0, 0, 0, 0, 0, 0, 0]; MAX_MASKS + 1]).is_err()
         );
