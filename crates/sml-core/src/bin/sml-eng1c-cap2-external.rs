@@ -372,7 +372,7 @@ fn scan(
     scratch_path: &Path,
     limits: Limits,
 ) -> Result<ScanResult, ScanError> {
-    if !DEPTH_LADDER.contains(&depth) {
+    if depth > MAX_DEPTH || !DEPTH_LADDER.contains(&depth) {
         return Err(ScanError::InvalidDepth);
     }
     if limits.records_per_run == 0
@@ -586,7 +586,7 @@ mod tests {
                 &data,
                 depth,
                 &format!("oracle-{depth}"),
-                Limits { records_per_run: 211, ..Limits::default() },
+                Limits { records_per_run: 1000, ..Limits::default() },
             );
             let ScanResult::Full(result) = r else {
                 panic!("unexpected quota STOP for oracle");
