@@ -1,0 +1,64 @@
+name: ENG-2b heap ACT VERIFY COMMIT or ROLLBACK
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng2b-heap-swap-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  exact-heap-actuation:
+    if: startsWith(github.head_ref, 'research/eng2b-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only exact PR source on fresh hosted runner
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89 with rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Exact-head formatting, compilation and Clippy strict
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-elastic-bench -p sml-core --all-targets
+          cargo clippy --locked -p sml-elastic-bench -p sml-core --all-targets -- -D warnings
+      - name: Actual heap swap and three independent rollback fault gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-elastic-bench eng2b -- --nocapture
+      - name: Previous EL-NG1, ENG-2a and fixed-depth oracle regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-elastic-bench --lib
+          cargo test --locked -p sml-core --lib elastic_ngram_trie
+          cargo test --locked -p sml-core --lib elastic_ngram_long
+          cargo test --locked -p sml-core --lib elastic_ngram::tests
+      - name: Explicit scope classification
+        shell: bash
+        run: |
+          echo 'ENG2B_HEAP_ACTUAL_SWITCH=TESTED_SINGLE_PROCESS'
+          echo 'ENG2B_ROLLBACK=RESTORE_PREVIOUS_HEAP_BOX'
+          echo 'ENG2B_PHYSICAL_RSS_BUDGET=NOT_IMPLEMENTED'
+          echo 'ENG2B_MMAP_CRASH_DURABILITY_GPU=NOT_IMPLEMENTED'
+          echo 'ENG2B_PRODUCTION_MODEL_ROUTE=NOT_AUTHORIZED'
