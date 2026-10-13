@@ -78,19 +78,11 @@ impl std::fmt::Display for ScanError {
 }
 impl Error for ScanError {}
 
-fn inspect(
-    train: &[u8],
-    max_depth: usize,
-    caps: Caps,
-) -> Result<ScanReport, ScanError> {
+fn inspect(train: &[u8], max_depth: usize, caps: Caps) -> Result<ScanReport, ScanError> {
     if !DEPTH_LADDER.contains(&max_depth) {
         return Err(ScanError::InvalidDepth);
     }
-    if caps.nodes == 0
-        || caps.nodes > MAX_NODES
-        || caps.pairs == 0
-        || caps.pairs > MAX_PAIRS
-    {
+    if caps.nodes == 0 || caps.nodes > MAX_NODES || caps.pairs == 0 || caps.pairs > MAX_PAIRS {
         return Err(ScanError::InvalidLimits);
     }
     let layout = ChunkLayout::new(train.len()).map_err(|_| ScanError::InvalidCorpus)?;
@@ -116,13 +108,9 @@ fn inspect(
             let mut status = None;
             // The root's next-byte follower is recorded for every event.
             // Then traverse newest-to-oldest full context exactly as ENG-1b.
-            for older in std::iter::once(None).chain(
-                chunk[..t]
-                    .iter()
-                    .rev()
-                    .take(max_depth)
-                    .map(|&b| Some(b)),
-            ) {
+            for older in std::iter::once(None)
+                .chain(chunk[..t].iter().rev().take(max_depth).map(|&b| Some(b)))
+            {
                 if let Some(byte) = older {
                     let child = match edges.get(&(parent, byte)) {
                         Some(&found) => found,
@@ -131,8 +119,8 @@ fn inspect(
                                 status = Some(ScanStatus::NodeStop);
                                 break;
                             }
-                            let next = u32::try_from(nodes)
-                                .map_err(|_| ScanError::CounterOverflow)?;
+                            let next =
+                                u32::try_from(nodes).map_err(|_| ScanError::CounterOverflow)?;
                             edges.insert((parent, byte), next);
                             nodes += 1;
                             next
@@ -273,8 +261,7 @@ mod tests {
     fn fixture() -> Vec<u8> {
         (0..LANES)
             .flat_map(|lane| {
-                (0..40usize)
-                    .map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11) % 23) as u8)
+                (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11) % 23) as u8)
             })
             .collect()
     }
@@ -306,7 +293,15 @@ mod tests {
     #[test]
     fn bounded_stop_preserves_complete_event_count_and_first_interrupted_position() {
         let corpus = fixture();
-        let nodes = inspect(&corpus, 12, Caps { nodes: 1, pairs: 100 }).unwrap();
+        let nodes = inspect(
+            &corpus,
+            12,
+            Caps {
+                nodes: 1,
+                pairs: 100,
+            },
+        )
+        .unwrap();
         assert_eq!(nodes.status, ScanStatus::NodeStop);
         assert_eq!(nodes.fully_processed_events, 0);
         assert_eq!(nodes.interrupted_at, Some((0, 1)));
@@ -322,10 +317,22 @@ mod tests {
     #[test]
     fn failures_are_typed_and_do_not_publish_partial_model() {
         let corpus = fixture();
-        assert_eq!(inspect(&corpus, 33, Caps::default()), Err(ScanError::InvalidDepth));
-        assert_eq!(inspect(&corpus, 3, Caps::default()), Err(ScanError::InvalidDepth));
-        assert_eq!(inspect(&corpus, 12, Caps { nodes: 0, pairs: 3 }), Err(ScanError::InvalidLimits));
-        assert_eq!(inspect(&[0; LANES], 7, Caps::default()), Err(ScanError::InvalidCorpus));
+        assert_eq!(
+            inspect(&corpus, 33, Caps::default()),
+            Err(ScanError::InvalidDepth)
+        );
+        assert_eq!(
+            inspect(&corpus, 3, Caps::default()),
+            Err(ScanError::InvalidDepth)
+        );
+        assert_eq!(
+            inspect(&corpus, 12, Caps { nodes: 0, pairs: 3 }),
+            Err(ScanError::InvalidLimits)
+        );
+        assert_eq!(
+            inspect(&[0; LANES], 7, Caps::default()),
+            Err(ScanError::InvalidCorpus)
+        );
         assert_eq!(
             inspect(&vec![7u8; LANES * 10500], 0, Caps::default()),
             Err(ScanError::SourceTooLarge)
