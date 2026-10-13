@@ -1,7 +1,13 @@
 //! ENG-1c/VAL1: frozen independent real-text validation log-loss.
 //!
 //! Fixed depths 4/7/12/32 and model-owned exact TRAIN occurrence policies
-//! 2/4/8 share one immutable depth32 Witten-Bell store. This program never
+//! 2/4/8 share one immutable depth32 Witten-Bell store.
+//! Explicit --explore-counts-16-32 adds post-hoc 16/32 arms on exposed VAL.
+//! --explore-counts-64-128 adds two further exploratory arms (eleven total).
+//! --explore-counts-256-512 selects thirteen arms, --explore-counts-1024 fourteen.
+//! --explore-language-counts-140-75 adds a FR140/EN75 arm (fifteen total).
+//! --explore-threshold-grid sweeps FR128..139 and EN65..74 on exposed VAL.
+//! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
 use std::{error::Error, fs, path::Path, time::Instant};
@@ -15,7 +21,7 @@ use sml_core::{
     elastic_ngram_paged_sha::hex,
 };
 
-const POLICY_NAMES: [&str; 7] = [
+const POLICY_NAMES: [&str; 15] = [
     "FIXED_4",
     "FIXED_7",
     "FIXED_12",
@@ -23,10 +29,133 @@ const POLICY_NAMES: [&str; 7] = [
     "MIN_COUNT_2",
     "MIN_COUNT_4",
     "MIN_COUNT_8",
+    "MIN_COUNT_16",
+    "MIN_COUNT_32",
+    "MIN_COUNT_64",
+    "MIN_COUNT_128",
+    "MIN_COUNT_256",
+    "MIN_COUNT_512",
+    "MIN_COUNT_1024",
+    "LANG_COUNT_FR140_EN75",
 ];
-const EVIDENCE_MIN_COUNTS: [u64; 3] = [2, 4, 8];
+const EVIDENCE_MIN_COUNTS: [u64; 10] = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+const FROZEN_POLICIES: usize = 7;
 const BOOTSTRAP_REPETITIONS: usize = 2048;
 const BOOTSTRAP_SEED: u64 = 0xE1C5_2026_1013_B001;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EvaluationMode {
+    Frozen,
+    Explore16_32,
+    Explore64_128,
+    Explore256_512,
+    Explore1024,
+    Language140_75,
+    ThresholdGrid,
+}
+
+impl EvaluationMode {
+    fn from_flag(flag: Option<&str>) -> Self {
+        match flag {
+            Some("--explore-counts-16-32") => Self::Explore16_32,
+            Some("--explore-counts-64-128") => Self::Explore64_128,
+            Some("--explore-counts-256-512") => Self::Explore256_512,
+            Some("--explore-counts-1024") => Self::Explore1024,
+            Some("--explore-language-counts-140-75") => Self::Language140_75,
+            Some("--explore-threshold-grid") => Self::ThresholdGrid,
+            _ => Self::Frozen,
+        }
+    }
+
+    fn base_policy_count(self) -> usize {
+        match self {
+            Self::Frozen => FROZEN_POLICIES,
+            Self::Explore16_32 => 9,
+            Self::Explore64_128 => 11,
+            Self::Explore256_512 => 13,
+            Self::Explore1024 => 14,
+            Self::Language140_75 | Self::ThresholdGrid => POLICY_NAMES.len(),
+        }
+    }
+
+    fn output_prefix(self) -> &'static str {
+        match self {
+            Self::Frozen => "ENG1C_VAL1",
+            Self::Explore16_32 => "ENG1C_VAL1_X16_32",
+            Self::Explore64_128 => "ENG1C_VAL1_X64_128",
+            Self::Explore256_512 => "ENG1C_VAL1_X256_512",
+            Self::Explore1024 => "ENG1C_VAL1_X1024",
+            Self::Language140_75 => "ENG1C_VAL1_LANG140_75",
+            Self::ThresholdGrid => "ENG1C_VAL1_GRID",
+        }
+    }
+}
+
+fn language_min_count(language: &str) -> Result<u64, &'static str> {
+    match language {
+        "FR" => Ok(140),
+        "EN" => Ok(75),
+        _ => Err("unknown pinned language for occurrence gate"),
+    }
+}
+
+fn grid_bounds(language: &str) -> Result<(u64, u64), &'static str> {
+    match language {
+        "FR" => Ok((128, 139)),
+        "EN" => Ok((65, 74)),
+        _ => Err("unknown pinned language for threshold grid"),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ReadoutPolicy {
+    Fixed(usize),
+    MinCount(u64),
+}
+
+struct EvaluationPolicy {
+    name: String,
+    readout: ReadoutPolicy,
+}
+
+fn policy_specs(
+    mode: EvaluationMode,
+    language: &str,
+) -> Result<Vec<EvaluationPolicy>, &'static str> {
+    let language_count = language_min_count(language)?;
+    let mut policies: Vec<_> = POLICY_NAMES
+        .iter()
+        .take(mode.base_policy_count())
+        .enumerate()
+        .map(|(index, name)| {
+            let readout = if index < 4 {
+                ReadoutPolicy::Fixed(index)
+            } else if index == POLICY_NAMES.len() - 1 {
+                ReadoutPolicy::MinCount(language_count)
+            } else {
+                ReadoutPolicy::MinCount(EVIDENCE_MIN_COUNTS[index - 4])
+            };
+            EvaluationPolicy {
+                name: (*name).to_owned(),
+                readout,
+            }
+        })
+        .collect();
+    if mode == EvaluationMode::ThresholdGrid {
+        let (lower, upper) = grid_bounds(language)?;
+        for count in lower..=upper {
+            let name = format!("MIN_COUNT_{count}");
+            // FR128 is an existing comparator; do not create a second row.
+            if !policies.iter().any(|policy| policy.name == name) {
+                policies.push(EvaluationPolicy {
+                    name,
+                    readout: ReadoutPolicy::MinCount(count),
+                });
+            }
+        }
+    }
+    Ok(policies)
+}
 
 #[derive(Clone, Copy)]
 struct Corpus {
@@ -154,28 +283,26 @@ fn evaluate_val(
     model: &mut PagedNGram,
     val: &[u8],
     expected_events: u64,
-) -> Result<[PolicyStats; 7], Box<dyn Error>> {
+    mode: EvaluationMode,
+    language: &str,
+) -> Result<Vec<PolicyStats>, Box<dyn Error>> {
     let layout = ChunkLayout::new(val.len())?;
     if layout.tokens() != expected_events {
         return Err("VAL 64-lane denominator drift".into());
     }
-    let mut stats: [PolicyStats; 7] = std::array::from_fn(|_| PolicyStats::default());
+    let policies = policy_specs(mode, language)?;
+    let mut stats = vec![PolicyStats::default(); policies.len()];
     for lane in 0..LANES {
         let chunk = &val[lane * layout.chunk..(lane + 1) * layout.chunk];
         for t in 1..chunk.len() {
             // Exactly one traversal of each observed TRAIN count layer.
             let ladder = model.depth_ladder_readout(&chunk[..t])?;
-            let choices = [
-                0usize,
-                1,
-                2,
-                3,
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[0]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[1]),
-                evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[2]),
-            ];
             let true_next_byte = chunk[t];
-            for (policy, &depth_index) in choices.iter().enumerate() {
+            for (policy, spec) in policies.iter().enumerate() {
+                let depth_index = match spec.readout {
+                    ReadoutPolicy::Fixed(index) => index,
+                    ReadoutPolicy::MinCount(count) => evidence_choice(&ladder, count),
+                };
                 stats[policy].record(lane, true_next_byte, &ladder[depth_index]);
             }
         }
@@ -237,8 +364,16 @@ fn paired_lane_interval(
 }
 
 fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
+    let mode = EvaluationMode::from_flag(args.get(1).map(String::as_str));
+    let exploratory = mode != EvaluationMode::Frozen;
+    let output_prefix = mode.output_prefix();
+    let mut normalized = args.to_vec();
+    if exploratory {
+        normalized.remove(1);
+    }
+    let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024|--explore-language-counts-140-75|--explore-threshold-grid] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -280,42 +415,64 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Opening validates the counted file, sparse index and source SHA256.
     let mut model = PagedNGram::open(Path::new(&args[4]), source)?;
     let val_at = Instant::now();
-    let stats = evaluate_val(&mut model, &val, corpus.val_events)?;
+    let policies = policy_specs(mode, corpus.language)?;
+    let stats = evaluate_val(&mut model, &val, corpus.val_events, mode, corpus.language)?;
     let val_ms = val_at.elapsed().as_millis();
     let full_process_peak_kib = vmhwm_kib()?;
     let lane_tokens = layout.chunk as u64 - 1;
     let fixed = best_index(&stats, 0..4);
-    let gated = best_index(&stats, 4..7);
-    let selected = best_index(&stats, 0..7);
+    let gated = best_index(&stats, 4..stats.len());
+    let selected = best_index(&stats, 0..stats.len());
     let adaptive_gain = stats[fixed].bpb() - stats[gated].bpb();
     let (gate_lo, gate_hi) = paired_lane_interval(&stats[fixed], &stats[gated], lane_tokens);
     let verdict = if adaptive_gain >= 0.01 && gate_lo > 0.0 {
-        "PROVISIONAL_VAL_GAIN"
+        if exploratory {
+            "EXPLORATORY_VAL_GAIN"
+        } else {
+            "PROVISIONAL_VAL_GAIN"
+        }
+    } else if exploratory {
+        "EXPLORATORY_VAL_STOP_NOT_PROVEN"
     } else {
         "VAL_STOP_NOT_PROVEN"
     };
 
+    let language_count_metadata = if mode == EvaluationMode::Language140_75 {
+        format!(
+            ",language_min_count={}",
+            language_min_count(corpus.language)?
+        )
+    } else if mode == EvaluationMode::ThresholdGrid {
+        let (lower, upper) = grid_bounds(corpus.language)?;
+        format!(
+            ",grid_min_count={lower},grid_max_count={upper},policy_count={}",
+            policies.len()
+        )
+    } else {
+        String::new()
+    };
     println!(
-        "ENG1C_VAL1_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32,counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source=VAL_ONLY,integrity=PASS",
+        "{output_prefix}_META,language={},train_bytes={},train_sha256={},val_bytes={},val_tokens={},val_lanes=64,depth_model=32{language_count_metadata},counted_bytes={},sparse_bytes={},contexts={},pairs={},build_ms={},score_ms={},build_process_vmhwm_kib={},score_process_vmhwm_kib={},quality_source={},integrity=PASS",
         corpus.language, corpus.train_bytes, hex(&source), val.len(),
         corpus.val_events, metadata.count_store_bytes, metadata.sparse_index_bytes,
         metadata.contexts, metadata.follower_pairs, build_ms, val_ms,
-        build_peak_kib, full_process_peak_kib
+        build_peak_kib, full_process_peak_kib,
+        if exploratory { "EXPOSED_VAL_EXPLORATORY" } else { "VAL_ONLY" }
     );
     for (i, score) in stats.iter().enumerate() {
         let (lo, hi) = paired_lane_interval(&stats[0], score, lane_tokens);
         let improvement = stats[0].bpb() - score.bpb();
         println!(
-            "ENG1C_VAL1_POLICY,language={},policy={},tokens={},total_bits={:.12},bpb={:.12},accuracy={:.12},delta_bpb_vs_FIXED_4={:.12},paired_boot_low={:.12},paired_boot_high={:.12},selected_depth4={},selected_depth7={},selected_depth12={},selected_depth32={},integrity=PASS",
-            corpus.language, POLICY_NAMES[i], score.tokens, score.bits(), score.bpb(),
+            "{output_prefix}_POLICY,language={},policy={},tokens={},total_bits={:.12},bpb={:.12},accuracy={:.12},delta_bpb_vs_FIXED_4={:.12},paired_boot_low={:.12},paired_boot_high={:.12},selected_depth4={},selected_depth7={},selected_depth12={},selected_depth32={},integrity=PASS",
+            corpus.language, policies[i].name, score.tokens, score.bits(), score.bpb(),
             score.accuracy(), improvement, lo, hi,
             score.selected_depths[0], score.selected_depths[1],
             score.selected_depths[2], score.selected_depths[3]
         );
     }
     println!(
-        "ENG1C_VAL1_DECISION,language={},best_fixed={},best_gated={},best_overall={},best_fixed_bpb={:.12},best_gated_bpb={:.12},gated_gain_bpb={:.12},paired_gate_low={:.12},paired_gate_high={:.12},adaptive_science={},test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS",
-        corpus.language, POLICY_NAMES[fixed], POLICY_NAMES[gated], POLICY_NAMES[selected],
+        "{output_prefix}_DECISION,language={},best_fixed={},best_gated={},best_overall={},best_fixed_bpb={:.12},best_gated_bpb={:.12},gated_gain_bpb={:.12},paired_gate_low={:.12},paired_gate_high={:.12},adaptive_science={},test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS",
+        corpus.language, policies[fixed].name, policies[gated].name, policies[selected].name,
         stats[fixed].bpb(), stats[gated].bpb(), adaptive_gain, gate_lo, gate_hi, verdict
     );
     Ok(())
@@ -332,6 +489,217 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn language_gate_routes_train_evidence_between_75_and_140() {
+        let root = std::env::temp_dir().join(format!("sml-val1-language-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let train = b"abcdefghabcdefgh".repeat(LANES);
+        let source = training_sha256(&train);
+        let store = root.join("store");
+        assert!(matches!(
+            build_paged(
+                &train,
+                32,
+                &store,
+                &root.join("sort"),
+                PagedLimits::default()
+            )
+            .unwrap(),
+            PagedBuild::Published(_)
+        ));
+        let mut model = PagedNGram::open(&store, source).unwrap();
+        let events = ChunkLayout::new(train.len()).unwrap().tokens();
+        let fr = evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "FR",
+        )
+        .unwrap();
+        let en = evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "EN",
+        )
+        .unwrap();
+        // This seven-byte suffix has exactly 128 TRAIN occurrences: EN qualifies, FR does not.
+        assert_eq!(
+            model.depth_ladder_readout(b"abcdefg").unwrap()[1].context_events,
+            128
+        );
+        assert_eq!(fr[14].selected_depths, [events, 0, 0, 0]);
+        assert_eq!(en[14].selected_depths[1], 128);
+        assert_eq!(en[14].selected_depths[2..], [0, 0]);
+        for (a, b) in fr[..14].iter().zip(&en[..14]) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.selected_depths, b.selected_depths);
+            assert_eq!(a.correct, b.correct);
+        }
+        for (language, earlier, expected_rows) in [("FR", &fr, 26), ("EN", &en, 25)] {
+            let specs = policy_specs(EvaluationMode::ThresholdGrid, language).unwrap();
+            let grid = evaluate_val(
+                &mut model,
+                &train,
+                events,
+                EvaluationMode::ThresholdGrid,
+                language,
+            )
+            .unwrap();
+            assert_eq!(specs.len(), expected_rows);
+            assert_eq!(grid.len(), expected_rows);
+            let names: std::collections::BTreeSet<_> = specs.iter().map(|p| &p.name).collect();
+            assert_eq!(names.len(), expected_rows);
+            for (a, b) in earlier.iter().zip(&grid) {
+                assert_eq!(a.lane_bits, b.lane_bits);
+                assert_eq!(a.tokens, b.tokens);
+                assert_eq!(a.selected_depths, b.selected_depths);
+                assert_eq!(a.correct, b.correct);
+            }
+            let (lower, upper) = grid_bounds(language).unwrap();
+            for count in lower..=upper {
+                let index = specs
+                    .iter()
+                    .position(|p| p.name == format!("MIN_COUNT_{count}"))
+                    .unwrap();
+                assert!(matches!(specs[index].readout, ReadoutPolicy::MinCount(n) if n == count));
+                if count <= 128 {
+                    assert_eq!(grid[index].selected_depths, [events - 128, 128, 0, 0]);
+                } else {
+                    assert_eq!(grid[index].selected_depths, [events, 0, 0, 0]);
+                }
+            }
+        }
+        assert!(evaluate_val(
+            &mut model,
+            &train,
+            events,
+            EvaluationMode::Language140_75,
+            "UNKNOWN"
+        )
+        .is_err());
+        assert_eq!(model.metadata().source_sha256, source);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn exploratory_threshold_boundaries_are_inclusive_and_monotone() {
+        for threshold in [16, 32, 64, 128, 256, 512, 1024] {
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold - 1, 0, 0]), threshold),
+                0
+            );
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold, 0, 0]), threshold),
+                1
+            );
+            assert_eq!(
+                evidence_choice(&fabricated([99, threshold, threshold, 0]), threshold),
+                2
+            );
+            assert_eq!(
+                evidence_choice(
+                    &fabricated([99, threshold, threshold, threshold]),
+                    threshold
+                ),
+                3
+            );
+        }
+        let ladder = fabricated([99, 32, 16, 15]);
+        assert_eq!(evidence_choice(&ladder, 16), 2);
+        assert_eq!(evidence_choice(&ladder, 32), 1);
+    }
+
+    #[test]
+    fn exploratory_scoring_preserves_original_seven_arms_on_real_store() {
+        let root = std::env::temp_dir().join(format!("sml-val1-x1632-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        // Enough repeated TRAIN contexts to exercise the 1024-occurrence arm.
+        let train = b"abcdefghabcdefghabcdefghabcdefghabcdefghabcdefgh".repeat(LANES * 4);
+        let val = b"abcdefghabcdefgh".repeat(LANES);
+        let source = training_sha256(&train);
+        let store = root.join("store");
+        assert!(matches!(
+            build_paged(
+                &train,
+                32,
+                &store,
+                &root.join("sort"),
+                PagedLimits::default()
+            )
+            .unwrap(),
+            PagedBuild::Published(_)
+        ));
+        let mut model = PagedNGram::open(&store, source).unwrap();
+        let events = ChunkLayout::new(val.len()).unwrap().tokens();
+        let original =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Frozen, "FR").unwrap();
+        let exploratory =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore16_32, "FR").unwrap();
+        let expanded = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Explore64_128,
+            "FR",
+        )
+        .unwrap();
+        assert_eq!(original.len(), 7);
+        assert_eq!(exploratory.len(), 9);
+        assert_eq!(expanded.len(), 11);
+        let stage1 = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Explore256_512,
+            "FR",
+        )
+        .unwrap();
+        let stage2 =
+            evaluate_val(&mut model, &val, events, EvaluationMode::Explore1024, "FR").unwrap();
+        assert_eq!(stage1.len(), 13);
+        assert_eq!(stage2.len(), 14);
+        let language_arm = evaluate_val(
+            &mut model,
+            &val,
+            events,
+            EvaluationMode::Language140_75,
+            "FR",
+        )
+        .unwrap();
+        assert_eq!(language_arm.len(), 15);
+        for previous in [&original, &exploratory, &expanded, &stage1, &stage2] {
+            for (a, b) in previous.iter().zip(&language_arm) {
+                assert_eq!(a.lane_bits, b.lane_bits);
+                assert_eq!(a.tokens, b.tokens);
+                assert_eq!(a.correct, b.correct);
+                assert_eq!(a.selected_depths, b.selected_depths);
+            }
+        }
+        for (a, b) in exploratory.iter().zip(&expanded) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.tokens, b.tokens);
+            assert_eq!(a.correct, b.correct);
+            assert_eq!(a.selected_depths, b.selected_depths);
+        }
+        for (a, b) in original.iter().zip(&expanded) {
+            assert_eq!(a.lane_bits, b.lane_bits);
+            assert_eq!(a.correct, b.correct);
+            assert_eq!(a.selected_depths, b.selected_depths);
+        }
+        for row in &language_arm[7..] {
+            assert_eq!(row.tokens, events);
+            assert_eq!(row.selected_depths.iter().sum::<u64>(), events);
+            assert!(row.selected_depths[2] + row.selected_depths[3] > 0);
+        }
+        assert_eq!(model.metadata().source_sha256, source);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn fabricated(evidence: [u64; 4]) -> [EvidenceDepthReadout; 4] {
         std::array::from_fn(|i| EvidenceDepthReadout {
@@ -361,7 +729,7 @@ mod tests {
             row.lane_bits = std::array::from_fn(|lane| (lane + i) as f64);
         }
         assert_eq!(best_index(&stats, 0..4), 0);
-        assert_eq!(best_index(&stats, 4..7), 4);
+        assert_eq!(best_index(&stats, 4..stats.len()), 4);
         assert_eq!(
             paired_lane_interval(&stats[0], &stats[1], 39),
             paired_lane_interval(&stats[0], &stats[1], 39)
