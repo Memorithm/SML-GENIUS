@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_full_suffix_counts_equal_independent_ENG1b_at_all_depths() {
+    fn exact_full_suffix_counts_equal_independent_eng1b_at_all_depths() {
         let data = fixture();
         for depth in DEPTH_LADDER {
             let r = run_fixture(
