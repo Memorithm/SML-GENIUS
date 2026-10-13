@@ -49,7 +49,13 @@ impl From<&WeightArtifactEntry> for ArtifactKey {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightArtifactCatalog {
-    entries: BTreeMap<ArtifactKey, PathBuf>,
+    entries: BTreeMap<ArtifactKey, ArtifactSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ArtifactSource {
+    Disk(PathBuf),
+    Retained(Vec<u8>),
 }
 
 impl WeightArtifactCatalog {
@@ -57,7 +63,10 @@ impl WeightArtifactCatalog {
         let mut indexed = BTreeMap::new();
         for entry in entries {
             let key = ArtifactKey::from(&entry);
-            if indexed.insert(key, entry.path).is_some() {
+            if indexed
+                .insert(key, ArtifactSource::Disk(entry.path))
+                .is_some()
+            {
                 return Err(RamMaterializationError::DuplicateArtifact {
                     page_id: PageId(key.page_id),
                     representation_version: key.representation_version,
@@ -68,12 +77,37 @@ impl WeightArtifactCatalog {
         Ok(Self { entries: indexed })
     }
 
-    fn path(
+    /// Retain exactly the bytes checked by an external admission adapter.
+    /// Parsing/CRC is corruption detection, not publisher authentication.
+    pub fn from_retained_bytes(artifacts: Vec<Vec<u8>>) -> Result<Self, RamMaterializationError> {
+        let mut entries = BTreeMap::new();
+        for bytes in artifacts {
+            let header = parse_weight_artifact(&bytes)?.header;
+            let key = ArtifactKey {
+                page_id: header.page_id.0,
+                representation_version: header.representation_version,
+                precision: header.precision,
+            };
+            if entries
+                .insert(key, ArtifactSource::Retained(bytes))
+                .is_some()
+            {
+                return Err(RamMaterializationError::DuplicateArtifact {
+                    page_id: header.page_id,
+                    representation_version: header.representation_version,
+                    precision: header.precision,
+                });
+            }
+        }
+        Ok(Self { entries })
+    }
+
+    fn source(
         &self,
         page_id: PageId,
         representation_version: u64,
         precision: WeightPrecision,
-    ) -> Result<&PathBuf, RamMaterializationError> {
+    ) -> Result<&ArtifactSource, RamMaterializationError> {
         self.entries
             .get(&ArtifactKey {
                 page_id: page_id.0,
@@ -123,6 +157,7 @@ pub struct RamMaterializationReport {
     pub base_generation: u64,
     pub epoch: u64,
     pub files_read: usize,
+    pub retained_artifacts_read: usize,
     pub artifacts_reused_from_ram: usize,
     pub artifact_bytes_read: u64,
     pub ram_pages: usize,
@@ -233,6 +268,7 @@ impl ElasticRamRuntime {
 
         let mut staged = BTreeMap::new();
         let mut files_read = 0_usize;
+        let mut retained_artifacts_read = 0_usize;
         let mut reused = 0_usize;
         let mut artifact_bytes_read = 0_u64;
         let mut ram_payload_bytes = 0_u64;
@@ -250,10 +286,10 @@ impl ElasticRamRuntime {
                 reused = reused.saturating_add(1);
                 existing.clone()
             } else {
-                if files_read >= budget.max_files_read {
+                if files_read.saturating_add(retained_artifacts_read) >= budget.max_files_read {
                     return Err(RamMaterializationError::MaterializationBudget);
                 }
-                let path = catalog.path(
+                let source = catalog.source(
                     transition.page_id,
                     transition.to_representation_version,
                     transition.to_precision,
@@ -265,12 +301,15 @@ impl ElasticRamRuntime {
                             .map_err(|_| RamMaterializationError::ArithmeticOverflow)?,
                     )
                     .ok_or(RamMaterializationError::ArithmeticOverflow)?;
-                let metadata = fs::metadata(path)?;
-                if metadata.len() != expected_file_bytes {
+                let source_len = match source {
+                    ArtifactSource::Disk(path) => fs::metadata(path)?.len(),
+                    ArtifactSource::Retained(bytes) => bytes.len() as u64,
+                };
+                if source_len != expected_file_bytes {
                     return Err(RamMaterializationError::ArtifactFileLength {
                         page_id: transition.page_id,
                         expected: expected_file_bytes,
-                        actual: metadata.len(),
+                        actual: source_len,
                     });
                 }
                 let next_artifact_bytes = artifact_bytes_read
@@ -279,11 +318,19 @@ impl ElasticRamRuntime {
                 if next_artifact_bytes > budget.max_total_artifact_bytes {
                     return Err(RamMaterializationError::MaterializationBudget);
                 }
-                let bytes = fs::read(path)?;
+                let bytes = match source {
+                    ArtifactSource::Disk(path) => {
+                        files_read = files_read.saturating_add(1);
+                        fs::read(path)?
+                    }
+                    ArtifactSource::Retained(bytes) => {
+                        retained_artifacts_read = retained_artifacts_read.saturating_add(1);
+                        bytes.clone()
+                    }
+                };
                 let parsed = parse_weight_artifact(&bytes)?;
                 validate_artifact_header(&parsed.header, transition)?;
                 artifact_bytes_read = next_artifact_bytes;
-                files_read = files_read.saturating_add(1);
                 RamWeightPage {
                     header: parsed.header,
                     payload: parsed.payload.to_vec(),
@@ -317,6 +364,7 @@ impl ElasticRamRuntime {
                 base_generation: plan.base_generation,
                 epoch: plan.epoch,
                 files_read,
+                retained_artifacts_read,
                 artifacts_reused_from_ram: reused,
                 artifact_bytes_read,
                 ram_pages: plan
