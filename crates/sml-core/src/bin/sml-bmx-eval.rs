@@ -1,7 +1,7 @@
 //! ENG-1d/BMX: ideal code length of every released mixer configuration.
 //!
 //! For each (PRIME, INPUT) pair, prints the ideal code length (sum of
-//! -log2 p, in bytes) of INPUT for `bmx-v4`, `bmx-v3` and `bmx-v2`, coded
+//! -log2 p, in bytes) of INPUT for `bmx-v5`, `bmx-v4`, `bmx-v3` and `bmx-v2`, coded
 //! alone and after priming on PRIME (`-` for no prime). Real streams are
 //! within a few bytes of these values (see `sml-bool-codec encode-mix`).
 //!

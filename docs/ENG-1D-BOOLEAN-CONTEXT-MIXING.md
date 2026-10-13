@@ -189,7 +189,7 @@ Diagnostic : passer les tables de 2^22 à 2^24 cases gagne 0,67 % sur le
 réglage. Les collisions de hachage coûtaient donc, mais ×4 en mémoire
 n'est pas acceptable.
 
-`Architecture::V4` (configuration par défaut, identité `bmx-v4:…`) :
+`Architecture::V4` (identité `bmx-v4:…`, configuration par défaut jusqu'à `bmx-v5`) :
 
 - **cases contrôlées** : chaque case garde 5 bits de contrôle tirés du haut
   du hachage (probabilité 20 bits, compte 7 bits). Une case dont le contrôle
@@ -282,3 +282,88 @@ ni le temps de calcul. Les projections qui gardent des octets entiers
 égalent les octets bruts correspondants, comme prévu. Conclusion : sur ces
 ensembles, la projection de Pascal n'apporte pas de gain exploitable au
 mélangeur ; elle n'est pas intégrée.
+
+## bmx-v5 : projections au-delà des 8 derniers octets
+
+Après l'échec des projections des 64 derniers bits (masques, Pascal),
+l'information manquante a été cherchée là où les compresseurs de texte à
+mélange de contextes (paq8px, `IndirectModel` et `WordModelInfo`) la
+trouvent : la position dans la ligne, la ligne précédente, les mots
+précédents, et les contextes *indirects* (les octets qui ont suivi les
+dernières apparitions du contexte courant, appris par une petite table).
+
+`Architecture::V5` (configuration par défaut, identité `bmx-v5:…`) garde
+tout `bmx-v4` et ajoute dix contextes à cases contrôlées, dans l'ordre de
+`PROJECTIONS` :
+
+| Projection | Contexte |
+|---|---|
+| `above-col` | caractère au-dessus dans la ligne précédente, colonne |
+| `ctx3-next2+c1` | 2 octets qui ont suivi `t-3..t-1`, `t-1` |
+| `word-pair+c1` | mot courant, mot précédent, `t-1` |
+| `col+c1` | colonne, `t-1` |
+| `word-skip` | mot courant, mot d'avant le précédent |
+| `c1-next3` | `t-1` et les 3 octets qui l'ont suivi |
+| `lower2-next4` | 4 octets (casse repliée) qui ont suivi `t-2..t-1` repliés |
+| `above+c1` | caractère au-dessus, `t-1` |
+| `ctx3-next1+c2c1` | octet qui a suivi `t-3..t-1`, `t-2`, `t-1` |
+| `c1-next1` | `t-1` et l'octet qui l'a suivi |
+
+### Sélection, sur les ensembles de réglage seulement
+
+Quatorze candidats ont été ajoutés un à un à `bmx-v4` (référence 25 465,5
+octets) : chacun gagne seul de −0,61 % à −2,28 % (meilleur : `above-col`),
+contre au plus −0,10 % pour une projection de Pascal. Une sélection
+gloutonne (ajout du meilleur candidat tant qu'il gagne au moins 0,10 %)
+retient les dix ci-dessus dans cet ordre ; le onzième n'apportait que
+0,08 %.
+
+| Tours de la sélection | Total réglage | vs v4 |
+|---|---:|---:|
+| `above-col` | 24 886,1 | −2,28 % |
+| + `ctx3-next2+c1` | 24 547,0 | −3,61 % |
+| + `word-pair+c1` | 24 340,7 | −4,42 % |
+| + `col+c1` | 24 222,1 | −4,88 % |
+| + `word-skip`, `c1-next3`, `lower2-next4` | 23 925,2 | −6,05 % |
+| **bmx-v5** : + `above+c1`, `ctx3-next1+c2c1`, `c1-next1` | **23 823,9** | **−6,45 %** |
+
+### Évaluation sur textes réservés
+
+Mêmes textes et même méthode que pour v3 et v4. Les sous-ensembles
+emboîtés de la sélection et des tailles de tables réduites y ont aussi été
+mesurés (ci-dessous) ; le choix final (les dix projections, tables 2^22)
+suit la règle d'arrêt fixée sur le réglage, pas ces mesures.
+
+| Texte | Mode | `bzip2 -9` | `bmx-v4` | `bmx-v5` | v5 vs v4 | v5 vs bzip2 |
+|---|---|---:|---:|---:|---:|---:|
+| *Opticks* TEST | seul | 18 775 | 15 672 | 15 060 | −3,91 % | −19,8 % |
+| | amorcé | 15 530 | 13 237 | 12 419 | −6,18 % | −20,0 % |
+| Documentation SML | seul | 24 691 | 20 546 | 20 110 | −2,12 % | −18,6 % |
+| | amorcé | 20 393 | 16 766 | 16 126 | −3,82 % | −20,9 % |
+| Manuel Vim | seul | 19 420 | 16 306 | 15 848 | −2,81 % | −18,4 % |
+| | amorcé | 15 433 | 13 252 | 12 536 | −5,40 % | −18,8 % |
+
+Total : 95 779,8 → 92 100,5 octets (−3,84 %), à peu près 60 % du gain
+mesuré sur le réglage. Les six flux réels de `sml-bool-codec` (charge utile
+à 5 octets au plus de la valeur idéale) se décodent à l'identique, SHA-256
+vérifié.
+
+Coût et variantes mesurées (textes réservés, total vs v4) :
+
+| Variante | Gain | Mémoire en plus | Débit |
+|---|---:|---:|---:|
+| 4 premières projections, tables 2^22 | −3,04 % | 64 Mio | non mesuré |
+| 10 projections, tables 2^16 à 2^18 | −2,97 % | ≈ 8 Mio | non mesuré |
+| 10 projections, tables 2^18 à 2^20 | −3,52 % | ≈ 32 Mio | 65 Kio/s |
+| **bmx-v5** : 10 projections, tables 2^22 | **−3,84 %** | **176 Mio** | **61 Kio/s** |
+
+Débits mesurés séquentiellement sur la documentation SML entière
+(1,9 Mo) : 136 Kio/s pour `bmx-v4`, 61 à 65 Kio/s pour les dix projections
+quelle que soit la taille des tables. Le coût en temps tient au nombre
+d'entrées du mélangeur, pas à la mémoire. Une machine plus contrainte peut réduire `table_bits`, ce qui
+change l'identité du modèle.
+
+Limites : les candidats viennent de paq8px et la règle d'arrêt (0,10 %) a
+été fixée à la main ; une seule passe d'essais ; mêmes trois textes
+d'évaluation, sur lesquels on retrouve environ 60 % du gain du réglage. Ce n'est pas un panel ; la confirmation passe par le panel
+préregistré.

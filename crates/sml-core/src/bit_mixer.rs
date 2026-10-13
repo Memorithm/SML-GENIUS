@@ -6,14 +6,21 @@
 //! refines the result with an adaptive probability map. Everything learns
 //! while coding: there is no frozen TRAIN count table.
 //!
-//! [`Architecture::V4`] (`bmx-v4`, the default) adds two things to the
-//! classic `bmx-v2`/`bmx-v3` design, at the same table memory:
+//! [`Architecture::V4`] (`bmx-v4`) adds two things to the classic
+//! `bmx-v2`/`bmx-v3` design, at the same table memory:
 //! * collision-checked context slots: each slot stores 5 check bits of its
 //!   context hash; a slot whose check differs is read as unseen and reset on
 //!   update, instead of lending another context's statistics;
 //! * three mixer weight sets, selected by the partial byte, by the previous
 //!   byte × match state, and by the classes (bits 7-5) of the two previous
 //!   bytes × bit position, combined by a small learned final mixer.
+//!
+//! [`Architecture::V5`] (`bmx-v5`, the default) keeps `bmx-v4` and adds ten
+//! history projections that look beyond the last 8 bytes (see
+//! [`PROJECTIONS`]): the column and the character above it in the previous
+//! line, the previous and skipped words, and indirect contexts (the bytes
+//! that followed the last occurrences of the current context). Each is one
+//! more collision-checked context table.
 //!
 //! Determinism: integer arithmetic only (no floating point anywhere in the
 //! prediction or update path), fixed hash functions and fixed table sizes.
@@ -93,7 +100,43 @@ pub enum Architecture {
     /// Collision-checked slots and three weight sets with a learned final
     /// mixer (`bmx-v4`).
     V4,
+    /// `bmx-v4` plus the ten [`PROJECTIONS`] (`bmx-v5`).
+    V5,
 }
+
+impl Architecture {
+    /// Collision-checked slots and three weight sets (`bmx-v4`, `bmx-v5`).
+    fn checked(self) -> bool {
+        self != Self::Classic
+    }
+
+    fn n_projections(self) -> usize {
+        if self == Self::V5 {
+            PROJECTIONS.len()
+        } else {
+            0
+        }
+    }
+}
+
+/// History projections of `bmx-v5`, in mixer input order. Selected greedily
+/// from 14 candidates on the tuning corpora only (Opticks DEV, Vim
+/// `version7.txt`, Rust source of SML), then frozen; see
+/// docs/ENG-1D-BOOLEAN-CONTEXT-MIXING.md. `t-k` is the byte k positions
+/// back; "next" bytes are the bytes that followed the last occurrences of a
+/// context (indirect contexts).
+pub const PROJECTIONS: [&str; 10] = [
+    "above-col",       // character above in the previous line, column
+    "ctx3-next2+c1",   // 2 bytes that followed t-3..t-1, t-1
+    "word-pair+c1",    // current word, previous word, t-1
+    "col+c1",          // column, t-1
+    "word-skip",       // current word, word before the previous one
+    "c1-next3",        // t-1 and the 3 bytes that followed it
+    "lower2-next4",    // 4 case-folded bytes that followed t-2..t-1 folded
+    "above+c1",        // character above, t-1
+    "ctx3-next1+c2c1", // byte that followed t-3..t-1, t-2, t-1
+    "c1-next1",        // t-1 and the byte that followed it
+];
 
 /// Number of check bits stored in each `bmx-v4` context slot.
 const CHECK_BITS: u32 = 5;
@@ -179,17 +222,21 @@ impl Default for MixerConfig {
             counter_limit: 127,
             mixer_rate: 6,
             mask_set: MaskSet::V3,
-            architecture: Architecture::V4,
+            architecture: Architecture::V5,
         }
     }
 }
 
 impl MixerConfig {
-    /// Every released configuration, newest first: `bmx-v4`, `bmx-v3`,
-    /// `bmx-v2` (for decoding a container by its stored identity).
+    /// Every released configuration, newest first: `bmx-v5`, `bmx-v4`,
+    /// `bmx-v3`, `bmx-v2` (for decoding a container by its stored identity).
     #[must_use]
-    pub fn released() -> [Self; 3] {
-        let v4 = Self::default();
+    pub fn released() -> [Self; 4] {
+        let v5 = Self::default();
+        let v4 = Self {
+            architecture: Architecture::V4,
+            ..v5
+        };
         let v3 = Self {
             architecture: Architecture::Classic,
             ..v4
@@ -198,7 +245,7 @@ impl MixerConfig {
             mask_set: MaskSet::None,
             ..v3
         };
-        [v4, v3, v2]
+        [v5, v4, v3, v2]
     }
 
     /// Stable text identity, recorded in coded containers.
@@ -225,6 +272,11 @@ impl MixerConfig {
                 "bmx-v4:{base};masks={};check_bits={CHECK_BITS};sets=c0,c1xmatch,class2xbit;final=learned",
                 masks_label(masks)
             ),
+            (Architecture::V5, _) => format!(
+                "bmx-v5:{base};masks={};check_bits={CHECK_BITS};sets=c0,c1xmatch,class2xbit;final=learned;projections={}",
+                masks_label(masks),
+                PROJECTIONS.join(",")
+            ),
         }
     }
 
@@ -233,7 +285,7 @@ impl MixerConfig {
             && (10..=24).contains(&self.match_bits)
             && (1..=1023).contains(&self.counter_limit)
             // Checked slots store a 7-bit count.
-            && (self.architecture == Architecture::Classic || self.counter_limit <= 127)
+            && (!self.architecture.checked() || self.counter_limit <= 127)
             && (1..=1024).contains(&self.mixer_rate)
     }
 }
@@ -450,6 +502,8 @@ pub struct BitMixer {
     n_hashed: usize,
     byte_hashes: Vec<u32>,
     word_hash: u32,
+    /// `bmx-v5` history projections (`None` for earlier architectures).
+    projections: Option<Box<Projections>>,
     c0: u32,
     bit_pos: u32,
     // per-bit state
@@ -525,7 +579,7 @@ impl BitMixer {
         if masks.len() > MAX_MASKS || masks.iter().any(|m| m.iter().all(|&b| b == 0)) {
             return Err("invalid Boolean mask list");
         }
-        let n_hashed = N_FIXED + masks.len();
+        let n_hashed = N_FIXED + masks.len() + config.architecture.n_projections();
         let side_present = side.is_some();
         let n_inputs = n_hashed + N_EXTRA + if side_present { 2 } else { 0 };
         let logistic = Logistic::new();
@@ -564,6 +618,8 @@ impl BitMixer {
             n_hashed,
             byte_hashes: vec![0; n_hashed],
             word_hash: 0,
+            projections: (config.architecture == Architecture::V5)
+                .then(|| Box::new(Projections::new(config.table_bits))),
             c0: 1,
             bit_pos: 0,
             inputs: vec![0; n_inputs],
@@ -571,7 +627,7 @@ impl BitMixer {
             checks: vec![0; n_hashed],
             extra_weights: match config.architecture {
                 Architecture::Classic => [Vec::new(), Vec::new()],
-                Architecture::V4 => [
+                Architecture::V4 | Architecture::V5 => [
                     vec![0; SETS_V4[1] * n_inputs],
                     vec![0; SETS_V4[2] * n_inputs],
                 ],
@@ -582,7 +638,7 @@ impl BitMixer {
             final_weights: match config.architecture {
                 Architecture::Classic => Vec::new(),
                 // Start as the plain average of the three sets, no bias.
-                Architecture::V4 => (0..256 * FINAL_INPUTS)
+                Architecture::V4 | Architecture::V5 => (0..256 * FINAL_INPUTS)
                     .map(|i| if i % FINAL_INPUTS < 3 { 21_845 } else { 0 })
                     .collect(),
             },
@@ -636,7 +692,7 @@ impl BitMixer {
 
     fn predict(&mut self) {
         let c0 = self.c0;
-        let checked = self.config.architecture == Architecture::V4;
+        let checked = self.config.architecture.checked();
         for (i, slot) in self.slots.iter_mut().enumerate() {
             let h = hash(self.byte_hashes[i], c0);
             *slot = h as usize;
@@ -698,7 +754,7 @@ impl BitMixer {
             Architecture::Classic => {
                 self.mixer_p = squash((dot >> 16) as i32).clamp(1, 4095);
             }
-            Architecture::V4 => {
+            Architecture::V4 | Architecture::V5 => {
                 let match_state = match (self.match_slot != usize::MAX, self.match_len) {
                     (false, _) => 0,
                     (true, 0..=15) => 1,
@@ -748,7 +804,7 @@ impl BitMixer {
                 let err = (target - self.mixer_p) * rate;
                 train_row(&mut self.weights, &self.inputs, self.c0 as usize, err);
             }
-            Architecture::V4 => {
+            Architecture::V4 | Architecture::V5 => {
                 let err = (target - self.set_p[0]) * rate;
                 train_row(&mut self.weights, &self.inputs, self.selectors[0], err);
                 for ((weights, &row), &p) in self
@@ -769,7 +825,7 @@ impl BitMixer {
             }
         }
         // Counters and maps.
-        let checked = self.config.architecture == Architecture::V4;
+        let checked = self.config.architecture.checked();
         for (i, &slot) in self.slots.iter().enumerate() {
             if checked {
                 self.tables[i].update_checked(slot, self.checks[i], bit, limit);
@@ -874,6 +930,119 @@ impl BitMixer {
             }
             self.byte_hashes[N_FIXED + k] = h;
         }
+        if let Some(projections) = &mut self.projections {
+            let first = N_FIXED + self.masks.len();
+            projections.after_byte(
+                &self.history,
+                self.word_hash,
+                &mut self.byte_hashes[first..],
+            );
+        }
+    }
+}
+
+// ----------------------------------------------------------- projections
+
+/// State of the `bmx-v5` history projections. Every field follows the byte
+/// history only, so encoder and decoder stay in step.
+struct Projections {
+    /// Last 4 bytes that followed each byte value.
+    after1: Vec<u32>,
+    /// Last 4 case-folded bytes that followed each case-folded byte pair.
+    after_lower2: Vec<u32>,
+    /// Last bytes that followed each hashed 3-byte context.
+    after3: Vec<u32>,
+    /// Last 4 case-folded bytes.
+    lower4: u32,
+    /// Hashes of the previous word and of the one before it.
+    word1: u32,
+    word2: u32,
+    last_word: u32,
+    /// History index of the first byte of the current and previous lines.
+    line_start: usize,
+    prev_line_start: Option<usize>,
+}
+
+impl Projections {
+    fn new(table_bits: u32) -> Self {
+        Self {
+            after1: vec![0; 256],
+            after_lower2: vec![0; 1 << 16],
+            after3: vec![0; 1 << table_bits],
+            lower4: 0,
+            word1: 0,
+            word2: 0,
+            last_word: 0,
+            line_start: 0,
+            prev_line_start: None,
+        }
+    }
+
+    fn after3_slot(&self, context: u32) -> usize {
+        (hash(context, 0xB16) as usize) & (self.after3.len() - 1)
+    }
+
+    /// Column of the next byte and the byte above it in the previous line
+    /// (0 past the end of that line or on the first line).
+    fn column_and_above(&self, history: &[u8]) -> (u32, u32) {
+        let col = history.len() - self.line_start;
+        let above = match self.prev_line_start {
+            Some(prev) if prev + col + 1 < self.line_start => u32::from(history[prev + col]),
+            _ => 0,
+        };
+        (col.min(255) as u32, above)
+    }
+
+    /// Updates the state with the byte just appended to `history` and
+    /// writes the projection hashes, in [`PROJECTIONS`] order.
+    fn after_byte(&mut self, history: &[u8], word_hash: u32, out: &mut [u32]) {
+        let n = history.len();
+        let back = |k: usize| -> u32 {
+            if k <= n {
+                u32::from(history[n - k])
+            } else {
+                0
+            }
+        };
+        let (c1, c2, c3, c4) = (back(1), back(2), back(3), back(4));
+        // Indirect tables: record c1 as what followed its context.
+        let r1 = &mut self.after1[c2 as usize];
+        *r1 = (*r1 << 8) | c1;
+        let lower = u32::from((c1 as u8).to_ascii_lowercase());
+        self.lower4 = (self.lower4 << 8) | lower;
+        let r5 = &mut self.after_lower2[((self.lower4 >> 8) & 0xFFFF) as usize];
+        *r5 = (*r5 << 8) | lower;
+        let slot = self.after3_slot((c4 << 16) | (c3 << 8) | c2);
+        self.after3[slot] = (self.after3[slot] << 8) | c1;
+        let ctx3 = (c3 << 16) | (c2 << 8) | c1;
+        let next3 = self.after3[self.after3_slot(ctx3)];
+        // Words: shift on the first non-letter after a word.
+        if word_hash == 0 && self.last_word != 0 {
+            self.word2 = self.word1;
+            self.word1 = self.last_word;
+        }
+        self.last_word = word_hash;
+        // Lines.
+        if c1 == u32::from(b'\n') {
+            self.prev_line_start = Some(self.line_start);
+            self.line_start = n;
+        }
+        let (col, above) = self.column_and_above(history);
+        let next1 = c1 | (self.after1[c1 as usize] << 8);
+        let next_lower = self.after_lower2[(self.lower4 & 0xFFFF) as usize];
+        let values = [
+            hash((above << 8) | col, 9),
+            hash(hash(next3 & 0xFFFF, c1), 12),
+            hash(hash(word_hash, self.word1), hash(c1, 10)),
+            hash((col << 8) | c1, 7),
+            hash(hash(word_hash, self.word2), 6),
+            hash(next1, 1),
+            hash(next_lower, 14),
+            hash((above << 8) | c1, 8),
+            hash(hash(next3 & 0xFF, ctx3 & 0xFFFF), 11),
+            hash(next1 & 0xFFFF, 2),
+        ];
+        out.copy_from_slice(&values);
     }
 }
 
@@ -1091,7 +1260,7 @@ mod tests {
                 mixer_rate: 0,
                 ..MixerConfig::default()
             },
-            // bmx-v4 slots hold a 7-bit count.
+            // bmx-v4 and bmx-v5 slots hold a 7-bit count.
             MixerConfig {
                 counter_limit: 128,
                 ..MixerConfig::default()
@@ -1099,14 +1268,21 @@ mod tests {
         ] {
             assert!(BitMixer::try_new(bad).is_err());
         }
-        let [v4, v3, v2] = MixerConfig::released();
+        let [v5, v4, v3, v2] = MixerConfig::released();
         assert!(BitMixer::try_new(MixerConfig {
             counter_limit: 128,
             ..v3
         })
         .is_ok());
-        assert_eq!(v4, MixerConfig::default());
-        assert!(v4.label().starts_with("bmx-v4:") && v4.label().contains(";check_bits=5;"));
+        assert_eq!(v5, MixerConfig::default());
+        assert!(v5.label().starts_with("bmx-v5:"));
+        assert!(v5
+            .label()
+            .ends_with(";final=learned;projections=above-col,ctx3-next2+c1,word-pair+c1,col+c1,word-skip,c1-next3,lower2-next4,above+c1,ctx3-next1+c2c1,c1-next1"));
+        assert_eq!(
+            v4.label(),
+            "bmx-v4:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6;masks=e0e0e0e0e0e0e0e0,ffe0e0e0e0e00000;check_bits=5;sets=c0,c1xmatch,class2xbit;final=learned"
+        );
         assert_eq!(
             v3.label(),
             "bmx-v3:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6;masks=e0e0e0e0e0e0e0e0,ffe0e0e0e0e00000"
@@ -1149,12 +1325,14 @@ mod tests {
     #[test]
     fn v4_mixer_changes_predictions_round_trips_and_binds_identity() {
         let data = text(30_000);
-        let v4 = small();
+        let v4 = MixerConfig {
+            architecture: Architecture::V4,
+            ..small()
+        };
         let v3 = MixerConfig {
             architecture: Architecture::Classic,
             ..v4
         };
-        assert_eq!(v4.architecture, Architecture::V4);
         let mut a = BitMixer::new(v3);
         let mut b = BitMixer::new(v4);
         let mut differ = 0usize;
@@ -1175,6 +1353,87 @@ mod tests {
         );
         assert_eq!(
             decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v4))
+                .unwrap(),
+            data
+        );
+    }
+
+    #[test]
+    fn projections_track_columns_lines_words_and_followers() {
+        let mut p = Projections::new(10);
+        let mut history = Vec::new();
+        let mut out = [0u32; PROJECTIONS.len()];
+        let mut word = 0u32;
+        for &byte in b"ab ac\nxyz\nx" {
+            history.push(byte);
+            word = if byte.is_ascii_alphabetic() {
+                hash(word, u32::from(byte))
+            } else {
+                0
+            };
+            p.after_byte(&history, word, &mut out);
+        }
+        // Third line, column 1: the byte above is 'y' of "xyz".
+        assert_eq!(p.column_and_above(&history), (1, u32::from(b'y')));
+        // After "a": 'b' then 'c' followed it, newest in the low byte.
+        assert_eq!(
+            p.after1[usize::from(b'a')] & 0xFFFF,
+            u32::from_be_bytes([0, 0, b'b', b'c'])
+        );
+        // Words: "xyz" is the previous word, "ac" the one before it.
+        let word_of = |w: &[u8]| w.iter().fold(0, |h, &b| hash(h, u32::from(b)));
+        assert_eq!((p.word1, p.word2), (word_of(b"xyz"), word_of(b"ac")));
+        // Past the end of the previous line there is no byte above.
+        history.extend_from_slice(b"yzzzz");
+        assert_eq!(p.column_and_above(&history).1, 0);
+        assert!(out.iter().all(|&h| h != 0));
+    }
+
+    #[test]
+    fn v5_projections_change_predictions_round_trip_and_bind_identity() {
+        let data: Vec<u8> = text(30_000)
+            .chunks(37)
+            .flat_map(|line| line.iter().copied().chain(*b"\n"))
+            .collect();
+        let v5 = small();
+        let v4 = MixerConfig {
+            architecture: Architecture::V4,
+            ..v5
+        };
+        assert_eq!(v5.architecture, Architecture::V5);
+        let mut a = BitMixer::new(v4);
+        let mut b = BitMixer::new(v5);
+        assert_eq!(b.n_hashed, a.n_hashed + PROJECTIONS.len());
+        let mut differ = 0usize;
+        for &byte in &data[..2_000] {
+            for shift in (0..8).rev() {
+                differ += usize::from(a.p12() != b.p12());
+                let bit = (byte >> shift) & 1 == 1;
+                a.update(bit);
+                b.update(bit);
+            }
+        }
+        assert!(
+            differ > 8_000,
+            "projections must change predictions ({differ})"
+        );
+        let id = v5.label();
+        let encoded = encode_with_predictor(&data, id.as_bytes(), &mut BitMixer::new(v5)).unwrap();
+        let v4_size =
+            encode_with_predictor(&data, v4.label().as_bytes(), &mut BitMixer::new(v4)).unwrap();
+        // Fixed-width lines: the column contexts must pay off.
+        assert!(
+            encoded.payload_bytes < v4_size.payload_bytes,
+            "{} vs {}",
+            encoded.payload_bytes,
+            v4_size.payload_bytes
+        );
+        assert!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v4))
+                .is_err()
+        );
+        assert_eq!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v5))
                 .unwrap(),
             data
         );

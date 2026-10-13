@@ -13,7 +13,7 @@ use std::{error::Error, fs, time::Instant};
 
 use sml_core::{
     anf_side::AnfCharSide,
-    bit_mixer::{BitMixer, MaskSet, MixerConfig, SideInputs},
+    bit_mixer::{Architecture, BitMixer, MaskSet, MixerConfig, SideInputs},
     bool_coder::BitPredictor,
 };
 
@@ -32,12 +32,21 @@ fn code_bytes(mixer: &mut BitMixer, input: &[u8]) -> f64 {
     bits / 8.0
 }
 
+/// The documented ablation was measured against bmx-v3; pinned so later
+/// default architectures do not change what this tool reproduces.
+fn baseline() -> MixerConfig {
+    MixerConfig {
+        architecture: Architecture::Classic,
+        mask_set: MaskSet::V3,
+        ..MixerConfig::default()
+    }
+}
+
 fn run(args: &[String]) -> Result<()> {
     if args.len() < 3 || (args.len() - 1) % 2 != 0 {
         return Err("usage: sml-bmx-anf-eval PRIME INPUT [PRIME INPUT ...]".into());
     }
-    // The documented ablation was measured against bmx-v3.
-    let config = MixerConfig::released()[1];
+    let config = baseline();
     for pair in args[1..].chunks(2) {
         let prime = fs::read(&pair[0])?;
         let input = fs::read(&pair[1])?;
@@ -71,5 +80,16 @@ fn main() {
     if let Err(e) = run(&std::env::args().collect::<Vec<_>>()) {
         eprintln!("ANF_EVAL_STOP: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ablation_baseline_is_the_released_bmx_v3() {
+        assert_eq!(baseline(), MixerConfig::released()[2]);
+        assert!(baseline().label().starts_with("bmx-v3:"));
     }
 }
