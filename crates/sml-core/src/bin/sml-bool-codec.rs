@@ -9,7 +9,12 @@
 //! Usage:
 //!   sml-bool-codec encode TRAIN WORK_DIR INPUT NEW_OUTPUT DEPTH POLICY
 //!   sml-bool-codec decode TRAIN WORK_DIR INPUT NEW_OUTPUT
-//! POLICY is `wb`, `swb:<beta>` or `dir:<tau>`.
+//!   sml-bool-codec encode-mix PRIME|- INPUT NEW_OUTPUT
+//!   sml-bool-codec decode-mix PRIME|- INPUT NEW_OUTPUT
+//! POLICY is `wb`, `swb:<beta>` or `dir:<tau>`. The `-mix` commands use the
+//! adaptive Boolean context-mixing predictor (`bit_mixer`), optionally
+//! primed by learning PRIME first (`-` for none); decoding needs the same
+//! PRIME, whose SHA-256 is recorded in the container.
 
 use std::{
     error::Error,
@@ -20,7 +25,11 @@ use std::{
 };
 
 use sml_core::{
-    bool_coder::{container_model_id, decode_bytes, encode_bytes, CoderError},
+    bit_mixer::{BitMixer, MixerConfig},
+    bool_coder::{
+        container_model_id, decode_bytes, decode_with_predictor, encode_bytes,
+        encode_with_predictor, CoderError,
+    },
     elastic_ngram_paged::{
         build_paged, training_sha256, EscapePolicy, PagedBuild, PagedLimits, PagedNGram,
         MAX_PAGED_DEPTH,
@@ -186,11 +195,89 @@ fn decode(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn mix_id(prime: &[u8], config: MixerConfig) -> Vec<u8> {
+    format!(
+        "{};prime_sha256={};prime_bytes={}",
+        config.label(),
+        hex(&training_sha256(prime)),
+        prime.len()
+    )
+    .into_bytes()
+}
+
+fn read_prime(arg: &str) -> Result<Vec<u8>> {
+    if arg == "-" {
+        Ok(Vec::new())
+    } else {
+        read(Path::new(arg))
+    }
+}
+
+fn primed(prime: &[u8], config: MixerConfig) -> Result<BitMixer> {
+    let mut mixer = BitMixer::try_new(config)?;
+    mixer.prime(prime);
+    Ok(mixer)
+}
+
+fn encode_mix(args: &[String]) -> Result<()> {
+    let config = MixerConfig::default();
+    let prime = read_prime(&args[2])?;
+    let input = read(Path::new(&args[3]))?;
+    let started = Instant::now();
+    let mut mixer = primed(&prime, config)?;
+    let prime_seconds = started.elapsed().as_secs_f64();
+    let started = Instant::now();
+    let encoded = encode_with_predictor(&input, &mix_id(&prime, config), &mut mixer)?;
+    let seconds = started.elapsed().as_secs_f64();
+    write_new(Path::new(&args[4]), &encoded.container)?;
+    let n = input.len().max(1) as f64;
+    println!(
+        "BMX_ENCODE\tinput_bytes={}\tprime_bytes={}\tcontainer_bytes={}\tpayload_bytes={}",
+        input.len(),
+        prime.len(),
+        encoded.container.len(),
+        encoded.payload_bytes
+    );
+    println!(
+        "BMX_BITS\tmodel_bpb={:.9}\tpayload_bpb={:.9}\tflush_bits={:.3}",
+        encoded.model_bits / n,
+        8.0 * encoded.payload_bytes as f64 / n,
+        8.0 * encoded.payload_bytes as f64 - encoded.coded_bits
+    );
+    println!(
+        "BMX_SPEED\tprime_seconds={prime_seconds:.3}\tcode_seconds={seconds:.3}\tbytes_per_second={:.0}",
+        n / seconds.max(1e-9)
+    );
+    Ok(())
+}
+
+fn decode_mix(args: &[String]) -> Result<()> {
+    let config = MixerConfig::default();
+    let prime = read_prime(&args[2])?;
+    let container = read(Path::new(&args[3]))?;
+    let id = mix_id(&prime, config);
+    if container_model_id(&container)? != id.as_slice() {
+        return Err("PRIME or mixer configuration differs from the one used to encode".into());
+    }
+    let started = Instant::now();
+    let mut mixer = primed(&prime, config)?;
+    let output = decode_with_predictor(&container, &id, &mut mixer)?;
+    write_new(Path::new(&args[4]), &output)?;
+    println!(
+        "BMX_DECODE\toutput_bytes={}\tseconds={:.3}\tsha256_verified=YES",
+        output.len(),
+        started.elapsed().as_secs_f64()
+    );
+    Ok(())
+}
+
 fn run(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
         Some("encode") if args.len() == 8 => encode(args),
         Some("decode") if args.len() == 6 => decode(args),
-        _ => Err("usage: sml-bool-codec encode TRAIN WORK_DIR INPUT NEW_OUTPUT DEPTH POLICY | decode TRAIN WORK_DIR INPUT NEW_OUTPUT".into()),
+        Some("encode-mix") if args.len() == 5 => encode_mix(args),
+        Some("decode-mix") if args.len() == 5 => decode_mix(args),
+        _ => Err("usage: sml-bool-codec encode TRAIN WORK_DIR INPUT NEW_OUTPUT DEPTH POLICY | decode TRAIN WORK_DIR INPUT NEW_OUTPUT | encode-mix PRIME|- INPUT NEW_OUTPUT | decode-mix PRIME|- INPUT NEW_OUTPUT".into()),
     }
 }
 
@@ -304,6 +391,37 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(fs::read(&shallow_out).unwrap(), input);
+        // Adaptive mixer, unprimed and primed; a wrong PRIME is refused.
+        for (prime, tag) in [(String::from("-"), "cold"), (s(&train_path), "warm")] {
+            let packed = root.join(format!("input-{tag}.bmx"));
+            let out = root.join(format!("restored-{tag}.txt"));
+            run(&[
+                "x".into(),
+                "encode-mix".into(),
+                prime.clone(),
+                s(&input_path),
+                s(&packed),
+            ])
+            .unwrap();
+            run(&["x".into(), "decode-mix".into(), prime, s(&packed), s(&out)]).unwrap();
+            assert_eq!(fs::read(&out).unwrap(), input);
+        }
+        assert!(run(&[
+            "x".into(),
+            "decode-mix".into(),
+            s(&other_train),
+            s(&root.join("input-warm.bmx")),
+            s(&root.join("bad.txt"))
+        ])
+        .is_err());
+        assert!(run(&[
+            "x".into(),
+            "decode-mix".into(),
+            "-".into(),
+            s(&root.join("input-warm.bmx")),
+            s(&root.join("bad2.txt"))
+        ])
+        .is_err());
         // Temporary stores are cleaned up.
         assert_eq!(fs::read_dir(&work).unwrap().count(), 0);
         fs::remove_dir_all(root).unwrap();
