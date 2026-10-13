@@ -2,12 +2,12 @@
   "schema": "memorithm.audit-proof.v1",
   "finding": "COG-SML-003",
   "repository": "Memorithm/SML-GENIUS",
-  "status": "candidate_waiting_exact_primary_owner_consumer_CI_and_review",
-  "observed_at": "2026-10-13T19:57:12.576Z",
+  "status": "merged_waiting_integrated_qualification",
+  "observed_at": "2026-10-13T20:13:34.254Z",
   "base_sha": "0dd6290aa4aff194e7828a2b51f249ba045f9cd2",
   "candidate": {
-    "sha": "7cd668983f61643b0893c92ff0c5eb3e2c43784a",
-    "tree": "dc1a14b82dd2f2d8eddb345fae79ff7320b87673",
+    "sha": "956de0ede29ff58b790f2551bd252108c7566cd7",
+    "tree": "bd326be65ded578e5104e9d761dd5bf10e105713",
     "branch": "audit/cog-sml-003-trusted-review-adapter"
   },
   "pull_request": 561,
@@ -39,5 +39,42 @@
   "limitations": [
     "Authenticating aggregate assertions does not re-execute domain checks or prove protected-data independence.",
     "No actual model promotion, final-label access, producer rights or production publisher acceptance is established."
-  ]
+  ],
+  "merge_sha": "69cf44d25000c7f5f77d1bd35b160b93fc225879",
+  "integrated_tree": "bd326be65ded578e5104e9d761dd5bf10e105713",
+  "candidate_checks": [
+    {
+      "name": "rust",
+      "job": 115512690823,
+      "conclusion": "success"
+    },
+    {
+      "name": "fmt",
+      "job": 115512560944,
+      "conclusion": "success"
+    },
+    {
+      "name": "primary-provider-owner-review",
+      "job": 115512379122,
+      "conclusion": "success"
+    },
+    {
+      "name": "owner-admission",
+      "job": 115512378801,
+      "conclusion": "success"
+    }
+  ],
+  "candidate_artifact": {
+    "id": 11845228963,
+    "run": 38459994422,
+    "sha256": "45e1d2f36f6ab83307f9bd429f2b030696416ca1217bd3f6593eafa99794c3f1",
+    "archive": "docs/audit/COG-SML-003-candidate.zip",
+    "downloaded_digest_and_exact_source_verified": true
+  },
+  "review": {
+    "thread": "PRRT_kwDOUi5lc86sCbLV",
+    "finding": "P2 draft transition events",
+    "fixed_head": "956de0ede29ff58b790f2551bd252108c7566cd7",
+    "resolved": true
+  }
 }
