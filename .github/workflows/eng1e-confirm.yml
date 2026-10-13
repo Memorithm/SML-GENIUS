@@ -1,0 +1,96 @@
+name: ENG-1e independent beta confirmation
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eng1e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  confirmation-language:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'research/eng1e-confirm')
+    name: "Independent confirmation ${{ matrix.language }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [FR, EN]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Provenance oracle and sealed two-phase qualification
+        run: |
+          bash -n scripts/eng1e/run-confirm.sh
+          rustfmt --edition 2021 --check scripts/eng1e/fingerprint.rs
+          rustc --edition 2021 -D warnings --test scripts/eng1e/fingerprint.rs -o "$RUNNER_TEMP/fingerprint-tests"
+          "$RUNNER_TEMP/fingerprint-tests"
+          cargo fmt --all -- --check
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib beta_ladder
+          cargo test --locked -p sml-core --lib paired_panel
+          cargo test --locked -p sml-core --bin sml-eng1e-confirm
+          cargo build --locked --release -p sml-core --bin sml-eng1e-confirm
+      - name: Nine authors, three DEV seals before each author's three TESTs
+        env:
+          CONFIRM_LANGUAGE: ${{ matrix.language }}
+        run: |
+          bash scripts/eng1e/run-confirm.sh "$RUNNER_TEMP/eng1e" "$CONFIRM_LANGUAGE"
+          test "$(find "$RUNNER_TEMP/eng1e/evidence" -name '*-test.tsv' | wc -l)" -eq 27
+          test "$(find "$RUNNER_TEMP/eng1e/evidence" -name '*-seal.tsv' | wc -l)" -eq 27
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1e-confirm-${{ matrix.language }}
+          path: ${{ runner.temp }}/eng1e/evidence/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+  confirmation-panel:
+    needs: confirmation-language
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: eng1e-confirm-FR
+          path: ${{ runner.temp }}/eng1e-panel
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: eng1e-confirm-EN
+          path: ${{ runner.temp }}/eng1e-panel
+      - name: Complete author-block endpoint, unchanged positive or negative verdict
+        run: |
+          cargo build --locked --release -p sml-core --bin sml-eng1e-confirm
+          target/release/sml-eng1e-confirm analyze "$RUNNER_TEMP/eng1e-panel" "$RUNNER_TEMP/eng1e-panel/panel.tsv"
+          cat "$RUNNER_TEMP/eng1e-panel/panel.tsv"
+          grep -Eq $'^DECISION\t(HISTORICAL_FR_EN_PANEL_CONFIRMED|SUPERIORITY_NOT_ESTABLISHED)\t.*integrity=PASS$' "$RUNNER_TEMP/eng1e-panel/panel.tsv"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1e-confirm-complete-panel
+          path: ${{ runner.temp }}/eng1e-panel/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
