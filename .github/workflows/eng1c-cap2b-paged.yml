@@ -1,0 +1,122 @@
+name: ENG-1c CAP2b atomic paged Witten-Bell whole TRAIN
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1c-cap2b-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  exact-paged-store:
+    if: startsWith(github.head_ref, 'research/eng1c-cap2b-')
+    name: "Paged model ${{ matrix.language }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [FR, EN]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Exact untrusted PR head checkout without credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 rustfmt Clippy pins
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Format, strict compilation and independent exact 256-way oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          test -s docs/ENG-1C-CAP2B-PAGED-STORE-PREREGISTRATION.md
+          bash -n scripts/eng1c/fetch-cap1-train.sh
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --lib elastic_ngram_paged -- --nocapture
+          cargo test --locked -p sml-core --bin sml-eng1c-cap2b-paged
+          cargo test --locked -p sml-core --lib elastic_ngram_trie
+      - name: Build immutable release model builder and reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-core --bin sml-eng1c-cap2b-paged
+      - name: Four depths of full-TRAIN source-bound counted model and cold reopen
+        shell: bash
+        env:
+          CAP2B_LANGUAGE: ${{ matrix.language }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eng1c-cap2b"
+          mkdir -p "$root/private" "$root/evidence"
+          cleanup() { rm -rf -- "$root/private"; }
+          trap cleanup EXIT
+          echo "ENG1C_CAP2B_SOURCE_SHA=$(git rev-parse HEAD)" | tee "$root/evidence/environment.txt"
+          echo "ENG1C_CAP2B_ARCH=$(uname -m)" | tee -a "$root/evidence/environment.txt"
+          rustc --version | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2B_TRAIN_ONLY=TRUE' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2B_MAX_VIRTUAL_KIB=262144' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2B_TOTAL_SCRATCH_AND_STORE_BUDGET_BYTES=2147483648' | tee -a "$root/evidence/environment.txt"
+          bash scripts/eng1c/fetch-cap1-train.sh "$CAP2B_LANGUAGE" "$root/private/TRAIN" | tee "$root/evidence/source.txt"
+          for depth in 4 7 12 32; do
+            output="$root/evidence/depth-$depth.txt"
+            store="$root/private/store-$depth"
+            binary=target/release/sml-eng1c-cap2b-paged
+            set +e
+            (
+              ulimit -v 262144
+              timeout --signal=TERM --kill-after=5s 900 \
+                "$binary" build "$CAP2B_LANGUAGE" "$depth" "$root/private/TRAIN" "$store"
+            ) > "$output" 2> "$root/private/error-$depth.log"
+            code=$?
+            set -e
+            if [[ "$code" -eq 124 || "$code" -eq 137 ]]; then
+              echo "ENG1C_CAP2B,language=$CAP2B_LANGUAGE,depth=$depth,status=TIMEOUT_STOP,contexts=UNKNOWN,quality=NOT_EVALUATED" > "$output"
+            elif [[ "$code" -ne 0 ]]; then
+              cat "$root/private/error-$depth.log" >&2
+              exit "$code"
+            fi
+            cat "$output"
+            test "$(grep -c '^ENG1C_CAP2B,' "$output")" -eq 1
+            grep -Eq '^ENG1C_CAP2B,language=(FR|EN),depth=(4|7|12|32),status=(PUBLISHED|CAPACITY_STOP|TIMEOUT_STOP),.*quality=NOT_EVALUATED' "$output"
+            if grep -q ',status=PUBLISHED,' "$output"; then
+              (
+                ulimit -v 262144
+                timeout --signal=TERM --kill-after=5s 900 \
+                  "$binary" reopen "$CAP2B_LANGUAGE" "$depth" "$root/private/TRAIN" "$store"
+              ) | tee "$root/evidence/reopen-$depth.txt"
+              grep -Eq "^ENG1C_CAP2B,language=$CAP2B_LANGUAGE,depth=$depth,status=REOPENED,.*integrity=PASS$" "$root/evidence/reopen-$depth.txt"
+              built="$(sed -n 's/.*probe_checksum=\([a-f0-9]*\),quality=.*/\1/p' "$output")"
+              reopened="$(sed -n 's/.*probe_checksum=\([a-f0-9]*\),quality=.*/\1/p' "$root/evidence/reopen-$depth.txt")"
+              test -n "$built"
+              test "$built" = "$reopened"
+              test -f "$store/manifest.txt"
+            fi
+            rm -rf -- "$store"
+          done
+          test "$(find "$root/evidence" -name 'depth-*.txt' | wc -l)" -eq 4
+          ( cd "$root/evidence" && sha256sum depth-*.txt source.txt > manifest.sha256 )
+          echo 'ENG1C_CAP2B_VAL_TEST_SCORE=NOT_EVALUATED' >> "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2B_OLD_MODEL_LIMITS=UNCHANGED' >> "$root/evidence/environment.txt"
+      - name: Retain only manifests and measurements, never model corpus or count-store bytes
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1c-cap2b-paged-${{ matrix.language }}
+          path: ${{ runner.temp }}/eng1c-cap2b/evidence/
+          if-no-files-found: warn
+          retention-days: 30
