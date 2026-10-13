@@ -86,7 +86,7 @@ integration test that is otherwise ignored by ordinary workspace tests. It uses
 an ephemeral development signer for negative controls and RAM byte continuity.
 
 The separate `Production weight publication` workflow is the organizational
-path. It runs only for integrated `main` code or an explicit trusted dispatch,
+path. It runs only for code already integrated on `main`,
 loads the private identity from the repository Actions secret
 `SML_PRODUCTION_SIGNING_KEY`, and admits only the committed
 `memorithm-sml-production` public key. The private key is written with mode
