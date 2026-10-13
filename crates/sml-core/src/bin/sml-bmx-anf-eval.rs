@@ -36,7 +36,8 @@ fn run(args: &[String]) -> Result<()> {
     if args.len() < 3 || (args.len() - 1) % 2 != 0 {
         return Err("usage: sml-bmx-anf-eval PRIME INPUT [PRIME INPUT ...]".into());
     }
-    let config = MixerConfig::default();
+    // The documented ablation was measured against bmx-v3.
+    let config = MixerConfig::released()[1];
     for pair in args[1..].chunks(2) {
         let prime = fs::read(&pair[0])?;
         let input = fs::read(&pair[1])?;

@@ -158,3 +158,87 @@ figée dégrade le code, et ses adresses n'aident pas au-delà du bruit
 (±0,06 %). Aucune évaluation sur les textes réservés n'a été faite, faute de
 gain sur le réglage. L'outil reste disponible pour tester de futurs
 modèles ANF (`SideModel`) sans toucher au codeur.
+
+## Plafond d'une adaptation en ligne des masques
+
+Le compteur adaptatif d'un contexte masqué apprend déjà en ligne la table de
+vérité complète (donc la forme ANF complète) de la fonction sur les bits
+retenus. Une « ANF en ligne » ne peut plus choisir que l'ensemble de bits.
+Plafond mesuré par un oracle qui choisit les masques sur le texte même
+(`sml-bmx-mask-search 22 3 0`), sur un domaine nouveau : du code Rust de SML
+(`crates/sml-core/src/anf_*.rs`, 340 000 octets d'amorçage puis 65 536
+octets codés ; ensemble de réglage, jamais d'évaluation).
+
+| Contextes | Octets | vs sans masque |
+|---|---:|---:|
+| sans masque (`bmx-v2`) | 10 051,8 | — |
+| `V3_MASKS` figés | 9 969,1 | −0,82 % |
+| oracle (3 masques choisis sur ce texte) | 9 950,2 | −1,01 % |
+
+L'oracle reprend les deux masques de `V3` et n'ajoute que 0,19 %. Une
+sélection en ligne, qui ne peut faire mieux que l'oracle, n'est pas
+construite.
+
+Référence PPMd var. H (`pyppmd`, meilleur ordre parmi 4 à 16 par texte, sans
+réglage) : *Opticks* TEST 16 600, documentation SML 21 859, manuel Vim
+17 178 octets seuls. `bmx-v3` était déjà de 3,0 à 4,3 % en dessous.
+
+## bmx-v4 : cases contrôlées et trois jeux de poids
+
+Diagnostic : passer les tables de 2^22 à 2^24 cases gagne 0,67 % sur le
+réglage. Les collisions de hachage coûtaient donc, mais ×4 en mémoire
+n'est pas acceptable.
+
+`Architecture::V4` (configuration par défaut, identité `bmx-v4:…`) :
+
+- **cases contrôlées** : chaque case garde 5 bits de contrôle tirés du haut
+  du hachage (probabilité 20 bits, compte 7 bits). Une case dont le contrôle
+  diffère se lit comme jamais vue et est remplacée à la mise à jour, au lieu
+  de prêter les statistiques d'un autre contexte. Mémoire inchangée.
+- **trois jeux de poids** du mélangeur, choisis par l'octet partiel (comme
+  avant), par l'octet précédent × l'état de la correspondance (aucune,
+  longueur < 16, < 32, ≥ 32), et par les classes (bits 7-5) des deux octets
+  précédents × la position du bit. Un petit mélangeur final appris (choisi
+  par l'octet partiel, initialisé à la moyenne) combine les trois sorties.
+- La compatibilité est conservée : `MixerConfig::released()` liste v4, v3 et
+  v2. `decode-mix` choisit la configuration dont l'identité est stockée, et
+  deux fichiers de référence, écrits par les binaires publiés v2 et v3, se
+  décodent toujours et se réencodent octet pour octet.
+
+Choix faits sur les trois ensembles de réglage seulement (*Opticks* DEV
+amorcé par TRAIN, Vim `version7.txt`, code Rust ci-dessus) ; total de
+`bmx-v3` : 26 370,7 octets.
+
+| Variante (une seule passe d'essais) | Total | vs v3 |
+|---|---:|---:|
+| tables 2^24 (référence de coût des collisions) | 26 193,1 | −0,67 % |
+| deuxième entrée « confiance » par contexte | 26 477,6 | +0,41 % (écartée) |
+| cases contrôlées seules | 26 161,1 | −0,79 % |
+| deuxième jeu de poids seul | 25 760,8 | −2,31 % |
+| cases contrôlées + 2 jeux + moyenne | 25 583,1 | −2,99 % |
+| **bmx-v4** : + 3e jeu + mélangeur final appris | **25 465,5** | **−3,43 %** |
+
+### Évaluation sur textes réservés
+
+Mêmes textes et même méthode que pour v3 (`sml-bmx-eval`, longueur idéale
+pour 65 536 octets codés ; les valeurs v2/v3 se reproduisent à l'octet près).
+C'est un deuxième regard sur la documentation SML et le manuel Vim, un
+troisième sur *Opticks* TEST ; aucun choix de v4 n'a été fait sur eux.
+
+| Texte | Mode | `bzip2 -9` | `bmx-v3` | `bmx-v4` | v4 vs v3 | v4 vs bzip2 |
+|---|---|---:|---:|---:|---:|---:|
+| *Opticks* TEST | seul | 18 775 | 15 985 | 15 672 | −1,96 % | −16,5 % |
+| | amorcé | 15 530 | 13 587 | 13 237 | −2,57 % | −14,8 % |
+| Documentation SML | seul | 24 691 | 20 916 | 20 546 | −1,77 % | −16,8 % |
+| | amorcé | 20 393 | 17 259 | 16 766 | −2,85 % | −17,8 % |
+| Manuel Vim | seul | 19 420 | 16 655 | 16 306 | −2,09 % | −16,0 % |
+| | amorcé | 15 433 | 13 692 | 13 252 | −3,22 % | −14,1 % |
+
+Les six flux réels de `sml-bool-codec` (charge utile à 5 octets au plus de la
+valeur idéale) se décodent à l'identique, SHA-256 vérifié. Débit mesuré
+séquentiellement sur *Opticks* : 150 Kio/s pour v4 contre 174 pour v3.
+
+Limites : sélecteurs des jeux de poids choisis à la main, une seule passe
+d'essais ; mêmes trois textes d'évaluation, choisis par disponibilité (pas
+un panel, aucun texte littéraire français). La confirmation passe par un
+panel préregistré.
