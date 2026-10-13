@@ -90,12 +90,11 @@ fn parse_id(id: &[u8]) -> Result<(String, usize, EscapePolicy)> {
     Ok((sha, depth, policy))
 }
 
-fn load(train_path: &Path, work: &Path, depth: usize, policy: EscapePolicy) -> Result<Model> {
+fn load(train: &[u8], work: &Path, depth: usize, policy: EscapePolicy) -> Result<Model> {
     if depth > MAX_PAGED_DEPTH {
         return Err("depth above 32".into());
     }
     let policy = policy.validate()?;
-    let train = read(train_path)?;
     fs::create_dir_all(work)?;
     let tag = format!(
         "{}-{}",
@@ -104,13 +103,9 @@ fn load(train_path: &Path, work: &Path, depth: usize, policy: EscapePolicy) -> R
     );
     let store = work.join(format!("bac-store-{tag}"));
     let sort = work.join(format!("bac-sort-{tag}"));
-    let built = build_paged(
-        &train,
-        MAX_PAGED_DEPTH,
-        &store,
-        &sort,
-        PagedLimits::default(),
-    );
+    // Build only the requested depth: deeper levels are never read and
+    // would cost construction work and capacity quota.
+    let built = build_paged(train, depth, &store, &sort, PagedLimits::default());
     let dirs = [store.clone(), sort];
     let PagedBuild::Published(_) = built? else {
         for dir in &dirs {
@@ -118,7 +113,7 @@ fn load(train_path: &Path, work: &Path, depth: usize, policy: EscapePolicy) -> R
         }
         return Err("TRAIN exceeds paged capacity limits".into());
     };
-    let sha = training_sha256(&train);
+    let sha = training_sha256(train);
     Ok(Model {
         paged: PagedNGram::open(&store, sha)?,
         depth,
@@ -138,7 +133,8 @@ fn distribution(model: &mut Model, history: &[u8]) -> std::result::Result<[f64; 
 fn encode(args: &[String]) -> Result<()> {
     let depth: usize = args[6].parse()?;
     let policy = EscapePolicy::from_label(&args[7])?;
-    let mut model = load(Path::new(&args[2]), Path::new(&args[3]), depth, policy)?;
+    let train = read(Path::new(&args[2]))?;
+    let mut model = load(&train, Path::new(&args[3]), depth, policy)?;
     let input = read(Path::new(&args[4]))?;
     let started = Instant::now();
     let id = model.id.clone();
@@ -171,10 +167,12 @@ fn encode(args: &[String]) -> Result<()> {
 fn decode(args: &[String]) -> Result<()> {
     let container = read(Path::new(&args[4]))?;
     let (train_sha, depth, policy) = parse_id(container_model_id(&container)?)?;
-    let mut model = load(Path::new(&args[2]), Path::new(&args[3]), depth, policy)?;
-    if hex(&training_sha256(&read(Path::new(&args[2]))?)) != train_sha {
+    // Reject a wrong TRAIN before any model construction work.
+    let train = read(Path::new(&args[2]))?;
+    if hex(&training_sha256(&train)) != train_sha {
         return Err("TRAIN file differs from the one used to encode".into());
     }
+    let mut model = load(&train, Path::new(&args[3]), depth, policy)?;
     let started = Instant::now();
     let id = model.id.clone();
     let output = decode_bytes(&container, depth, &id, |h| distribution(&mut model, h))?;
@@ -275,11 +273,37 @@ mod tests {
             "x".into(),
             "decode".into(),
             s(&other_train),
-            s(&work),
+            s(&root.join("never-built")),
             s(&packed),
             s(&root.join("x.txt"))
         ])
         .is_err());
+        // The TRAIN mismatch is detected before any store is built.
+        assert!(!root.join("never-built").exists());
+        // A shallow model is built only to its own depth and still round-trips.
+        let shallow = root.join("input-d2.bac");
+        let shallow_out = root.join("restored-d2.txt");
+        run(&[
+            "x".into(),
+            "encode".into(),
+            s(&train_path),
+            s(&work),
+            s(&input_path),
+            s(&shallow),
+            "2".into(),
+            "dir:16".into(),
+        ])
+        .unwrap();
+        run(&[
+            "x".into(),
+            "decode".into(),
+            s(&train_path),
+            s(&work),
+            s(&shallow),
+            s(&shallow_out),
+        ])
+        .unwrap();
+        assert_eq!(fs::read(&shallow_out).unwrap(), input);
         // Temporary stores are cleaned up.
         assert_eq!(fs::read_dir(&work).unwrap().count(), 0);
         fs::remove_dir_all(root).unwrap();
