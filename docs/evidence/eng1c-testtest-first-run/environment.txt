@@ -1,0 +1,13 @@
+65d76ad7f229a544054f79da161cf43e49b907cd
+rustc 1.89.0 (29483883e 2025-08-04)
+x86_64
+c6b5a94f190c82fbe1ecff9f61e085faf66583b8ab04596fcb92c0f53bde5c6f  /workspace/scratch/aa3027bf744e/SML-GENIUS/target/release/sml-eng1c-testtest
+ffd768bfe236eb1c7e9cee689d84c50702d551315dfe3327ed9dced10074e990  /workspace/scratch/aa3027bf744e/SML-GENIUS/scripts/eng1c/testtest-manifest.tsv
+4908a60d362e3e3897b18d25f03c96a29f6ee7919e21b535e403b1c56bbe62e4  /workspace/scratch/aa3027bf744e/SML-GENIUS/scripts/eng1c/testtest-roster.tsv
+3da4fc20b16fd8ae12e07a7c11e37edb81244bcb7736429685ca1335c714b6ec  /workspace/scratch/aa3027bf744e/SML-GENIUS/crates/sml-core/src/bin/sml-eng1c-testtest.rs
+c194b738544ddf706e820be5702ab63c26ac342dd576c612a5675c270311521e  /workspace/scratch/aa3027bf744e/SML-GENIUS/crates/sml-core/src/paired_panel.rs
+EXPOSED_DUMAS_AUSTEN_VERNE_FLAUBERT_TEST=UNREAD
+SOURCE_CACHE=PRE_MODEL_FINGERPRINTED_RAW_RECHECKED_ON_EACH_PHASE
+MAX_CONCURRENT_LANGUAGE_WORKERS=2
+VIRTUAL_LIMIT_KIB=262144
+PHASE_DEADLINE_SECONDS=3000
