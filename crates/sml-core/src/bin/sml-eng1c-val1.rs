@@ -6,6 +6,7 @@
 //! --explore-counts-64-128 adds two further exploratory arms (eleven total).
 //! --explore-counts-256-512 selects thirteen arms, --explore-counts-1024 fourteen.
 //! --explore-language-counts-140-75 adds a FR140/EN75 arm (fifteen total).
+//! --explore-threshold-grid sweeps FR128..139 and EN65..74 on exposed VAL.
 //! Default output and seven frozen arms remain unchanged. This program never
 //! opens or scores TEST, does not fit on VAL, and does not actuate ElasticXxx.
 
@@ -50,6 +51,7 @@ enum EvaluationMode {
     Explore256_512,
     Explore1024,
     Language140_75,
+    ThresholdGrid,
 }
 
 impl EvaluationMode {
@@ -60,18 +62,19 @@ impl EvaluationMode {
             Some("--explore-counts-256-512") => Self::Explore256_512,
             Some("--explore-counts-1024") => Self::Explore1024,
             Some("--explore-language-counts-140-75") => Self::Language140_75,
+            Some("--explore-threshold-grid") => Self::ThresholdGrid,
             _ => Self::Frozen,
         }
     }
 
-    fn policy_count(self) -> usize {
+    fn base_policy_count(self) -> usize {
         match self {
             Self::Frozen => FROZEN_POLICIES,
             Self::Explore16_32 => 9,
             Self::Explore64_128 => 11,
             Self::Explore256_512 => 13,
             Self::Explore1024 => 14,
-            Self::Language140_75 => POLICY_NAMES.len(),
+            Self::Language140_75 | Self::ThresholdGrid => POLICY_NAMES.len(),
         }
     }
 
@@ -83,6 +86,7 @@ impl EvaluationMode {
             Self::Explore256_512 => "ENG1C_VAL1_X256_512",
             Self::Explore1024 => "ENG1C_VAL1_X1024",
             Self::Language140_75 => "ENG1C_VAL1_LANG140_75",
+            Self::ThresholdGrid => "ENG1C_VAL1_GRID",
         }
     }
 }
@@ -93,6 +97,64 @@ fn language_min_count(language: &str) -> Result<u64, &'static str> {
         "EN" => Ok(75),
         _ => Err("unknown pinned language for occurrence gate"),
     }
+}
+
+fn grid_bounds(language: &str) -> Result<(u64, u64), &'static str> {
+    match language {
+        "FR" => Ok((128, 139)),
+        "EN" => Ok((65, 74)),
+        _ => Err("unknown pinned language for threshold grid"),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ReadoutPolicy {
+    Fixed(usize),
+    MinCount(u64),
+}
+
+struct EvaluationPolicy {
+    name: String,
+    readout: ReadoutPolicy,
+}
+
+fn policy_specs(
+    mode: EvaluationMode,
+    language: &str,
+) -> Result<Vec<EvaluationPolicy>, &'static str> {
+    let language_count = language_min_count(language)?;
+    let mut policies: Vec<_> = POLICY_NAMES
+        .iter()
+        .take(mode.base_policy_count())
+        .enumerate()
+        .map(|(index, name)| {
+            let readout = if index < 4 {
+                ReadoutPolicy::Fixed(index)
+            } else if index == POLICY_NAMES.len() - 1 {
+                ReadoutPolicy::MinCount(language_count)
+            } else {
+                ReadoutPolicy::MinCount(EVIDENCE_MIN_COUNTS[index - 4])
+            };
+            EvaluationPolicy {
+                name: (*name).to_owned(),
+                readout,
+            }
+        })
+        .collect();
+    if mode == EvaluationMode::ThresholdGrid {
+        let (lower, upper) = grid_bounds(language)?;
+        for count in lower..=upper {
+            let name = format!("MIN_COUNT_{count}");
+            // FR128 is an existing comparator; do not create a second row.
+            if !policies.iter().any(|policy| policy.name == name) {
+                policies.push(EvaluationPolicy {
+                    name,
+                    readout: ReadoutPolicy::MinCount(count),
+                });
+            }
+        }
+    }
+    Ok(policies)
 }
 
 #[derive(Clone, Copy)]
@@ -228,25 +290,19 @@ fn evaluate_val(
     if layout.tokens() != expected_events {
         return Err("VAL 64-lane denominator drift".into());
     }
-    let language_count = language_min_count(language)?;
-    let policy_count = mode.policy_count();
-    let mut stats = vec![PolicyStats::default(); policy_count];
+    let policies = policy_specs(mode, language)?;
+    let mut stats = vec![PolicyStats::default(); policies.len()];
     for lane in 0..LANES {
         let chunk = &val[lane * layout.chunk..(lane + 1) * layout.chunk];
         for t in 1..chunk.len() {
             // Exactly one traversal of each observed TRAIN count layer.
             let ladder = model.depth_ladder_readout(&chunk[..t])?;
-            let choices: [usize; POLICY_NAMES.len()] = std::array::from_fn(|policy| {
-                if policy < 4 {
-                    policy
-                } else if policy == POLICY_NAMES.len() - 1 {
-                    evidence_choice(&ladder, language_count)
-                } else {
-                    evidence_choice(&ladder, EVIDENCE_MIN_COUNTS[policy - 4])
-                }
-            });
             let true_next_byte = chunk[t];
-            for (policy, &depth_index) in choices.iter().take(policy_count).enumerate() {
+            for (policy, spec) in policies.iter().enumerate() {
+                let depth_index = match spec.readout {
+                    ReadoutPolicy::Fixed(index) => index,
+                    ReadoutPolicy::MinCount(count) => evidence_choice(&ladder, count),
+                };
                 stats[policy].record(lane, true_next_byte, &ladder[depth_index]);
             }
         }
@@ -317,7 +373,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let args = &normalized;
     if args.len() != 6 {
-        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024|--explore-language-counts-140-75] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
+        return Err("usage: sml-eng1c-val1 [--explore-counts-16-32|--explore-counts-64-128|--explore-counts-256-512|--explore-counts-1024|--explore-language-counts-140-75|--explore-threshold-grid] FR|EN <TRAIN> <VAL> <NEW-store> <NEW-scratch>".into());
     }
     let corpus = frozen(&args[1]).ok_or("unknown pinned language")?;
     let train = fs::read(&args[2])?;
@@ -359,6 +415,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Opening validates the counted file, sparse index and source SHA256.
     let mut model = PagedNGram::open(Path::new(&args[4]), source)?;
     let val_at = Instant::now();
+    let policies = policy_specs(mode, corpus.language)?;
     let stats = evaluate_val(&mut model, &val, corpus.val_events, mode, corpus.language)?;
     let val_ms = val_at.elapsed().as_millis();
     let full_process_peak_kib = vmhwm_kib()?;
@@ -385,6 +442,12 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             ",language_min_count={}",
             language_min_count(corpus.language)?
         )
+    } else if mode == EvaluationMode::ThresholdGrid {
+        let (lower, upper) = grid_bounds(corpus.language)?;
+        format!(
+            ",grid_min_count={lower},grid_max_count={upper},policy_count={}",
+            policies.len()
+        )
     } else {
         String::new()
     };
@@ -401,7 +464,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         let improvement = stats[0].bpb() - score.bpb();
         println!(
             "{output_prefix}_POLICY,language={},policy={},tokens={},total_bits={:.12},bpb={:.12},accuracy={:.12},delta_bpb_vs_FIXED_4={:.12},paired_boot_low={:.12},paired_boot_high={:.12},selected_depth4={},selected_depth7={},selected_depth12={},selected_depth32={},integrity=PASS",
-            corpus.language, POLICY_NAMES[i], score.tokens, score.bits(), score.bpb(),
+            corpus.language, policies[i].name, score.tokens, score.bits(), score.bpb(),
             score.accuracy(), improvement, lo, hi,
             score.selected_depths[0], score.selected_depths[1],
             score.selected_depths[2], score.selected_depths[3]
@@ -409,7 +472,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     println!(
         "{output_prefix}_DECISION,language={},best_fixed={},best_gated={},best_overall={},best_fixed_bpb={:.12},best_gated_bpb={:.12},gated_gain_bpb={:.12},paired_gate_low={:.12},paired_gate_high={:.12},adaptive_science={},test=UNREAD,physical_RAM_savings=NOT_CLAIMED,integrity=PASS",
-        corpus.language, POLICY_NAMES[fixed], POLICY_NAMES[gated], POLICY_NAMES[selected],
+        corpus.language, policies[fixed].name, policies[gated].name, policies[selected].name,
         stats[fixed].bpb(), stats[gated].bpb(), adaptive_gain, gate_lo, gate_hi, verdict
     );
     Ok(())
@@ -475,6 +538,40 @@ mod tests {
             assert_eq!(a.lane_bits, b.lane_bits);
             assert_eq!(a.selected_depths, b.selected_depths);
             assert_eq!(a.correct, b.correct);
+        }
+        for (language, earlier, expected_rows) in [("FR", &fr, 26), ("EN", &en, 25)] {
+            let specs = policy_specs(EvaluationMode::ThresholdGrid, language).unwrap();
+            let grid = evaluate_val(
+                &mut model,
+                &train,
+                events,
+                EvaluationMode::ThresholdGrid,
+                language,
+            )
+            .unwrap();
+            assert_eq!(specs.len(), expected_rows);
+            assert_eq!(grid.len(), expected_rows);
+            let names: std::collections::BTreeSet<_> = specs.iter().map(|p| &p.name).collect();
+            assert_eq!(names.len(), expected_rows);
+            for (a, b) in earlier.iter().zip(&grid) {
+                assert_eq!(a.lane_bits, b.lane_bits);
+                assert_eq!(a.tokens, b.tokens);
+                assert_eq!(a.selected_depths, b.selected_depths);
+                assert_eq!(a.correct, b.correct);
+            }
+            let (lower, upper) = grid_bounds(language).unwrap();
+            for count in lower..=upper {
+                let index = specs
+                    .iter()
+                    .position(|p| p.name == format!("MIN_COUNT_{count}"))
+                    .unwrap();
+                assert!(matches!(specs[index].readout, ReadoutPolicy::MinCount(n) if n == count));
+                if count <= 128 {
+                    assert_eq!(grid[index].selected_depths, [events - 128, 128, 0, 0]);
+                } else {
+                    assert_eq!(grid[index].selected_depths, [events, 0, 0, 0]);
+                }
+            }
         }
         assert!(evaluate_val(
             &mut model,
