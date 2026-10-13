@@ -966,7 +966,6 @@ impl PagedNGram {
         Ok(probabilities)
     }
 
-
     /// ENG-1c/VAL1: read all frozen depths using each lower-order Witten-Bell
     /// context exactly once. A context too deep for history has count zero.
     /// Every returned distribution is bitwise the same as distribution()
@@ -1098,8 +1097,14 @@ mod tests {
         let probe = corpus(13);
         let root = TestRoot::new("val1-ladder-oracles");
         let target = root.output("published");
-        let built = build_paged(&train, 32, &target, &root.output("sort"), PagedLimits::default())
-            .unwrap();
+        let built = build_paged(
+            &train,
+            32,
+            &target,
+            &root.output("sort"),
+            PagedLimits::default(),
+        )
+        .unwrap();
         assert!(matches!(built, PagedBuild::Published(_)));
         let mut model = PagedNGram::open(&target, training_sha256(&train)).unwrap();
         let trie = ElasticNGramTrie::train(
@@ -1131,12 +1136,24 @@ mod tests {
                         let ref_trie = trie.distribution(history, depth).unwrap();
                         let ref_long = long.distribution(history, depth).unwrap();
                         for label in 0..256 {
-                            assert_eq!(ladder[i].probabilities[label].to_bits(), direct[label].to_bits());
-                            assert_eq!(ladder[i].probabilities[label].to_bits(), ref_trie[label].to_bits());
-                            assert_eq!(ladder[i].probabilities[label].to_bits(), ref_long[label].to_bits());
+                            assert_eq!(
+                                ladder[i].probabilities[label].to_bits(),
+                                direct[label].to_bits()
+                            );
+                            assert_eq!(
+                                ladder[i].probabilities[label].to_bits(),
+                                ref_trie[label].to_bits()
+                            );
+                            assert_eq!(
+                                ladder[i].probabilities[label].to_bits(),
+                                ref_long[label].to_bits()
+                            );
                         }
                         let trained_count = if depth <= history.len() {
-                            model.context_histogram(history, depth).unwrap().map_or(0, |(n, _)| n)
+                            model
+                                .context_histogram(history, depth)
+                                .unwrap()
+                                .map_or(0, |(n, _)| n)
                         } else {
                             0
                         };
