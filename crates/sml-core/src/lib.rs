@@ -79,6 +79,7 @@ pub mod elastic_ngram_paged;
 pub mod elastic_ngram_paged_sha;
 pub mod elastic_ngram_trie;
 pub mod elastic_weights;
+pub mod eng1c_dev;
 pub mod forge_topology;
 pub mod gf2;
 pub mod large_anf_delta_kv;
