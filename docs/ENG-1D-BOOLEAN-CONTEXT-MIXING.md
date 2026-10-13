@@ -122,3 +122,39 @@ Limites : réservoir de candidats conçu à la main, recherche gloutonne sur
 deux textes, trois textes d'évaluation choisis par disponibilité (pas un
 panel), aucun texte littéraire français parmi eux. Ce n'est pas une
 revendication générale ; la confirmation passe par un panel préregistré.
+
+## Entrée ANF de SML dans le mélangeur : résultat négatif
+
+Question : le modèle ANF récurrent de SML (`anf_char` : réseau de portes
+ANF locales à fan-in 6, couche d'historique, 8 lectures chaînées choisies
+par sélection gloutonne) apporte-t-il de l'information au-delà de
+`bmx-v3` ?
+
+Outil : `anf_side::AnfCharSide` rejoue le modèle de façon causale, octet
+par octet, sur une seule voie. Un test vérifie que la somme de ses
+`-log2 p` égale exactement (à 1e-9) le score de `anf_char::evaluate`, donc
+que le rejeu est fidèle. Le trait `bit_mixer::SideModel` branche ce
+prédicteur comme entrées du mélangeur : probabilité KT calibrée par
+position de bit, et/ou compteur adaptatif indexé par l'adresse de lecture
+ANF (`SideInputs::{Both, AddressOnly, ProbabilityOnly}`). Le modèle ANF est
+entraîné sur le texte d'amorçage (90 % ajustement, 10 % arrêt anticipé) ;
+l'identité du conteneur inclut l'empreinte SHA-256 du modèle entraîné.
+
+Mesure (`sml-bmx-anf-eval`, ensembles de réglage uniquement) :
+
+| Ensemble | `bmx-v3` | + ANF (deux entrées) | adresse seule | probabilité seule |
+|---|---:|---:|---:|---:|
+| *Opticks* DEV (amorcé par TRAIN) | 6 765,2 o | +0,55 % | +0,02 % | +0,22 % |
+| Vim `version7.txt` (amorcé) | 9 636,4 o | +0,91 % | −0,06 % | +0,24 % |
+
+Une configuration ANF plus forte (128 portes libres, 256 propositions par
+époque, 30 époques, 176 s d'entraînement) donne aussi +0,66 % sur
+*Opticks* DEV. Le modèle ANF seul atteint 2,66 bit/octet en validation, loin
+du mélangeur.
+
+Conclusion pour cette configuration : **le modèle ANF de caractères actuel
+n'apporte pas d'information exploitable par le mélangeur** ; sa probabilité
+figée dégrade le code, et ses adresses n'aident pas au-delà du bruit
+(±0,06 %). Aucune évaluation sur les textes réservés n'a été faite, faute de
+gain sur le réglage. L'outil reste disponible pour tester de futurs
+modèles ANF (`SideModel`) sans toucher au codeur.

@@ -40,6 +40,41 @@ pub const V3_MASKS: &[ByteMask] = &[
     [0xFF, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0x00, 0x00],
 ];
 
+/// An external bit predictor fed to the mixer as extra inputs (for example
+/// the SML recurrent ANF byte model, see `anf_side`). It follows the byte
+/// stream through [`SideModel::push_byte`] and, for each chain bit, returns
+/// a 12-bit probability of a 1 and a context address.
+pub trait SideModel: Send {
+    /// Stable identity, recorded in coded containers.
+    fn label(&self) -> String;
+    /// Called after every completed byte (priming and coding alike).
+    fn push_byte(&mut self, byte: u8);
+    /// For chain bit `bit_pos` (0 = most significant) of the next byte,
+    /// given `c0` = 1 followed by the bits already coded: `(p12, address)`.
+    fn predict(&self, bit_pos: u32, c0: u32) -> (i32, u32);
+}
+
+/// Which side-model signals enter the mixer (for ablation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SideInputs {
+    /// Calibrated side probability and adaptive counter on its address.
+    Both,
+    /// Only the adaptive counter keyed by the side address.
+    AddressOnly,
+    /// Only the calibrated side probability.
+    ProbabilityOnly,
+}
+
+impl SideInputs {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Both => "both",
+            Self::AddressOnly => "address",
+            Self::ProbabilityOnly => "probability",
+        }
+    }
+}
+
 /// Which Boolean mask contexts the predictor uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskSet {
@@ -313,6 +348,13 @@ pub struct BitMixer {
     match_ptr: usize,
     match_len: usize,
     masks: Vec<ByteMask>,
+    side: Option<Box<dyn SideModel>>,
+    side_inputs: SideInputs,
+    side_apm: Apm,
+    side_table: CounterTable,
+    side_adapter: Apm,
+    side_slot: usize,
+    n_hashed: usize,
     n_inputs: usize,
     byte_hashes: Vec<u32>,
     word_hash: u32,
@@ -342,6 +384,39 @@ impl BitMixer {
     /// `config.mask_set` (for mask search; coded containers must then use
     /// [`MixerConfig::label_with`] as identity).
     pub fn try_with_masks(config: MixerConfig, masks: &[ByteMask]) -> Result<Self, &'static str> {
+        Self::build(config, masks, None, SideInputs::Both)
+    }
+
+    /// Builds a predictor that also mixes an external [`SideModel`].
+    pub fn try_with_side(
+        config: MixerConfig,
+        masks: &[ByteMask],
+        side: Box<dyn SideModel>,
+        inputs: SideInputs,
+    ) -> Result<Self, &'static str> {
+        Self::build(config, masks, Some(side), inputs)
+    }
+
+    /// Identity of this predictor: configuration, masks and side model.
+    #[must_use]
+    pub fn identity(&self) -> String {
+        let base = self.config.label_with(&self.masks);
+        match &self.side {
+            Some(side) => format!(
+                "{base};side={};side_inputs={}",
+                side.label(),
+                self.side_inputs.label()
+            ),
+            None => base,
+        }
+    }
+
+    fn build(
+        config: MixerConfig,
+        masks: &[ByteMask],
+        side: Option<Box<dyn SideModel>>,
+        side_inputs: SideInputs,
+    ) -> Result<Self, &'static str> {
         if !config.valid() {
             return Err("invalid MixerConfig");
         }
@@ -349,7 +424,7 @@ impl BitMixer {
             return Err("invalid Boolean mask list");
         }
         let n_hashed = N_FIXED + masks.len();
-        let n_inputs = n_hashed + N_EXTRA;
+        let n_inputs = n_hashed + N_EXTRA + if side.is_some() { 2 } else { 0 };
         let logistic = Logistic::new();
         let apm_order1 = Apm::new(256 * 256);
         let apm_order2 = Apm::new(1 << 16);
@@ -372,6 +447,13 @@ impl BitMixer {
             match_ptr: 0,
             match_len: 0,
             masks: masks.to_vec(),
+            side,
+            side_inputs,
+            side_apm: Apm::new(8),
+            side_table: CounterTable::new(config.table_bits.min(20)),
+            side_adapter: Apm::new(CONFIDENCE_BUCKETS),
+            side_slot: 0,
+            n_hashed,
             n_inputs,
             byte_hashes: vec![0; n_hashed],
             word_hash: 0,
@@ -432,7 +514,7 @@ impl BitMixer {
             let adapted = self.adapters[i].refine(raw, bucket, &self.logistic);
             self.inputs[i] = self.logistic.stretch(adapted.clamp(1, 4095));
         }
-        let n_hashed = self.slots.len();
+        let n_hashed = self.n_hashed;
         self.inputs[n_hashed] = self.logistic.stretch(self.order0.p(c0 as usize));
         self.inputs[n_hashed + 1] = match self.expected_bit() {
             Some(bit) => {
@@ -447,6 +529,26 @@ impl BitMixer {
             }
         };
         self.inputs[n_hashed + 2] = 256;
+        if let Some(side) = &self.side {
+            let (p, address) = side.predict(self.bit_pos, c0);
+            let calibrated =
+                self.side_apm
+                    .refine(p.clamp(1, 4095), self.bit_pos as usize, &self.logistic);
+            self.inputs[n_hashed + 3] = if self.side_inputs == SideInputs::AddressOnly {
+                0
+            } else {
+                self.logistic.stretch(calibrated.clamp(1, 4095))
+            };
+            self.side_slot = hash(address, 0x51DE_0001) as usize;
+            let raw = self.side_table.p(self.side_slot);
+            let bucket = confidence_bucket(self.side_table.count(self.side_slot));
+            let adapted = self.side_adapter.refine(raw, bucket, &self.logistic);
+            self.inputs[n_hashed + 4] = if self.side_inputs == SideInputs::ProbabilityOnly {
+                0
+            } else {
+                self.logistic.stretch(adapted.clamp(1, 4095))
+            };
+        }
         let base = c0 as usize * self.n_inputs;
         let dot: i64 = self
             .inputs
@@ -487,6 +589,11 @@ impl BitMixer {
             self.adapters[i].update(bit);
         }
         self.order0.update(self.c0 as usize, bit, limit);
+        if self.side.is_some() {
+            self.side_apm.update(bit);
+            self.side_table.update(self.side_slot, bit, limit);
+            self.side_adapter.update(bit);
+        }
         if self.match_slot != usize::MAX {
             self.match_counters.update(self.match_slot, bit, 1023);
         }
@@ -511,6 +618,9 @@ impl BitMixer {
 
     fn end_of_byte(&mut self, byte: u8) {
         self.history.push(byte);
+        if let Some(side) = &mut self.side {
+            side.push_byte(byte);
+        }
         let n = self.history.len();
         // Match model: extend or look up.
         if self.match_len > 0 {
