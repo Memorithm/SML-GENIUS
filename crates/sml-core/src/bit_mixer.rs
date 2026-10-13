@@ -50,6 +50,11 @@ pub enum MaskSet {
 }
 
 impl MaskSet {
+    /// Every released mask set, newest first (for decoding by identity).
+    pub const RELEASED: [Self; 2] = [Self::V3, Self::None];
+}
+
+impl MaskSet {
     #[must_use]
     pub fn masks(self) -> &'static [ByteMask] {
         match self {
@@ -127,15 +132,17 @@ impl MixerConfig {
     /// Identity with an explicit mask list (used by mask search).
     #[must_use]
     pub fn label_with(&self, masks: &[ByteMask]) -> String {
-        let version = if masks.is_empty() { "bmx-v2" } else { "bmx-v3" };
-        format!(
-            "{version}:orders=1,2,3,4,6,8+word+o0+match;table_bits={};match_bits={};limit={};rate={};masks={}",
-            self.table_bits,
-            self.match_bits,
-            self.counter_limit,
-            self.mixer_rate,
-            masks_label(masks)
-        )
+        let base = format!(
+            "orders=1,2,3,4,6,8+word+o0+match;table_bits={};match_bits={};limit={};rate={}",
+            self.table_bits, self.match_bits, self.counter_limit, self.mixer_rate
+        );
+        // Without masks the identity is byte-identical to the released
+        // bmx-v2 label, so existing containers stay decodable.
+        if masks.is_empty() {
+            format!("bmx-v2:{base}")
+        } else {
+            format!("bmx-v3:{base};masks={}", masks_label(masks))
+        }
     }
 
     fn valid(&self) -> bool {
@@ -789,7 +796,10 @@ mod tests {
             mask_set: MaskSet::None,
             ..MixerConfig::default()
         };
-        assert!(v2.label().starts_with("bmx-v2:") && v2.label().ends_with("masks=-"));
+        assert_eq!(
+            v2.label(),
+            "bmx-v2:orders=1,2,3,4,6,8+word+o0+match;table_bits=22;match_bits=20;limit=127;rate=6"
+        );
         assert!(BitMixer::try_with_masks(v2, &[[0; 8]]).is_err());
         assert!(
             BitMixer::try_with_masks(v2, &[[0xFF, 0, 0, 0, 0, 0, 0, 0]; MAX_MASKS + 1]).is_err()

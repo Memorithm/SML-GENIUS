@@ -14,7 +14,7 @@
 use std::{error::Error, fs, sync::Arc, thread};
 
 use sml_core::{
-    bit_mixer::{masks_label, BitMixer, ByteMask, MaskSet, MixerConfig},
+    bit_mixer::{masks_label, BitMixer, ByteMask, MaskSet, MixerConfig, MAX_MASKS},
     bool_coder::BitPredictor,
 };
 
@@ -90,6 +90,9 @@ fn run(args: &[String]) -> Result<()> {
         ..MixerConfig::default()
     };
     let rounds: usize = args[2].parse()?;
+    if rounds > MAX_MASKS {
+        return Err(format!("ROUNDS must be at most {MAX_MASKS}").into());
+    }
     let min_gain: f64 = args[3].parse()?;
     let mut sets = Vec::new();
     for pair in args[4..].chunks(2) {
@@ -173,6 +176,16 @@ mod tests {
             assert!(mask.iter().any(|&b| b != 0));
             assert!(!pool[..i].contains(mask), "duplicate {mask:?}");
         }
+    }
+
+    #[test]
+    fn rounds_above_the_mask_limit_are_refused_up_front() {
+        let args: Vec<String> = ["x", "16", "17", "0", "-", "/nonexistent"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let err = run(&args).unwrap_err().to_string();
+        assert!(err.contains("ROUNDS must be at most"), "{err}");
     }
 
     #[test]
