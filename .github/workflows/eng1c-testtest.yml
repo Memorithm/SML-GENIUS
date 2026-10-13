@@ -74,9 +74,12 @@ jobs:
           toolchain: 1.89.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: testtest-*
+          name: testtest-FR
           path: ${{ runner.temp }}/panel
-          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: testtest-EN
+          path: ${{ runner.temp }}/panel
       - name: Verify complete checked panel and apply frozen scientific gate
         env:
           CARGO_INCREMENTAL: "0"
