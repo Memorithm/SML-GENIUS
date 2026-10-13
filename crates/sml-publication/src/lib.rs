@@ -29,6 +29,83 @@ const RECORD: &str = "logs/custom-weight-publication.out.log";
 const REPOSITORY: &str = "Memorithm/SML-GENIUS";
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
+pub mod promotion_review;
+
+pub(crate) struct RecordTrust<'a> {
+    pub principals: &'a BTreeSet<String>,
+    pub verifier_sha256: &'a str,
+    pub allowed_signers_sha256: &'a str,
+}
+
+pub(crate) struct AuthenticatedRecord {
+    pub principal: String,
+    pub bundle_sha256: String,
+    pub bytes: Vec<u8>,
+}
+
+pub(crate) fn read_authenticated_record(
+    root: &Path,
+    run: &str,
+    owner: &Path,
+    signers: &Path,
+    policy: RecordTrust<'_>,
+    record_name: &str,
+) -> Result<AuthenticatedRecord> {
+    if !identifier(run)
+        || !run.starts_with("run-")
+        || policy.principals.is_empty()
+        || policy.principals.len() > 64
+        || policy.principals.iter().any(|x| !identifier(x))
+        || !hex(policy.verifier_sha256, 64)
+        || !hex(policy.allowed_signers_sha256, 64)
+    {
+        return Err("invalid independent evidence trust policy".into());
+    }
+    let owner = independent(owner, root)?;
+    let signers = independent(signers, root)?;
+    if sha256(&read_bounded(&owner, WEIGHT_LIMIT)?)? != policy.verifier_sha256 {
+        return Err("owner executable pin mismatch".into());
+    }
+    let trust_bytes = read_bounded(&signers, JSON_LIMIT)?;
+    if sha256(&trust_bytes)? != policy.allowed_signers_sha256 {
+        return Err("publisher trust root pin mismatch".into());
+    }
+    let trust = TrustSnapshot::new(&trust_bytes)?;
+    let auth = authenticate(&owner, root, run, &trust.path())?;
+    if auth["run_id"] != run
+        || auth["authenticity"]["status"] != "verified"
+        || auth["integrity"]["status"] != "verified"
+        || auth["authenticity"]["namespace"] != "scirust-verify-evidence-v1"
+    {
+        return Err("owner did not authenticate this sealed evidence record".into());
+    }
+    let principal = auth["authenticity"]["principal"]
+        .as_str()
+        .ok_or("missing authenticated principal")?;
+    if !policy.principals.contains(principal) {
+        return Err("principal not admitted by independent ACL".into());
+    }
+    let folder = relative_file(root, &format!(".scirust-verify/runs/{run}"))?;
+    let bundle_bytes = read_bounded(&relative_file(&folder, "bundle.json")?, JSON_LIMIT)?;
+    let bundle_digest = sha256(&bundle_bytes)?;
+    if auth["bundle_sha256"] != bundle_digest {
+        return Err("authenticated bundle changed".into());
+    }
+    let bundle: serde_json::Value = serde_json::from_slice(&bundle_bytes)?;
+    if bundle["schema_version"] != 1 || bundle["algorithm"] != "sha256" {
+        return Err("unsupported owner bundle".into());
+    }
+    let bytes = read_bounded(&relative_file(&folder, record_name)?, JSON_LIMIT)?;
+    if bundle["files"][record_name] != sha256(&bytes)? {
+        return Err("sealed evidence record changed".into());
+    }
+    Ok(AuthenticatedRecord {
+        principal: principal.into(),
+        bundle_sha256: bundle_digest,
+        bytes,
+    })
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Policy {
@@ -289,43 +366,22 @@ pub fn admit_external_weights(
     {
         return Err("invalid independent publication policy".into());
     }
-    if sha256(&read_bounded(&owner, WEIGHT_LIMIT)?)? != policy.verifier_sha256 {
-        return Err("owner executable pin mismatch".into());
-    }
-    let trust_bytes = read_bounded(&allowed_signers, JSON_LIMIT)?;
-    if sha256(&trust_bytes)? != policy.allowed_signers_sha256 {
-        return Err("publisher trust root pin mismatch".into());
-    }
-    let trust = TrustSnapshot::new(&trust_bytes)?;
-    let auth = authenticate(&owner, &root, run, &trust.path())?;
-    if auth["run_id"] != run
-        || auth["authenticity"]["status"] != "verified"
-        || auth["integrity"]["status"] != "verified"
-        || auth["authenticity"]["namespace"] != "scirust-verify-evidence-v1"
-    {
-        return Err("owner did not authenticate this sealed publication".into());
-    }
-    let principal = auth["authenticity"]["principal"]
-        .as_str()
-        .ok_or("missing authenticated principal")?;
-    if !policy.publishers.contains(principal) {
-        return Err("publisher not admitted by independent ACL".into());
-    }
-    let folder = relative_file(&root, &format!(".scirust-verify/runs/{run}"))?;
-    let bundle_bytes = read_bounded(&relative_file(&folder, "bundle.json")?, JSON_LIMIT)?;
-    let bundle_digest = sha256(&bundle_bytes)?;
-    if auth["bundle_sha256"] != bundle_digest {
-        return Err("authenticated bundle changed".into());
-    }
-    let bundle: serde_json::Value = serde_json::from_slice(&bundle_bytes)?;
-    if bundle["schema_version"] != 1 || bundle["algorithm"] != "sha256" {
-        return Err("unsupported owner bundle".into());
-    }
-    let manifest_bytes = read_bounded(&relative_file(&folder, RECORD)?, JSON_LIMIT)?;
+    let record = read_authenticated_record(
+        &root,
+        run,
+        &owner,
+        &allowed_signers,
+        RecordTrust {
+            principals: &policy.publishers,
+            verifier_sha256: &policy.verifier_sha256,
+            allowed_signers_sha256: &policy.allowed_signers_sha256,
+        },
+        RECORD,
+    )?;
+    let principal = record.principal;
+    let bundle_digest = record.bundle_sha256;
+    let manifest_bytes = record.bytes;
     let manifest_digest = sha256(&manifest_bytes)?;
-    if bundle["files"][RECORD] != manifest_digest {
-        return Err("sealed publication record changed".into());
-    }
     let manifest: WeightPublicationManifest = serde_json::from_slice(&manifest_bytes)?;
     if manifest.schema_version != 1
         || manifest.repository != REPOSITORY
