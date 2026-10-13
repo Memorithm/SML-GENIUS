@@ -1,0 +1,125 @@
+name: ENG-1c CAP2a exact external-memory full-TRAIN index
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1c-cap2a-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bounded-external-sort:
+    if: startsWith(github.head_ref, 'research/eng1c-cap2-')
+    name: "CAP2a exact ${{ matrix.language }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [FR, EN]
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only checkout of the exact untrusted PR head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89, rustfmt and Clippy on hosted Ubuntu
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Exact-head compilation, strict Clippy and independent CAP2a oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          test -s docs/ENG-1C-CAP2A-EXTERNAL-SORT-PREREGISTRATION.md
+          bash -n scripts/eng1c/fetch-cap1-train.sh
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-eng1c-cap2-external -- --nocapture
+          cargo test --locked -p sml-core --bin sml-eng1c-capacity-profile
+          cargo test --locked -p sml-core --lib elastic_ngram_trie
+      - name: One immutable release binary per hosted candidate matrix job
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-core --bin sml-eng1c-cap2-external
+          test -x target/release/sml-eng1c-cap2-external
+      - name: Eight exact full-TRAIN external scans at frozen resource limits
+        shell: bash
+        env:
+          CAP2_LANGUAGE: ${{ matrix.language }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eng1c-cap2"
+          mkdir -p "$root/private" "$root/evidence"
+          cleanup() { rm -rf -- "$root/private"; }
+          trap cleanup EXIT
+          printf 'ENG1C_CAP2A_SOURCE_SHA=%s\n' "$(git rev-parse HEAD)" | tee "$root/evidence/environment.txt"
+          printf 'ENG1C_CAP2A_ARCH=%s\n' "$(uname -m)" | tee -a "$root/evidence/environment.txt"
+          rustc --version | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2A_TRAIN_ONLY=TRUE' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2A_VIRTUAL_ADDRESS_LIMIT_KIB=262144' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2A_MAX_SCRATCH_BYTES=1073741824' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP2A_MAX_SINGLE_DEPTH_SECONDS=900' | tee -a "$root/evidence/environment.txt"
+          bash scripts/eng1c/fetch-cap1-train.sh "$CAP2_LANGUAGE" "$root/private/TRAIN" | tee "$root/evidence/source-identity.txt"
+          for depth in 0 2 4 7 12 16 24 32; do
+            output="$root/evidence/depth-$depth.txt"
+            scratch="$root/private/run-$depth"
+            set +e
+            (
+              ulimit -v 262144
+              timeout --signal=TERM --kill-after=5s 900 \
+                target/release/sml-eng1c-cap2-external "$CAP2_LANGUAGE" "$depth" \
+                "$root/private/TRAIN" "$scratch"
+            ) > "$output" 2> "$root/private/error-$depth.log"
+            code=$?
+            set -e
+            if [[ "$code" -eq 124 || "$code" -eq 137 ]]; then
+              printf 'ENG1C_CAP2,language=%s,depth=%s,status=TIMEOUT_STOP,contexts=UNKNOWN,follower_pairs=UNKNOWN,integrity=PARTIAL_STOP\n' "$CAP2_LANGUAGE" "$depth" > "$output"
+            elif [[ "$code" -ne 0 ]]; then
+              cat "$root/private/error-$depth.log" >&2
+              echo "ENG1C_CAP2A_INTEGRITY_FAILURE,language=$CAP2_LANGUAGE,depth=$depth,exit_code=$code" >&2
+              exit "$code"
+            fi
+            test "$(grep -c '^ENG1C_CAP2,' "$output")" -eq 1
+            row="$(grep '^ENG1C_CAP2,' "$output")"
+            echo "$row"
+            printf '%s\n' "$row" | grep -Eq '^ENG1C_CAP2,language=(FR|EN),depth=(0|2|4|7|12|16|24|32),status=(FULL_SCAN_COMPLETE|DISK_QUOTA_STOP|RUN_QUOTA_STOP|TIMEOUT_STOP),.*integrity=(PASS|PARTIAL_STOP)$'
+            if [[ "$depth" == 0 || "$depth" == 2 || "$depth" == 4 ]]; then
+              # Exact independent first-pass CAP1 complete-TRAIN oracles
+              case "$CAP2_LANGUAGE:$depth" in
+                FR:0) expected_contexts=1; expected_pairs=94 ;;
+                FR:2) expected_contexts=1368; expected_pairs=9480 ;;
+                FR:4) expected_contexts=40329; expected_pairs=117282 ;;
+                EN:0) expected_contexts=1; expected_pairs=96 ;;
+                EN:2) expected_contexts=1529; expected_pairs=10305 ;;
+                EN:4) expected_contexts=41802; expected_pairs=118117 ;;
+              esac
+              printf '%s\n' "$row" | grep -Eq "^ENG1C_CAP2,language=$CAP2_LANGUAGE,depth=$depth,status=FULL_SCAN_COMPLETE,.*contexts=$expected_contexts,follower_pairs=$expected_pairs,.*integrity=PASS$"
+            fi
+          done
+          test "$(find "$root/evidence" -name 'depth-*.txt' | wc -l)" = 8
+          ( cd "$root/evidence" && sha256sum depth-*.txt source-identity.txt > manifest.sha256 )
+          echo "ENG1C_CAP2A_MODEL_TRAINING=NONE" | tee -a "$root/evidence/environment.txt"
+          echo "ENG1C_CAP2A_VAL_TEST_SCORING=NONE" | tee -a "$root/evidence/environment.txt"
+          echo "ENG1C_CAP2A_EXISTING_MODEL_EVENT_LIMIT=UNCHANGED_500000" | tee -a "$root/evidence/environment.txt"
+      - name: Preserve exact diagnostics, never eBook text or sorted run records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1c-cap2a-exact-${{ matrix.language }}
+          path: ${{ runner.temp }}/eng1c-cap2/evidence/
+          if-no-files-found: warn
+          retention-days: 30
