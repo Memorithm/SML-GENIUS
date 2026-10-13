@@ -114,4 +114,5 @@ jobs:
             ${{ runner.temp }}/external-consumer-receipt.json
             ${{ runner.temp }}/production-dossier
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
