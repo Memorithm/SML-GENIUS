@@ -41,6 +41,7 @@ pub mod anf_passive_committee;
 pub mod anf_phase_capacity;
 pub mod anf_sbg_unified;
 pub mod anf_scoped_risk;
+pub mod anf_side;
 pub mod anf_sparse_byte;
 pub mod anf_sparse_readout;
 pub mod anf_three_gate_diagnostic;
