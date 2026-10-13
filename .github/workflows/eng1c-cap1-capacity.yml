@@ -1,0 +1,85 @@
+name: ENG-1c CAP1 frozen real-text TRAIN capacity admission
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eng1c-cap1-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  exact-train-only-capacity:
+    if: startsWith(github.head_ref, 'research/eng1c-capacity-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout exact HEAD on fresh GitHub-hosted VM
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 pin, rustfmt, strict Clippy
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Source identity, formatting, strict compiler and scanner tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          rustc --version
+          test -s docs/ENG-1C-CAP1-FULL-TRAIN-CAPACITY-PREREGISTRATION.md
+          bash -n scripts/eng1c/fetch-cap1-train.sh
+          if bash scripts/eng1c/fetch-cap1-train.sh WRONG "$RUNNER_TEMP/invalid"; then exit 1; fi
+          test ! -e "$RUNNER_TEMP/invalid"
+          cargo fmt --all -- --check
+          cargo check --locked -p sml-core --all-targets
+          cargo clippy --locked -p sml-core --all-targets -- -D warnings
+          cargo test --locked -p sml-core --bin sml-eng1c-capacity-profile
+      - name: Build unchanged no-model capacity binary in release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p sml-core --bin sml-eng1c-capacity-profile
+      - name: Scan all sixteen frozen full-TRAIN profile/corpus combinations
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eng1c-cap1"
+          mkdir -p "$root/private" "$root/evidence"
+          cleanup() { rm -rf -- "$root/private"; }
+          trap cleanup EXIT
+          echo "ENG1C_CAP1_SOURCE_SHA=$(git rev-parse HEAD)" | tee "$root/evidence/environment.txt"
+          echo "ENG1C_CAP1_ARCH=$(uname -m)" | tee -a "$root/evidence/environment.txt"
+          rustc --version | tee -a "$root/evidence/environment.txt"
+          for lang in FR EN; do
+            bash scripts/eng1c/fetch-cap1-train.sh "$lang" "$root/private/$lang-TRAIN" | tee "$root/evidence/$lang-source.txt"
+            for depth in 0 2 4 7 12 16 24 32; do
+              target/release/sml-eng1c-capacity-profile "$lang" "$depth" "$root/private/$lang-TRAIN"                 | tee "$root/evidence/$lang-depth-$depth.txt"
+              row="$(grep '^ENG1C_CAPACITY,' "$root/evidence/$lang-depth-$depth.txt")"
+              test "$(grep -c '^ENG1C_CAPACITY,' "$root/evidence/$lang-depth-$depth.txt")" = 1
+              printf '%s\n' "$row" | grep -Eq '^ENG1C_CAPACITY,language=(FR|EN),depth=(0|2|4|7|12|16|24|32),status=(SCAN_COMPLETE|NODE_CAPACITY_STOP|PAIR_CAPACITY_STOP),.*model_event_gate=STOP,model_event_max=500000,vmhwm_process_kib=[1-9][0-9]*,integrity=PASS$'
+            done
+          done
+          test "$(find "$root/evidence" -name '*depth-*.txt' | wc -l)" = 16
+          ( cd "$root/evidence" && sha256sum *-depth-*.txt > checksums.sha256 )
+          echo 'ENG1C_CAP1_TEST_LABELS=NOT_SCORED' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP1_MODEL_PREDICTIONS=NOT_EVALUATED' | tee -a "$root/evidence/environment.txt"
+          echo 'ENG1C_CAP1_FULL_TRAIN_MODEL_EVENT_LIMIT=STOP' | tee -a "$root/evidence/environment.txt"
+      - name: Upload only small capacity manifests and process physical summaries
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eng1c-cap1-train-only-full-text-capacity
+          path: ${{ runner.temp }}/eng1c-cap1/evidence/
+          if-no-files-found: warn
+          retention-days: 30
