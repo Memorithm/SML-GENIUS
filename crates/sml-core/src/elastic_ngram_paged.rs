@@ -29,6 +29,9 @@ const SORT_WRITE_BUFFER: usize = 65_536;
 const RUN_HASH_INITIAL: u64 = 0xcbf2_9ce4_8422_2325;
 
 pub const MAX_PAGED_DEPTH: usize = 32;
+
+/// Frozen ENG-1c/VAL1 fixed-depth and evidence-policy candidate depths.
+pub const ENG1C_VAL_DEPTHS: [usize; 4] = [4, 7, 12, 32];
 pub const MAX_PAGED_TRAIN_EVENTS: usize = 650_000;
 pub const MAX_PAGED_CONTEXTS: u64 = 16_000_000;
 pub const MAX_PAGED_FOLLOWER_PAIRS: u64 = 16_000_000;
@@ -800,6 +803,16 @@ pub fn build_paged(
     }
 }
 
+/// Model-owned observation of one full fixed-depth byte distribution.
+/// context_events counts only occurrences of the exact requested-depth
+/// suffix in immutable TRAIN; it never uses the current VAL target.
+#[derive(Clone, Debug)]
+pub struct EvidenceDepthReadout {
+    pub depth: usize,
+    pub probabilities: [f64; 256],
+    pub context_events: u64,
+}
+
 #[derive(Clone)]
 struct IndexRow {
     key: Record,
@@ -953,6 +966,67 @@ impl PagedNGram {
         Ok(probabilities)
     }
 
+
+    /// ENG-1c/VAL1: read all frozen depths using each lower-order Witten-Bell
+    /// context exactly once. A context too deep for history has count zero.
+    /// Every returned distribution is bitwise the same as distribution()
+    /// at the corresponding explicitly requested depth.
+    pub fn depth_ladder_readout(
+        &mut self,
+        history: &[u8],
+    ) -> Result<[EvidenceDepthReadout; 4], PagedError> {
+        if self.metadata.max_depth < ENG1C_VAL_DEPTHS[3] {
+            return Err(PagedError::InvalidDepth);
+        }
+        let mut result = std::array::from_fn(|i| EvidenceDepthReadout {
+            depth: ENG1C_VAL_DEPTHS[i],
+            probabilities: [1.0 / 256.0; 256],
+            context_events: 0,
+        });
+        let mut probabilities = [1.0 / 256.0; 256];
+        let mut next_snapshot = 0usize;
+        for d in 0..=ENG1C_VAL_DEPTHS[3].min(history.len()) {
+            let histogram = self.context_histogram(history, d)?;
+            let exact_total = if let Some((count, followers)) = histogram {
+                let n = count as f64;
+                let distinct = followers.len() as f64;
+                let den = n + distinct;
+                let scale = distinct / den;
+                for p in &mut probabilities {
+                    *p *= scale;
+                }
+                for (label, frequency) in followers {
+                    probabilities[usize::from(label)] += f64::from(frequency) / den;
+                }
+                count
+            } else {
+                0
+            };
+
+            if next_snapshot < result.len() && d == ENG1C_VAL_DEPTHS[next_snapshot] {
+                result[next_snapshot].probabilities = probabilities;
+                result[next_snapshot].context_events = exact_total;
+                next_snapshot += 1;
+            }
+        }
+        while next_snapshot < result.len() {
+            result[next_snapshot].probabilities = probabilities;
+            result[next_snapshot].context_events = 0;
+            next_snapshot += 1;
+        }
+        for snapshot in &result {
+            if snapshot
+                .probabilities
+                .iter()
+                .any(|p| !p.is_finite() || *p <= 0.0)
+                || (snapshot.probabilities.iter().sum::<f64>() - 1.0).abs() > 1e-10
+            {
+                return Err(PagedError::InvalidProbability);
+            }
+        }
+        Ok(result)
+    }
+
     pub fn score(&mut self, bytes: &[u8], depth: usize) -> Result<ByteScore, PagedError> {
         if depth > self.metadata.max_depth {
             return Err(PagedError::InvalidDepth);
@@ -1016,6 +1090,65 @@ mod tests {
                 (0..40usize).map(move |t| ((lane * 17 + t * 7 + (t % 3) * 11 + seed) % 23) as u8)
             })
             .collect()
+    }
+
+    #[test]
+    fn eng1c_val1_ladder_matches_exact_independent_oracles_and_source_counts() {
+        let train = corpus(0);
+        let probe = corpus(13);
+        let root = TestRoot::new("val1-ladder-oracles");
+        let target = root.output("published");
+        let built = build_paged(&train, 32, &target, &root.output("sort"), PagedLimits::default())
+            .unwrap();
+        assert!(matches!(built, PagedBuild::Published(_)));
+        let mut model = PagedNGram::open(&target, training_sha256(&train)).unwrap();
+        let trie = ElasticNGramTrie::train(
+            &train,
+            TrieLimits {
+                max_depth: 32,
+                ..TrieLimits::default()
+            },
+        )
+        .unwrap();
+        let long = ElasticNGramLong::train(
+            &train,
+            LongNGramLimits {
+                max_depth: 32,
+                ..LongNGramLimits::default()
+            },
+        )
+        .unwrap();
+
+        for source in [&train, &probe] {
+            for lane in 0..LANES {
+                let chunk = &source[lane * 40..(lane + 1) * 40];
+                for t in 1..40 {
+                    let history = &chunk[..t];
+                    let ladder = model.depth_ladder_readout(history).unwrap();
+                    for (i, &depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+                        assert_eq!(ladder[i].depth, depth);
+                        let direct = model.distribution(history, depth).unwrap();
+                        let ref_trie = trie.distribution(history, depth).unwrap();
+                        let ref_long = long.distribution(history, depth).unwrap();
+                        for label in 0..256 {
+                            assert_eq!(ladder[i].probabilities[label].to_bits(), direct[label].to_bits());
+                            assert_eq!(ladder[i].probabilities[label].to_bits(), ref_trie[label].to_bits());
+                            assert_eq!(ladder[i].probabilities[label].to_bits(), ref_long[label].to_bits());
+                        }
+                        let trained_count = if depth <= history.len() {
+                            model.context_histogram(history, depth).unwrap().map_or(0, |(n, _)| n)
+                        } else {
+                            0
+                        };
+                        assert_eq!(ladder[i].context_events, trained_count);
+                    }
+                }
+            }
+        }
+        assert!(matches!(
+            PagedNGram::open(&target, [255; 32]),
+            Err(PagedError::SourceMismatch)
+        ));
     }
 
     #[test]
