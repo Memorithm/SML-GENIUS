@@ -19,8 +19,58 @@ use crate::bool_coder::{BitPredictor, P_MAX, P_MIN};
 
 /// Context orders (number of preceding whole bytes) hashed as inputs.
 pub const ORDERS: [usize; 6] = [1, 2, 3, 4, 6, 8];
-const N_HASHED: usize = ORDERS.len() + 1; // + word context
-const N_INPUTS: usize = N_HASHED + 1 + 1 + 1; // + order 0, match, bias
+/// Fixed hashed contexts: the orders plus the word context.
+const N_FIXED: usize = ORDERS.len() + 1;
+/// Non-hashed inputs: order 0, match model, bias.
+const N_EXTRA: usize = 3;
+/// Most Boolean mask contexts a predictor may carry.
+pub const MAX_MASKS: usize = 16;
+
+/// A Boolean byte-mask context: `mask[j]` is ANDed with the byte `j + 1`
+/// positions back, and the masked bytes are hashed together. Each mask
+/// selects an explicit set of context bits (a Boolean sub-cube of the last
+/// 8 bytes): skip contexts, case-folded or character-class sequences.
+pub type ByteMask = [u8; 8];
+
+/// Boolean mask contexts selected by `sml-bmx-mask-search` on the tuning
+/// corpora only (Opticks DEV with TRAIN priming, Vim `version7.txt`), then
+/// frozen. See docs/ENG-1D-BOOLEAN-CONTEXT-MIXING.md.
+pub const V3_MASKS: &[ByteMask] = &[
+    [0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0],
+    [0xFF, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0x00, 0x00],
+];
+
+/// Which Boolean mask contexts the predictor uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaskSet {
+    /// No mask contexts (the `bmx-v2` model).
+    None,
+    /// The frozen [`V3_MASKS`].
+    V3,
+}
+
+impl MaskSet {
+    #[must_use]
+    pub fn masks(self) -> &'static [ByteMask] {
+        match self {
+            Self::None => &[],
+            Self::V3 => V3_MASKS,
+        }
+    }
+}
+
+/// Stable hexadecimal label of a mask list (`-` when empty).
+#[must_use]
+pub fn masks_label(masks: &[ByteMask]) -> String {
+    if masks.is_empty() {
+        return "-".into();
+    }
+    masks
+        .iter()
+        .map(|m| m.iter().map(|b| format!("{b:02x}")).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(",")
+}
 const MATCH_MIN: usize = 6;
 const MAX_MATCH: usize = 65_535;
 const CONFIDENCE_BUCKETS: usize = 16;
@@ -51,6 +101,8 @@ pub struct MixerConfig {
     pub counter_limit: u32,
     /// Mixer learning rate, in 1/16 steps of the classic `err * rate >> 10`.
     pub mixer_rate: i32,
+    /// Boolean mask contexts.
+    pub mask_set: MaskSet,
 }
 
 impl Default for MixerConfig {
@@ -60,6 +112,7 @@ impl Default for MixerConfig {
             match_bits: 20,
             counter_limit: 127,
             mixer_rate: 6,
+            mask_set: MaskSet::V3,
         }
     }
 }
@@ -68,9 +121,20 @@ impl MixerConfig {
     /// Stable text identity, recorded in coded containers.
     #[must_use]
     pub fn label(&self) -> String {
+        Self::label_with(self, self.mask_set.masks())
+    }
+
+    /// Identity with an explicit mask list (used by mask search).
+    #[must_use]
+    pub fn label_with(&self, masks: &[ByteMask]) -> String {
+        let version = if masks.is_empty() { "bmx-v2" } else { "bmx-v3" };
         format!(
-            "bmx-v2:orders=1,2,3,4,6,8+word+o0+match;table_bits={};match_bits={};limit={};rate={}",
-            self.table_bits, self.match_bits, self.counter_limit, self.mixer_rate
+            "{version}:orders=1,2,3,4,6,8+word+o0+match;table_bits={};match_bits={};limit={};rate={};masks={}",
+            self.table_bits,
+            self.match_bits,
+            self.counter_limit,
+            self.mixer_rate,
+            masks_label(masks)
         )
     }
 
@@ -241,13 +305,15 @@ pub struct BitMixer {
     match_index: Vec<u32>,
     match_ptr: usize,
     match_len: usize,
-    byte_hashes: [u32; N_HASHED],
+    masks: Vec<ByteMask>,
+    n_inputs: usize,
+    byte_hashes: Vec<u32>,
     word_hash: u32,
     c0: u32,
     bit_pos: u32,
     // per-bit state
-    inputs: [i32; N_INPUTS],
-    slots: [usize; N_HASHED],
+    inputs: Vec<i32>,
+    slots: Vec<usize>,
     match_slot: usize,
     mixer_p: i32,
     final_p: i32,
@@ -262,23 +328,35 @@ impl BitMixer {
     }
 
     pub fn try_new(config: MixerConfig) -> Result<Self, &'static str> {
+        Self::try_with_masks(config, config.mask_set.masks())
+    }
+
+    /// Builds a predictor with an explicit Boolean mask list, overriding
+    /// `config.mask_set` (for mask search; coded containers must then use
+    /// [`MixerConfig::label_with`] as identity).
+    pub fn try_with_masks(config: MixerConfig, masks: &[ByteMask]) -> Result<Self, &'static str> {
         if !config.valid() {
             return Err("invalid MixerConfig");
         }
+        if masks.len() > MAX_MASKS || masks.iter().any(|m| m.iter().all(|&b| b == 0)) {
+            return Err("invalid Boolean mask list");
+        }
+        let n_hashed = N_FIXED + masks.len();
+        let n_inputs = n_hashed + N_EXTRA;
         let logistic = Logistic::new();
         let apm_order1 = Apm::new(256 * 256);
         let apm_order2 = Apm::new(1 << 16);
         let mut mixer = Self {
             config,
-            tables: (0..N_HASHED)
+            tables: (0..n_hashed)
                 .map(|_| CounterTable::new(config.table_bits))
                 .collect(),
-            adapters: (0..N_HASHED)
+            adapters: (0..n_hashed)
                 .map(|_| Apm::new(CONFIDENCE_BUCKETS))
                 .collect(),
             order0: CounterTable::new(8),
             match_counters: CounterTable::new(16),
-            weights: vec![0; 256 * N_INPUTS],
+            weights: vec![0; 256 * n_inputs],
             apm_order1,
             apm_order2,
             logistic,
@@ -286,17 +364,19 @@ impl BitMixer {
             match_index: vec![0; 1 << config.match_bits],
             match_ptr: 0,
             match_len: 0,
-            byte_hashes: [0; N_HASHED],
+            masks: masks.to_vec(),
+            n_inputs,
+            byte_hashes: vec![0; n_hashed],
             word_hash: 0,
             c0: 1,
             bit_pos: 0,
-            inputs: [0; N_INPUTS],
-            slots: [0; N_HASHED],
+            inputs: vec![0; n_inputs],
+            slots: vec![0; n_hashed],
             match_slot: 0,
             mixer_p: 2048,
             final_p: 2048,
         };
-        let initial = (1 << 16) / N_INPUTS as i32;
+        let initial = (1 << 16) / n_inputs as i32;
         for w in &mut mixer.weights {
             *w = initial;
         }
@@ -345,8 +425,9 @@ impl BitMixer {
             let adapted = self.adapters[i].refine(raw, bucket, &self.logistic);
             self.inputs[i] = self.logistic.stretch(adapted.clamp(1, 4095));
         }
-        self.inputs[N_HASHED] = self.logistic.stretch(self.order0.p(c0 as usize));
-        self.inputs[N_HASHED + 1] = match self.expected_bit() {
+        let n_hashed = self.slots.len();
+        self.inputs[n_hashed] = self.logistic.stretch(self.order0.p(c0 as usize));
+        self.inputs[n_hashed + 1] = match self.expected_bit() {
             Some(bit) => {
                 let len_bucket = self.match_len.min(31);
                 self.match_slot = (len_bucket << 1) | usize::from(bit);
@@ -358,12 +439,12 @@ impl BitMixer {
                 0
             }
         };
-        self.inputs[N_HASHED + 2] = 256;
-        let base = c0 as usize * N_INPUTS;
+        self.inputs[n_hashed + 2] = 256;
+        let base = c0 as usize * self.n_inputs;
         let dot: i64 = self
             .inputs
             .iter()
-            .zip(&self.weights[base..base + N_INPUTS])
+            .zip(&self.weights[base..base + self.n_inputs])
             .map(|(&x, &w)| i64::from(x) * i64::from(w))
             .sum();
         self.mixer_p = squash((dot >> 16) as i32).clamp(1, 4095);
@@ -386,8 +467,8 @@ impl BitMixer {
         let limit = self.config.counter_limit;
         // Mixer.
         let err = ((i32::from(bit) << 12) - self.mixer_p) * self.config.mixer_rate;
-        let base = self.c0 as usize * N_INPUTS;
-        for (w, &x) in self.weights[base..base + N_INPUTS]
+        let base = self.c0 as usize * self.n_inputs;
+        for (w, &x) in self.weights[base..base + self.n_inputs]
             .iter_mut()
             .zip(&self.inputs)
         {
@@ -471,6 +552,21 @@ impl BitMixer {
             self.byte_hashes[i] = h;
         }
         self.byte_hashes[ORDERS.len()] = hash(self.word_hash, 0x5741_5244);
+        // Boolean mask contexts over the last 8 bytes.
+        for (k, mask) in self.masks.iter().enumerate() {
+            let mut h = (k as u32 + 1).wrapping_mul(0x2545_F491);
+            for (j, &m) in mask.iter().enumerate() {
+                if m != 0 {
+                    let b = if j < n {
+                        self.history[n - 1 - j] & m
+                    } else {
+                        0
+                    };
+                    h = hash(h, ((j as u32) << 8) | u32::from(b));
+                }
+            }
+            self.byte_hashes[N_FIXED + k] = h;
+        }
     }
 }
 
@@ -629,6 +725,45 @@ mod tests {
     }
 
     #[test]
+    fn boolean_mask_contexts_change_predictions_and_round_trip() {
+        let data = text(30_000);
+        let v2 = MixerConfig {
+            mask_set: MaskSet::None,
+            ..small()
+        };
+        let v3 = MixerConfig {
+            mask_set: MaskSet::V3,
+            ..small()
+        };
+        assert_eq!(V3_MASKS.len(), 2);
+        assert!(v3.label().starts_with("bmx-v3:") && v3.label().contains("e0e0e0e0e0e0e0e0"));
+        let mut a = BitMixer::new(v2);
+        let mut b = BitMixer::new(v3);
+        let mut differ = 0usize;
+        for &byte in &data[..2_000] {
+            for shift in (0..8).rev() {
+                differ += usize::from(a.p12() != b.p12());
+                let bit = (byte >> shift) & 1 == 1;
+                a.update(bit);
+                b.update(bit);
+            }
+        }
+        assert!(differ > 1_000, "mask inputs must influence predictions");
+        let id = v3.label();
+        let encoded = encode_with_predictor(&data, id.as_bytes(), &mut BitMixer::new(v3)).unwrap();
+        // A v2 decoder under the v3 identity is detected, never silently wrong.
+        assert!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v2))
+                .is_err()
+        );
+        assert_eq!(
+            decode_with_predictor(&encoded.container, id.as_bytes(), &mut BitMixer::new(v3))
+                .unwrap(),
+            data
+        );
+    }
+
+    #[test]
     fn invalid_configurations_are_rejected() {
         for bad in [
             MixerConfig {
@@ -650,6 +785,14 @@ mod tests {
         ] {
             assert!(BitMixer::try_new(bad).is_err());
         }
-        assert!(MixerConfig::default().label().starts_with("bmx-v2:"));
+        let v2 = MixerConfig {
+            mask_set: MaskSet::None,
+            ..MixerConfig::default()
+        };
+        assert!(v2.label().starts_with("bmx-v2:") && v2.label().ends_with("masks=-"));
+        assert!(BitMixer::try_with_masks(v2, &[[0; 8]]).is_err());
+        assert!(
+            BitMixer::try_with_masks(v2, &[[0xFF, 0, 0, 0, 0, 0, 0, 0]; MAX_MASKS + 1]).is_err()
+        );
     }
 }
