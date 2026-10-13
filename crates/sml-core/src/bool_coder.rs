@@ -374,6 +374,35 @@ pub fn decode_bytes<F>(
 where
     F: FnMut(&[u8]) -> Result<[f64; 256], CoderError>,
 {
+    let (length, digest, payload) = parse_container(container, model_id)?;
+    let mut decoder = BinaryDecoder::new(payload)?;
+    // A coded byte costs at least 8 * -log2(P_MAX / 2^32) bits; cap the
+    // allocation by what the payload could possibly hold.
+    let mut out = Vec::with_capacity(length.min(payload.len().saturating_mul(1 << 16)));
+    for i in 0..length {
+        let tree = ByteBitTree::new(&model(&out[i.saturating_sub(max_history)..i])?)?;
+        let mut node = 1usize;
+        for _ in 0..8 {
+            let bit = decoder.decode(quantize_p1(tree.p1(node))?)?;
+            node = 2 * node + usize::from(bit);
+        }
+        out.push((node - 256) as u8);
+    }
+    if decoder.consumed() != payload.len() {
+        return Err(CoderError::TrailingData);
+    }
+    if sha256(&out) != digest {
+        return Err(CoderError::PlaintextMismatch);
+    }
+    Ok(out)
+}
+
+/// Splits a container into (plaintext length, plaintext SHA-256, payload)
+/// after checking magic and model identity.
+fn parse_container<'a>(
+    container: &'a [u8],
+    model_id: &[u8],
+) -> Result<(usize, [u8; 32], &'a [u8]), CoderError> {
     if container_model_id(container)? != model_id {
         return Err(CoderError::ModelMismatch);
     }
@@ -394,20 +423,80 @@ where
         .try_into()
         .map_err(|_| CoderError::TruncatedStream)?;
     pos += 32;
-    let payload = &container[pos..];
-    let mut decoder = BinaryDecoder::new(payload)?;
     let length = usize::try_from(length).map_err(|_| CoderError::LengthOutOfRange)?;
-    // A coded byte costs at least 8 * -log2(P_MAX / 2^32) bits; cap the
-    // allocation by what the payload could possibly hold.
-    let mut out = Vec::with_capacity(length.min(payload.len().saturating_mul(1 << 16)));
-    for i in 0..length {
-        let tree = ByteBitTree::new(&model(&out[i.saturating_sub(max_history)..i])?)?;
-        let mut node = 1usize;
-        for _ in 0..8 {
-            let bit = decoder.decode(quantize_p1(tree.p1(node))?)?;
-            node = 2 * node + usize::from(bit);
+    Ok((length, digest, &container[pos..]))
+}
+
+/// A sequential bit model: it predicts the next bit, then learns it.
+/// Encoder and decoder must start from identical states and see identical
+/// bits, so the predictor must be deterministic.
+pub trait BitPredictor {
+    /// P(next bit = 1) as a fraction of 2^32, within `[P_MIN, P_MAX]`.
+    fn p1(&self) -> u32;
+    /// Learns the bit that was just coded.
+    fn update(&mut self, bit: bool);
+}
+
+/// Encodes `data` bit by bit (MSB first) with an adaptive bit predictor.
+/// `model_bits` and `coded_bits` both use the probabilities applied.
+pub fn encode_with_predictor<P: BitPredictor>(
+    data: &[u8],
+    model_id: &[u8],
+    predictor: &mut P,
+) -> Result<Encoded, CoderError> {
+    if data.len() as u64 > MAX_PLAINTEXT {
+        return Err(CoderError::LengthOutOfRange);
+    }
+    let mut container = header(model_id, data)?;
+    let mut encoder = BinaryEncoder::new();
+    let (mut model_bits, mut coded_bits) = (0.0f64, 0.0f64);
+    for &byte in data {
+        for shift in (0..8).rev() {
+            let bit = (byte >> shift) & 1 == 1;
+            let p1 = predictor.p1();
+            if !(P_MIN..=P_MAX).contains(&p1) {
+                return Err(CoderError::InvalidDistribution);
+            }
+            let p = f64::from(p1) / 4_294_967_296.0;
+            model_bits -= if bit { p } else { 1.0 - p }.log2();
+            coded_bits -= effective_probability(encoder.range(), p1, bit).log2();
+            encoder.encode(bit, p1);
+            predictor.update(bit);
         }
-        out.push((node - 256) as u8);
+    }
+    let payload = encoder.finish();
+    let payload_bytes = payload.len();
+    container.extend_from_slice(&payload);
+    Ok(Encoded {
+        container,
+        payload_bytes,
+        model_bits,
+        coded_bits,
+    })
+}
+
+/// Decodes a container from [`encode_with_predictor`] with a predictor in
+/// the same initial state. Fails closed like [`decode_bytes`].
+pub fn decode_with_predictor<P: BitPredictor>(
+    container: &[u8],
+    model_id: &[u8],
+    predictor: &mut P,
+) -> Result<Vec<u8>, CoderError> {
+    let (length, digest, payload) = parse_container(container, model_id)?;
+    let mut decoder = BinaryDecoder::new(payload)?;
+    let mut out = Vec::with_capacity(length.min(payload.len().saturating_mul(1 << 16)));
+    for _ in 0..length {
+        let mut byte = 0u8;
+        for _ in 0..8 {
+            let p1 = predictor.p1();
+            if !(P_MIN..=P_MAX).contains(&p1) {
+                return Err(CoderError::InvalidDistribution);
+            }
+            let bit = decoder.decode(p1)?;
+            predictor.update(bit);
+            byte = (byte << 1) | u8::from(bit);
+        }
+        out.push(byte);
     }
     if decoder.consumed() != payload.len() {
         return Err(CoderError::TrailingData);
@@ -599,6 +688,73 @@ mod tests {
             Ok(p)
         };
         assert!(decode_bytes(c, 1, b"toy-order1", shifted).is_err());
+    }
+
+    /// Order-0 adaptive bit counter keyed by the partial byte: a minimal
+    /// independent predictor for exercising the predictor API.
+    struct Order0 {
+        counts: Vec<[u32; 2]>,
+        node: usize,
+    }
+    impl Order0 {
+        fn new() -> Self {
+            Self {
+                counts: vec![[1, 1]; 256],
+                node: 1,
+            }
+        }
+    }
+    impl BitPredictor for Order0 {
+        fn p1(&self) -> u32 {
+            let [zeros, ones] = self.counts[self.node];
+            let p = f64::from(ones) / f64::from(zeros + ones);
+            quantize_p1(p).unwrap()
+        }
+        fn update(&mut self, bit: bool) {
+            self.counts[self.node][usize::from(bit)] += 1;
+            self.node = 2 * self.node + usize::from(bit);
+            if self.node >= 256 {
+                self.node = 1;
+            }
+        }
+    }
+
+    #[test]
+    fn predictor_api_round_trips_and_matches_ideal_size() {
+        let data = sample(40_000, 21);
+        let encoded = encode_with_predictor(&data, b"order0", &mut Order0::new()).unwrap();
+        assert_eq!(
+            decode_with_predictor(&encoded.container, b"order0", &mut Order0::new()).unwrap(),
+            data
+        );
+        assert!((encoded.coded_bits - encoded.model_bits).abs() < 1e-3 * data.len() as f64);
+        let payload_bits = 8.0 * encoded.payload_bytes as f64;
+        assert!(
+            payload_bits >= encoded.coded_bits - 1e-6 && payload_bits <= encoded.coded_bits + 48.0
+        );
+        // A predictor in a different state is caught, never silently wrong.
+        let mut warm = Order0::new();
+        warm.update(true);
+        assert!(decode_with_predictor(&encoded.container, b"order0", &mut warm).is_err());
+        assert_eq!(
+            decode_with_predictor(&encoded.container, b"other", &mut Order0::new()),
+            Err(CoderError::ModelMismatch)
+        );
+    }
+
+    #[test]
+    fn out_of_range_predictor_probability_is_rejected() {
+        struct Bad;
+        impl BitPredictor for Bad {
+            fn p1(&self) -> u32 {
+                0
+            }
+            fn update(&mut self, _: bool) {}
+        }
+        assert_eq!(
+            encode_with_predictor(b"x", b"bad", &mut Bad).unwrap_err(),
+            CoderError::InvalidDistribution
+        );
     }
 
     #[test]
