@@ -1,7 +1,7 @@
 schema_version: 1
 kind: sml_genius_ecosystem_roadmap
 status: active
-last_updated: "2026-10-12"
+last_updated: "2026-10-13"
 repository: Memorithm/SML-GENIUS
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
 mission:
@@ -1038,8 +1038,37 @@ elastic_ngram_program_2026_10_12:
       - no_real_mmap_allocator_or_data_residency_transition
       - no_hard_physical_memory_budget_or_production_inference
       - not_an_ENG1c_full_corpus_training_capacity_solution
+  ENG2b_H1:
+    status: merged_opt_in_single_process_heap_swap_with_post_ACT_verification_and_original_box_rollback
+    pull_request: 536
+    merge_commit: 925dcd9d6fa0ced389cff0301bb632f57f15c4b0
+    preregistration_commit: dbd109953744fc0f54e7110f9f7798178d645ad4
+    scientific_protocol: docs/ENG-2B-HEAP-TRANSITION-PREREGISTRATION.md
+    source: crates/sml-elastic-bench/src/eng2_heap_swap.rs
+    final_PR_head: d1c3a55f38d1f9b1d3e18c970e304a1ff13447d1
+    source_blob_sha: 1eac808ffa44a37db569b6475a0fe3da272646fe
+    dedicated_CI: 38353641217
+    full_CI: 38353641499
+    exact_head_checks: both_success
+    new_regression_tests: 6
+    implemented_observations:
+      - retained_training_bytes_compared_bytewise_and_expected_epoch_checked
+      - same_depth_only_full_256_class_pre_swap_and_post_swap_parity_on_bounded_TRAIN_and_probe
+      - actual_std_mem_replace_of_Rust_heap_resident_Box_model
+      - structural_ElasticXxx_Recompute_validated_then_committed_only_after_post_SWAP_equality
+      - injected_after_swap_after_verify_and_after_commit_failures_restore_original_Box_and_frontier_epoch
+      - poisoned_target_rejected_before_heap_swap
+      - successful_reverse_Recompute_rebuilds_original_representation_from_retained_TRAIN
+    hard_bound: 8192_TRAIN_events_plus_existing_250k_node_context_caps
+    explicit_unqualified_boundaries:
+      - not_a_physical_file_format_codec_or_memory_mapped_backend
+      - no_concurrent_reader_protection_or_crash_durable_recovery
+      - transient_simultaneous_allocations_are_not_hard_RSS_budget_enforced
+      - no_NVIDIA_GPU_driver_actuator_or_real_ElasticXxx_generic_resource_provider
+      - no_model_quality_or_depth_adaptation_or_SML25B_default_route
   next_slices:
-    - ENG2b_real_physical_source_bound_residency_codec_and_independent_rollback
+    - ENG2b_H2_source_epoch_bound_provider_with_hard_peak_budget_concurrent_reader_safety_crash_rollback
+    - ENG1c_full_corpus_capacity_preflight_without_TEST_or_model_scoring
     - ENG1c_independent_corpus_pretrained_capacity_protocol_before_scoring_issue_530
     - ENG1b_repeat_frozen_resource_study_with_independent_hosted_and_native_Thor_controls
     - ENG1c_separately_preregistered_CTW_and_PPM_predictive_comparators
