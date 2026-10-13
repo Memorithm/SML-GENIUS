@@ -7,8 +7,6 @@ on:
       - crates/sml-publication/**
       - policy/production-weight-publishers.allowed_signers
       - .github/workflows/production-weight-publication.yml
-  workflow_dispatch:
-
 permissions:
   contents: read
 
