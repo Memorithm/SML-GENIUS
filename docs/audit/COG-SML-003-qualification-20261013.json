@@ -3,7 +3,7 @@
   "finding": "COG-SML-003",
   "repository": "Memorithm/SML-GENIUS",
   "status": "merged_waiting_integrated_qualification",
-  "observed_at": "2026-10-13T20:13:34.254Z",
+  "observed_at": "2026-10-13T20:15:00.328Z",
   "base_sha": "0dd6290aa4aff194e7828a2b51f249ba045f9cd2",
   "candidate": {
     "sha": "956de0ede29ff58b790f2551bd252108c7566cd7",
@@ -76,5 +76,37 @@
     "finding": "P2 draft transition events",
     "fixed_head": "956de0ede29ff58b790f2551bd252108c7566cd7",
     "resolved": true
+  },
+  "integrated_artifact": {
+    "id": 11846245398,
+    "name": "trusted-review-69cf44d25000c7f5f77d1bd35b160b93fc225879",
+    "size_in_bytes": 390,
+    "url": "https://api.github.com/repos/Memorithm/SML-GENIUS/actions/artifacts/11846245398",
+    "archive_download_url": "https://api.github.com/repos/Memorithm/SML-GENIUS/actions/artifacts/11846245398/zip",
+    "expired": false,
+    "created_at": "2026-10-13T20:14:12Z",
+    "expires_at": "2027-01-11T20:13:05Z",
+    "updated_at": "2026-10-13T20:14:12Z",
+    "digest": "sha256:165661d1670f4d49cc4468c6f58c8a0ddc247f031131dc985e3bb09f447ffe6a",
+    "workflow_run": {
+      "id": 38461057746,
+      "repository_id": 1378772339,
+      "head_repository_id": 1378772339,
+      "head_branch": "main",
+      "head_sha": "69cf44d25000c7f5f77d1bd35b160b93fc225879"
+    },
+    "archive": "docs/audit/COG-SML-003-integrated.zip",
+    "downloaded_digest_verified": true,
+    "receipt": {
+      "trusted-review-qualification.json": {
+        "closed_PR_refused": true,
+        "merge_authorization": false,
+        "primary_integrated_identity": "verified",
+        "pull_request": 561,
+        "repository": "Memorithm/SML-GENIUS",
+        "scientific_qualification": "not_evaluated",
+        "source_sha": "69cf44d25000c7f5f77d1bd35b160b93fc225879"
+      }
+    }
   }
 }
