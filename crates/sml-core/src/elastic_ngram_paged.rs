@@ -282,7 +282,10 @@ fn push_run(
     }
     batch.sort_unstable();
     let path = dir.join(format!("sort-{:04}.bin", runs.len()));
-    let f = OpenOptions::new().write(true).create_new(true).open(&path)?;
+    let f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
     let mut writer = BufWriter::with_capacity(SORT_WRITE_BUFFER, f);
     let mut h = RUN_HASH_INITIAL;
     for key in batch.iter() {
@@ -379,7 +382,10 @@ impl StoreCounters {
         if count == 0 {
             return Err(PagedError::CorruptRecordCount);
         }
-        let next_pairs = self.pairs.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+        let next_pairs = self
+            .pairs
+            .checked_add(1)
+            .ok_or(PagedError::ArithmeticOverflow)?;
         if next_pairs > limits.max_follower_pairs {
             return Err(PagedError::Quota(PagedQuota::FollowerPairs));
         }
@@ -391,7 +397,9 @@ impl StoreCounters {
         }
         let mut next_index = self.index_entries;
         if self.pairs % PAGE_ROWS as u64 == 0 {
-            next_index = next_index.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+            next_index = next_index
+                .checked_add(1)
+                .ok_or(PagedError::ArithmeticOverflow)?;
             if next_index > limits.max_index_entries {
                 return Err(PagedError::Quota(PagedQuota::SparseIndex));
             }
@@ -410,7 +418,10 @@ impl StoreCounters {
 
         let context: [u8; 33] = key[..33].try_into().map_err(|_| PagedError::CorruptRun)?;
         if self.last_context != Some(context) {
-            self.contexts = self.contexts.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+            self.contexts = self
+                .contexts
+                .checked_add(1)
+                .ok_or(PagedError::ArithmeticOverflow)?;
             if self.contexts > limits.max_contexts {
                 return Err(PagedError::Quota(PagedQuota::Contexts));
             }
@@ -440,8 +451,10 @@ fn merge_counts(
     scratch: u64,
     limits: PagedLimits,
 ) -> Result<StoreCounters, PagedError> {
-    let mut readers: Vec<SortReader> =
-        runs.iter().map(SortReader::open).collect::<Result<_, _>>()?;
+    let mut readers: Vec<SortReader> = runs
+        .iter()
+        .map(SortReader::open)
+        .collect::<Result<_, _>>()?;
     let mut heap: BinaryHeap<Reverse<(Record, usize)>> = BinaryHeap::new();
     for (i, reader) in readers.iter_mut().enumerate() {
         if let Some(key) = reader.next()? {
@@ -470,7 +483,9 @@ fn merge_counts(
                 return Err(PagedError::CorruptSortedOrder);
             }
             if prev == key {
-                same_count = same_count.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+                same_count = same_count
+                    .checked_add(1)
+                    .ok_or(PagedError::ArithmeticOverflow)?;
             } else {
                 counters.push_count(&prev, same_count, &mut data, &mut index, scratch, limits)?;
                 previous = Some(key);
@@ -481,7 +496,9 @@ fn merge_counts(
             same_count = 1;
         }
         outgoing.add(&key);
-        observed_rows = observed_rows.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+        observed_rows = observed_rows
+            .checked_add(1)
+            .ok_or(PagedError::ArithmeticOverflow)?;
         if let Some(next) = readers[source_id].next()? {
             heap.push(Reverse((next, source_id)));
         }
@@ -489,9 +506,10 @@ fn merge_counts(
     if let Some(last) = previous {
         counters.push_count(&last, same_count, &mut data, &mut index, scratch, limits)?;
     }
-    let run_rows = runs.iter().try_fold(0u64, |total, run| {
-        total.checked_add(run.rows as u64)
-    }).ok_or(PagedError::ArithmeticOverflow)?;
+    let run_rows = runs
+        .iter()
+        .try_fold(0u64, |total, run| total.checked_add(run.rows as u64))
+        .ok_or(PagedError::ArithmeticOverflow)?;
     if observed_rows != expected_source_rows
         || observed_rows != run_rows
         || counters.observations != observed_rows
@@ -535,7 +553,9 @@ fn expected_source_rows(events_per_lane: usize, depth: usize) -> Result<u64, Pag
     let one_lane = (1..=events_per_lane)
         .try_fold(0u64, |sum, t| sum.checked_add(1 + t.min(depth) as u64))
         .ok_or(PagedError::ArithmeticOverflow)?;
-    one_lane.checked_mul(LANES as u64).ok_or(PagedError::ArithmeticOverflow)
+    one_lane
+        .checked_mul(LANES as u64)
+        .ok_or(PagedError::ArithmeticOverflow)
 }
 
 fn append_manifest(dir: &Path, meta: &PagedMetadata) -> Result<(), PagedError> {
@@ -584,8 +604,8 @@ fn parse_manifest(path: &Path) -> Result<PagedMetadata, PagedError> {
         return Err(PagedError::CorruptManifest);
     }
     let number = |text: String| text.parse::<u64>().map_err(|_| PagedError::CorruptManifest);
-    let max_depth = usize::try_from(number(next("max_depth")?)?)
-        .map_err(|_| PagedError::CorruptManifest)?;
+    let max_depth =
+        usize::try_from(number(next("max_depth")?)?).map_err(|_| PagedError::CorruptManifest)?;
     let train_bytes = number(next("train_bytes")?)?;
     let train_events = number(next("train_events")?)?;
     let source_records = number(next("source_records")?)?;
@@ -595,14 +615,13 @@ fn parse_manifest(path: &Path) -> Result<PagedMetadata, PagedError> {
     let sparse_index_bytes = number(next("sparse_index_bytes")?)?;
     let sparse_entries = number(next("sparse_entries")?)?;
     let scratch_peak_bytes = number(next("scratch_peak_bytes")?)?;
-    let sorted_runs = usize::try_from(number(next("sorted_runs")?)?)
-        .map_err(|_| PagedError::CorruptManifest)?;
-    let source_sha256 = parse_hex(&next("source_sha256")?)
-        .ok_or(PagedError::CorruptManifest)?;
-    let count_store_sha256 = parse_hex(&next("counts_sha256")?)
-        .ok_or(PagedError::CorruptManifest)?;
-    let sparse_index_sha256 = parse_hex(&next("index_sha256")?)
-        .ok_or(PagedError::CorruptManifest)?;
+    let sorted_runs =
+        usize::try_from(number(next("sorted_runs")?)?).map_err(|_| PagedError::CorruptManifest)?;
+    let source_sha256 = parse_hex(&next("source_sha256")?).ok_or(PagedError::CorruptManifest)?;
+    let count_store_sha256 =
+        parse_hex(&next("counts_sha256")?).ok_or(PagedError::CorruptManifest)?;
+    let sparse_index_sha256 =
+        parse_hex(&next("index_sha256")?).ok_or(PagedError::CorruptManifest)?;
     drop(next);
     if lines.next().is_some()
         || max_depth > MAX_PAGED_DEPTH
@@ -691,7 +710,9 @@ fn build_inner(
                 let key = source_record(&chunk[..t], chunk[t], d);
                 input_checksum.add(&key);
                 batch.push(key);
-                generated = generated.checked_add(1).ok_or(PagedError::ArithmeticOverflow)?;
+                generated = generated
+                    .checked_add(1)
+                    .ok_or(PagedError::ArithmeticOverflow)?;
                 if batch.len() == limits.rows_per_run {
                     push_run(
                         &mut batch,
@@ -704,7 +725,13 @@ fn build_inner(
             }
         }
     }
-    push_run(&mut batch, &scratch.path, &mut runs, &mut scratch_bytes, limits)?;
+    push_run(
+        &mut batch,
+        &scratch.path,
+        &mut runs,
+        &mut scratch_bytes,
+        limits,
+    )?;
     if generated != expected_source_rows(layout.chunk - 1, depth)? {
         return Err(PagedError::CorruptRecordCount);
     }
@@ -849,8 +876,7 @@ impl PagedNGram {
         let mut query = [0u8; SOURCE_RECORD_BYTES];
         query[0] = depth as u8;
         if depth > 0 {
-            query[1..depth + 1]
-                .copy_from_slice(&history[history.len() - depth..]);
+            query[1..depth + 1].copy_from_slice(&history[history.len() - depth..]);
         }
         let index_pos = self.index.partition_point(|entry| entry.key <= query);
         let first_record = if index_pos == 0 {
@@ -881,13 +907,15 @@ impl PagedNGram {
                     .map_err(|_| PagedError::CorruptManifest)?,
             );
             if count == 0
-                || followers.last().is_some_and(|(last, _): &(u8, u32)| {
-                    *last >= counted[SOURCE_RECORD_BYTES - 1]
-                })
+                || followers
+                    .last()
+                    .is_some_and(|(last, _): &(u8, u32)| *last >= counted[SOURCE_RECORD_BYTES - 1])
             {
                 return Err(PagedError::CorruptRecordCount);
             }
-            total = total.checked_add(u64::from(count)).ok_or(PagedError::ArithmeticOverflow)?;
+            total = total
+                .checked_add(u64::from(count))
+                .ok_or(PagedError::ArithmeticOverflow)?;
             followers.push((counted[SOURCE_RECORD_BYTES - 1], count));
             row += 1;
         }
@@ -898,11 +926,7 @@ impl PagedNGram {
         })
     }
 
-    pub fn distribution(
-        &mut self,
-        history: &[u8],
-        depth: usize,
-    ) -> Result<[f64; 256], PagedError> {
+    pub fn distribution(&mut self, history: &[u8], depth: usize) -> Result<[f64; 256], PagedError> {
         if depth > self.metadata.max_depth {
             return Err(PagedError::InvalidDepth);
         }
@@ -971,8 +995,8 @@ mod tests {
     struct TestRoot(PathBuf);
     impl TestRoot {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("sml-eng2b-paged-{}-{name}", std::process::id()));
+            let path =
+                std::env::temp_dir().join(format!("sml-eng2b-paged-{}-{name}", std::process::id()));
             fs::create_dir(&path).expect("test directory must be unique");
             Self(path)
         }
@@ -1002,8 +1026,8 @@ mod tests {
         for depth in [0, 4, 7, 12, 32] {
             let target = root.output(&format!("model-{depth}"));
             let scratch = root.output(&format!("scratch-{depth}"));
-            let built = build_paged(&train, depth, &target, &scratch, PagedLimits::default())
-                .unwrap();
+            let built =
+                build_paged(&train, depth, &target, &scratch, PagedLimits::default()).unwrap();
             let PagedBuild::Published(meta) = built else {
                 panic!("unexpected capacity STOP");
             };
@@ -1011,12 +1035,20 @@ mod tests {
             assert!(!scratch.exists());
             let old = ElasticNGramTrie::train(
                 &train,
-                TrieLimits { max_depth: depth, ..TrieLimits::default() },
-            ).unwrap();
+                TrieLimits {
+                    max_depth: depth,
+                    ..TrieLimits::default()
+                },
+            )
+            .unwrap();
             let full = ElasticNGramLong::train(
                 &train,
-                LongNGramLimits { max_depth: depth, ..LongNGramLimits::default() },
-            ).unwrap();
+                LongNGramLimits {
+                    max_depth: depth,
+                    ..LongNGramLimits::default()
+                },
+            )
+            .unwrap();
             assert_eq!(meta.contexts, old.accounting().nodes as u64);
             assert_eq!(meta.follower_pairs, old.accounting().follower_pairs as u64);
             let mut disk = PagedNGram::open(&target, training_sha256(&train)).unwrap();
@@ -1057,12 +1089,22 @@ mod tests {
         let root = TestRoot::new("twelve");
         let target = root.output("published");
         assert!(matches!(
-            build_paged(&train, 12, &target, &root.output("scratch"), PagedLimits::default()),
+            build_paged(
+                &train,
+                12,
+                &target,
+                &root.output("scratch"),
+                PagedLimits::default()
+            ),
             Ok(PagedBuild::Published(_))
         ));
         let mut disk = PagedNGram::open(&target, training_sha256(&train)).unwrap();
-        let a = std::iter::once(0u8).chain(std::iter::repeat_n(0, 11)).collect::<Vec<_>>();
-        let b = std::iter::once(1u8).chain(std::iter::repeat_n(0, 11)).collect::<Vec<_>>();
+        let a = std::iter::once(0u8)
+            .chain(std::iter::repeat_n(0, 11))
+            .collect::<Vec<_>>();
+        let b = std::iter::once(1u8)
+            .chain(std::iter::repeat_n(0, 11))
+            .collect::<Vec<_>>();
         let x = disk.distribution(&a, 7).unwrap();
         let y = disk.distribution(&b, 7).unwrap();
         for i in 0..256 {
@@ -1079,43 +1121,80 @@ mod tests {
         let a = root.output("one");
         let b = root.output("many");
         let complete = build_paged(
-            &train, 12, &a, &root.output("scratch-one"), PagedLimits::default(),
-        ).unwrap();
+            &train,
+            12,
+            &a,
+            &root.output("scratch-one"),
+            PagedLimits::default(),
+        )
+        .unwrap();
         let small_runs = build_paged(
-            &train, 12, &b, &root.output("scratch-many"),
-            PagedLimits { rows_per_run: 1024, ..PagedLimits::default() },
-        ).unwrap();
+            &train,
+            12,
+            &b,
+            &root.output("scratch-many"),
+            PagedLimits {
+                rows_per_run: 1024,
+                ..PagedLimits::default()
+            },
+        )
+        .unwrap();
         let (PagedBuild::Published(x), PagedBuild::Published(y)) = (complete, small_runs) else {
             panic!("unexpected quota STOP");
         };
-        assert_eq!((x.contexts, x.follower_pairs, x.count_store_sha256),
-                   (y.contexts, y.follower_pairs, y.count_store_sha256));
+        assert_eq!(
+            (x.contexts, x.follower_pairs, x.count_store_sha256),
+            (y.contexts, y.follower_pairs, y.count_store_sha256)
+        );
         assert_eq!(x.source_sha256, y.source_sha256);
         assert!(y.sorted_runs > 1);
 
         let quota = build_paged(
-            &train, 12, &root.output("quota"),
+            &train,
+            12,
+            &root.output("quota"),
             &root.output("scratch-quota"),
-            PagedLimits { max_data_bytes: 38, ..PagedLimits::default() },
-        ).unwrap();
+            PagedLimits {
+                max_data_bytes: 38,
+                ..PagedLimits::default()
+            },
+        )
+        .unwrap();
         assert_eq!(quota, PagedBuild::CapacityStop(PagedQuota::CountedData));
         assert!(!root.output("quota").exists());
         assert!(!root.output("scratch-quota").exists());
 
         assert_eq!(
-            build_paged(&train, 33, &root.output("bad-depth"),
-                        &root.output("unused"), PagedLimits::default()),
+            build_paged(
+                &train,
+                33,
+                &root.output("bad-depth"),
+                &root.output("unused"),
+                PagedLimits::default()
+            ),
             Err(PagedError::InvalidDepth)
         );
         assert_eq!(
-            build_paged(&[0u8; LANES], 4, &root.output("bad-corpus"),
-                        &root.output("unused"), PagedLimits::default()),
+            build_paged(
+                &[0u8; LANES],
+                4,
+                &root.output("bad-corpus"),
+                &root.output("unused"),
+                PagedLimits::default()
+            ),
             Err(PagedError::InvalidCorpus)
         );
         assert_eq!(
-            build_paged(&train, 4, &root.output("invalid-cap"),
-                        &root.output("unused"),
-                        PagedLimits { rows_per_run: 0, ..PagedLimits::default() }),
+            build_paged(
+                &train,
+                4,
+                &root.output("invalid-cap"),
+                &root.output("unused"),
+                PagedLimits {
+                    rows_per_run: 0,
+                    ..PagedLimits::default()
+                }
+            ),
             Err(PagedError::InvalidLimits)
         );
     }
@@ -1131,9 +1210,18 @@ mod tests {
         let digest = training_sha256(&train);
         let mut fake = digest;
         fake[0] ^= 1;
-        assert!(matches!(PagedNGram::open(&target, fake), Err(PagedError::SourceMismatch)));
         assert!(matches!(
-            build_paged(&train, 12, &target, &root.output("other-scratch"), PagedLimits::default()),
+            PagedNGram::open(&target, fake),
+            Err(PagedError::SourceMismatch)
+        ));
+        assert!(matches!(
+            build_paged(
+                &train,
+                12,
+                &target,
+                &root.output("other-scratch"),
+                PagedLimits::default()
+            ),
             Err(PagedError::DestinationExists)
         ));
         assert!(PagedNGram::open(&target, digest).is_ok());
@@ -1141,8 +1229,12 @@ mod tests {
         let not_published = root.output("failed-target");
         assert_eq!(
             build_inner(
-                &train, 12, &not_published, &root.output("failed-scratch"),
-                PagedLimits::default(), true
+                &train,
+                12,
+                &not_published,
+                &root.output("failed-scratch"),
+                PagedLimits::default(),
+                true
             ),
             Err(PagedError::CorruptManifest)
         );
@@ -1153,7 +1245,10 @@ mod tests {
         let mut count_bytes = fs::read(target.join("counts.bin")).unwrap();
         count_bytes[35] ^= 0x40;
         fs::write(target.join("counts.bin"), count_bytes).unwrap();
-        assert!(matches!(PagedNGram::open(&target, digest), Err(PagedError::CorruptChecksum)));
+        assert!(matches!(
+            PagedNGram::open(&target, digest),
+            Err(PagedError::CorruptChecksum)
+        ));
     }
 
     #[test]
@@ -1162,18 +1257,33 @@ mod tests {
         let root = TestRoot::new("index-corrupt");
         let target = root.output("published");
         assert!(matches!(
-            build_paged(&train, 12, &target, &root.output("scratch"), PagedLimits::default()),
+            build_paged(
+                &train,
+                12,
+                &target,
+                &root.output("scratch"),
+                PagedLimits::default()
+            ),
             Ok(PagedBuild::Published(_))
         ));
         let hash = training_sha256(&train);
         let mut idx = fs::read(target.join("sparse.bin")).unwrap();
         idx[0] ^= 1;
         fs::write(target.join("sparse.bin"), idx).unwrap();
-        assert!(matches!(PagedNGram::open(&target, hash), Err(PagedError::CorruptChecksum)));
+        assert!(matches!(
+            PagedNGram::open(&target, hash),
+            Err(PagedError::CorruptChecksum)
+        ));
 
         let text = fs::read_to_string(target.join("manifest.txt")).unwrap();
-        fs::write(target.join("manifest.txt"), text.replace("schema=ENG2B001", "schema=BAD"))
-            .unwrap();
-        assert!(matches!(PagedNGram::open(&target, hash), Err(PagedError::CorruptManifest)));
+        fs::write(
+            target.join("manifest.txt"),
+            text.replace("schema=ENG2B001", "schema=BAD"),
+        )
+        .unwrap();
+        assert!(matches!(
+            PagedNGram::open(&target, hash),
+            Err(PagedError::CorruptManifest)
+        ));
     }
 }
