@@ -108,6 +108,7 @@ pub enum PagedQuota {
 pub enum PagedError {
     InvalidCorpus,
     InvalidDepth,
+    InvalidBeta,
     InvalidLimits,
     TooManyTrainEvents,
     ArithmeticOverflow,
@@ -1105,6 +1106,99 @@ impl PagedNGram {
         Ok(result)
     }
 
+    /// Constant positive escape-mass multiplier at every observed order,
+    /// including order zero. beta=1 is exactly the original Witten-Bell rule.
+    pub fn depth_ladder_readout_with_beta(
+        &mut self,
+        history: &[u8],
+        beta: f64,
+    ) -> Result<[EvidenceDepthReadout; 4], PagedError> {
+        Ok(self
+            .depth_ladder_readouts_with_betas(history, &[beta])?
+            .remove(0))
+    }
+
+    /// Bounded read-only batch: one exact context lookup per depth, shared
+    /// across beta values. No count, key or training metadata is changed.
+    pub fn depth_ladder_readouts_with_betas(
+        &mut self,
+        history: &[u8],
+        betas: &[f64],
+    ) -> Result<Vec<[EvidenceDepthReadout; 4]>, PagedError> {
+        if betas.is_empty() || betas.len() > 16 || betas.iter().any(|b| !b.is_finite() || *b <= 0.0)
+        {
+            return Err(PagedError::InvalidBeta);
+        }
+        if self.metadata.max_depth < ENG1C_VAL_DEPTHS[3] {
+            return Err(PagedError::InvalidDepth);
+        }
+        let empty = || {
+            std::array::from_fn(|i| EvidenceDepthReadout {
+                depth: ENG1C_VAL_DEPTHS[i],
+                probabilities: [1.0 / 256.0; 256],
+                context_events: 0,
+            })
+        };
+        let mut result: Vec<_> = betas.iter().map(|_| empty()).collect();
+        let mut probabilities = vec![[1.0 / 256.0; 256]; betas.len()];
+        let mut next_snapshot = 0;
+        for d in 0..=ENG1C_VAL_DEPTHS[3].min(history.len()) {
+            let histogram = self.context_histogram(history, d)?;
+            let exact_total = if let Some((count, followers)) = histogram {
+                for (slot, beta) in betas.iter().enumerate() {
+                    let distinct = followers.len() as f64;
+                    // Preserve the old operation sequence at beta=1.
+                    let escape = if *beta == 1.0 {
+                        distinct
+                    } else {
+                        *beta * distinct
+                    };
+                    let den = count as f64 + escape;
+                    if !escape.is_finite() || !den.is_finite() || den <= 0.0 {
+                        return Err(PagedError::InvalidProbability);
+                    }
+                    let scale = escape / den;
+                    for p in &mut probabilities[slot] {
+                        *p *= scale;
+                    }
+                    for &(label, frequency) in &followers {
+                        probabilities[slot][usize::from(label)] += f64::from(frequency) / den;
+                    }
+                }
+                count
+            } else {
+                0
+            };
+            if next_snapshot < 4 && d == ENG1C_VAL_DEPTHS[next_snapshot] {
+                for (slot, readouts) in result.iter_mut().enumerate() {
+                    readouts[next_snapshot].probabilities = probabilities[slot];
+                    readouts[next_snapshot].context_events = exact_total;
+                }
+                next_snapshot += 1;
+            }
+        }
+        while next_snapshot < 4 {
+            for (slot, readouts) in result.iter_mut().enumerate() {
+                readouts[next_snapshot].probabilities = probabilities[slot];
+                readouts[next_snapshot].context_events = 0;
+            }
+            next_snapshot += 1;
+        }
+        for readouts in &result {
+            for snapshot in readouts {
+                if snapshot
+                    .probabilities
+                    .iter()
+                    .any(|p| !p.is_finite() || *p <= 0.0)
+                    || (snapshot.probabilities.iter().sum::<f64>() - 1.0).abs() > 1e-10
+                {
+                    return Err(PagedError::InvalidProbability);
+                }
+            }
+        }
+        Ok(result)
+    }
+
     /// ENG-1d scoring fast path: probability of `target` only, at every depth
     /// 0..=max_depth, for several escape policies, reading each context
     /// histogram once. It applies the same per-element operations as the
@@ -1509,6 +1603,116 @@ mod tests {
             PagedNGram::open(&target, [255; 32]),
             Err(PagedError::SourceMismatch)
         ));
+    }
+
+    #[test]
+    fn beta_ladder_bitwise_legacy_parity_and_independent_frequency_oracle() {
+        let train = corpus(0);
+        let root = TestRoot::new("beta-ladder");
+        let target = root.output("store");
+        assert!(matches!(
+            build_paged(
+                &train,
+                32,
+                &target,
+                &root.output("sort"),
+                PagedLimits::default()
+            )
+            .unwrap(),
+            PagedBuild::Published(_)
+        ));
+        let mut model = PagedNGram::open(&target, training_sha256(&train)).unwrap();
+        let meta = model.metadata().clone();
+        let mut tables = vec![std::collections::BTreeMap::<Vec<u8>, [u32; 256]>::new(); 33];
+        let layout = ChunkLayout::new(train.len()).unwrap();
+        for lane in 0..LANES {
+            let chunk = &train[lane * layout.chunk..(lane + 1) * layout.chunk];
+            for t in 1..chunk.len() {
+                for (d, table) in tables.iter_mut().enumerate().take(t.min(32) + 1) {
+                    table.entry(chunk[t - d..t].to_vec()).or_insert([0; 256])
+                        [usize::from(chunk[t])] += 1;
+                }
+            }
+        }
+        let probe = corpus(13);
+        let betas = [1.0, 0.25, 0.5, 2.0, 4.0, 8.0];
+        for history in [
+            &train[..0],
+            &train[..1],
+            &train[..7],
+            &train[..39],
+            &probe[..12],
+            &probe[..39],
+            &[255; 40][..],
+        ] {
+            let legacy = model.depth_ladder_readout(history).unwrap();
+            let batch = model
+                .depth_ladder_readouts_with_betas(history, &betas)
+                .unwrap();
+            for (slot, beta) in betas.iter().enumerate() {
+                let scalar = model
+                    .depth_ladder_readout_with_beta(history, *beta)
+                    .unwrap();
+                let existing = model
+                    .depth_ladder_readout_with(
+                        history,
+                        EscapePolicy::ScaledWittenBell { beta: *beta },
+                    )
+                    .unwrap();
+                for (i, depth) in ENG1C_VAL_DEPTHS.iter().enumerate() {
+                    let mut oracle = [1.0 / 256.0; 256];
+                    for (d, table) in tables
+                        .iter()
+                        .enumerate()
+                        .take(depth.min(&history.len()) + 1)
+                    {
+                        if let Some(counts) = table.get(&history[history.len() - d..]) {
+                            let n = counts.iter().map(|c| u64::from(*c)).sum::<u64>() as f64;
+                            let u = counts.iter().filter(|c| **c > 0).count() as f64;
+                            for (y, p) in oracle.iter_mut().enumerate() {
+                                *p = f64::from(counts[y]) / (n + beta * u)
+                                    + (beta * u) / (n + beta * u) * *p;
+                            }
+                        }
+                    }
+                    assert_eq!(batch[slot][i].context_events, legacy[i].context_events);
+                    assert_eq!(batch[slot][i].depth, *depth);
+                    for (y, p) in oracle.iter().enumerate() {
+                        assert_eq!(
+                            batch[slot][i].probabilities[y].to_bits(),
+                            scalar[i].probabilities[y].to_bits()
+                        );
+                        assert!((batch[slot][i].probabilities[y] - p).abs() < 1e-12);
+                        assert_eq!(
+                            batch[slot][i].probabilities[y].to_bits(),
+                            existing[i].probabilities[y].to_bits()
+                        );
+                        if *beta == 1.0 {
+                            assert_eq!(
+                                batch[slot][i].probabilities[y].to_bits(),
+                                legacy[i].probabilities[y].to_bits()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(model.metadata(), &meta);
+        for beta in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                model
+                    .depth_ladder_readout_with_beta(&train[..39], beta)
+                    .unwrap_err(),
+                PagedError::InvalidBeta
+            );
+        }
+        assert!(model.depth_ladder_readouts_with_betas(&[], &[]).is_err());
+        assert!(model
+            .depth_ladder_readouts_with_betas(&[], &[1.0; 17])
+            .is_err());
+        assert!(model
+            .depth_ladder_readout_with_beta(&train[..39], f64::MAX)
+            .is_err());
     }
 
     #[test]
