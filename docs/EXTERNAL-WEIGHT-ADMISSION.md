@@ -93,6 +93,23 @@ loads the private identity from the repository Actions secret
 0600 under the hosted runner's temporary directory, deleted at step exit, and
 never uploaded.
 
+The workflow checks the secret before building the publisher and retains a
+`sml-production-signing-preflight/v1` status artifact. An absent secret is an
+explicit publication failure, not a skipped or successful publication. The
+status contains only the commit and readiness state, never key material.
+
+An operator who already holds the approved private key can provision it without
+putting it in a command argument, Git, a journal or a chat message:
+
+```sh
+gh secret set SML_PRODUCTION_SIGNING_KEY --repo Memorithm/SML-GENIUS \
+  < /secure/path/to/already-approved-production-private-key
+```
+
+The path is a placeholder for the existing approved private key. Do not create
+or substitute a development identity to make CI green. Replacing the approved
+key or ACL requires the operator's separate authorization as described above.
+
 That workflow independently constructs the policy from the exact SML commit,
 publication identity, trusted owner digest, and allowed-signers digest. It pins
 the external SciRust Hub consumer at
