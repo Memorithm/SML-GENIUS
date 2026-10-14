@@ -20,6 +20,24 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Require the provisioned production signing identity
+        shell: bash
+        env:
+          SML_PRODUCTION_SIGNING_KEY: ${{ secrets.SML_PRODUCTION_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          status=ready
+          if [ -z "$SML_PRODUCTION_SIGNING_KEY" ]; then
+            status=blocked_missing_signing_key
+          fi
+          jq -n --arg code_sha "$GITHUB_SHA" --arg status "$status" \
+            '{schema: "sml-production-signing-preflight/v1", code_sha: $code_sha, status: $status}' \
+            > "$RUNNER_TEMP/production-publication-status.json"
+          if [ "$status" != ready ]; then
+            echo '::error title=Production signing identity unavailable::Provision the repository Actions secret SML_PRODUCTION_SIGNING_KEY with the private key matching policy/production-weight-publishers.allowed_signers. Publication remains blocked; do not substitute a development key.'
+            exit 1
+          fi
       - name: Checkout exact authentication owner
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -105,6 +123,7 @@ jobs:
         with:
           name: production-weight-admission-${{ github.sha }}
           path: |
+            ${{ runner.temp }}/production-publication-status.json
             ${{ runner.temp }}/external-consumer-receipt.json
             ${{ runner.temp }}/production-dossier
           if-no-files-found: error
