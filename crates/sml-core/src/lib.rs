@@ -85,6 +85,7 @@ pub mod elastic_weights;
 pub mod eng1c_dev;
 pub mod forge_topology;
 pub mod gf2;
+pub mod gru_side;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;
