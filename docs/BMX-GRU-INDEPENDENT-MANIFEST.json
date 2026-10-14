@@ -1,0 +1,302 @@
+[
+  {
+    "key": "fr-sand",
+    "domain": "FR",
+    "independent_unit": "George Sand",
+    "url": "https://www.gutenberg.org/cache/epub/23582/pg23582.txt",
+    "raw_bytes": 248235,
+    "raw_sha256": "32d5de98c2d6a05fe2ab34107dbd7d63e9030860d207e57308c57f31ce4c8cb1",
+    "body_bytes": 228462,
+    "body_sha256": "eea72c33f56467e220975f38b45ba409c8b1d8bb9e752652587f767e9642c854",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "0a7d1974f4647dd71f88a1261335ba9333e3b2687b6fddb2e397c3cbc2889d81"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "4769706d6f472e13a5395379cafff339a4a9c1654a70cca75d9b2c226603cc1d"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "28cb5321535905442cceab7878fc72099a76156fe51a2483f3c472a17563f9f7"
+    }
+  },
+  {
+    "key": "fr-daudet",
+    "domain": "FR",
+    "independent_unit": "Alphonse Daudet",
+    "url": "https://www.gutenberg.org/cache/epub/5105/pg5105.txt",
+    "raw_bytes": 326714,
+    "raw_sha256": "25324f9be83f911aa40bd5d87bb22fb555a500f5b410972e0fec8e073237b985",
+    "body_bytes": 306846,
+    "body_sha256": "551d42b745b0d2a8d39c8d0b02389d2598c84a1f39d70bb199e873d5b11417a4",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "458c980cb22f5478497eb5f1fe0ef3abc227409d0f0b3ffb3eeec3e14e5dc52f"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "540af8fd327fd04b867fbf862eb31314d72f532bb839bf3a1df2db4c7737fff3"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "1a15a0c5fd89e9367ee872f6e095f8ad838db3e6b953727e33d4b44c2652e071"
+    }
+  },
+  {
+    "key": "fr-huysmans",
+    "domain": "FR",
+    "independent_unit": "J.-K. Huysmans",
+    "url": "https://www.gutenberg.org/cache/epub/56149/pg56149.txt",
+    "raw_bytes": 483320,
+    "raw_sha256": "113105d413cd4a211d37cfbf8c2b643e3069e98225be2cd179cdde28d114d0a0",
+    "body_bytes": 463334,
+    "body_sha256": "22cb28e4ae3641b15878ab88487ccf67bf39a1bb7dc0cbb0aa69001a260b3bd8",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "46e19c409f772c232314a6df1057fa27b930c102896eeea416e2ad2112ae0136"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "51f3b1dbc1312b969dde7193e134614e0dbfa07ed377a0712daba3136caf885b"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "63c3cc18b89276824bcaed860719060499e0bc1b6fff399aeff1070a77d6e3c7"
+    }
+  },
+  {
+    "key": "fr-loti",
+    "domain": "FR",
+    "independent_unit": "Pierre Loti",
+    "url": "https://www.gutenberg.org/cache/epub/4785/pg4785.txt",
+    "raw_bytes": 368707,
+    "raw_sha256": "d722a121be5555900a3c15fba35ca5ac300295388d2bf4e1e2969a7569613d27",
+    "body_bytes": 348946,
+    "body_sha256": "bd447744583459bf4bc506247160e99c74bdd3a7c515f06c5348e6a2f64068e4",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "9c77b5678873e23d4424accb8c8cb7396d9a7805fc64d4981d7c54db58bd56b5"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "0b5bcdee8b742b064993d82603b5d9d43b8cf593d5226e8ed4540f5564a80576"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "9ee8645c1c06c2011b5c4af55d12cabf44611390ffc4f692e1a2ab2f5646d58a"
+    }
+  },
+  {
+    "key": "en-dolbear",
+    "domain": "EN",
+    "independent_unit": "Amos Emerson Dolbear",
+    "url": "https://www.gutenberg.org/cache/epub/29444/pg29444.txt",
+    "raw_bytes": 179265,
+    "raw_sha256": "d6965d7da496e36fbe19a6664f0866d92eb6c4723f3cd2baec0e4574b7a97356",
+    "body_bytes": 159064,
+    "body_sha256": "65966ab8df2e74f65962b9bf17932d3981a9892bda0b0a34bea68a4cbb3e78bd",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "fbc4f8f5d51fa83cc8aed4d5f2bdf9dfd86856a3988e948eb9359603166ff734"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "42fc9f85fcf86b466a54d807a58002e4f7cbdb7178869f451ffd7125eeb658b5"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "6120a1655f4cb2323dfcee15c0ec722d4e7d542892a066cb6024dc51d6ee131b"
+    }
+  },
+  {
+    "key": "en-tyndall",
+    "domain": "EN",
+    "independent_unit": "John Tyndall",
+    "url": "https://www.gutenberg.org/cache/epub/24527/pg24527.txt",
+    "raw_bytes": 1748830,
+    "raw_sha256": "153423dd9a7033f40aa78a45a58e1631f90d4e49836e420fe9b6daeb7dcdf78a",
+    "body_bytes": 1728805,
+    "body_sha256": "baeebb201d2e980a120c5af4c4326b2d5e577c4c4e5a26ab064dc22cdae69e53",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "6b6f5fe040f4db04d55f1f75a7cd7c11853885a0d4cad9211770729e870bf942"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "dcaab1c06d0257218077bdf897f692ff1a59ba40e1b1b11811311b96e30abd60"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "ed7d9296582deb5eadd26e488ca2e0c622d7bec7225d41b34bf66a55f6bdd9c3"
+    }
+  },
+  {
+    "key": "en-lodge",
+    "domain": "EN",
+    "independent_unit": "Oliver Lodge",
+    "url": "https://www.gutenberg.org/cache/epub/28613/pg28613.txt",
+    "raw_bytes": 688924,
+    "raw_sha256": "9c7d60dd3198e5dbf7b5f1d10ae71e918e73d054668eb3e653fa6e9a4806eb55",
+    "body_bytes": 668978,
+    "body_sha256": "9535e3fa65520225df628c27c5e4efde42486486cc467d93fc6ee6238ac314d8",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "5ef5d6b20febd60513acbd23f42cfc0c274eb57026e82e31f7343a45c1a32a93"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "2683c3987fa11d2df163be073ea106380091b66a5695971c1c4711ac1903feff"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "873e015969e6305e26f963e4527e3b748b5f868a3dba54ba4929be1ab0061431"
+    }
+  },
+  {
+    "key": "en-maxwell",
+    "domain": "EN",
+    "independent_unit": "James Clerk Maxwell",
+    "url": "https://www.gutenberg.org/cache/epub/4908/pg4908.txt",
+    "raw_bytes": 106324,
+    "raw_sha256": "8e53ac54145eeb62ec816e99006d70e5bf8a95608ac3f4911aa1ae51848ad824",
+    "body_bytes": 86519,
+    "body_sha256": "36bd09dd05881218ce96d5153f892805bbd57051b22890853173be38cdc333a6",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "c43c01638fbc4462150c500e1644c08cf44614e5dfa7510f6506d88facfe868f"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "efb53416e95077e1408bb7980dcd380fa8c9c7f382390b1e9e6c304c2970c473"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "121baa9bb1d7680574bec9853944c8b69826e43a946c2cbe4dc024822d456aa9"
+    }
+  },
+  {
+    "key": "rs-tokio",
+    "domain": "RS",
+    "independent_unit": "tokio-rs/tokio",
+    "url": "https://raw.githubusercontent.com/tokio-rs/tokio/4890d027f8a566ccf081e7f019ed766f780df1af/tokio/src/sync/mutex.rs",
+    "raw_bytes": 46340,
+    "raw_sha256": "f5ca224054d774db86f735e5400fde606aa6acb6e84a711598678082f562af85",
+    "body_bytes": 46340,
+    "body_sha256": "f5ca224054d774db86f735e5400fde606aa6acb6e84a711598678082f562af85",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "ad6659c3ed59986187af8db0fa65388f5332f6934a5ea115513852c965190baf"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "dac29389a1501bcee29ed4f7a4d9b42001b522aa7ab1bb93650f1122403bc6ed"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "3d700cc5fc4d095dd7b307a009181bc603e692adbabe3f1d688abe3d6cb4cc92"
+    }
+  },
+  {
+    "key": "rs-rayon",
+    "domain": "RS",
+    "independent_unit": "rayon-rs/rayon",
+    "url": "https://raw.githubusercontent.com/rayon-rs/rayon/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs",
+    "raw_bytes": 119870,
+    "raw_sha256": "abf61fb25e0534e7b349ab2e2269df5e2b9beaceca907511496b52aa104c609e",
+    "body_bytes": 119870,
+    "body_sha256": "abf61fb25e0534e7b349ab2e2269df5e2b9beaceca907511496b52aa104c609e",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "7423e34d2a5dab946747747839d22debf15aeb1ed0a1dd069c5a497e16c1e409"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "e6521973cbdb659aca87778d7849803f3c5e6e4f6ec4fe5932ad091d3e59866b"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "da421f0b01425b23e969605ddccd79a5d9770121dabfcc59ff7191839a550e3b"
+    }
+  },
+  {
+    "key": "rs-serde",
+    "domain": "RS",
+    "independent_unit": "serde-rs/serde",
+    "url": "https://raw.githubusercontent.com/serde-rs/serde/6693a89cca77e0151437da1c7f890090b9ebf04c/serde_core/src/de/mod.rs",
+    "raw_bytes": 83879,
+    "raw_sha256": "5ec8602d593915e0cf480b0ce67b02f6ab066dac34725237d2c7b4a6ef12a845",
+    "body_bytes": 83879,
+    "body_sha256": "5ec8602d593915e0cf480b0ce67b02f6ab066dac34725237d2c7b4a6ef12a845",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "ffa726589e4e2f6e28832cd1dedec7a6c62c1ff5a547b911be2f071d42159e58"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "6fd77ec2c3aadb3295a87c0844383233d73b6ea216324ae7a60d909aa4c9bc47"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "b1735dd044a9d11fe87db1271c1fceea335c1fd75353dbf9637abd994bd49e86"
+    }
+  },
+  {
+    "key": "rs-regex",
+    "domain": "RS",
+    "independent_unit": "rust-lang/regex",
+    "url": "https://raw.githubusercontent.com/rust-lang/regex/72d650cb0a880a01ab6dc2137c0888e8f89740f7/regex-syntax/src/ast/parse.rs",
+    "raw_bytes": 221008,
+    "raw_sha256": "af6d82e62e97379a91840e99c10be1279c0ae1298a0d8e5da429e9e7bc3ec339",
+    "body_bytes": 221008,
+    "body_sha256": "af6d82e62e97379a91840e99c10be1279c0ae1298a0d8e5da429e9e7bc3ec339",
+    "prime": {
+      "start": 0,
+      "end": 16384,
+      "sha256": "1904b443b196fe21aaf41e462c99535348ad05cd1276e4a0e7172d6cf7af35fd"
+    },
+    "dev": {
+      "start": 16384,
+      "end": 24576,
+      "sha256": "ac7e4a2517a66835ce1ae6165ea4772046d8374f201c277feb4391f32d5c9cae"
+    },
+    "test": {
+      "start": 24576,
+      "end": 40960,
+      "sha256": "51ac085016d047bb3c639d289f1ce75f52846f0d708f8a835e28eea0bca43cfa"
+    }
+  }
+]
