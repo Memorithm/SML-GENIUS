@@ -93,3 +93,47 @@ allocation scientifique décidée et autorisée.
 **Verdict documentaire actuel : `NOT_READY_FOR_TRAINING`.**
 Cette PR ne change ni le modèle ni les seuils de sélection, et ne
 déclare aucune licence autorisée automatiquement.
+
+
+## G0-R2 — preuve d'octets des reçus de droits (RemoteOps #420)
+
+Une validation de la seule syntaxe de `legal_evidence_sha256` ne suffisait
+pas : une déclaration `REVIEWED` pouvait faire référence à un document
+inexistant. Ce chemin est désormais bloqué par
+[RemoteOps PR #420](https://github.com/Memorithm/RemoteOps/pull/420),
+fusionnée sur le commit `a7ed6780535b24446a224ec3e76a24a99fdbc97d`.
+
+Le binaire Rust `v2_review_gate.rs` exige désormais
+`--evidence-dir PRIVATE_ROOT` si une seule décision est `REVIEWED`.
+Il lit un document privé `<legal_evidence_sha256>.txt` par entrée,
+recalcule le SHA-256 sur **les octets lus**, valide un format borné à
+16 Kio et vérifie l'identité du dépôt, commit, chemin, objet Git, licence,
+réviseur et split. Les reçus altérés, absents, symboliques, d'un autre
+document ou en doublon sont rejetés. Les trois champs déclaratifs
+`rights_basis`, `attribution_plan` et `third_party_scope` doivent
+être renseignés.
+
+Validation réelle de la PR sur Dell, au SHA head
+`8b2dfa17f47abe2b8ca885dbd50b8d5c746ca3e0` :
+
+- [admission Rust et tests adversariaux #38743299101](https://github.com/Memorithm/RemoteOps/actions/runs/38743299101) : SUCCESS ;
+- [reconstruction du registre candidat #38743299084](https://github.com/Memorithm/RemoteOps/actions/runs/38743299084) : SUCCESS.
+
+**Cette preuve est technique, pas juridique.** Elle confirme que le
+justificatif existe et correspond aux déclarations, pas que son auteur
+est autorisé ni que ses conclusions sont exactes. Aucun `REVIEWED`
+du vrai registre de 19 578 documents n'a été authentifié ni signé
+scientifiquement. Un processus d'authentification séparé devra lier
+l'identité habilitée, le lot figé de décisions et les reçus validés,
+avec conservation privée des originaux et examen des conditions de
+licence spécifiques aux fichiers.
+
+Dans l'état courant, le registre de décisions est intégralement
+`EXCLUDE`, les octets admis valent **zéro** pour chaque split,
+et `G0_admitted=false`. Le protocole interdit de qualifier
+le corpus au seul motif que la CI documentaire est verte.
+
+Prochaine condition mesurable : obtenir **un sous-ensemble de reçus
+authentifiés et valides**, puis répéter les calculs des tailles et
+familles sur ces seuls fichiers sans changer les seuils. Le modèle
+GRU-v2 n'a pas reçu l'autorisation d'entraînement.
