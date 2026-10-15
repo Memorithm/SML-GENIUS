@@ -107,3 +107,29 @@ comme substitut arbitraire au Rust.
 Ce recensement constitue un nouveau plan d'approvisionnement **fondé
 sur des sources effectivement identifiées sur Hugging Face**, et
 non une admission de données ou une annonce de supériorité du modèle.
+
+
+## Revisions Hugging Face observées réellement sur Dell
+
+Une sonde à accès Git en lecture seule a été exécutée depuis
+RemoteOps [run #38791110602](https://github.com/Memorithm/RemoteOps/actions/runs/38791110602),
+et les **six dépôts ont répondu** sans téléchargement de corpus
+(le scan se borne à `git ls-remote HEAD`).
+
+| Source HF | Revision Git HEAD observée le 15-10-2026 |
+| --- | --- |
+| `common-pile/project_gutenberg` | `01dc90a5002f8977c7fb03a372c14bca29c65cf1` |
+| `PleIAs/US-PD-Newspapers` | `39dc0a2a0113609fdcc2f865a25a6d8bafd1f5e6` |
+| `common-pile/uspto` | `e8b975381547f026e2ccfe721f785dcb6a2fa9a0` |
+| `PleIAs/French-PD-Books` | `21abfb3f646a0f1846175c63709913a51abc9bcb` |
+| `PleIAs/French-PD-Newspapers` | `b1ce8d95cb66432879a34cdedfda9a0dad478204` |
+| `PleIAs/common_corpus` | `307910e4c5d040d6f318e6edf2a2b97849155771` |
+
+SHA-256 du TSV de preuve :
+`1005671cb71bc288ce7496fe7a4486fe520f34ad0c0edae01913900d7c3554b7`.
+Artefact GitHub Actions [#12000381839](https://github.com/Memorithm/RemoteOps/actions/runs/38791110602/artifacts/12000381839).
+
+Le Git HEAD observé ne qualifie ni la licence ni la provenance des
+documents : les six restent `UNREVIEWED`, `G0_NOT_ADMITTED`.
+La sélection documentaire ultérieure doit pinner le commit exact, et
+non `main`, puis apporter ses propres preuves de droits.
