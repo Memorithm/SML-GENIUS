@@ -128,3 +128,51 @@ supériorité du GRU-v2.
 
 `rights_reviewed_files=0`, `G0_admitted=false`,
 `gru_v2_training_started=false`.
+
+
+## G0-R4 — contrôle atomique d'exhaustivité avant une signature de revue
+
+L'analyse de la procédure G0-R3 a identifié un défaut d'articulation :
+le programme d'attestation pouvait produire un message signable même
+si le fichier des décisions comportait une ligne de source **absente**
+du registre Git, ou s'il omettait un candidat enregistré. Une
+signature SSH correcte ne démontre pas à elle seule la concordance
+des documents déclarés et des sources réellement inventoriées.
+
+Cette lacune est corrigée et validée par
+[RemoteOps PR #432](https://github.com/Memorithm/RemoteOps/pull/432),
+fusionnée sur le commit
+`bc2fbaac09c33f97c1726419dfc04c453db1d767`.
+Le
+[workflow Dell #38782362739](https://github.com/Memorithm/RemoteOps/actions/runs/38782362739)
+est **SUCCESS** sur le commit exact
+`f835fb53b89b5b79d49be49a34b6a3a1d10c5698`.
+
+Le contrôleur Rust `v2_review_authority.rs` refuse maintenant de
+créer ou confirmer une attestation si :
+
+- le registre Git contient une provenance erronée, URI mutable,
+  chemin invalide, identité en double ou taille hors contrat ;
+- les décisions omettent un fichier, comportent une identité
+  inventée, ou possèdent des doublons ;
+- les documents d'un même dépôt ou d'une famille de traductions
+  connues traversent les splits, ou la décision TEST recouvre
+  les sources historiquement exposées connues ;
+- un justificatif de droits est réutilisé entre plusieurs
+  fichiers ou n'existe pas physiquement sous son SHA-256 attendu.
+
+**Changement d'interface non rétrocompatible :**
+`--message` ET `--verify` exigent désormais le répertoire local
+des reçus privés `PRIVATE_RECEIPTS_DIR`. Ce répertoire est contrôlé
+pendant la même invocation Rust qui calcule le message canonique
+et vérifie la signature. L'ancien appel sans les reçus est rejeté.
+Les fixtures Dell comportent un reçu synthétique et une clé éphémère
+détruits après les tests ; aucun véritable droit n'a été accordé.
+
+Le même contrôleur maintient `G0_admitted=false`, même après
+validation des signatures et des octets des reçus. Il reste obligatoire
+de faire vérifier l'autorité légale réelle, la politique de
+réutilisation des œuvres, les exclusions, et l'absence de
+contamination des nouvelles partitions TEST avant l'apprentissage.
+**Les 19 578 décisions réelles restent EXCLUDE, les volumes
+TRAIN/VAL/TEST autorisés restent à zéro.**
