@@ -18,7 +18,7 @@ Toutes les références ci-dessous sont des commits de 40 hexadécimaux observé
 | RS | `github:rust-lang/cargo` | `01b026f0a6119442b1104b7eec298da835b22d5b` | `LICENSE-APACHE`, blob `c98d27d4f32d56e56f13de73a08ab44b2947ccf5` |
 | RS | `github:rust-lang/rustfmt` | `c69af7786cdfef5da968f53eebd6c9b1af242b5f` | `LICENSE-APACHE`, blob `212ba1f3184810909ef2186137ec0d9a6aea4a6b` |
 | RS | `github:rust-lang/rustlings` | `bc8e51115c9304fbd036f5d6fca683e71363468f` | `LICENSE` MIT, blob `30f5c619789bc6ca1b2838a78b9b3cf3a0a9dfc0` ; exercices à filtrer et droits des contributions à auditer |
-| EN | `github:rust-lang/mdBook` | `ae0bc6996bf45cd9e93b9222fd4cd264ee69e6d4` | `LICENSE` MPL-2.0, blob `be2cc4dfb609fb6c38f6365ec345bded3350dd63` |
+| EN/RS | `github:rust-lang/mdBook` | `ae0bc6996bf45cd9e93b9222fd4cd264ee69e6d4` | `LICENSE` MPL-2.0, blob `be2cc4dfb609fb6c38f6365ec345bded3350dd63` |
 
 Les licences MDN s'appliquent différemment à la prose et aux exemples de code ; les conditions d'attribution, de copyleft et les exceptions doivent être revues fichier par fichier. Les dépôts Rust peuvent contenir des éléments tiers. Les mentions ci-dessus sont des **observations**, pas une autorisation générale d'exploiter tous les fichiers ni un avis juridique.
 
@@ -66,10 +66,15 @@ Le seuil global de TRAIN de 40 Mio est théoriquement couvert par ces
 `corpus_admitted=false`. Les contrôles de licence, déduplication
 et traçabilité individuelle sont nécessaires avant toute exploitation.
 
-Rust ne totalise que 1975900 octets, soit **121252 octets de moins**
-que les 2 Mio requis par le préenregistrement. RemoteOps PR #409
-mesure le complément possible sous le commit immuable de Rustlings,
-sans lui attribuer par avance un résultat ni une autorisation juridique.
+Le complément de capacité Rust a été mesuré par RemoteOps PR #409 et le
+[run #38714709582](https://github.com/Memorithm/RemoteOps/actions/runs/38714709582) :
+Rustlings apporte **87 916 octets** et mdBook (`crates`, Rust) **408 444 octets**.
+Le total Rust candidat vaut désormais **2 472 260 octets**, au-dessus
+ du minimum de 2 Mio (2 097 152) de **375 108 octets**. Le total six
+sources est **79 976 152 octets candidats**. L'empreinte SHA-256 du
+TSV du scan est `fd8ebdebc2ff0e791e9d0d096e0602556427192036d0403e4e563622d6067338`.
+Il ne s'agit ni de TRAIN admis ni d'une validation de licences. L'inventaire
+précis de chaque document, sa filiation et son rôle de split restent à figer.
 Le vérificateur Rust distinct [PR #408](https://github.com/Memorithm/RemoteOps/pull/408)
 empêche d'affecter les deux dépôts MDN traduction/original à des
 splits différents, ainsi que Rust Book FR/original.
@@ -78,3 +83,6 @@ Le corpus TEST indépendant reste **non choisi, non scoré**.
 Les mesures de dépôt ne doivent pas servir à ajuster les seuils,
 attribuer les partitions selon la performance du modèle ou promouvoir
 des poids. Aucun fit GRU-v2 n'est autorisé par ce rapport seul.
+
+
+La source `mdBook` n'est pas automatiquement disponible pour deux splits sous prétexte qu'elle contient des fichiers `.md` et `.rs` : **l'unité de groupe GitHub entière** doit rester dans un seul split, même si plusieurs domaines sont extraits. Aucun nouveau TEST n'a encore été consulté.
