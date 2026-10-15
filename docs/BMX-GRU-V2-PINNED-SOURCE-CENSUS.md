@@ -17,6 +17,7 @@ Toutes les références ci-dessous sont des commits de 40 hexadécimaux observé
 | RS | `github:rust-lang/rust` | `91e9c2688eb23af9a5b77f056156e756550c7c99` | `LICENSE-APACHE`, blob `1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d`; vérifier licences de fichiers et sous-répertoires |
 | RS | `github:rust-lang/cargo` | `01b026f0a6119442b1104b7eec298da835b22d5b` | `LICENSE-APACHE`, blob `c98d27d4f32d56e56f13de73a08ab44b2947ccf5` |
 | RS | `github:rust-lang/rustfmt` | `c69af7786cdfef5da968f53eebd6c9b1af242b5f` | `LICENSE-APACHE`, blob `212ba1f3184810909ef2186137ec0d9a6aea4a6b` |
+| RS | `github:rust-lang/rustlings` | `bc8e51115c9304fbd036f5d6fca683e71363468f` | `LICENSE` MIT, blob `30f5c619789bc6ca1b2838a78b9b3cf3a0a9dfc0` ; exercices à filtrer et droits des contributions à auditer |
 | EN | `github:rust-lang/mdBook` | `ae0bc6996bf45cd9e93b9222fd4cd264ee69e6d4` | `LICENSE` MPL-2.0, blob `be2cc4dfb609fb6c38f6365ec345bded3350dd63` |
 
 Les licences MDN s'appliquent différemment à la prose et aux exemples de code ; les conditions d'attribution, de copyleft et les exceptions doivent être revues fichier par fichier. Les dépôts Rust peuvent contenir des éléments tiers. Les mentions ci-dessus sont des **observations**, pas une autorisation générale d'exploiter tous les fichiers ni un avis juridique.
@@ -42,3 +43,38 @@ Les licences MDN s'appliquent différemment à la prose et aux exemples de code 
 Le seul progrès revendiqué ici est l'inventaire des objets sources possibles.
 Ne pas simuler des empreintes SHA-256 de corpus, des volumes ou des scores
 et ne pas solliciter la lecture du nouveau TEST avant la publication des règles de décision.
+
+## Première vérification du volume physique (Dell, 2026-10-15)
+
+RemoteOps [PR #407](https://github.com/Memorithm/RemoteOps/pull/407),
+[workflow #38713793635](https://github.com/Memorithm/RemoteOps/actions/runs/38713793635),
+SHA de code `0c070cda6b51f23f41bd72dc8e8292ba185d3afa`,
+a mesuré les fichiers réguliers des sous-arbres épinglés de 256 à
+131072 octets, sans corpus enregistré ni entraînement :
+
+| Domaine / source | Fichiers retenus par filtres de forme | Octets candidats |
+| --- | ---: | ---: |
+| FR mdn/translated-content | 6094 | 30440038 |
+| EN mdn/content | 12283 | 47063854 |
+| RS rust-lang/cargo | 67 | 753688 |
+| RS rust-lang/rustfmt | 69 | 1222212 |
+| **Total des quatre sous-arbres mesurés** | **18513** | **79479792** |
+
+Le seuil global de TRAIN de 40 Mio est théoriquement couvert par ces
+*volumes candidats*, mais aucun document ne passe encore G0 :
+`licence_qualified=false`, `split_assigned=false`,
+`corpus_admitted=false`. Les contrôles de licence, déduplication
+et traçabilité individuelle sont nécessaires avant toute exploitation.
+
+Rust ne totalise que 1975900 octets, soit **121252 octets de moins**
+que les 2 Mio requis par le préenregistrement. RemoteOps PR #409
+mesure le complément possible sous le commit immuable de Rustlings,
+sans lui attribuer par avance un résultat ni une autorisation juridique.
+Le vérificateur Rust distinct [PR #408](https://github.com/Memorithm/RemoteOps/pull/408)
+empêche d'affecter les deux dépôts MDN traduction/original à des
+splits différents, ainsi que Rust Book FR/original.
+
+Le corpus TEST indépendant reste **non choisi, non scoré**.
+Les mesures de dépôt ne doivent pas servir à ajuster les seuils,
+attribuer les partitions selon la performance du modèle ou promouvoir
+des poids. Aucun fit GRU-v2 n'est autorisé par ce rapport seul.
