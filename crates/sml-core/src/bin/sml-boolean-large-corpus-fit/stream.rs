@@ -1,4 +1,4 @@
-//! Sequential Boolean-bank trainer for a provenance-ledger corpus up to 32 GiB.
+//! Sequential Boolean-bank trainer for a provenance-ledger corpus up to 128 GiB.
 //! G0 NOT admitted; this is a counting baseline, not a GRU/ANF/25B network.
 use super::{scan, Bank, Corpus, MIN_DEV};
 use sml_core::elastic_ngram_paged_sha::{hex, parse_hex, sha256, Sha256};
@@ -11,7 +11,7 @@ use std::{
 };
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const CHUNK: usize = 1024 * 1024;
-const MAX_TRAIN: u64 = 32 * 1024 * 1024 * 1024;
+const MAX_TRAIN: u64 = 128 * 1024 * 1024 * 1024;
 const MIN_TRAIN: u64 = 8 * 1024 * 1024;
 const MAX_DOCUMENT: u64 = 8 * 1024 * 1024;
 const MAX_DOCUMENTS: u64 = 20_000_000;
@@ -100,7 +100,7 @@ fn checked_manifest(path: &Path) -> Result<(u64, u64, u64, [u8; 32])> {
             .checked_add(row.bytes + 1)
             .ok_or("physical size overflow")?;
         if docs > MAX_DOCUMENTS || payload > MAX_TRAIN || physical > MAX_TRAIN + MAX_DOCUMENTS {
-            return Err("32-GiB source capacity exceeded".into());
+            return Err("128-GiB source capacity exceeded".into());
         }
     }
     if docs == 0 || payload < MIN_TRAIN {
@@ -445,9 +445,9 @@ pub(super) fn run(
 mod tests {
     use super::*;
     #[test]
-    fn supports_25_gib_without_allocating_corpus() {
+    fn supports_100_gib_without_allocating_corpus() {
         let capacity = std::hint::black_box(MAX_TRAIN);
-        assert!(capacity >= 25 * 1024 * 1024 * 1024);
+        assert!(capacity >= 100 * 1024 * 1024 * 1024);
         assert_eq!(super::super::SLOTS, 8192);
         assert_eq!(CHECKPOINT_EVERY, 256);
     }
