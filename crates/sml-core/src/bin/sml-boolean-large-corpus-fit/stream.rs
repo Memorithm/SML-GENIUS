@@ -1,6 +1,6 @@
 //! Sequential Boolean-bank trainer for a provenance-ledger corpus up to 32 GiB.
 //! G0 NOT admitted; this is a counting baseline, not a GRU/ANF/25B network.
-use super::{scan, Bank, Corpus, SLOTS, MIN_DEV};
+use super::{scan, Bank, Corpus, MIN_DEV};
 use sml_core::elastic_ngram_paged_sha::{hex, parse_hex, sha256, Sha256};
 use std::{
     collections::HashSet,
@@ -46,17 +46,37 @@ fn entry(line: &str) -> Result<Entry> {
     Ok(Entry { hash, bytes })
 }
 
+// Never allocate an unbounded line from an untrusted future (25-GiB) ledger.
+fn next_record(reader: &mut BufReader<File>) -> Result<Option<String>> {
+    let mut line = Vec::<u8>::new();
+    loop {
+        let bytes = reader.fill_buf()?;
+        if bytes.is_empty() {
+            if line.is_empty() { return Ok(None); }
+            return Err("unterminated provenance record".into());
+        }
+        let consumed = bytes.iter().position(|b| *b == b'\n').map_or(bytes.len(), |p| p + 1);
+        if line.len().checked_add(consumed).ok_or("line length overflow")? > 262_144 {
+            return Err("provenance line exceeds bounded memory policy".into());
+        }
+        line.extend_from_slice(&bytes[..consumed]);
+        reader.consume(consumed);
+        if line.last() == Some(&b'\n') { break; }
+    }
+    Ok(Some(String::from_utf8(line)?))
+}
+
 fn checked_manifest(path: &Path) -> Result<(u64, u64, u64, [u8; 32])> {
     let digest = hash_file(path)?;
-    let mut lines = BufReader::new(File::open(path)?).lines();
-    if lines.next().transpose()?.as_deref() != Some(HEADER) {
+    let mut lines = BufReader::with_capacity(8192, File::open(path)?);
+    if next_record(&mut lines)?.as_deref() != Some(&format!("{HEADER}\n")) {
         return Err("unrecognized exact provenance header".into());
     }
     let mut docs = 0u64;
     let mut payload = 0u64;
     let mut physical = 0u64;
-    for line in lines {
-        let row = entry(&line?)?;
+    while let Some(line) = next_record(&mut lines)? {
+        let row = entry(&line)?;
         docs = docs.checked_add(1).ok_or("document counter overflow")?;
         payload = payload.checked_add(row.bytes).ok_or("payload overflow")?;
         physical = physical
@@ -239,15 +259,15 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
         return Err("checkpoint outside corpus bounds".into());
     }
     let mut file = File::open(corpus)?;
-    let mut lines = BufReader::new(File::open(provenance)?).lines();
-    if lines.next().transpose()?.as_deref() != Some(HEADER) { return Err("manifest changed".into()); }
+    let mut lines = BufReader::with_capacity(8192, File::open(provenance)?);
+    if next_record(&mut lines)?.as_deref() != Some(&format!("{HEADER}\n")) { return Err("manifest changed".into()); }
     let mut prefix_offset = 0u64;
     let mut prefix_bytes = 0u64;
     let mut prefix_events = 0u64;
     let mut resumed = false;
     let mut number = 0u64;
-    for line in lines {
-        let record = entry(&line?)?;
+    while let Some(line) = next_record(&mut lines)? {
+        let record = entry(&line)?;
         if dev_hashes.contains(&record.hash) {
             return Err("TRAIN/DEV exact document overlap rejected".into());
         }
@@ -316,7 +336,7 @@ mod tests {
     #[test]
     fn supports_25_gib_without_allocating_corpus() {
         assert!(MAX_TRAIN >= 25 * 1024 * 1024 * 1024);
-        assert_eq!(SLOTS, 8192);
+        assert_eq!(super::super::SLOTS, 8192);
         assert_eq!(CHECKPOINT_EVERY, 256);
     }
     #[test]
