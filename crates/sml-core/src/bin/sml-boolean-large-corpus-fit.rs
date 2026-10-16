@@ -109,7 +109,10 @@ impl Corpus {
     fn take(&mut self, role: &str, repo: &str, rel: &Path, bytes: &[u8]) -> Result<bool> {
         let fingerprint = sha256(bytes);
         if !self.fingerprints.insert(fingerprint) {
-            self.duplicates_skipped = self.duplicates_skipped.checked_add(1).ok_or("duplicate overflow")?;
+            self.duplicates_skipped = self
+                .duplicates_skipped
+                .checked_add(1)
+                .ok_or("duplicate overflow")?;
             return Ok(false);
         }
         self.files += 1;
@@ -253,7 +256,9 @@ fn valid_repository(name: &str) -> bool {
     };
     !short.is_empty()
         && short.len() <= 64
-        && short.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        && short
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
 }
 
 // The prior four-root invocation is preserved; --multi introduces frozen 16 MiB scale gate.
@@ -281,7 +286,11 @@ fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
     for (repo, root) in roots {
         scan(root, repo, "TRAIN", &mut train, &mut bank, false)?;
     }
-    let floor = if roots.len() > 4 { MIN_TRAIN_MULTI } else { MIN_TRAIN };
+    let floor = if roots.len() > 4 {
+        MIN_TRAIN_MULTI
+    } else {
+        MIN_TRAIN
+    };
     if train.bytes < floor {
         return Err(format!("large corpus minimum not met: {} < {floor}", train.bytes).into());
     }
@@ -328,7 +337,12 @@ fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
         output,
         "provenance.tsv",
         &(train.provenance
-            + &dev.provenance.lines().skip(1).map(|line| format!("{line}\n")).collect::<String>()),
+            + &dev
+                .provenance
+                .lines()
+                .skip(1)
+                .map(|line| format!("{line}\n"))
+                .collect::<String>()),
     )?;
     write_new(output, "summary.tsv", &summary)?;
     write_new(output, "weights.tsv", &weights)?;
@@ -356,7 +370,11 @@ fn execute_args(args: &[String]) -> Result<()> {
         .chunks_exact(2)
         .map(|part| (part[0].as_str(), Path::new(&part[1])))
         .collect();
-    run(&repos, Path::new(&args[args.len() - 2]), Path::new(&args[args.len() - 1]))
+    run(
+        &repos,
+        Path::new(&args[args.len() - 2]),
+        Path::new(&args[args.len() - 1]),
+    )
 }
 
 fn main() {
@@ -387,10 +405,14 @@ mod tests {
     fn cross_split_identical_file_is_excluded_before_dev_scoring() {
         let mut train = Corpus::new();
         let bytes = b"independent repeated text bytes";
-        assert!(train.take("TRAIN", "Memorithm/SciRust", Path::new("src/a.rs"), bytes).unwrap());
+        assert!(train
+            .take("TRAIN", "Memorithm/SciRust", Path::new("src/a.rs"), bytes)
+            .unwrap());
         let mut dev = Corpus::new();
         dev.fingerprints.extend(train.fingerprints.iter().copied());
-        assert!(!dev.take("DEV", "Memorithm/SML-GENIUS", Path::new("docs/a.md"), bytes).unwrap());
+        assert!(!dev
+            .take("DEV", "Memorithm/SML-GENIUS", Path::new("docs/a.md"), bytes)
+            .unwrap());
         assert_eq!(dev.bytes, 0);
         assert_eq!(dev.duplicates_skipped, 1);
     }
