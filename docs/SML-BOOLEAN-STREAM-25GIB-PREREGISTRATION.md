@@ -40,3 +40,17 @@ Les modes antérieurs `SCIRUST TDI FLAT CCOS DEV OUTPUT` et `--multi REPO ROOT .
 - Vérifier le cas 500 Mio, les tests de continuité entre chunks, la reprise sur corruption/coupure, et le dépassement de capacité simulé sans allouer 25 Gio. Le run physique 25 Gio réel reste un **jalon futur** dépendant d'un corpus plus volumineux autorisé, de l'espace disque et du temps de calcul sur machine.
 
 **Frontière** : `G0_admitted=false`, `TEST=UNOPENED`, modèle probabiliste booléen de référence. 25 Gio d'entraînement ne signifie ni un modèle 25B ni une garantie de performances supérieures. Les obligations d'attribution CC-BY demeurent applicables.
+
+## Résultat du premier fit en streaming (non homologué)
+
+L'exécution Dell [RemoteOps Actions #38913477655](https://github.com/Memorithm/RemoteOps/actions/runs/38913477655) a validé le binaire au SHA `355b52ceda1b71e869b3641810157c61c1e762cb` (avant ajout du test de reprise). Résultats physiques :
+
+- TRAIN : **524 332 346 octets** utiles, **28 294 documents**, **524 275 758** positions de prédiction (`sum(max(0, len-2))`).
+- Banque : **3 249 / 8 192 cellules** apprises ; DEV gelé : **5 862 247 octets**, **5 861 191 positions**, **5.995993233 bits/octet**.
+- Capacité annoncée par le nouveau binaire : **34 359 738 368 octets (32 Gio)** de payload TRAIN, suffisante pour une cible de 25 Gio. Ce plafond est le résultat de bornes, types et tests ; il **n'est pas la preuve d'un run de 25 Gio**.
+- Sorties : `checkpoint.v1` atomique, `summary.tsv`, `weights.tsv`, `qualification.tsv` et empreintes dans l'artefact GitHub Actions, sans texte brut.
+- `TEST=UNOPENED` ; `G0=NOT_ADMITTED`.
+
+Attention : la perte DEV de 5.99599 bpc est mesurée après un entraînement sur des textes Hugging Face hétérogènes, évalué sur le code/documentation de SML. Elle n'est **pas directement comparable en validité externe** aux campagnes à 4/14 dépôts Memorithm, et ne constitue ni une preuve d'ANF récurrente, ni un gain universel.
+
+La qualification finale exige la CI verte sur la dernière révision de la PR, une requalification Dell sur ce même commit et la vérification du checkpoint. Les longues campagnes 25 Gio requièrent un vrai corpus éligible de 25 Gio, des évaluations indépendantes par source et une protection de crash/reprise démontrée.
