@@ -38,7 +38,7 @@ fn full_sha256(path: &Path) -> Result<String> {
 }
 
 fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
-    if !matches!(parse_hex(digest), Some(_)) || corpus == ledger || out.exists() {
+    if parse_hex(digest).is_none() || corpus == ledger || out.exists() {
         return Err("invalid pinned SHA-256, overlapping input files, or output exists".into());
     }
     for input in [corpus, ledger] {
