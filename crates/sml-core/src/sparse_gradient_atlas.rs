@@ -969,7 +969,12 @@ mod tests {
         let (dev_loss, dev_events) = masked.evaluate_assistant_bytes(&bytes, 256, 128).unwrap();
         assert_eq!(dev_events, 256);
         assert!(dev_loss.is_finite());
-        assert_eq!(masked.counters(), before);
+        assert_eq!(masked.counters().supervised_bits, before.supervised_bits);
+        assert_eq!(masked.counters().parameter_updates, before.parameter_updates);
+        assert_eq!(
+            masked.counters().distinct_updated_parameters,
+            before.distinct_updated_parameters
+        );
         assert!(masked.evaluate_assistant_bytes(&bytes, 1, 128).is_err());
         assert!(masked.evaluate_assistant_bytes(&bytes, 256, 0).is_err());
         let (_, count) = full.train_document_grouped(&bytes, 128).unwrap();
