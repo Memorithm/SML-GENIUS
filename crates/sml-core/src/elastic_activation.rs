@@ -116,14 +116,41 @@ struct EacNext {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EacProposal {
     /// Version of the proposed SML-only controller contract.
-    pub contract: &'static str,
-    pub action: EacAction,
-    pub active_ceiling_parameters: u64,
-    pub selected_pages: Vec<PageId>,
-    pub recurrent_depth: u8,
-    pub weight_plan: ElasticWeightPlan,
+    contract: &'static str,
+    action: EacAction,
+    active_ceiling_parameters: u64,
+    selected_pages: Vec<PageId>,
+    recurrent_depth: u8,
+    weight_plan: ElasticWeightPlan,
     base_generation: u64,
     next: EacNext,
+}
+
+impl EacProposal {
+    #[must_use]
+    pub const fn action(&self) -> EacAction {
+        self.action
+    }
+
+    #[must_use]
+    pub const fn active_ceiling_parameters(&self) -> u64 {
+        self.active_ceiling_parameters
+    }
+
+    #[must_use]
+    pub fn selected_pages(&self) -> &[PageId] {
+        &self.selected_pages
+    }
+
+    #[must_use]
+    pub const fn recurrent_depth(&self) -> u8 {
+        self.recurrent_depth
+    }
+
+    #[must_use]
+    pub fn weight_plan(&self) -> &ElasticWeightPlan {
+        &self.weight_plan
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
