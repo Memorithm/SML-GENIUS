@@ -468,7 +468,12 @@ impl SparseGradientAtlas {
             for position in begin..end {
                 for bit in 0..8usize {
                     scheduled.push((
-                        route(document[position], document[position + 1], bit, self.config.pages),
+                        route(
+                            document[position],
+                            document[position + 1],
+                            bit,
+                            self.config.pages,
+                        ),
                         position,
                         bit,
                     ));
@@ -589,7 +594,13 @@ impl QuantizedSparseAtlas {
             return Err("Q4 file must have exact model dimensions".into());
         }
         let packed = File::open(path)?;
-        Ok(Self { config, packed, cache: Vec::new(), tick: 0, page_loads: 0 })
+        Ok(Self {
+            config,
+            packed,
+            cache: Vec::new(),
+            tick: 0,
+            page_loads: 0,
+        })
     }
 
     fn load(&mut self, id: u64) -> Result<usize> {
@@ -602,28 +613,48 @@ impl QuantizedSparseAtlas {
             return Ok(index);
         }
         if self.cache.len() == self.config.max_cached_pages {
-            let old = self.cache.iter().enumerate().min_by_key(|(_, p)| p.used)
-                .map(|(idx, _)| idx).ok_or("Q4 cache eviction without resident")?;
+            let old = self
+                .cache
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, p)| p.used)
+                .map(|(idx, _)| idx)
+                .ok_or("Q4 cache eviction without resident")?;
             self.cache.swap_remove(old);
         }
         let mut bytes = [0u8; PAGE_PARAMETERS / 2];
-        self.packed.seek(SeekFrom::Start(id * (PAGE_PARAMETERS / 2) as u64))?;
+        self.packed
+            .seek(SeekFrom::Start(id * (PAGE_PARAMETERS / 2) as u64))?;
         self.packed.read_exact(&mut bytes)?;
-        self.cache.push(QuantizedPage { id, nibble_bytes: bytes, used: self.tick });
+        self.cache.push(QuantizedPage {
+            id,
+            nibble_bytes: bytes,
+            used: self.tick,
+        });
         self.page_loads = self.page_loads.checked_add(1).ok_or("Q4 load overflow")?;
         Ok(self.cache.len() - 1)
     }
 
     pub fn probability(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
-        if bit >= 8 { return Err("invalid output bit".into()); }
+        if bit >= 8 {
+            return Err("invalid output bit".into());
+        }
         let page_id = route(a, b, bit, self.config.pages);
         let index = self.load(page_id)?;
         let mut sum = 0f64;
         for feature in 0..FEATURES {
             let slot = feature_slot(a, b, bit, feature);
             let encoded = self.cache[index].nibble_bytes[slot / 2];
-            let nibble = if slot % 2 == 0 { encoded & 15 } else { encoded >> 4 };
-            let signed = if nibble >= 8 { nibble as i8 - 16 } else { nibble as i8 };
+            let nibble = if slot % 2 == 0 {
+                encoded & 15
+            } else {
+                encoded >> 4
+            };
+            let signed = if nibble >= 8 {
+                nibble as i8 - 16
+            } else {
+                nibble as i8
+            };
             sum += (f64::from(signed) / 2.0) * feature_sign(a, b, feature);
         }
         Ok(sigmoid(sum / SCALE))
@@ -637,7 +668,9 @@ impl QuantizedSparseAtlas {
                 loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
             }
         }
-        if !loss.is_finite() { return Err("Q4 inference loss is nonfinite".into()); }
+        if !loss.is_finite() {
+            return Err("Q4 inference loss is nonfinite".into());
+        }
         Ok((loss, document.len().saturating_sub(2) as u64))
     }
 
@@ -657,7 +690,12 @@ impl QuantizedSparseAtlas {
             for position in begin..end {
                 for bit in 0..8usize {
                     scheduled.push((
-                        route(document[position], document[position + 1], bit, self.config.pages),
+                        route(
+                            document[position],
+                            document[position + 1],
+                            bit,
+                            self.config.pages,
+                        ),
                         position,
                         bit,
                     ));
@@ -669,7 +707,9 @@ impl QuantizedSparseAtlas {
                 loss += binary_loss_bits(probability, document[pos + 2] & (1 << bit) != 0);
             }
         }
-        if !loss.is_finite() { return Err("nonfinite grouped Q4 loss".into()); }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped Q4 loss".into());
+        }
         Ok((loss, predicted as u64))
     }
 
@@ -677,7 +717,9 @@ impl QuantizedSparseAtlas {
         self.config.max_cached_pages * (PAGE_PARAMETERS / 2)
     }
 
-    pub fn page_loads(&self) -> u64 { self.page_loads }
+    pub fn page_loads(&self) -> u64 {
+        self.page_loads
+    }
 }
 
 #[cfg(test)]
@@ -786,8 +828,14 @@ mod tests {
         let (_, events) = serial.train_document(&bytes).unwrap();
         let (_, grouped_events) = grouped.train_document_grouped(&bytes, 512).unwrap();
         assert_eq!(events, grouped_events);
-        assert_eq!(serial.counters().supervised_bits, grouped.counters().supervised_bits);
-        assert_eq!(serial.counters().distinct_updated_parameters, grouped.counters().distinct_updated_parameters);
+        assert_eq!(
+            serial.counters().supervised_bits,
+            grouped.counters().supervised_bits
+        );
+        assert_eq!(
+            serial.counters().distinct_updated_parameters,
+            grouped.counters().distinct_updated_parameters
+        );
         // Different selected pages have disjoint weights. The result is
         // identical for each page despite reordering across pages.
         serial.flush().unwrap();
@@ -801,7 +849,9 @@ mod tests {
         let (online_dev, count_online) = serial.evaluate_document(&bytes).unwrap();
         let (grouped_dev, count_grouped) = grouped.evaluate_document_grouped(&bytes, 512).unwrap();
         assert_eq!(count_online, count_grouped);
-        assert!((online_dev / count_online as f64 - grouped_dev / count_grouped as f64).abs() < 1e-10);
+        assert!(
+            (online_dev / count_online as f64 - grouped_dev / count_grouped as f64).abs() < 1e-10
+        );
         assert!(grouped.train_document_grouped(&bytes, 0).is_err());
         assert!(grouped.train_document_grouped(&bytes, 8193).is_err());
         fs::remove_dir_all(first).unwrap();
