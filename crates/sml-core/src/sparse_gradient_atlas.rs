@@ -875,7 +875,7 @@ mod tests {
         let (loss, n) = inference.evaluate_document(&bytes).unwrap();
         assert_eq!(n, 498);
         assert!(loss.is_finite());
-        assert!(loss / n as f64 < 8.0);
+        assert!(loss / (n as f64) < 8.0);
         assert_eq!(inference.resident_bytes_upper_bound(), 1024);
         let (grouped_loss, grouped_n) = inference.evaluate_document_grouped(&bytes, 64).unwrap();
         assert_eq!(grouped_n, n);
