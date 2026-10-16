@@ -243,7 +243,14 @@ fn write_new(dir: &Path, name: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn run(scirst: &Path, tdi: &Path, flat: &Path, ccos: &Path, sml: &Path, output: &Path) -> Result<()> {
+fn run(
+    scirst: &Path,
+    tdi: &Path,
+    flat: &Path,
+    ccos: &Path,
+    sml: &Path,
+    output: &Path,
+) -> Result<()> {
     if output.exists() {
         return Err("new output directory must not already exist".into());
     }
@@ -263,8 +270,22 @@ fn run(scirst: &Path, tdi: &Path, flat: &Path, ccos: &Path, sml: &Path, output: 
         false,
     )?;
     scan(tdi, "Memorithm/TDI", "TRAIN", &mut train, &mut bank, false)?;
-    scan(flat, "Memorithm/FLAT-ATTENTION", "TRAIN", &mut train, &mut bank, false)?;
-    scan(ccos, "Memorithm/CCOS-Enterprise", "TRAIN", &mut train, &mut bank, false)?;
+    scan(
+        flat,
+        "Memorithm/FLAT-ATTENTION",
+        "TRAIN",
+        &mut train,
+        &mut bank,
+        false,
+    )?;
+    scan(
+        ccos,
+        "Memorithm/CCOS-Enterprise",
+        "TRAIN",
+        &mut train,
+        &mut bank,
+        false,
+    )?;
     if train.bytes < MIN_TRAIN {
         return Err(format!(
             "large corpus minimum not met: {} < {MIN_TRAIN}",
