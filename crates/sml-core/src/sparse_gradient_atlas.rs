@@ -391,6 +391,47 @@ impl SparseGradientAtlas {
         Ok((loss, predicted_bytes))
     }
 
+    /// Deterministic bounded block-shuffled SGD. Groups each consecutive
+    /// block of token prediction positions by routed page to avoid one
+    /// physical page fault per bit. Stable sorting preserves temporal
+    /// order *within* each page; different pages are independent weights.
+    ///
+    /// The result is mathematically identical to sequential train_document
+    /// when there are no shared weights across different pages. No data
+    /// outside the current document influences the prediction context.
+    pub fn train_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid page batch window (1..=8192 prediction bytes)".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                let a = document[position];
+                let b = document[position + 1];
+                for bit in 0..8usize {
+                    let page = route(a, b, bit, self.config.pages);
+                    scheduled.push((page, position, bit));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, position, bit) in scheduled {
+                let target = document[position + 2] & (1 << bit) != 0;
+                loss += self.train_bit(document[position], document[position + 1], bit, target)?;
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped training loss".into());
+        }
+        Ok((loss, predicted as u64))
+    }
+
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
@@ -407,6 +448,47 @@ impl SparseGradientAtlas {
             return Err("nonfinite DEV loss".into());
         }
         Ok((loss, predicted_bytes))
+    }
+
+    /// Exact held-out prediction with page-local data access. Unlike SGD,
+    /// score order is immaterial because weights are immutable in this method.
+    pub fn evaluate_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid held-out page batch window".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                for bit in 0..8usize {
+                    scheduled.push((
+                        route(
+                            document[position],
+                            document[position + 1],
+                            bit,
+                            self.config.pages,
+                        ),
+                        position,
+                        bit,
+                    ));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, pos, bit) in scheduled {
+                let (_, p) = self.bit_probability(document[pos], document[pos + 1], bit)?;
+                loss += binary_loss_bits(p, document[pos + 2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped DEV loss".into());
+        }
+        Ok((loss, predicted as u64))
     }
 
     #[must_use]
@@ -481,6 +563,162 @@ impl SparseGradientAtlas {
         }
         packed.sync_all()?;
         Ok(())
+    }
+}
+
+/// Read-only 4-bit inference atlas. No f32 masters are loaded, no weights are
+/// changed, and the page cache contains only bounded 512-byte Q4 pages.
+/// Q4 loss is explicitly measured rather than inferred from master loss.
+pub struct QuantizedSparseAtlas {
+    config: SparseConfig,
+    packed: File,
+    cache: Vec<QuantizedPage>,
+    tick: u64,
+    page_loads: u64,
+}
+
+struct QuantizedPage {
+    id: u64,
+    nibble_bytes: [u8; PAGE_PARAMETERS / 2],
+    used: u64,
+}
+
+impl QuantizedSparseAtlas {
+    pub fn open(path: &Path, config: SparseConfig) -> Result<Self> {
+        let config = config.validate()?;
+        let info = fs::symlink_metadata(path)?;
+        if !info.is_file()
+            || info.file_type().is_symlink()
+            || info.len() != config.packed_q4_bytes()
+        {
+            return Err("Q4 file must have exact model dimensions".into());
+        }
+        let packed = File::open(path)?;
+        Ok(Self {
+            config,
+            packed,
+            cache: Vec::new(),
+            tick: 0,
+            page_loads: 0,
+        })
+    }
+
+    fn load(&mut self, id: u64) -> Result<usize> {
+        if id >= self.config.pages {
+            return Err("Q4 page outside model atlas".into());
+        }
+        self.tick = self.tick.checked_add(1).ok_or("Q4 LRU overflow")?;
+        if let Some(index) = self.cache.iter().position(|p| p.id == id) {
+            self.cache[index].used = self.tick;
+            return Ok(index);
+        }
+        if self.cache.len() == self.config.max_cached_pages {
+            let old = self
+                .cache
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, p)| p.used)
+                .map(|(idx, _)| idx)
+                .ok_or("Q4 cache eviction without resident")?;
+            self.cache.swap_remove(old);
+        }
+        let mut bytes = [0u8; PAGE_PARAMETERS / 2];
+        self.packed
+            .seek(SeekFrom::Start(id * (PAGE_PARAMETERS / 2) as u64))?;
+        self.packed.read_exact(&mut bytes)?;
+        self.cache.push(QuantizedPage {
+            id,
+            nibble_bytes: bytes,
+            used: self.tick,
+        });
+        self.page_loads = self.page_loads.checked_add(1).ok_or("Q4 load overflow")?;
+        Ok(self.cache.len() - 1)
+    }
+
+    pub fn probability(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
+        if bit >= 8 {
+            return Err("invalid output bit".into());
+        }
+        let page_id = route(a, b, bit, self.config.pages);
+        let index = self.load(page_id)?;
+        let mut sum = 0f64;
+        for feature in 0..FEATURES {
+            let slot = feature_slot(a, b, bit, feature);
+            let encoded = self.cache[index].nibble_bytes[slot / 2];
+            let nibble = if slot % 2 == 0 {
+                encoded & 15
+            } else {
+                encoded >> 4
+            };
+            let signed = if nibble >= 8 {
+                nibble as i8 - 16
+            } else {
+                nibble as i8
+            };
+            sum += (f64::from(signed) / 2.0) * feature_sign(a, b, feature);
+        }
+        Ok(sigmoid(sum / SCALE))
+    }
+
+    pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
+        let mut loss = 0f64;
+        for window in document.windows(3) {
+            for bit in 0..8 {
+                let p = self.probability(window[0], window[1], bit)?;
+                loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("Q4 inference loss is nonfinite".into());
+        }
+        Ok((loss, document.len().saturating_sub(2) as u64))
+    }
+
+    pub fn evaluate_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid Q4 evaluation batch window".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                for bit in 0..8usize {
+                    scheduled.push((
+                        route(
+                            document[position],
+                            document[position + 1],
+                            bit,
+                            self.config.pages,
+                        ),
+                        position,
+                        bit,
+                    ));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, pos, bit) in scheduled {
+                let probability = self.probability(document[pos], document[pos + 1], bit)?;
+                loss += binary_loss_bits(probability, document[pos + 2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped Q4 loss".into());
+        }
+        Ok((loss, predicted as u64))
+    }
+
+    pub fn resident_bytes_upper_bound(&self) -> usize {
+        self.config.max_cached_pages * (PAGE_PARAMETERS / 2)
+    }
+
+    pub fn page_loads(&self) -> u64 {
+        self.page_loads
     }
 }
 
@@ -575,6 +813,77 @@ mod tests {
         weights.sync_all().unwrap();
         assert!(SparseGradientAtlas::reopen(&dir, cfg(4, 1)).is_err());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn grouped_gradient_matches_online_weights_across_page_routing() {
+        let first = temp("online");
+        let second = temp("grouped");
+        let config = cfg(64, 1);
+        let mut serial = SparseGradientAtlas::create(&first, config).unwrap();
+        let mut grouped = SparseGradientAtlas::create(&second, config).unwrap();
+        let bytes: Vec<u8> = (0..3000usize)
+            .map(|n| (n.wrapping_mul(13) ^ (n / 7)) as u8)
+            .collect();
+        let (_, events) = serial.train_document(&bytes).unwrap();
+        let (_, grouped_events) = grouped.train_document_grouped(&bytes, 512).unwrap();
+        assert_eq!(events, grouped_events);
+        assert_eq!(
+            serial.counters().supervised_bits,
+            grouped.counters().supervised_bits
+        );
+        assert_eq!(
+            serial.counters().distinct_updated_parameters,
+            grouped.counters().distinct_updated_parameters
+        );
+        // Different selected pages have disjoint weights. The result is
+        // identical for each page despite reordering across pages.
+        serial.flush().unwrap();
+        grouped.flush().unwrap();
+        assert_eq!(full_master(&first), full_master(&second));
+        assert_eq!(
+            fs::read(first.join("touched.bit")).unwrap(),
+            fs::read(second.join("touched.bit")).unwrap()
+        );
+        assert!(grouped.counters().page_loads < serial.counters().page_loads);
+        let (online_dev, count_online) = serial.evaluate_document(&bytes).unwrap();
+        let (grouped_dev, count_grouped) = grouped.evaluate_document_grouped(&bytes, 512).unwrap();
+        assert_eq!(count_online, count_grouped);
+        assert!(
+            (online_dev / count_online as f64 - grouped_dev / count_grouped as f64).abs() < 1e-10
+        );
+        assert!(grouped.train_document_grouped(&bytes, 0).is_err());
+        assert!(grouped.train_document_grouped(&bytes, 8193).is_err());
+        fs::remove_dir_all(first).unwrap();
+        fs::remove_dir_all(second).unwrap();
+    }
+
+    fn full_master(dir: &Path) -> Vec<u8> {
+        fs::read(dir.join("master.f32")).unwrap()
+    }
+
+    #[test]
+    fn q4_is_a_real_bounded_read_only_inference_artifact() {
+        let root = temp("q4");
+        let config = cfg(256, 2);
+        let mut learn = SparseGradientAtlas::create(&root, config).unwrap();
+        let bytes = vec![b'Q'; 500];
+        learn.train_document_grouped(&bytes, 128).unwrap();
+        learn.export_q4(&root.join("weights.q4")).unwrap();
+        let before = fs::read(root.join("weights.q4")).unwrap();
+        let mut inference = QuantizedSparseAtlas::open(&root.join("weights.q4"), config).unwrap();
+        let (loss, n) = inference.evaluate_document(&bytes).unwrap();
+        assert_eq!(n, 498);
+        assert!(loss.is_finite());
+        assert!(loss / (n as f64) < 8.0);
+        assert_eq!(inference.resident_bytes_upper_bound(), 1024);
+        let (grouped_loss, grouped_n) = inference.evaluate_document_grouped(&bytes, 64).unwrap();
+        assert_eq!(grouped_n, n);
+        assert!((loss / n as f64 - grouped_loss / grouped_n as f64).abs() < 1e-10);
+        assert!(inference.page_loads() > 0);
+        assert_eq!(fs::read(root.join("weights.q4")).unwrap(), before);
+        assert!(QuantizedSparseAtlas::open(&root.join("weights.q4"), cfg(257, 2)).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
