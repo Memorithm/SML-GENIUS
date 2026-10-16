@@ -160,13 +160,7 @@ impl MorAnfRecurrent {
         (first, second, bucket)
     }
 
-    fn prediction(
-        &mut self,
-        a: u8,
-        b: u8,
-        bit: usize,
-        trace: Trace,
-    ) -> Result<MixturePrediction> {
+    fn prediction(&mut self, a: u8, b: u8, bit: usize, trace: Trace) -> Result<MixturePrediction> {
         let (first, second, bucket) = self.candidates(a, b, bit);
         let nonlinear = anf_monomial(a, b);
         let feature = [
@@ -185,7 +179,14 @@ impl MorAnfRecurrent {
             return Err("invalid MOR mixture probability".into());
         }
         Ok(MixturePrediction {
-            p, gate, p0, p1, bucket, features: feature, first, second,
+            p,
+            gate,
+            p0,
+            p1,
+            bucket,
+            features: feature,
+            first,
+            second,
         })
     }
 
@@ -197,8 +198,16 @@ impl MorAnfRecurrent {
         label: bool,
         trace: Trace,
     ) -> Result<(f64, f64)> {
-        let MixturePrediction {p, gate, p0, p1, bucket, features, first, second} =
-            self.prediction(a, b, bit, trace)?;
+        let MixturePrediction {
+            p,
+            gate,
+            p0,
+            p1,
+            bucket,
+            features,
+            first,
+            second,
+        } = self.prediction(a, b, bit, trace)?;
         let y = f64::from(u8::from(label));
         let loss = if label { -p.log2() } else { -(1.0 - p).log2() };
         // Gradients are for nats rather than bits, differing by ln(2) scale.
@@ -383,12 +392,12 @@ impl MorAnfRecurrent {
         }
         let mut head = Head {
             counters: MorAnfCounters {
-            supervised_target_bits: h[4].parse()?,
-            routed_expert_updates: h[5].parse()?,
-            router_parameter_updates: h[6].parse()?,
-            unique_router_parameters: h[7].parse()?,
-            recurrent_parameter_updates: h[8].parse()?,
-            recurrence_steps: h[9].parse()?,
+                supervised_target_bits: h[4].parse()?,
+                routed_expert_updates: h[5].parse()?,
+                router_parameter_updates: h[6].parse()?,
+                unique_router_parameters: h[7].parse()?,
+                recurrent_parameter_updates: h[8].parse()?,
+                recurrence_steps: h[9].parse()?,
             },
             ..Head::default()
         };
