@@ -467,6 +467,33 @@ mod tests {
         assert_eq!(a.counts, b.counts);
     }
     #[test]
+    fn checkpoint_roundtrip_preserves_weights_and_rejects_new_source() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("sml-stream-{}-{nonce}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let input = b"abcdefgh1234";
+        let mut bank = Bank::new();
+        let events = bank.learn(input).unwrap();
+        let state = State {
+            docs: 1,
+            offset: input.len() as u64 + 1,
+            payload: input.len() as u64,
+            events,
+        };
+        let corpus = sha256(input);
+        let manifest = sha256(b"pinned manifest");
+        checkpoint(&dir, &corpus, &manifest, &state, &bank).unwrap();
+        let mut recovered = Bank::new();
+        let saved = restore(&dir, &corpus, &manifest, &mut recovered).unwrap();
+        assert_eq!(saved.docs, 1);
+        assert_eq!(saved.events, events);
+        assert_eq!(saved.offset, state.offset);
+        assert_eq!(bank.counts, recovered.counts);
+        assert!(restore(&dir, &sha256(b"changed source"), &manifest, &mut Bank::new()).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
     fn fails_closed_on_bad_rights_or_manifest() {
         let row = "a.parquet\t1\tdeadbeef\t200\tCC-BY-NC\tCC-BY-NC\tsource\tcreator";
         assert!(entry(row).is_err());
