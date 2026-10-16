@@ -30,13 +30,14 @@ struct Bank {
 
 impl Bank {
     fn new() -> Self {
-        Self { counts: vec![[0; 2]; SLOTS] }
+        Self {
+            counts: vec![[0; 2]; SLOTS],
+        }
     }
 
     fn slot(prev2: u8, prev1: u8, bit: usize) -> usize {
         let upper_nibbles = usize::from(prev2 >> 4) * 16 + usize::from(prev1 >> 4);
-        let pair = (usize::from((prev2 >> bit) & 1) << 1)
-            | usize::from((prev1 >> bit) & 1);
+        let pair = (usize::from((prev2 >> bit) & 1) << 1) | usize::from((prev1 >> bit) & 1);
         bit * CLASSES * PAIRS + upper_nibbles * PAIRS + pair
     }
 
@@ -76,7 +77,10 @@ impl Bank {
     }
 
     fn changed_slots(&self) -> usize {
-        self.counts.iter().filter(|counts| counts[0] + counts[1] > 0).count()
+        self.counts
+            .iter()
+            .filter(|counts| counts[0] + counts[1] > 0)
+            .count()
     }
 }
 
@@ -108,25 +112,45 @@ impl Corpus {
         if self.files > MAX_FILES {
             return Err("corpus has too many files".into());
         }
-        self.bytes = self.bytes.checked_add(bytes.len() as u64).ok_or("byte overflow")?;
+        self.bytes = self
+            .bytes
+            .checked_add(bytes.len() as u64)
+            .ok_or("byte overflow")?;
         if self.bytes > MAX_TOTAL {
             return Err("corpus exceeds 256 MiB".into());
         }
         self.provenance.push_str(&format!(
             "{role}\t{repo}\t{}\t{}\t{}\n",
-            rel.display(), bytes.len(), hex(&fingerprint)
+            rel.display(),
+            bytes.len(),
+            hex(&fingerprint)
         ));
         Ok(true)
     }
 }
 
 fn selected_root_segment(name: &str) -> bool {
-    matches!(name, "src" | "crates" | "docs" | "README.md" | "BOOTSTRAP.md")
+    matches!(
+        name,
+        "src" | "crates" | "docs" | "README.md" | "BOOTSTRAP.md"
+    )
 }
 fn excluded_segment(name: &str) -> bool {
-    matches!(name, ".git" | "vendor" | "third_party" | "third-party"
-        | "target" | "node_modules" | "fixtures" | "testdata"
-        | "tests" | "examples" | "generated" | "assets")
+    matches!(
+        name,
+        ".git"
+            | "vendor"
+            | "third_party"
+            | "third-party"
+            | "target"
+            | "node_modules"
+            | "fixtures"
+            | "testdata"
+            | "tests"
+            | "examples"
+            | "generated"
+            | "assets"
+    )
 }
 fn gather(root: &Path) -> Result<Vec<PathBuf>> {
     if !root.is_dir() || root.symlink_metadata()?.file_type().is_symlink() {
@@ -155,7 +179,10 @@ fn gather(root: &Path) -> Result<Vec<PathBuf>> {
             } else if metadata.is_file()
                 && metadata.len() >= 128
                 && metadata.len() <= MAX_FILE
-                && matches!(entry.path().extension().and_then(|v| v.to_str()), Some("rs" | "md"))
+                && matches!(
+                    entry.path().extension().and_then(|v| v.to_str()),
+                    Some("rs" | "md")
+                )
             {
                 paths.push(relative);
             }
@@ -202,10 +229,17 @@ fn scan(
 }
 
 fn write_new(dir: &Path, name: &str, value: &str) -> Result<()> {
-    let mut f = OpenOptions::new().write(true).create_new(true).open(dir.join(name))?;
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dir.join(name))?;
     f.write_all(value.as_bytes())?;
     f.sync_all()?;
-    println!("BOOLEAN_FIT_EVIDENCE file={name} bytes={} sha256={}", value.len(), hex(&sha256(value.as_bytes())));
+    println!(
+        "BOOLEAN_FIT_EVIDENCE file={name} bytes={} sha256={}",
+        value.len(),
+        hex(&sha256(value.as_bytes()))
+    );
     Ok(())
 }
 
@@ -220,10 +254,21 @@ fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
     }
     let mut bank = Bank::new();
     let mut train = Corpus::new();
-    scan(scirst, "Memorithm/SciRust", "TRAIN", &mut train, &mut bank, false)?;
+    scan(
+        scirst,
+        "Memorithm/SciRust",
+        "TRAIN",
+        &mut train,
+        &mut bank,
+        false,
+    )?;
     scan(tdi, "Memorithm/TDI", "TRAIN", &mut train, &mut bank, false)?;
     if train.bytes < MIN_TRAIN {
-        return Err(format!("large corpus minimum not met: {} < {MIN_TRAIN}", train.bytes).into());
+        return Err(format!(
+            "large corpus minimum not met: {} < {MIN_TRAIN}",
+            train.bytes
+        )
+        .into());
     }
     let changed = bank.changed_slots();
     if changed < 100 {
@@ -231,7 +276,14 @@ fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
     }
     // SML-GENIUS is separate DEV only, and never affects the trained counts.
     let mut dev = Corpus::new();
-    let neglog = scan(sml, "Memorithm/SML-GENIUS", "DEV", &mut dev, &mut bank, true)?;
+    let neglog = scan(
+        sml,
+        "Memorithm/SML-GENIUS",
+        "DEV",
+        &mut dev,
+        &mut bank,
+        true,
+    )?;
     if dev.bytes < MIN_DEV || dev.events == 0 || train.events == 0 {
         return Err("insufficient DEV or TRAIN bytes/events".into());
     }
@@ -245,11 +297,23 @@ fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
         weights.push_str(&format!("{idx}\t{}\t{}\t{ALPHA}\n", counts[0], counts[1]));
     }
     fs::create_dir(output)?;
-    write_new(output, "provenance.tsv", &(train.provenance + &dev.provenance.lines().skip(1).map(|s| format!("{s}\n")).collect::<String>()))?;
+    write_new(
+        output,
+        "provenance.tsv",
+        &(train.provenance
+            + &dev
+                .provenance
+                .lines()
+                .skip(1)
+                .map(|s| format!("{s}\n"))
+                .collect::<String>()),
+    )?;
     write_new(output, "summary.tsv", &summary)?;
     write_new(output, "weights.tsv", &weights)?;
     print!("{summary}");
-    println!("BOOLEAN_LARGE_FIT_DONE scope=EXPLORATORY_RUST_NATIVE test=UNOPENED G0_admitted=false");
+    println!(
+        "BOOLEAN_LARGE_FIT_DONE scope=EXPLORATORY_RUST_NATIVE test=UNOPENED G0_admitted=false"
+    );
     Ok(())
 }
 
@@ -259,7 +323,12 @@ fn main() {
         eprintln!("usage: sml-boolean-large-corpus-fit SCIRUST TDI SML-GENIUS NEW_OUTPUT_DIR");
         std::process::exit(2);
     }
-    if let Err(e) = run(Path::new(&a[1]), Path::new(&a[2]), Path::new(&a[3]), Path::new(&a[4])) {
+    if let Err(e) = run(
+        Path::new(&a[1]),
+        Path::new(&a[2]),
+        Path::new(&a[3]),
+        Path::new(&a[4]),
+    ) {
         eprintln!("BOOLEAN_LARGE_FIT_STOP {e}");
         std::process::exit(1);
     }
