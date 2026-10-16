@@ -69,7 +69,7 @@ fn next_record(reader: &mut BufReader<File>) -> Result<Option<String>> {
 fn checked_manifest(path: &Path) -> Result<(u64, u64, u64, [u8; 32])> {
     let digest = hash_file(path)?;
     let mut lines = BufReader::with_capacity(8192, File::open(path)?);
-    if next_record(&mut lines)?.as_deref() != Some(&format!("{HEADER}\n")) {
+    if next_record(&mut lines)?.as_deref().map(|line| line.trim_end_matches('\n')) != Some(HEADER) {
         return Err("unrecognized exact provenance header".into());
     }
     let mut docs = 0u64;
@@ -260,7 +260,7 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
     }
     let mut file = File::open(corpus)?;
     let mut lines = BufReader::with_capacity(8192, File::open(provenance)?);
-    if next_record(&mut lines)?.as_deref() != Some(&format!("{HEADER}\n")) { return Err("manifest changed".into()); }
+    if next_record(&mut lines)?.as_deref().map(|line| line.trim_end_matches('\n')) != Some(HEADER) { return Err("manifest changed".into()); }
     let mut prefix_offset = 0u64;
     let mut prefix_bytes = 0u64;
     let mut prefix_events = 0u64;
