@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod stream;
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const CLASSES: usize = 256;
 const PAIRS: usize = 4;
@@ -354,6 +356,15 @@ fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
 }
 
 fn execute_args(args: &[String]) -> Result<()> {
+    if args.len() == 7 && args[1] == "--stream" {
+        return stream::run(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            &args[4],
+            Path::new(&args[5]),
+            Path::new(&args[6]),
+        );
+    }
     if args.len() == 7 && args[1] != "--multi" {
         let repos = [
             ("Memorithm/SciRust", Path::new(&args[1])),
