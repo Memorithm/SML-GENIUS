@@ -970,7 +970,10 @@ mod tests {
         assert_eq!(dev_events, 256);
         assert!(dev_loss.is_finite());
         assert_eq!(masked.counters().supervised_bits, before.supervised_bits);
-        assert_eq!(masked.counters().parameter_updates, before.parameter_updates);
+        assert_eq!(
+            masked.counters().parameter_updates,
+            before.parameter_updates
+        );
         assert_eq!(
             masked.counters().distinct_updated_parameters,
             before.distinct_updated_parameters
