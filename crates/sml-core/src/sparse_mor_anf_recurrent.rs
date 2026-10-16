@@ -109,6 +109,17 @@ impl Default for Head {
     }
 }
 
+struct MixturePrediction {
+    p: f64,
+    gate: f64,
+    p0: f64,
+    p1: f64,
+    bucket: usize,
+    features: [f64; GATE_FEATURES],
+    first: u64,
+    second: u64,
+}
+
 pub struct MorAnfRecurrent {
     atlas: SparseGradientAtlas,
     head: Head,
@@ -155,7 +166,7 @@ impl MorAnfRecurrent {
         b: u8,
         bit: usize,
         trace: Trace,
-    ) -> Result<(f64, f64, f64, f64, usize, [f64; GATE_FEATURES], u64, u64)> {
+    ) -> Result<MixturePrediction> {
         let (first, second, bucket) = self.candidates(a, b, bit);
         let nonlinear = anf_monomial(a, b);
         let feature = [
@@ -173,7 +184,9 @@ impl MorAnfRecurrent {
         if !p.is_finite() || !(0.0..1.0).contains(&p) {
             return Err("invalid MOR mixture probability".into());
         }
-        Ok((p, gate, p0, p1, bucket, feature, first, second))
+        Ok(MixturePrediction {
+            p, gate, p0, p1, bucket, features: feature, first, second,
+        })
     }
 
     fn train_target(
@@ -184,7 +197,7 @@ impl MorAnfRecurrent {
         label: bool,
         trace: Trace,
     ) -> Result<(f64, f64)> {
-        let (p, gate, p0, p1, bucket, features, first, second) =
+        let MixturePrediction {p, gate, p0, p1, bucket, features, first, second} =
             self.prediction(a, b, bit, trace)?;
         let y = f64::from(u8::from(label));
         let loss = if label { -p.log2() } else { -(1.0 - p).log2() };
@@ -270,7 +283,7 @@ impl MorAnfRecurrent {
         for triple in text.windows(3) {
             trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
             for bit in 0..8 {
-                let (p, ..) = self.prediction(triple[0], triple[1], bit, trace)?;
+                let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
                 loss += if triple[2] & (1 << bit) != 0 {
                     -p.log2()
                 } else {
@@ -368,14 +381,16 @@ impl MorAnfRecurrent {
         {
             return Err("MOR head config mismatch".into());
         }
-        let mut head = Head::default();
-        head.counters = MorAnfCounters {
+        let mut head = Head {
+            counters: MorAnfCounters {
             supervised_target_bits: h[4].parse()?,
             routed_expert_updates: h[5].parse()?,
             router_parameter_updates: h[6].parse()?,
             unique_router_parameters: h[7].parse()?,
             recurrent_parameter_updates: h[8].parse()?,
             recurrence_steps: h[9].parse()?,
+            },
+            ..Head::default()
         };
         let recurrence = lines.next().ok_or("missing RTRL weights")?;
         let r: Vec<_> = recurrence.split('\t').collect();
