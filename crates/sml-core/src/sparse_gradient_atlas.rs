@@ -391,6 +391,47 @@ impl SparseGradientAtlas {
         Ok((loss, predicted_bytes))
     }
 
+    /// Deterministic bounded block-shuffled SGD. Groups each consecutive
+    /// block of token prediction positions by routed page to avoid one
+    /// physical page fault per bit. Stable sorting preserves temporal
+    /// order *within* each page; different pages are independent weights.
+    ///
+    /// The result is mathematically identical to sequential train_document
+    /// when there are no shared weights across different pages. No data
+    /// outside the current document influences the prediction context.
+    pub fn train_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid page batch window (1..=8192 prediction bytes)".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                let a = document[position];
+                let b = document[position + 1];
+                for bit in 0..8usize {
+                    let page = route(a, b, bit, self.config.pages);
+                    scheduled.push((page, position, bit));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, position, bit) in scheduled {
+                let target = document[position + 2] & (1 << bit) != 0;
+                loss += self.train_bit(document[position], document[position + 1], bit, target)?;
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped training loss".into());
+        }
+        Ok((loss, predicted as u64))
+    }
+
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
@@ -575,6 +616,41 @@ mod tests {
         weights.sync_all().unwrap();
         assert!(SparseGradientAtlas::reopen(&dir, cfg(4, 1)).is_err());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn grouped_gradient_matches_online_weights_across_page_routing() {
+        let first = temp("online");
+        let second = temp("grouped");
+        let config = cfg(64, 1);
+        let mut serial = SparseGradientAtlas::create(&first, config).unwrap();
+        let mut grouped = SparseGradientAtlas::create(&second, config).unwrap();
+        let bytes: Vec<u8> = (0..3000usize)
+            .map(|n| (n.wrapping_mul(13) ^ (n / 7)) as u8)
+            .collect();
+        let (_, events) = serial.train_document(&bytes).unwrap();
+        let (_, grouped_events) = grouped.train_document_grouped(&bytes, 512).unwrap();
+        assert_eq!(events, grouped_events);
+        assert_eq!(serial.counters().supervised_bits, grouped.counters().supervised_bits);
+        assert_eq!(serial.counters().distinct_updated_parameters, grouped.counters().distinct_updated_parameters);
+        // Different selected pages have disjoint weights. The result is
+        // identical for each page despite reordering across pages.
+        serial.flush().unwrap();
+        grouped.flush().unwrap();
+        assert_eq!(full_master(&first), full_master(&second));
+        assert_eq!(
+            fs::read(first.join("touched.bit")).unwrap(),
+            fs::read(second.join("touched.bit")).unwrap()
+        );
+        assert!(grouped.counters().page_loads < serial.counters().page_loads);
+        assert!(grouped.train_document_grouped(&bytes, 0).is_err());
+        assert!(grouped.train_document_grouped(&bytes, 8193).is_err());
+        fs::remove_dir_all(first).unwrap();
+        fs::remove_dir_all(second).unwrap();
+    }
+
+    fn full_master(dir: &Path) -> Vec<u8> {
+        fs::read(dir.join("master.f32")).unwrap()
     }
 
     #[test]
