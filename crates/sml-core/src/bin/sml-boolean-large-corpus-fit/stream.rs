@@ -469,7 +469,10 @@ mod tests {
     #[test]
     fn checkpoint_roundtrip_preserves_weights_and_rejects_new_source() {
         use std::time::{SystemTime, UNIX_EPOCH};
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let dir = std::env::temp_dir().join(format!("sml-stream-{}-{nonce}", std::process::id()));
         fs::create_dir(&dir).unwrap();
         let input = b"abcdefgh1234";
@@ -490,7 +493,13 @@ mod tests {
         assert_eq!(saved.events, events);
         assert_eq!(saved.offset, state.offset);
         assert_eq!(bank.counts, recovered.counts);
-        assert!(restore(&dir, &sha256(b"changed source"), &manifest, &mut Bank::new()).is_err());
+        assert!(restore(
+            &dir,
+            &sha256(b"changed source"),
+            &manifest,
+            &mut Bank::new()
+        )
+        .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
