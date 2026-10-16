@@ -442,9 +442,7 @@ impl SparseGradientAtlas {
         answer_start: usize,
         batch_bytes: usize,
     ) -> Result<(f64, u64)> {
-        if answer_start < 2
-            || answer_start >= document.len()
-            || !(1..=8192).contains(&batch_bytes)
+        if answer_start < 2 || answer_start >= document.len() || !(1..=8192).contains(&batch_bytes)
         {
             return Err("invalid assistant target window".into());
         }
@@ -455,7 +453,12 @@ impl SparseGradientAtlas {
             for target in start..end {
                 for bit in 0..8 {
                     routed.push((
-                        route(document[target - 2], document[target - 1], bit, self.config.pages),
+                        route(
+                            document[target - 2],
+                            document[target - 1],
+                            bit,
+                            self.config.pages,
+                        ),
                         target,
                         bit,
                     ));
@@ -485,9 +488,7 @@ impl SparseGradientAtlas {
         answer_start: usize,
         batch_bytes: usize,
     ) -> Result<(f64, u64)> {
-        if answer_start < 2
-            || answer_start >= document.len()
-            || !(1..=8192).contains(&batch_bytes)
+        if answer_start < 2 || answer_start >= document.len() || !(1..=8192).contains(&batch_bytes)
         {
             return Err("invalid assistant evaluation window".into());
         }
@@ -498,7 +499,12 @@ impl SparseGradientAtlas {
             for target in start..end {
                 for bit in 0..8 {
                     routed.push((
-                        route(document[target - 2], document[target - 1], bit, self.config.pages),
+                        route(
+                            document[target - 2],
+                            document[target - 1],
+                            bit,
+                            self.config.pages,
+                        ),
                         target,
                         bit,
                     ));
