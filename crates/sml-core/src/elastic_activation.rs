@@ -273,7 +273,9 @@ impl ElasticActivationController {
 
         // The existing planner independently validates active, RAM, VRAM and
         // residency constraints. EAC has additional explicit headroom limits.
-        let weight_plan = planner.plan_cycle(&selected, epoch).map_err(EacError::Planner)?;
+        let weight_plan = planner
+            .plan_cycle(&selected, epoch)
+            .map_err(EacError::Planner)?;
         if weight_plan.precision_changes != 0 {
             return Err(EacError::UnmaterializedPrecisionTransition);
         }
@@ -317,7 +319,9 @@ impl ElasticActivationController {
             return Err(EacError::StaleOrInvalidProposal);
         }
         // The complete weight plan is validated again by planner.commit().
-        planner.commit(&proposal.weight_plan).map_err(EacError::Planner)?;
+        planner
+            .commit(&proposal.weight_plan)
+            .map_err(EacError::Planner)?;
         self.state = proposal.next;
         self.generation = self.generation.saturating_add(1);
         Ok(())
@@ -458,13 +462,17 @@ mod tests {
         let mut eac = ElasticActivationController::new(policy()).unwrap();
         let mut weights = planner();
         for (epoch, expected) in [(1, 200), (2, 300), (3, 400)] {
-            let proposal = eac.propose(&weights, &candidates(), ambiguous(), epoch).unwrap();
+            let proposal = eac
+                .propose(&weights, &candidates(), ambiguous(), epoch)
+                .unwrap();
             assert_eq!(proposal.action, EacAction::ExpandWidth);
             assert_eq!(proposal.weight_plan.active_parameters, expected);
             eac.commit(&mut weights, &proposal).unwrap();
         }
         assert_eq!(eac.active_ppm(), EAC_PPM);
-        let proposal = eac.propose(&weights, &candidates(), ambiguous(), 4).unwrap();
+        let proposal = eac
+            .propose(&weights, &candidates(), ambiguous(), 4)
+            .unwrap();
         assert_eq!(proposal.action, EacAction::ExpandDepth);
         assert_eq!(proposal.recurrent_depth, 2);
         eac.commit(&mut weights, &proposal).unwrap();
@@ -475,7 +483,9 @@ mod tests {
     fn stable_signal_contracts_after_hysteresis() {
         let mut eac = ElasticActivationController::new(policy()).unwrap();
         let mut weights = planner();
-        let expand = eac.propose(&weights, &candidates(), ambiguous(), 1).unwrap();
+        let expand = eac
+            .propose(&weights, &candidates(), ambiguous(), 1)
+            .unwrap();
         eac.commit(&mut weights, &expand).unwrap();
         let hold = eac.propose(&weights, &candidates(), stable(), 2).unwrap();
         assert_eq!(hold.action, EacAction::Hold);
@@ -491,7 +501,9 @@ mod tests {
         p.cooldown_cycles = 3;
         let mut eac = ElasticActivationController::new(p).unwrap();
         let mut weights = planner();
-        let expand = eac.propose(&weights, &candidates(), ambiguous(), 1).unwrap();
+        let expand = eac
+            .propose(&weights, &candidates(), ambiguous(), 1)
+            .unwrap();
         eac.commit(&mut weights, &expand).unwrap();
         let mut pressured = ambiguous();
         pressured.memory_pressure_ppm = EAC_PPM;
@@ -561,11 +573,17 @@ mod tests {
     fn invalid_signals_and_policies_fail_closed() {
         let mut p = policy();
         p.max_active_ppm = EAC_PPM + 1;
-        assert_eq!(ElasticActivationController::new(p), Err(EacError::InvalidPolicy));
+        assert_eq!(
+            ElasticActivationController::new(p),
+            Err(EacError::InvalidPolicy)
+        );
         let eac = ElasticActivationController::new(policy()).unwrap();
         let weights = planner();
         let mut signal = stable();
         signal.route_margin_ppm = EAC_PPM + 1;
-        assert_eq!(eac.propose(&weights, &candidates(), signal, 1), Err(EacError::InvalidEvidence));
+        assert_eq!(
+            eac.propose(&weights, &candidates(), signal, 1),
+            Err(EacError::InvalidEvidence)
+        );
     }
 }
