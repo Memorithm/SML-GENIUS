@@ -432,6 +432,97 @@ impl SparseGradientAtlas {
         Ok((loss, predicted as u64))
     }
 
+    /// Teacher-forced next-byte training restricted to assistant targets.
+    /// The whole preceding user/role prefix is visible as context, but no
+    /// gradient is ever applied to a prompt byte. Context is STILL only two
+    /// bytes: this is a bounded pilot, not a conversational model.
+    pub fn train_assistant_bytes(
+        &mut self,
+        document: &[u8],
+        answer_start: usize,
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if answer_start < 2 || answer_start >= document.len() || !(1..=8192).contains(&batch_bytes)
+        {
+            return Err("invalid assistant target window".into());
+        }
+        let mut loss = 0.0;
+        for start in (answer_start..document.len()).step_by(batch_bytes) {
+            let end = (start + batch_bytes).min(document.len());
+            let mut routed = Vec::with_capacity((end - start) * 8);
+            for target in start..end {
+                for bit in 0..8 {
+                    routed.push((
+                        route(
+                            document[target - 2],
+                            document[target - 1],
+                            bit,
+                            self.config.pages,
+                        ),
+                        target,
+                        bit,
+                    ));
+                }
+            }
+            routed.sort_by_key(|entry| entry.0);
+            for (_, target, bit) in routed {
+                loss += self.train_bit(
+                    document[target - 2],
+                    document[target - 1],
+                    bit,
+                    document[target] & (1 << bit) != 0,
+                )?;
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite assistant training loss".into());
+        }
+        Ok((loss, (document.len() - answer_start) as u64))
+    }
+
+    /// Separate frozen-weight DEV scoring on assistant targets only.
+    /// Does not update weights, gradients or training counters.
+    pub fn evaluate_assistant_bytes(
+        &mut self,
+        document: &[u8],
+        answer_start: usize,
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if answer_start < 2 || answer_start >= document.len() || !(1..=8192).contains(&batch_bytes)
+        {
+            return Err("invalid assistant evaluation window".into());
+        }
+        let mut loss = 0.0;
+        for start in (answer_start..document.len()).step_by(batch_bytes) {
+            let end = (start + batch_bytes).min(document.len());
+            let mut routed = Vec::with_capacity((end - start) * 8);
+            for target in start..end {
+                for bit in 0..8 {
+                    routed.push((
+                        route(
+                            document[target - 2],
+                            document[target - 1],
+                            bit,
+                            self.config.pages,
+                        ),
+                        target,
+                        bit,
+                    ));
+                }
+            }
+            routed.sort_by_key(|entry| entry.0);
+            for (_, target, bit) in routed {
+                let (_, p) =
+                    self.bit_probability(document[target - 2], document[target - 1], bit)?;
+                loss += binary_loss_bits(p, document[target] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite assistant DEV loss".into());
+        }
+        Ok((loss, (document.len() - answer_start) as u64))
+    }
+
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
@@ -856,6 +947,56 @@ mod tests {
         assert!(grouped.train_document_grouped(&bytes, 8193).is_err());
         fs::remove_dir_all(first).unwrap();
         fs::remove_dir_all(second).unwrap();
+    }
+
+    #[test]
+    fn assistant_targets_mask_prompt_and_match_full_fit_at_offset_two() {
+        let masked_dir = temp("assistant-mask");
+        let full_dir = temp("assistant-full");
+        let config = cfg(64, 2);
+        let bytes: Vec<u8> = (0..512).map(|i| ((i * 7) ^ (i / 5)) as u8).collect();
+        let mut masked = SparseGradientAtlas::create(&masked_dir, config).unwrap();
+        let mut full = SparseGradientAtlas::create(&full_dir, config).unwrap();
+        assert!(masked.train_assistant_bytes(&bytes, 0, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 1, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 512, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 256, 0).is_err());
+        let (loss, events) = masked.train_assistant_bytes(&bytes, 256, 128).unwrap();
+        assert!(loss.is_finite());
+        assert_eq!(events, 256);
+        assert_eq!(masked.counters().supervised_bits, 256 * 8);
+        let before = masked.counters();
+        let (dev_loss, dev_events) = masked.evaluate_assistant_bytes(&bytes, 256, 128).unwrap();
+        assert_eq!(dev_events, 256);
+        assert!(dev_loss.is_finite());
+        assert_eq!(masked.counters().supervised_bits, before.supervised_bits);
+        assert_eq!(
+            masked.counters().parameter_updates,
+            before.parameter_updates
+        );
+        assert_eq!(
+            masked.counters().distinct_updated_parameters,
+            before.distinct_updated_parameters
+        );
+        assert!(masked.evaluate_assistant_bytes(&bytes, 1, 128).is_err());
+        assert!(masked.evaluate_assistant_bytes(&bytes, 256, 0).is_err());
+        let (_, count) = full.train_document_grouped(&bytes, 128).unwrap();
+        assert_eq!(count, 510);
+        assert_eq!(full.counters().supervised_bits, 510 * 8);
+        let parity_dir = temp("assistant-parity");
+        let mut parity = SparseGradientAtlas::create(&parity_dir, config).unwrap();
+        let (_, parity_count) = parity.train_assistant_bytes(&bytes, 2, 128).unwrap();
+        assert_eq!(parity_count, count);
+        full.flush().unwrap();
+        parity.flush().unwrap();
+        assert_eq!(full_master(&full_dir), full_master(&parity_dir));
+        assert_eq!(
+            fs::read(full_dir.join("touched.bit")).unwrap(),
+            fs::read(parity_dir.join("touched.bit")).unwrap()
+        );
+        fs::remove_dir_all(masked_dir).unwrap();
+        fs::remove_dir_all(full_dir).unwrap();
+        fs::remove_dir_all(parity_dir).unwrap();
     }
 
     fn full_master(dir: &Path) -> Vec<u8> {
