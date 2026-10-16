@@ -50,6 +50,10 @@ physical budgets; it cannot be assumed by setting max_active_ppm=1000000.
 
 ## Reproducibility controls
 
+The metadata-only 25B case verifies exact 85% Boolean/10% ternary/5% residual
+storage (31,250,000,000 bits = 3,906,250,000 packed bytes) at a 100% active
+budget, without allocating or learning weights. This is accounting evidence only.
+
 The unit suite tests read-only planning, exact commit accounting, adaptive
 expansion 25%/50%/75%/100%, recurrence deepening, stability contraction,
 pressure overrides, stale replay, headroom budget rejection, invalid candidates,
