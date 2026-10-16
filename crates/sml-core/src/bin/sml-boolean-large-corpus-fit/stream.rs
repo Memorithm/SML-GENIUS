@@ -17,7 +17,8 @@ const MAX_DOCUMENT: u64 = 8 * 1024 * 1024;
 const MAX_DOCUMENTS: u64 = 20_000_000;
 const CHECKPOINT_EVERY: u64 = 256;
 const VERSION: &str = "SML_BOOLEAN_STREAM_V1";
-const HEADER: &str = "shard\trow\tsha256\tbytes\tlicense_class\tlicense_source\tidentifier\tcreator_title";
+const HEADER: &str =
+    "shard\trow\tsha256\tbytes\tlicense_class\tlicense_source\tidentifier\tcreator_title";
 
 struct Entry {
     hash: [u8; 32],
@@ -52,16 +53,28 @@ fn next_record(reader: &mut BufReader<File>) -> Result<Option<String>> {
     loop {
         let bytes = reader.fill_buf()?;
         if bytes.is_empty() {
-            if line.is_empty() { return Ok(None); }
+            if line.is_empty() {
+                return Ok(None);
+            }
             return Err("unterminated provenance record".into());
         }
-        let consumed = bytes.iter().position(|b| *b == b'\n').map_or(bytes.len(), |p| p + 1);
-        if line.len().checked_add(consumed).ok_or("line length overflow")? > 262_144 {
+        let consumed = bytes
+            .iter()
+            .position(|b| *b == b'\n')
+            .map_or(bytes.len(), |p| p + 1);
+        if line
+            .len()
+            .checked_add(consumed)
+            .ok_or("line length overflow")?
+            > 262_144
+        {
             return Err("provenance line exceeds bounded memory policy".into());
         }
         line.extend_from_slice(&bytes[..consumed]);
         reader.consume(consumed);
-        if line.last() == Some(&b'\n') { break; }
+        if line.last() == Some(&b'\n') {
+            break;
+        }
     }
     Ok(Some(String::from_utf8(line)?))
 }
@@ -69,7 +82,11 @@ fn next_record(reader: &mut BufReader<File>) -> Result<Option<String>> {
 fn checked_manifest(path: &Path) -> Result<(u64, u64, u64, [u8; 32])> {
     let digest = hash_file(path)?;
     let mut lines = BufReader::with_capacity(8192, File::open(path)?);
-    if next_record(&mut lines)?.as_deref().map(|line| line.trim_end_matches('\n')) != Some(HEADER) {
+    if next_record(&mut lines)?
+        .as_deref()
+        .map(|line| line.trim_end_matches('\n'))
+        != Some(HEADER)
+    {
         return Err("unrecognized exact provenance header".into());
     }
     let mut docs = 0u64;
@@ -101,7 +118,9 @@ fn hash_file(path: &Path) -> Result<[u8; 32]> {
     let mut chunk = vec![0u8; CHUNK];
     loop {
         let n = file.read(&mut chunk)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         hash.update(&chunk[..n]);
     }
     Ok(hash.finish())
@@ -127,14 +146,29 @@ struct State {
     events: u64,
 }
 
-fn checkpoint(out: &Path, corpus_hash: &[u8; 32], manifest_hash: &[u8; 32], state: &State, bank: &Bank) -> Result<()> {
+fn checkpoint(
+    out: &Path,
+    corpus_hash: &[u8; 32],
+    manifest_hash: &[u8; 32],
+    state: &State,
+    bank: &Bank,
+) -> Result<()> {
     let temp = out.join("checkpoint.v1.partial");
-    if temp.exists() { fs::remove_file(&temp)?; }
-    let mut f = OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    if temp.exists() {
+        fs::remove_file(&temp)?;
+    }
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
     writeln!(f, "{VERSION}")?;
     writeln!(f, "{}", hex(corpus_hash))?;
     writeln!(f, "{}", hex(manifest_hash))?;
-    writeln!(f, "{}\t{}\t{}\t{}", state.docs, state.offset, state.payload, state.events)?;
+    writeln!(
+        f,
+        "{}\t{}\t{}\t{}",
+        state.docs, state.offset, state.payload, state.events
+    )?;
     for counts in &bank.counts {
         writeln!(f, "{}\t{}", counts[0], counts[1])?;
     }
@@ -149,16 +183,24 @@ fn checkpoint_line<I: Iterator<Item = std::io::Result<String>>>(lines: &mut I) -
     Ok(lines.next().ok_or("short checkpoint")??)
 }
 
-fn restore(out: &Path, corpus_hash: &[u8; 32], manifest_hash: &[u8; 32], bank: &mut Bank) -> Result<State> {
+fn restore(
+    out: &Path,
+    corpus_hash: &[u8; 32],
+    manifest_hash: &[u8; 32],
+    bank: &mut Bank,
+) -> Result<State> {
     let path = out.join("checkpoint.v1");
-    if !path.exists() { return Ok(State::default()); }
+    if !path.exists() {
+        return Ok(State::default());
+    }
     if path.symlink_metadata()?.file_type().is_symlink() {
         return Err("checkpoint symlink forbidden".into());
     }
     let mut lines = BufReader::new(File::open(path)?).lines();
     if checkpoint_line(&mut lines)? != VERSION
         || checkpoint_line(&mut lines)? != hex(corpus_hash)
-        || checkpoint_line(&mut lines)? != hex(manifest_hash) {
+        || checkpoint_line(&mut lines)? != hex(manifest_hash)
+    {
         return Err("checkpoint/source identity mismatch".into());
     }
     let stats = checkpoint_line(&mut lines)?;
@@ -166,23 +208,36 @@ fn restore(out: &Path, corpus_hash: &[u8; 32], manifest_hash: &[u8; 32], bank: &
         .split('\t')
         .map(str::parse::<u64>)
         .collect::<std::result::Result<_, _>>()?;
-    if values.len() != 4 { return Err("invalid checkpoint counters".into()); }
+    if values.len() != 4 {
+        return Err("invalid checkpoint counters".into());
+    }
     for counts in &mut bank.counts {
         let line = checkpoint_line(&mut lines)?;
         let pair: Vec<u64> = line
             .split('\t')
             .map(str::parse::<u64>)
             .collect::<std::result::Result<_, _>>()?;
-        if pair.len() != 2 { return Err("invalid checkpoint weight row".into()); }
+        if pair.len() != 2 {
+            return Err("invalid checkpoint weight row".into());
+        }
         *counts = [pair[0], pair[1]];
     }
     if checkpoint_line(&mut lines)? != "END" || lines.next().is_some() {
         return Err("invalid checkpoint terminator".into());
     }
-    let state = State { docs: values[0], offset: values[1], payload: values[2], events: values[3] };
-    let learned: u64 = bank.counts.iter().try_fold(0u64, |total, item| {
-        total.checked_add(item[0])?.checked_add(item[1])
-    }).ok_or("checkpoint counter overflow")?;
+    let state = State {
+        docs: values[0],
+        offset: values[1],
+        payload: values[2],
+        events: values[3],
+    };
+    let learned: u64 = bank
+        .counts
+        .iter()
+        .try_fold(0u64, |total, item| {
+            total.checked_add(item[0])?.checked_add(item[1])
+        })
+        .ok_or("checkpoint counter overflow")?;
     if learned != state.events.checked_mul(8).ok_or("event overflow")? {
         return Err("checkpoint bit totals mismatch".into());
     }
@@ -210,7 +265,9 @@ fn one_document(file: &mut File, record: &Entry, bank: &mut Bank) -> Result<u64>
         let n = usize::try_from(remaining.min(CHUNK as u64))?;
         file.read_exact(&mut chunk[..n])?;
         digest.update(&chunk[..n]);
-        events = events.checked_add(feed(bank, &mut tail, &mut carry, &chunk[..n])?).ok_or("event overflow")?;
+        events = events
+            .checked_add(feed(bank, &mut tail, &mut carry, &chunk[..n])?)
+            .ok_or("event overflow")?;
         remaining -= n as u64;
     }
     if digest.finish() != record.hash {
@@ -232,11 +289,21 @@ fn write_artifact(out: &Path, name: &str, data: &[u8]) -> Result<()> {
     let mut f = OpenOptions::new().write(true).create_new(true).open(path)?;
     f.write_all(data)?;
     f.sync_all()?;
-    println!("BOOLEAN_STREAM_ARTIFACT name={name} bytes={} sha256={}", data.len(), hex(&sha256(data)));
+    println!(
+        "BOOLEAN_STREAM_ARTIFACT name={name} bytes={} sha256={}",
+        data.len(),
+        hex(&sha256(data))
+    );
     Ok(())
 }
 
-pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Path, out: &Path) -> Result<()> {
+pub(super) fn run(
+    corpus: &Path,
+    provenance: &Path,
+    expected_hex: &str,
+    dev: &Path,
+    out: &Path,
+) -> Result<()> {
     let expected = parse_hex(expected_hex).ok_or("invalid expected corpus SHA-256")?;
     if corpus == provenance || corpus == dev || provenance == dev {
         return Err("TRAIN/manifest/DEV paths must differ".into());
@@ -247,11 +314,17 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
     if out.join("summary.tsv").exists() {
         return Err("training output already sealed; refusing overwrite".into());
     }
-    if !out.exists() { fs::create_dir(out)?; }
+    if !out.exists() {
+        fs::create_dir(out)?;
+    }
     let (docs, payload, physical, manifest_hash) = checked_manifest(provenance)?;
-    if fs::metadata(corpus)?.len() != physical { return Err("corpus physical length differs from ledger".into()); }
+    if fs::metadata(corpus)?.len() != physical {
+        return Err("corpus physical length differs from ledger".into());
+    }
     let actual_hash = hash_file(corpus)?;
-    if actual_hash != expected { return Err("corpus identity does not match expected SHA-256".into()); }
+    if actual_hash != expected {
+        return Err("corpus identity does not match expected SHA-256".into());
+    }
     let dev_hashes = dev_fingerprints(dev)?;
     let mut bank = Bank::new();
     let mut state = restore(out, &expected, &manifest_hash, &mut bank)?;
@@ -260,7 +333,13 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
     }
     let mut file = File::open(corpus)?;
     let mut lines = BufReader::with_capacity(8192, File::open(provenance)?);
-    if next_record(&mut lines)?.as_deref().map(|line| line.trim_end_matches('\n')) != Some(HEADER) { return Err("manifest changed".into()); }
+    if next_record(&mut lines)?
+        .as_deref()
+        .map(|line| line.trim_end_matches('\n'))
+        != Some(HEADER)
+    {
+        return Err("manifest changed".into());
+    }
     let mut prefix_offset = 0u64;
     let mut prefix_bytes = 0u64;
     let mut prefix_events = 0u64;
@@ -277,35 +356,63 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
             prefix_events += record.bytes - 2;
         } else {
             if !resumed {
-                if state.offset != prefix_offset || state.payload != prefix_bytes || state.events != prefix_events {
+                if state.offset != prefix_offset
+                    || state.payload != prefix_bytes
+                    || state.events != prefix_events
+                {
                     return Err("checkpoint progress differs from manifest prefix".into());
                 }
                 file.seek(SeekFrom::Start(state.offset))?;
                 resumed = true;
-                println!("BOOLEAN_STREAM_RESUME documents={} offset={}", state.docs, state.offset);
+                println!(
+                    "BOOLEAN_STREAM_RESUME documents={} offset={}",
+                    state.docs, state.offset
+                );
             }
             let n = one_document(&mut file, &record, &mut bank)?;
             state.docs = state.docs.checked_add(1).ok_or("document overflow")?;
-            state.offset = state.offset.checked_add(record.bytes + 1).ok_or("offset overflow")?;
-            state.payload = state.payload.checked_add(record.bytes).ok_or("payload overflow")?;
+            state.offset = state
+                .offset
+                .checked_add(record.bytes + 1)
+                .ok_or("offset overflow")?;
+            state.payload = state
+                .payload
+                .checked_add(record.bytes)
+                .ok_or("payload overflow")?;
             state.events = state.events.checked_add(n).ok_or("event overflow")?;
             if state.docs % CHECKPOINT_EVERY == 0 {
                 checkpoint(out, &expected, &manifest_hash, &state, &bank)?;
-                println!("BOOLEAN_STREAM_CHECKPOINT docs={} bytes={} events={}", state.docs, state.payload, state.events);
+                println!(
+                    "BOOLEAN_STREAM_CHECKPOINT docs={} bytes={} events={}",
+                    state.docs, state.payload, state.events
+                );
             }
         }
         number += 1;
     }
-    if !resumed && (state.offset != prefix_offset || state.payload != prefix_bytes || state.events != prefix_events) {
+    if !resumed
+        && (state.offset != prefix_offset
+            || state.payload != prefix_bytes
+            || state.events != prefix_events)
+    {
         return Err("final checkpoint does not match complete manifest".into());
     }
     if state.docs != docs || state.offset != physical || state.payload != payload {
         return Err("TRAIN traversal differs from preflight".into());
     }
     checkpoint(out, &expected, &manifest_hash, &state, &bank)?;
-    if bank.changed_slots() < 100 { return Err("insufficient Boolean model coverage".into()); }
+    if bank.changed_slots() < 100 {
+        return Err("insufficient Boolean model coverage".into());
+    }
     let mut dev_corpus = Corpus::new();
-    let dev_loss = scan(dev, "Memorithm/SML-GENIUS", "DEV", &mut dev_corpus, &mut bank, true)?;
+    let dev_loss = scan(
+        dev,
+        "Memorithm/SML-GENIUS",
+        "DEV",
+        &mut dev_corpus,
+        &mut bank,
+        true,
+    )?;
     if dev_corpus.bytes < MIN_DEV || dev_corpus.events == 0 {
         return Err("DEV has no sufficient events".into());
     }
@@ -322,8 +429,12 @@ pub(super) fn run(corpus: &Path, provenance: &Path, expected_hex: &str, dev: &Pa
         "corpus_sha256\t{}\nmanifest_sha256\t{}\ntrain_documents\t{}\ntrain_payload_bytes\t{}\ncap_bytes\t{}\ntest\tUNOPENED\ng0\tNOT_ADMITTED\n",
         hex(&expected), hex(&manifest_hash), state.docs, state.payload, MAX_TRAIN
     );
-    if !out.join("weights.tsv").exists() { write_artifact(out, "weights.tsv", weights.as_bytes())?; }
-    if !out.join("qualification.tsv").exists() { write_artifact(out, "qualification.tsv", qualification.as_bytes())?; }
+    if !out.join("weights.tsv").exists() {
+        write_artifact(out, "weights.tsv", weights.as_bytes())?;
+    }
+    if !out.join("qualification.tsv").exists() {
+        write_artifact(out, "qualification.tsv", qualification.as_bytes())?;
+    }
     write_artifact(out, "summary.tsv", summary.as_bytes())?;
     print!("{summary}");
     println!("BOOLEAN_STREAM_DONE scope=RESEARCH source=HF_STREAM train_payload_bytes={} test=UNOPENED G0_admitted=false", state.payload);
