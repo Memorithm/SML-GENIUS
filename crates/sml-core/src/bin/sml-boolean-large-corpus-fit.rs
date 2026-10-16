@@ -307,7 +307,7 @@ fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
     }
     let dev_bpc = neglog / dev.events as f64;
     let summary = format!(
-        "model\\ttrain_roots\\ttrain_bytes\\ttrain_files\\ttrain_target_bytes\\ttrain_duplicates_skipped\\tdev_bytes\\tdev_files\\tdev_target_bytes\\tdev_identical_files_excluded\\tlearned_slots\\tdev_bpc\\tuniform_baseline_bpc\\ttest\\tg0\\nboolean_context_8192\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{dev_bpc:.9}\\t8.000000000\\tUNOPENED\\tNOT_ADMITTED\\n",
+        "model\ttrain_roots\ttrain_bytes\ttrain_files\ttrain_target_bytes\ttrain_duplicates_skipped\tdev_bytes\tdev_files\tdev_target_bytes\tdev_identical_files_excluded\tlearned_slots\tdev_bpc\tuniform_baseline_bpc\ttest\tg0\nboolean_context_8192\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{dev_bpc:.9}\t8.000000000\tUNOPENED\tNOT_ADMITTED\n",
         roots.len(),
         train.bytes,
         train.files,
@@ -319,16 +319,16 @@ fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
         dev.duplicates_skipped,
         changed
     );
-    let mut weights = String::from("slot\\tzeros\\tones\\talpha\\n");
+    let mut weights = String::from("slot\tzeros\tones\talpha\n");
     for (idx, counts) in bank.counts.iter().enumerate() {
-        weights.push_str(&format!("{idx}\\t{}\\t{}\\t{ALPHA}\\n", counts[0], counts[1]));
+        weights.push_str(&format!("{idx}\t{}\t{}\t{ALPHA}\n", counts[0], counts[1]));
     }
     fs::create_dir(output)?;
     write_new(
         output,
         "provenance.tsv",
         &(train.provenance
-            + &dev.provenance.lines().skip(1).map(|line| format!("{line}\\n")).collect::<String>()),
+            + &dev.provenance.lines().skip(1).map(|line| format!("{line}\n")).collect::<String>()),
     )?;
     write_new(output, "summary.tsv", &summary)?;
     write_new(output, "weights.tsv", &weights)?;
