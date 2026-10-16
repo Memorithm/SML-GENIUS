@@ -27,7 +27,9 @@ fn sha(path: &Path) -> Result<String> {
     let mut buf = [0u8; 1024 * 1024];
     loop {
         let n = reader.read(&mut buf)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         state.update(&buf[..n]);
     }
     Ok(hex(&state.finish()))
@@ -44,8 +46,14 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         }
     }
     let digest = sha(corpus)?;
-    if digest != expected_sha { return Err("source changed since admission".into()); }
-    let config = SparseConfig { pages: 4096, max_cached_pages: 32, learning_rate: 0.20 };
+    if digest != expected_sha {
+        return Err("source changed since admission".into());
+    }
+    let config = SparseConfig {
+        pages: 4096,
+        max_cached_pages: 32,
+        learning_rate: 0.20,
+    };
     let mut model = MorAnfRecurrent::create(output, config)?;
     let mut reader = BufReader::new(File::open(corpus)?);
     let mut lines = BufReader::new(File::open(provenance)?).lines();
@@ -63,11 +71,14 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
     let mut dev_loss = 0f64;
     let start = std::time::Instant::now();
     for line in lines.take(1000) {
-        if train_bytes >= TRAIN_TARGET && dev_bytes >= DEV_TARGET { break; }
+        if train_bytes >= TRAIN_TARGET && dev_bytes >= DEV_TARGET {
+            break;
+        }
         let line = line?;
         let cols: Vec<_> = line.split('\t').collect();
-        if cols.len() != 8 || cols[6].is_empty() ||
-            !matches!(cols[4], "CC0" | "PD_CLAIM" | "CC_BY_ATTRIBUTION")
+        if cols.len() != 8
+            || cols[6].is_empty()
+            || !matches!(cols[4], "CC0" | "PD_CLAIM" | "CC_BY_ATTRIBUTION")
         {
             return Err("invalid rights/filing metadata".into());
         }
@@ -79,14 +90,18 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         reader.read_exact(&mut bytes)?;
         let mut separator = [0u8; 1];
         reader.read_exact(&mut separator)?;
-        if separator != [b'\n'] { return Err("corrupt document boundary".into()); }
+        if separator != [b'\n'] {
+            return Err("corrupt document boundary".into());
+        }
         let expected = parse_hex(cols[2]).ok_or("bad SHA ledger")?;
         let mut h = Sha256::default();
         h.update(&bytes);
         if h.finish() != expected || !hashes.insert(expected) {
             return Err("duplicate or altered SEC document".into());
         }
-        if length > DOCUMENT_MAX { continue; }
+        if length > DOCUMENT_MAX {
+            continue;
+        }
         if train_bytes < TRAIN_TARGET {
             let (loss, events) = model.train_document(&bytes)?;
             train_docs += 1;
@@ -124,7 +139,9 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         dev_loss / dev_events as f64,
         start.elapsed().as_secs_f64()
     );
-    let mut report = OpenOptions::new().write(true).create_new(true)
+    let mut report = OpenOptions::new()
+        .write(true)
+        .create_new(true)
         .open(output.join("mor_anf_pilot.tsv"))?;
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
@@ -138,9 +155,16 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
 fn main() {
     let args: Vec<_> = env::args().collect();
     let result = match args.as_slice() {
-        [_, flag, corpus, ledger, digest, output] if flag == "--pilot" =>
-            execute(Path::new(corpus), Path::new(ledger), digest, Path::new(output)),
-        _ => Err("usage: sml-mor-anf-rtrl-fit --pilot CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR".into()),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot" => execute(
+            Path::new(corpus),
+            Path::new(ledger),
+            digest,
+            Path::new(output),
+        ),
+        _ => Err(
+            "usage: sml-mor-anf-rtrl-fit --pilot CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+                .into(),
+        ),
     };
     if let Err(error) = result {
         eprintln!("SML_MOR_ANF_RTRL_FAIL {error}");
