@@ -525,6 +525,93 @@ impl SparseGradientAtlas {
     }
 }
 
+/// Read-only 4-bit inference atlas. No f32 masters are loaded, no weights are
+/// changed, and the page cache contains only bounded 512-byte Q4 pages.
+/// Q4 loss is explicitly measured rather than inferred from master loss.
+pub struct QuantizedSparseAtlas {
+    config: SparseConfig,
+    packed: File,
+    cache: Vec<QuantizedPage>,
+    tick: u64,
+    page_loads: u64,
+}
+
+struct QuantizedPage {
+    id: u64,
+    nibble_bytes: [u8; PAGE_PARAMETERS / 2],
+    used: u64,
+}
+
+impl QuantizedSparseAtlas {
+    pub fn open(path: &Path, config: SparseConfig) -> Result<Self> {
+        let config = config.validate()?;
+        let info = fs::symlink_metadata(path)?;
+        if !info.is_file()
+            || info.file_type().is_symlink()
+            || info.len() != config.packed_q4_bytes()
+        {
+            return Err("Q4 file must have exact model dimensions".into());
+        }
+        let packed = File::open(path)?;
+        Ok(Self { config, packed, cache: Vec::new(), tick: 0, page_loads: 0 })
+    }
+
+    fn load(&mut self, id: u64) -> Result<usize> {
+        if id >= self.config.pages {
+            return Err("Q4 page outside model atlas".into());
+        }
+        self.tick = self.tick.checked_add(1).ok_or("Q4 LRU overflow")?;
+        if let Some(index) = self.cache.iter().position(|p| p.id == id) {
+            self.cache[index].used = self.tick;
+            return Ok(index);
+        }
+        if self.cache.len() == self.config.max_cached_pages {
+            let old = self.cache.iter().enumerate().min_by_key(|(_, p)| p.used)
+                .map(|(idx, _)| idx).ok_or("Q4 cache eviction without resident")?;
+            self.cache.swap_remove(old);
+        }
+        let mut bytes = [0u8; PAGE_PARAMETERS / 2];
+        self.packed.seek(SeekFrom::Start(id * (PAGE_PARAMETERS / 2) as u64))?;
+        self.packed.read_exact(&mut bytes)?;
+        self.cache.push(QuantizedPage { id, nibble_bytes: bytes, used: self.tick });
+        self.page_loads = self.page_loads.checked_add(1).ok_or("Q4 load overflow")?;
+        Ok(self.cache.len() - 1)
+    }
+
+    pub fn probability(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
+        if bit >= 8 { return Err("invalid output bit".into()); }
+        let page_id = route(a, b, bit, self.config.pages);
+        let index = self.load(page_id)?;
+        let mut sum = 0f64;
+        for feature in 0..FEATURES {
+            let slot = feature_slot(a, b, bit, feature);
+            let encoded = self.cache[index].nibble_bytes[slot / 2];
+            let nibble = if slot % 2 == 0 { encoded & 15 } else { encoded >> 4 };
+            let signed = if nibble >= 8 { nibble as i8 - 16 } else { nibble as i8 };
+            sum += (f64::from(signed) / 2.0) * feature_sign(a, b, feature);
+        }
+        Ok(sigmoid(sum / SCALE))
+    }
+
+    pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
+        let mut loss = 0f64;
+        for window in document.windows(3) {
+            for bit in 0..8 {
+                let p = self.probability(window[0], window[1], bit)?;
+                loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() { return Err("Q4 inference loss is nonfinite".into()); }
+        Ok((loss, document.len().saturating_sub(2) as u64))
+    }
+
+    pub fn resident_bytes_upper_bound(&self) -> usize {
+        self.config.max_cached_pages * (PAGE_PARAMETERS / 2)
+    }
+
+    pub fn page_loads(&self) -> u64 { self.page_loads }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -651,6 +738,27 @@ mod tests {
 
     fn full_master(dir: &Path) -> Vec<u8> {
         fs::read(dir.join("master.f32")).unwrap()
+    }
+
+    #[test]
+    fn q4_is_a_real_bounded_read_only_inference_artifact() {
+        let root = temp("q4");
+        let config = cfg(256, 2);
+        let mut learn = SparseGradientAtlas::create(&root, config).unwrap();
+        let bytes = vec![b'Q'; 500];
+        learn.train_document_grouped(&bytes, 128).unwrap();
+        learn.export_q4(&root.join("weights.q4")).unwrap();
+        let before = fs::read(root.join("weights.q4")).unwrap();
+        let mut inference = QuantizedSparseAtlas::open(&root.join("weights.q4"), config).unwrap();
+        let (loss, n) = inference.evaluate_document(&bytes).unwrap();
+        assert_eq!(n, 498);
+        assert!(loss.is_finite());
+        assert!(loss / n as f64 < 8.0);
+        assert_eq!(inference.resident_bytes_upper_bound(), 1024);
+        assert!(inference.page_loads() > 0);
+        assert_eq!(fs::read(root.join("weights.q4")).unwrap(), before);
+        assert!(QuantizedSparseAtlas::open(&root.join("weights.q4"), cfg(257, 2)).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
