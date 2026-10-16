@@ -1,12 +1,17 @@
-# GRU-v2 / G0-HF2 — premier micro-lot de 7 œuvres identifiées (métadonnées uniquement)
+# GRU-v2 / G0-HF2 — sept œuvres candidates et trois originaux Gutenberg hachés
 
-Date : 2026-10-15. **État : `WORK_ID_CANDIDATES_ONLY` ; zéro texte admis.**
+Date initiale : 2026-10-15 ; actualisation : 2026-10-16.
+**État : `WORK_ID_CANDIDATES_ONLY` pour les lignes Hugging Face épinglées ;
+trois originaux Gutenberg observés hors HF ; zéro texte admis.**
 
-Ce micro-lot fait progresser le chantier depuis les *fichiers conteneurs*
-Hugging Face vers des **identifiants d'œuvres** vérifiables. Aucune
-partition TRAIN/VAL/TEST n'est attribuée et aucun texte n'a été
-téléchargé, haché comme payload ni présenté comme licence autorisée.
-Les œuvres restent exclues du dataset entraînable.
+Ce micro-lot progresse des *fichiers conteneurs* Hugging Face vers des
+**identifiants d'œuvres** vérifiables. Lors de l'inventaire initial,
+aucun payload Hugging Face n'avait été téléchargé ni haché. Un second
+contrôle Dell a ensuite **téléchargé temporairement et haché trois textes
+depuis Gutenberg**, sans les conserver comme corpus (voir G0-HF2b).
+Aucun octet du conteneur Hugging Face épinglé n'a été rapproché de ces
+originaux ; aucune partition TRAIN/VAL/TEST ni autorisation de licence
+n'a été attribuée. Les sept œuvres restent exclues du dataset entraînable.
 
 ## Inventaire contrôlé des conteneurs
 
@@ -138,6 +143,15 @@ a terminé SUCCESS sur le head exact
 402a7fe37869c4c94d0fad39ded12e069be81320.
 Ce correctif de sûreté ne qualifie pas les droits et ne prouve pas
 l'identité d'un document Hugging Face à la révision épinglée.
+
+L'[évolution RemoteOps PR #448](https://github.com/Memorithm/RemoteOps/pull/448),
+fusionnée sur le commit `06ff1ef16a32721b1fe3fdfa061b5be5b32600c2`,
+a également **supprimé tout accès automatisé aux pages humaines
+Gutenberg** dans cette sonde au profit d'une vérification exclusivement
+locale des fichiers préalablement obtenus par un canal autorisé,
+conformément à la [politique officielle d'accès automatisé](https://www.gutenberg.org/policy/robot_access.html).
+Le run historique demeure une observation, pas une autorisation de
+récupération automatique récurrente.
 
 **Prochain verrou mesurable :** contrôle séparé des droits de
 l'édition/transcription effectivement matérialisée, comparaison à la
