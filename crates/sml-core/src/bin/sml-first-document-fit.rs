@@ -15,7 +15,10 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const TRAIN: [&str; 3] = ["README.md", "BOOTSTRAP.md", "docs/ROADMAP.md"];
-const DEV: [&str; 2] = ["docs/SML-0-SPEC.md", "docs/SML-ARCHITECTURE-DECISION-GATES.md"];
+const DEV: [&str; 2] = [
+    "docs/SML-0-SPEC.md",
+    "docs/SML-ARCHITECTURE-DECISION-GATES.md",
+];
 const EPOCHS: u32 = 24;
 const LEARNING_RATE: f64 = 0.25;
 const SAMPLES_PER_TRAIN_DOCUMENT: usize = 2_048;
@@ -25,13 +28,17 @@ const MIN_DOC_BYTES: usize = 128;
 fn read_doc(root: &Path, rel: &str) -> Result<Vec<u8>> {
     let path = root.join(rel);
     let metadata = fs::symlink_metadata(&path)?;
-    if !metadata.is_file() || metadata.file_type().is_symlink()
-        || metadata.len() > MAX_FILE_BYTES || metadata.len() < MIN_DOC_BYTES as u64
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.len() > MAX_FILE_BYTES
+        || metadata.len() < MIN_DOC_BYTES as u64
     {
         return Err(format!("invalid project-owned source file: {rel}").into());
     }
     let bytes = fs::read(&path)?;
-    if bytes.len() as u64 != metadata.len() || !bytes.iter().all(u8::is_ascii) && std::str::from_utf8(&bytes).is_err() {
+    if bytes.len() as u64 != metadata.len()
+        || !bytes.iter().all(u8::is_ascii) && std::str::from_utf8(&bytes).is_err()
+    {
         return Err(format!("invalid or changed source: {rel}").into());
     }
     Ok(bytes)
@@ -59,10 +66,9 @@ fn loss_bpc(gates: &[LatentGate2; 8], documents: &[Vec<u8>]) -> Result<(f64, usi
     for doc in documents {
         for i in 2..doc.len() {
             for (bit, gate) in gates.iter().enumerate() {
-                let p = gate.soft_probability(
-                    (doc[i - 2] >> bit) & 1 != 0,
-                    (doc[i - 1] >> bit) & 1 != 0,
-                )?.clamp(1.0e-9, 1.0 - 1.0e-9);
+                let p = gate
+                    .soft_probability((doc[i - 2] >> bit) & 1 != 0, (doc[i - 1] >> bit) & 1 != 0)?
+                    .clamp(1.0e-9, 1.0 - 1.0e-9);
                 let target = (doc[i] >> bit) & 1 != 0;
                 bits -= if target { p } else { 1.0 - p }.log2();
             }
@@ -88,11 +94,7 @@ fn train_model(train: &[Vec<u8>], dev: &[Vec<u8>]) -> Result<(String, String)> {
     for (bit, gate) in gates.iter_mut().enumerate() {
         let mut samples = Vec::new();
         for doc in train {
-            samples.extend(samples_for_bit(
-                doc,
-                bit as u8,
-                SAMPLES_PER_TRAIN_DOCUMENT,
-            ));
+            samples.extend(samples_for_bit(doc, bit as u8, SAMPLES_PER_TRAIN_DOCUMENT));
         }
         if samples.len() < 1_000 {
             return Err("too few document-derived samples".into());
@@ -105,24 +107,27 @@ fn train_model(train: &[Vec<u8>], dev: &[Vec<u8>]) -> Result<(String, String)> {
                 epsilon: 1.0e-6,
             },
         )?;
-        if !metrics.initial_loss.is_finite() || !metrics.final_loss.is_finite()
+        if !metrics.initial_loss.is_finite()
+            || !metrics.final_loss.is_finite()
             || metrics.final_loss > metrics.initial_loss
         {
             return Err("training failed to reduce in-sample objective".into());
         }
         total_training_samples += samples.len();
-        let values = gate.logits().iter()
+        let values = gate
+            .logits()
+            .iter()
             .map(|value| format!("{value:.17e}"))
-            .collect::<Vec<_>>().join(",");
-        weights.push_str(&format!(
-            "{bit}\t{}\t{values}\n",
-            gate.hard_table()?.code(),
-        ));
+            .collect::<Vec<_>>()
+            .join(",");
+        weights.push_str(&format!("{bit}\t{}\t{values}\n", gate.hard_table()?.code(),));
     }
     let (trained_bpc, _) = loss_bpc(&gates, train)?;
     let (dev_bpc, trained_dev_targets) = loss_bpc(&gates, dev)?;
-    if !trained_bpc.is_finite() || !dev_bpc.is_finite()
-        || trained_bpc > initial_train_bpc || dev_targets != trained_dev_targets
+    if !trained_bpc.is_finite()
+        || !dev_bpc.is_finite()
+        || trained_bpc > initial_train_bpc
+        || dev_targets != trained_dev_targets
         || total_training_samples > TRAIN.len() * SAMPLES_PER_TRAIN_DOCUMENT * 8
     {
         return Err("invalid training or scoring counters".into());
@@ -151,9 +156,14 @@ fn run(root: &Path, dest: &Path) -> Result<()> {
             let bytes = read_doc(root, rel)?;
             provenance.push_str(&format!(
                 "{role}\t{rel}\t{}\t{}\n",
-                bytes.len(), hex(&sha256(&bytes)),
+                bytes.len(),
+                hex(&sha256(&bytes)),
             ));
-            if role == "TRAIN" { train.push(bytes); } else { dev.push(bytes); }
+            if role == "TRAIN" {
+                train.push(bytes);
+            } else {
+                dev.push(bytes);
+            }
         }
     }
     fs::create_dir(dest)?;
@@ -167,7 +177,11 @@ fn run(root: &Path, dest: &Path) -> Result<()> {
         let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
         file.write_all(content.as_bytes())?;
         file.sync_all()?;
-        println!("FIRST_FIT_FILE name={name} bytes={} sha256={}",content.len(),hex(&sha256(content.as_bytes())));
+        println!(
+            "FIRST_FIT_FILE name={name} bytes={} sha256={}",
+            content.len(),
+            hex(&sha256(content.as_bytes()))
+        );
         if name == "first_fit.tsv" {
             print!("{content}");
         }
