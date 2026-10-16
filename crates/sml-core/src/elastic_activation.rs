@@ -249,7 +249,7 @@ impl ElasticActivationController {
         let mut selected = Vec::new();
         let mut selected_parameters = 0_u64;
         for &page_id in ranked_candidates {
-            if !known.insert(page_id) {
+            if !known.insert(page_id.0) {
                 return Err(EacError::DuplicateCandidate(page_id));
             }
             let page = planner
@@ -567,6 +567,60 @@ mod tests {
             eac.propose(&weights, &candidates(), stable(), 1),
             Err(EacError::UnmaterializedPrecisionTransition)
         );
+    }
+
+    #[test]
+    fn metadata_only_25b_full_activation_has_exact_hybrid_bits() {
+        // Only 100 page descriptors are instantiated: NO learned weights
+        // are allocated, trained, loaded or executed by this test.
+        let mut pages = Vec::new();
+        let mut eligible = Vec::new();
+        for id in 0..100_u32 {
+            let (precision, importance) = if id < 85 {
+                (WeightPrecision::Boolean, 400_000)
+            } else if id < 95 {
+                (WeightPrecision::Ternary, 600_000)
+            } else {
+                (WeightPrecision::Residual4, 900_000)
+            };
+            pages.push(
+                ElasticWeightPage::new(
+                    PageId(id),
+                    250_000_000,
+                    precision,
+                    ResidencyTier::Disk,
+                    importance,
+                )
+                .unwrap(),
+            );
+            eligible.push(PageId(id));
+        }
+        let weights = ElasticWeightPlanner::new(
+            pages,
+            ElasticWeightPolicy {
+                ram_limit_bytes: 8 * 1024 * 1024 * 1024,
+                vram_limit_bytes: 0,
+                max_active_parameters: 25_000_000_000,
+                ternary_threshold_ppm: 500_000,
+                residual4_threshold_ppm: 800_000,
+                vram_threshold_ppm: 1_000_000,
+            },
+        )
+        .unwrap();
+        let mut p = policy();
+        p.initial_active_ppm = EAC_PPM;
+        p.max_active_ppm = EAC_PPM;
+        p.min_active_ppm = EAC_PPM;
+        p.ram_ceiling_bytes = 8 * 1024 * 1024 * 1024;
+        p.ram_reserved_bytes = 1024 * 1024 * 1024;
+        let eac = ElasticActivationController::new(p).unwrap();
+        let proposal = eac.propose(&weights, &eligible, stable(), 1).unwrap();
+        assert_eq!(proposal.active_ceiling_parameters, 25_000_000_000);
+        assert_eq!(proposal.weight_plan.active_parameters, 25_000_000_000);
+        assert_eq!(proposal.weight_plan.active_storage_bits, 31_250_000_000);
+        assert_eq!(proposal.weight_plan.ram_bytes, 3_906_250_000);
+        assert_eq!(proposal.weight_plan.vram_bytes, 0);
+        assert_eq!(weights.accounting().unwrap().active_parameters, 0);
     }
 
     #[test]
