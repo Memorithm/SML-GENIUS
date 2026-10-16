@@ -34,12 +34,16 @@ impl SparseConfig {
         if self.pages == 0 || self.max_cached_pages == 0 || self.max_cached_pages > 256 {
             return Err("invalid page count/cache ceiling".into());
         }
-        if self.pages.checked_mul(PAGE_PARAMETERS as u64)
-            .and_then(|n| n.checked_mul(4)).is_none()
+        if self
+            .pages
+            .checked_mul(PAGE_PARAMETERS as u64)
+            .and_then(|n| n.checked_mul(4))
+            .is_none()
         {
             return Err("master file length overflow".into());
         }
-        if !self.learning_rate.is_finite() || !(0.0..=1.0).contains(&self.learning_rate)
+        if !self.learning_rate.is_finite()
+            || !(0.0..=1.0).contains(&self.learning_rate)
             || self.learning_rate == 0.0
         {
             return Err("invalid SGD learning rate".into());
@@ -115,8 +119,20 @@ fn feature_slot(a: u8, b: u8, bit: usize, feature: usize) -> usize {
 fn feature_sign(a: u8, b: u8, feature: usize) -> f64 {
     match feature {
         0 => 1.0,
-        1..=8 => if (a >> (feature - 1)) & 1 != 0 { 1.0 } else { -1.0 },
-        9..=16 => if (b >> (feature - 9)) & 1 != 0 { 1.0 } else { -1.0 },
+        1..=8 => {
+            if (a >> (feature - 1)) & 1 != 0 {
+                1.0
+            } else {
+                -1.0
+            }
+        }
+        9..=16 => {
+            if (b >> (feature - 9)) & 1 != 0 {
+                1.0
+            } else {
+                -1.0
+            }
+        }
         _ => unreachable!("17 registered features"),
     }
 }
@@ -154,14 +170,24 @@ impl SparseGradientAtlas {
     pub fn create(root: &Path, config: SparseConfig) -> Result<Self> {
         let config = config.validate()?;
         fs::create_dir(root)?;
-        let master = OpenOptions::new().write(true).read(true).create_new(true)
+        let master = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create_new(true)
             .open(root.join("master.f32"))?;
-        let touches = OpenOptions::new().write(true).read(true).create_new(true)
+        let touches = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create_new(true)
             .open(root.join("touched.bit"))?;
         master.set_len(config.train_master_bytes())?;
         touches.set_len(config.pages * TOUCH_BYTES as u64)?;
         Ok(Self {
-            config, master, touches, cache: Vec::new(), tick: 0,
+            config,
+            master,
+            touches,
+            cache: Vec::new(),
+            tick: 0,
             counters: SparseCounters::default(),
         })
     }
@@ -172,8 +198,14 @@ impl SparseGradientAtlas {
         if !dir.is_dir() || dir.file_type().is_symlink() {
             return Err("snapshot directory must not be symlink".into());
         }
-        let mut master = OpenOptions::new().read(true).write(true).open(root.join("master.f32"))?;
-        let mut touches = OpenOptions::new().read(true).write(true).open(root.join("touched.bit"))?;
+        let mut master = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("master.f32"))?;
+        let mut touches = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("touched.bit"))?;
         if master.metadata()?.len() != config.train_master_bytes()
             || touches.metadata()?.len() != config.pages * TOUCH_BYTES as u64
         {
@@ -181,7 +213,8 @@ impl SparseGradientAtlas {
         }
         let manifest = fs::read_to_string(root.join("snapshot.tsv"))?;
         let fields: Vec<_> = manifest.trim_end().split('\t').collect();
-        if fields.len() != 10 || fields[0] != VERSION
+        if fields.len() != 10
+            || fields[0] != VERSION
             || fields[1].parse::<u64>()? != config.pages
             || fields[2].parse::<usize>()? != config.max_cached_pages
             || fields[3].parse::<u32>()? != config.learning_rate.to_bits()
@@ -203,7 +236,14 @@ impl SparseGradientAtlas {
         {
             return Err("corrupt update accounting".into());
         }
-        Ok(Self { config, master, touches, cache: Vec::new(), tick: 0, counters })
+        Ok(Self {
+            config,
+            master,
+            touches,
+            cache: Vec::new(),
+            tick: 0,
+            counters,
+        })
     }
 
     fn flush_at(&mut self, index: usize) -> Result<()> {
@@ -211,14 +251,18 @@ impl SparseGradientAtlas {
             return Ok(());
         }
         let page = &mut self.cache[index];
-        self.master.seek(SeekFrom::Start(page.id * (PAGE_PARAMETERS as u64 * 4)))?;
+        self.master
+            .seek(SeekFrom::Start(page.id * (PAGE_PARAMETERS as u64 * 4)))?;
         let mut buf = [0u8; PAGE_PARAMETERS * 4];
         for (slot, weight) in page.master.iter().enumerate() {
-            if !weight.is_finite() { return Err("nonfinite master weight".into()); }
+            if !weight.is_finite() {
+                return Err("nonfinite master weight".into());
+            }
             buf[slot * 4..slot * 4 + 4].copy_from_slice(&weight.to_le_bytes());
         }
         self.master.write_all(&buf)?;
-        self.touches.seek(SeekFrom::Start(page.id * TOUCH_BYTES as u64))?;
+        self.touches
+            .seek(SeekFrom::Start(page.id * TOUCH_BYTES as u64))?;
         self.touches.write_all(&page.touched)?;
         page.dirty = false;
         Ok(())
@@ -231,32 +275,55 @@ impl SparseGradientAtlas {
             return Ok(index);
         }
         if self.cache.len() == self.config.max_cached_pages {
-            let victim = self.cache.iter().enumerate().min_by_key(|(_, p)| p.used)
-                .map(|(i, _)| i).ok_or("missing resident page")?;
+            let victim = self
+                .cache
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, p)| p.used)
+                .map(|(i, _)| i)
+                .ok_or("missing resident page")?;
             self.flush_at(victim)?;
             self.cache.swap_remove(victim);
-            self.counters.page_evictions = self.counters.page_evictions.checked_add(1)
+            self.counters.page_evictions = self
+                .counters
+                .page_evictions
+                .checked_add(1)
                 .ok_or("eviction counter overflow")?;
         }
-        self.master.seek(SeekFrom::Start(id * PAGE_PARAMETERS as u64 * 4))?;
+        self.master
+            .seek(SeekFrom::Start(id * PAGE_PARAMETERS as u64 * 4))?;
         let mut bytes = [0u8; PAGE_PARAMETERS * 4];
         self.master.read_exact(&mut bytes)?;
         let mut values = Box::new([0f32; PAGE_PARAMETERS]);
         for (index, dest) in values.iter_mut().enumerate() {
             *dest = f32::from_le_bytes(bytes[4 * index..4 * index + 4].try_into()?);
-            if !dest.is_finite() { return Err("nonfinite restored weight".into()); }
+            if !dest.is_finite() {
+                return Err("nonfinite restored weight".into());
+            }
         }
         let mut touched = [0u8; TOUCH_BYTES];
-        self.touches.seek(SeekFrom::Start(id * TOUCH_BYTES as u64))?;
+        self.touches
+            .seek(SeekFrom::Start(id * TOUCH_BYTES as u64))?;
         self.touches.read_exact(&mut touched)?;
-        self.cache.push(Resident { id, master: values, touched, dirty: false, used: self.tick });
-        self.counters.page_loads = self.counters.page_loads.checked_add(1)
+        self.cache.push(Resident {
+            id,
+            master: values,
+            touched,
+            dirty: false,
+            used: self.tick,
+        });
+        self.counters.page_loads = self
+            .counters
+            .page_loads
+            .checked_add(1)
             .ok_or("page load counter overflow")?;
         Ok(self.cache.len() - 1)
     }
 
     fn bit_probability(&mut self, a: u8, b: u8, bit: usize) -> Result<(usize, f64)> {
-        if bit >= 8 { return Err("bit output outside 0..8".into()); }
+        if bit >= 8 {
+            return Err("bit output outside 0..8".into());
+        }
         let page = self.cached(route(a, b, bit, self.config.pages))?;
         let mut score = 0.0f64;
         for feature in 0..FEATURES {
@@ -278,21 +345,32 @@ impl SparseGradientAtlas {
             let step = eta * derivative * feature_sign(a, b, feature);
             let before = self.cache[page].master[index];
             let after = (f64::from(before) - step).clamp(-4.0, 4.0) as f32;
-            if !after.is_finite() { return Err("nonfinite gradient update".into()); }
+            if !after.is_finite() {
+                return Err("nonfinite gradient update".into());
+            }
             self.cache[page].master[index] = after;
             let byte = index / 8;
             let mask = 1u8 << (index % 8);
             if self.cache[page].touched[byte] & mask == 0 {
                 self.cache[page].touched[byte] |= mask;
-                self.counters.distinct_updated_parameters = self.counters
-                    .distinct_updated_parameters.checked_add(1).ok_or("unique touch overflow")?;
+                self.counters.distinct_updated_parameters = self
+                    .counters
+                    .distinct_updated_parameters
+                    .checked_add(1)
+                    .ok_or("unique touch overflow")?;
             }
-            self.counters.parameter_updates = self.counters
-                .parameter_updates.checked_add(1).ok_or("update count overflow")?;
+            self.counters.parameter_updates = self
+                .counters
+                .parameter_updates
+                .checked_add(1)
+                .ok_or("update count overflow")?;
         }
         self.cache[page].dirty = true;
-        self.counters.supervised_bits = self.counters
-            .supervised_bits.checked_add(1).ok_or("supervised count overflow")?;
+        self.counters.supervised_bits = self
+            .counters
+            .supervised_bits
+            .checked_add(1)
+            .ok_or("supervised count overflow")?;
         Ok(loss)
     }
 
@@ -303,9 +381,13 @@ impl SparseGradientAtlas {
             for bit in 0..8 {
                 loss += self.train_bit(window[0], window[1], bit, window[2] & (1 << bit) != 0)?;
             }
-            predicted_bytes = predicted_bytes.checked_add(1).ok_or("document event overflow")?;
+            predicted_bytes = predicted_bytes
+                .checked_add(1)
+                .ok_or("document event overflow")?;
         }
-        if !loss.is_finite() { return Err("nonfinite training loss".into()); }
+        if !loss.is_finite() {
+            return Err("nonfinite training loss".into());
+        }
         Ok((loss, predicted_bytes))
     }
 
@@ -317,17 +399,25 @@ impl SparseGradientAtlas {
                 let (_, p) = self.bit_probability(window[0], window[1], bit)?;
                 loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
             }
-            predicted_bytes = predicted_bytes.checked_add(1).ok_or("document event overflow")?;
+            predicted_bytes = predicted_bytes
+                .checked_add(1)
+                .ok_or("document event overflow")?;
         }
-        if !loss.is_finite() { return Err("nonfinite DEV loss".into()); }
+        if !loss.is_finite() {
+            return Err("nonfinite DEV loss".into());
+        }
         Ok((loss, predicted_bytes))
     }
 
     #[must_use]
-    pub fn counters(&self) -> SparseCounters { self.counters }
+    pub fn counters(&self) -> SparseCounters {
+        self.counters
+    }
 
     #[must_use]
-    pub fn config(&self) -> SparseConfig { self.config }
+    pub fn config(&self) -> SparseConfig {
+        self.config
+    }
 
     pub fn flush(&mut self) -> Result<()> {
         for index in 0..self.cache.len() {
@@ -346,9 +436,12 @@ impl SparseGradientAtlas {
         let touches_sha = file_digest(&mut self.touches)?;
         let manifest = format!(
             "{VERSION}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{master_sha}\t{touches_sha}\n",
-            self.config.pages, self.config.max_cached_pages,
-            self.config.learning_rate.to_bits(), self.counters.supervised_bits,
-            self.counters.parameter_updates, self.counters.distinct_updated_parameters,
+            self.config.pages,
+            self.config.max_cached_pages,
+            self.config.learning_rate.to_bits(),
+            self.counters.supervised_bits,
+            self.counters.parameter_updates,
+            self.counters.distinct_updated_parameters,
             self.counters.page_loads
         );
         let tmp = root.join("snapshot.tsv.tmp");
@@ -366,7 +459,10 @@ impl SparseGradientAtlas {
     pub fn export_q4(&mut self, output: &Path) -> Result<()> {
         self.flush()?;
         self.master.seek(SeekFrom::Start(0))?;
-        let mut packed = OpenOptions::new().write(true).create_new(true).open(output)?;
+        let mut packed = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output)?;
         let mut buf = [0u8; PAGE_PARAMETERS * 4];
         for _ in 0..self.config.pages {
             self.master.read_exact(&mut buf)?;
@@ -394,12 +490,19 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp(label: &str) -> std::path::PathBuf {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("sml-learn-{label}-{}-{nonce}", std::process::id()))
     }
 
     fn cfg(pages: u64, resident: usize) -> SparseConfig {
-        SparseConfig { pages, max_cached_pages: resident, learning_rate: 0.3 }
+        SparseConfig {
+            pages,
+            max_cached_pages: resident,
+            learning_rate: 0.3,
+        }
     }
 
     #[test]
@@ -409,7 +512,9 @@ mod tests {
         let example = vec![b'A'; 256];
         let (before, n) = m.evaluate_document(&example).unwrap();
         assert!((before / n as f64 - 8.0).abs() < 1e-10);
-        for _ in 0..3 { m.train_document(&example).unwrap(); }
+        for _ in 0..3 {
+            m.train_document(&example).unwrap();
+        }
         let (after, count) = m.evaluate_document(&example).unwrap();
         assert_eq!(n, count);
         assert!(after < before * 0.7, "before {before} after {after}");
@@ -421,9 +526,15 @@ mod tests {
         let mut reopened = SparseGradientAtlas::reopen(&dir, cfg(32, 2)).unwrap();
         let (resumed, _) = reopened.evaluate_document(&example).unwrap();
         assert!((resumed - after).abs() < 1e-9);
-        assert_eq!(m.counters().distinct_updated_parameters, reopened.counters().distinct_updated_parameters);
+        assert_eq!(
+            m.counters().distinct_updated_parameters,
+            reopened.counters().distinct_updated_parameters
+        );
         reopened.export_q4(&dir.join("weights.q4")).unwrap();
-        assert_eq!(fs::metadata(dir.join("weights.q4")).unwrap().len(), 32 * 512);
+        assert_eq!(
+            fs::metadata(dir.join("weights.q4")).unwrap().len(),
+            32 * 512
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -434,7 +545,8 @@ mod tests {
         assert_eq!(m.config().total_parameters(), 4_194_304);
         assert_eq!(m.config().packed_q4_bytes(), 2_097_152);
         for n in 0u16..120u16 {
-            m.train_bit(n as u8, (n * 3) as u8, (n as usize) % 8, n % 2 == 0).unwrap();
+            m.train_bit(n as u8, (n * 3) as u8, (n as usize) % 8, n % 2 == 0)
+                .unwrap();
         }
         assert!(m.counters().page_evictions > 0);
         assert!(m.cache.len() <= 1);
@@ -454,7 +566,10 @@ mod tests {
         m.checkpoint(&dir).unwrap();
         assert!(SparseGradientAtlas::reopen(&dir, cfg(8, 1)).is_err());
         assert!(SparseGradientAtlas::reopen(&dir, cfg(4, 2)).is_err());
-        let mut weights = OpenOptions::new().write(true).open(dir.join("master.f32")).unwrap();
+        let mut weights = OpenOptions::new()
+            .write(true)
+            .open(dir.join("master.f32"))
+            .unwrap();
         weights.seek(SeekFrom::Start(0)).unwrap();
         weights.write_all(&[255; 4]).unwrap();
         weights.sync_all().unwrap();
