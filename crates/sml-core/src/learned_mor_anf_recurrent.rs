@@ -30,15 +30,21 @@ fn dot<const N: usize>(a: &[f64; N], b: &[f64; N]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
 fn check_finite(v: f64) -> Result<f64, &'static str> {
-    if v.is_finite() { Ok(v) } else { Err("nonfinite learned gradient or loss") }
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err("nonfinite learned gradient or loss")
+    }
 }
 
 impl Default for RecurrentMorAnf {
     fn default() -> Self {
         // Symmetry must be broken for the gate to receive nonzero gradient.
         Self {
-            expert: [[-0.2, 0.4, -0.3, 0.4, -0.2, 0.1],
-                     [0.3, -0.2, 0.4, -0.3, 0.2, -0.1]],
+            expert: [
+                [-0.2, 0.4, -0.3, 0.4, -0.2, 0.1],
+                [0.3, -0.2, 0.4, -0.3, 0.2, -0.1],
+            ],
             router: [0.05, 0.2, -0.1, 0.3, -0.3, 0.2],
             recurrent: [0.12, -0.2, 0.3],
         }
@@ -48,9 +54,7 @@ impl Default for RecurrentMorAnf {
 impl RecurrentMorAnf {
     pub const PARAMETERS: usize = 21;
 
-    fn steps(&self, inputs: &[(bool, bool)], labels: &[bool])
-        -> Result<Vec<Step>, &'static str>
-    {
+    fn steps(&self, inputs: &[(bool, bool)], labels: &[bool]) -> Result<Vec<Step>, &'static str> {
         if inputs.len() != labels.len() || inputs.is_empty() || inputs.len() > 4096 {
             return Err("invalid sequence length");
         }
@@ -63,8 +67,9 @@ impl RecurrentMorAnf {
             let xor = f64::from(u8::from(a ^ b));
             let and = f64::from(u8::from(a & b));
             // Recurrence retains context through the preceding state.
-            state = (self.recurrent[0] * previous
-                + self.recurrent[1] * xor + self.recurrent[2] * and).tanh();
+            state =
+                (self.recurrent[0] * previous + self.recurrent[1] * xor + self.recurrent[2] * and)
+                    .tanh();
             let x = [1.0, aa, bb, xor, and, state];
             let gate = logistic(dot(&self.router, &x));
             let expert = [
@@ -73,16 +78,19 @@ impl RecurrentMorAnf {
             ];
             let pred = gate * expert[0] + (1.0 - gate) * expert[1];
             result.push(Step {
-                x, h: state, prev_h: previous, pred, gate, expert,
+                x,
+                h: state,
+                prev_h: previous,
+                pred,
+                gate,
+                expert,
                 label: f64::from(u8::from(label)),
             });
         }
         Ok(result)
     }
 
-    pub fn loss(&self, inputs: &[(bool, bool)], labels: &[bool])
-        -> Result<f64, &'static str>
-    {
+    pub fn loss(&self, inputs: &[(bool, bool)], labels: &[bool]) -> Result<f64, &'static str> {
         let steps = self.steps(inputs, labels)?;
         let mut total = 0.0;
         for step in &steps {
@@ -113,16 +121,16 @@ impl RecurrentMorAnf {
             let p = step.pred.clamp(1e-12, 1.0 - 1e-12);
             loss -= step.label * p.ln() + (1.0 - step.label) * (1.0 - p).ln();
             let d_pred = (p - step.label) / (p * (1.0 - p));
-            let d_gate = d_pred * (step.expert[0] - step.expert[1])
-                * step.gate * (1.0 - step.gate);
+            let d_gate = d_pred * (step.expert[0] - step.expert[1]) * step.gate * (1.0 - step.gate);
             let d_expert = [
                 d_pred * step.gate * step.expert[0] * (1.0 - step.expert[0]),
-                d_pred * (1.0 - step.gate) * step.expert[1]
-                    * (1.0 - step.expert[1]),
+                d_pred * (1.0 - step.gate) * step.expert[1] * (1.0 - step.expert[1]),
             ];
             for (i, &v) in step.x.iter().enumerate() {
                 r_grad[i] += d_gate * v;
-                for expert in 0..2 { e_grad[expert][i] += d_expert[expert] * v; }
+                for expert in 0..2 {
+                    e_grad[expert][i] += d_expert[expert] * v;
+                }
             }
             let mut d_state = next_state_grad + d_gate * self.router[5];
             for expert in 0..2 {
@@ -135,27 +143,36 @@ impl RecurrentMorAnf {
             next_state_grad = d_pre * self.recurrent[0];
         }
         let denom = steps.len() as f64;
-        let norm2: f64 = e_grad.iter().flatten().chain(r_grad.iter())
-            .chain(h_grad.iter()).map(|x| (x / denom).powi(2)).sum();
+        let norm2: f64 = e_grad
+            .iter()
+            .flatten()
+            .chain(r_grad.iter())
+            .chain(h_grad.iter())
+            .map(|x| (x / denom).powi(2))
+            .sum();
         let scale = 1.0 / norm2.sqrt().max(1.0);
         for i in 0..6 {
-            self.router[i] = check_finite(self.router[i] - learning_rate * r_grad[i] / denom * scale)?;
+            self.router[i] =
+                check_finite(self.router[i] - learning_rate * r_grad[i] / denom * scale)?;
             for expert in 0..2 {
                 self.expert[expert][i] = check_finite(
-                    self.expert[expert][i] - learning_rate * e_grad[expert][i] / denom * scale
+                    self.expert[expert][i] - learning_rate * e_grad[expert][i] / denom * scale,
                 )?;
             }
         }
         for i in 0..3 {
-            self.recurrent[i] = check_finite(
-                self.recurrent[i] - learning_rate * h_grad[i] / denom * scale
-            )?;
+            self.recurrent[i] =
+                check_finite(self.recurrent[i] - learning_rate * h_grad[i] / denom * scale)?;
         }
         check_finite(loss / denom)
     }
 
-    pub fn router_weights(&self) -> [f64; 6] { self.router }
-    pub fn recurrent_weights(&self) -> [f64; 3] { self.recurrent }
+    pub fn router_weights(&self) -> [f64; 6] {
+        self.router
+    }
+    pub fn recurrent_weights(&self) -> [f64; 3] {
+        self.recurrent
+    }
 }
 
 #[cfg(test)]
@@ -184,7 +201,9 @@ mod tests {
         let mut m = RecurrentMorAnf::default();
         assert!(m.train_sequence(&[], &[], 0.2).is_err());
         assert!(m.train_sequence(&[(true, false)], &[], 0.2).is_err());
-        assert!(m.train_sequence(&[(true, false)], &[true], f64::NAN).is_err());
+        assert!(m
+            .train_sequence(&[(true, false)], &[true], f64::NAN)
+            .is_err());
         assert!(m.loss(&[(true, false)], &[true]).unwrap().is_finite());
     }
 
@@ -200,8 +219,8 @@ mod tests {
         a.recurrent[0] += 1e-5;
         let mut b = m.clone();
         b.recurrent[0] -= 1e-5;
-        let numerical = (a.loss(&inputs, &labels).unwrap()
-            - b.loss(&inputs, &labels).unwrap()) / 2e-5;
+        let numerical =
+            (a.loss(&inputs, &labels).unwrap() - b.loss(&inputs, &labels).unwrap()) / 2e-5;
         assert!((actual - numerical).abs() < 1e-7, "{actual} vs {numerical}");
     }
 }
