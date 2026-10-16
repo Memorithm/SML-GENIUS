@@ -432,6 +432,91 @@ impl SparseGradientAtlas {
         Ok((loss, predicted as u64))
     }
 
+    /// Teacher-forced next-byte training restricted to assistant targets.
+    /// The whole preceding user/role prefix is visible as context, but no
+    /// gradient is ever applied to a prompt byte. Context is STILL only two
+    /// bytes: this is a bounded pilot, not a conversational model.
+    pub fn train_assistant_bytes(
+        &mut self,
+        document: &[u8],
+        answer_start: usize,
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if answer_start < 2
+            || answer_start >= document.len()
+            || !(1..=8192).contains(&batch_bytes)
+        {
+            return Err("invalid assistant target window".into());
+        }
+        let mut loss = 0.0;
+        for start in (answer_start..document.len()).step_by(batch_bytes) {
+            let end = (start + batch_bytes).min(document.len());
+            let mut routed = Vec::with_capacity((end - start) * 8);
+            for target in start..end {
+                for bit in 0..8 {
+                    routed.push((
+                        route(document[target - 2], document[target - 1], bit, self.config.pages),
+                        target,
+                        bit,
+                    ));
+                }
+            }
+            routed.sort_by_key(|entry| entry.0);
+            for (_, target, bit) in routed {
+                loss += self.train_bit(
+                    document[target - 2],
+                    document[target - 1],
+                    bit,
+                    document[target] & (1 << bit) != 0,
+                )?;
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite assistant training loss".into());
+        }
+        Ok((loss, (document.len() - answer_start) as u64))
+    }
+
+    /// Separate frozen-weight DEV scoring on assistant targets only.
+    /// Does not update weights, gradients or training counters.
+    pub fn evaluate_assistant_bytes(
+        &mut self,
+        document: &[u8],
+        answer_start: usize,
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if answer_start < 2
+            || answer_start >= document.len()
+            || !(1..=8192).contains(&batch_bytes)
+        {
+            return Err("invalid assistant evaluation window".into());
+        }
+        let mut loss = 0.0;
+        for start in (answer_start..document.len()).step_by(batch_bytes) {
+            let end = (start + batch_bytes).min(document.len());
+            let mut routed = Vec::with_capacity((end - start) * 8);
+            for target in start..end {
+                for bit in 0..8 {
+                    routed.push((
+                        route(document[target - 2], document[target - 1], bit, self.config.pages),
+                        target,
+                        bit,
+                    ));
+                }
+            }
+            routed.sort_by_key(|entry| entry.0);
+            for (_, target, bit) in routed {
+                let (_, p) =
+                    self.bit_probability(document[target - 2], document[target - 1], bit)?;
+                loss += binary_loss_bits(p, document[target] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite assistant DEV loss".into());
+        }
+        Ok((loss, (document.len() - answer_start) as u64))
+    }
+
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
