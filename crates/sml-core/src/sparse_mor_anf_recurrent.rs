@@ -39,7 +39,11 @@ fn sig(x: f64) -> f64 {
 /// GF(2) algebraic normal form:
 /// x0*y0 XOR x1*y1 XOR ... XOR x7*y7, genuinely nonlinear over GF(2).
 fn anf_monomial(a: u8, b: u8) -> f64 {
-    if (a & b).count_ones() & 1 == 0 { -1.0 } else { 1.0 }
+    if (a & b).count_ones() & 1 == 0 {
+        -1.0
+    } else {
+        1.0
+    }
 }
 
 fn signal(b: u8) -> f64 {
@@ -93,8 +97,15 @@ struct Head {
 impl Default for Head {
     fn default() -> Self {
         let mut gate = [[0f64; GATE_FEATURES]; BUCKETS];
-        for row in &mut gate { row[2] = 0.25; }
-        Self { gate, touched: [0u8; BUCKETS], recurrence: [0.65, 0.3, 0.2], counters: MorAnfCounters::default() }
+        for row in &mut gate {
+            row[2] = 0.25;
+        }
+        Self {
+            gate,
+            touched: [0u8; BUCKETS],
+            recurrence: [0.65, 0.3, 0.2],
+            counters: MorAnfCounters::default(),
+        }
     }
 }
 
@@ -112,11 +123,18 @@ fn hash_file(path: &Path) -> Result<String> {
 
 impl MorAnfRecurrent {
     pub fn create(directory: &Path, config: SparseConfig) -> Result<Self> {
-        if config.pages < 2 { return Err("MOR needs at least two pages".into()); }
-        Ok(Self { atlas: SparseGradientAtlas::create(directory, config)?, head: Head::default() })
+        if config.pages < 2 {
+            return Err("MOR needs at least two pages".into());
+        }
+        Ok(Self {
+            atlas: SparseGradientAtlas::create(directory, config)?,
+            head: Head::default(),
+        })
     }
 
-    pub fn counters(&self) -> MorAnfCounters { self.head.counters }
+    pub fn counters(&self) -> MorAnfCounters {
+        self.head.counters
+    }
 
     pub fn atlas_counters(&self) -> crate::sparse_gradient_atlas::SparseCounters {
         self.atlas.counters()
@@ -132,11 +150,20 @@ impl MorAnfRecurrent {
     }
 
     fn prediction(
-        &mut self, a: u8, b: u8, bit: usize, trace: Trace,
+        &mut self,
+        a: u8,
+        b: u8,
+        bit: usize,
+        trace: Trace,
     ) -> Result<(f64, f64, f64, f64, usize, [f64; GATE_FEATURES], u64, u64)> {
         let (first, second, bucket) = self.candidates(a, b, bit);
         let nonlinear = anf_monomial(a, b);
-        let feature = [1.0, nonlinear, trace.h, if bit & 1 == 0 { -1.0 } else { 1.0 }];
+        let feature = [
+            1.0,
+            nonlinear,
+            trace.h,
+            if bit & 1 == 0 { -1.0 } else { 1.0 },
+        ];
         let theta = &self.head.gate[bucket];
         let logit = theta.iter().zip(feature).map(|(w, f)| w * f).sum::<f64>();
         let gate = sig(logit);
@@ -149,7 +176,14 @@ impl MorAnfRecurrent {
         Ok((p, gate, p0, p1, bucket, feature, first, second))
     }
 
-    fn train_target(&mut self, a: u8, b: u8, bit: usize, label: bool, trace: Trace) -> Result<(f64, f64)> {
+    fn train_target(
+        &mut self,
+        a: u8,
+        b: u8,
+        bit: usize,
+        label: bool,
+        trace: Trace,
+    ) -> Result<(f64, f64)> {
         let (p, gate, p0, p1, bucket, features, first, second) =
             self.prediction(a, b, bit, trace)?;
         let y = f64::from(u8::from(label));
@@ -159,15 +193,21 @@ impl MorAnfRecurrent {
         let expert0 = dl_dp * gate * p0 * (1.0 - p0) / 4.0;
         let expert1 = dl_dp * (1.0 - gate) * p1 * (1.0 - p1) / 4.0;
         let dgate = dl_dp * (p0 - p1) * gate * (1.0 - gate);
-        if !loss.is_finite() || !dgate.is_finite() { return Err("nonfinite MOR gradient".into()); }
+        if !loss.is_finite() || !dgate.is_finite() {
+            return Err("nonfinite MOR gradient".into());
+        }
         // Snapshot prior recurrent readout coefficient for chain-rule credit.
         let recurrence_credit = dgate * self.head.gate[bucket][2];
-        self.atlas.apply_expert_gradient(first, a, b, bit, expert0)?;
-        self.atlas.apply_expert_gradient(second, a, b, bit, expert1)?;
+        self.atlas
+            .apply_expert_gradient(first, a, b, bit, expert0)?;
+        self.atlas
+            .apply_expert_gradient(second, a, b, bit, expert1)?;
         for (i, feature) in features.into_iter().enumerate() {
             let before = self.head.gate[bucket][i];
             let after = (before - ROUTER_LR * dgate * feature).clamp(-4.0, 4.0);
-            if !after.is_finite() { return Err("nonfinite MOR parameter".into()); }
+            if !after.is_finite() {
+                return Err("nonfinite MOR parameter".into());
+            }
             if after != before {
                 if self.head.touched[bucket] & (1 << i) == 0 {
                     self.head.touched[bucket] |= 1 << i;
@@ -191,7 +231,11 @@ impl MorAnfRecurrent {
             let mut recurrent_derivative = 0f64;
             for bit in 0..8 {
                 let (cost, credit) = self.train_target(
-                    triple[0], triple[1], bit, (triple[2] >> bit) & 1 == 1, trace
+                    triple[0],
+                    triple[1],
+                    bit,
+                    (triple[2] >> bit) & 1 == 1,
+                    trace,
                 )?;
                 loss += cost;
                 recurrent_derivative += credit;
@@ -200,9 +244,11 @@ impl MorAnfRecurrent {
             // Gradient does not cross parameter updates at previous timesteps.
             for (index, sensitivity) in trace.dh.into_iter().enumerate() {
                 let before = self.head.recurrence[index];
-                let after = (before - RECURRENT_LR * recurrent_derivative * sensitivity)
-                    .clamp(-2.0, 2.0);
-                if !after.is_finite() { return Err("nonfinite recurrent parameter".into()); }
+                let after =
+                    (before - RECURRENT_LR * recurrent_derivative * sensitivity).clamp(-2.0, 2.0);
+                if !after.is_finite() {
+                    return Err("nonfinite recurrent parameter".into());
+                }
                 if after != before {
                     self.head.counters.recurrent_parameter_updates += 1;
                 }
@@ -211,7 +257,9 @@ impl MorAnfRecurrent {
             self.head.counters.recurrence_steps += 1;
             events += 1;
         }
-        if !loss.is_finite() { return Err("nonfinite training document loss".into()); }
+        if !loss.is_finite() {
+            return Err("nonfinite training document loss".into());
+        }
         Ok((loss, events))
     }
 
@@ -223,11 +271,17 @@ impl MorAnfRecurrent {
             trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
             for bit in 0..8 {
                 let (p, ..) = self.prediction(triple[0], triple[1], bit, trace)?;
-                loss += if triple[2] & (1 << bit) != 0 { -p.log2() } else { -(1.0 - p).log2() };
+                loss += if triple[2] & (1 << bit) != 0 {
+                    -p.log2()
+                } else {
+                    -(1.0 - p).log2()
+                };
             }
             events += 1;
         }
-        if !loss.is_finite() { return Err("nonfinite evaluation loss".into()); }
+        if !loss.is_finite() {
+            return Err("nonfinite evaluation loss".into());
+        }
         Ok((loss, events))
     }
 
@@ -235,20 +289,31 @@ impl MorAnfRecurrent {
         let c = self.head.counters;
         let mut out = format!(
             "{VERSION}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            self.atlas.config().pages, self.atlas.config().max_cached_pages,
-            self.atlas.config().learning_rate.to_bits(), c.supervised_target_bits,
-            c.routed_expert_updates, c.router_parameter_updates,
-            c.unique_router_parameters, c.recurrent_parameter_updates, c.recurrence_steps,
+            self.atlas.config().pages,
+            self.atlas.config().max_cached_pages,
+            self.atlas.config().learning_rate.to_bits(),
+            c.supervised_target_bits,
+            c.routed_expert_updates,
+            c.router_parameter_updates,
+            c.unique_router_parameters,
+            c.recurrent_parameter_updates,
+            c.recurrence_steps,
             ROUTER_LR.to_bits()
         );
-        out.push_str(&format!("R\t{:016x}\t{:016x}\t{:016x}\n",
-            self.head.recurrence[0].to_bits(), self.head.recurrence[1].to_bits(),
-            self.head.recurrence[2].to_bits()));
+        out.push_str(&format!(
+            "R\t{:016x}\t{:016x}\t{:016x}\n",
+            self.head.recurrence[0].to_bits(),
+            self.head.recurrence[1].to_bits(),
+            self.head.recurrence[2].to_bits()
+        ));
         for (i, row) in self.head.gate.iter().enumerate() {
             out.push_str(&format!(
                 "{i}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{}\n",
-                row[0].to_bits(), row[1].to_bits(), row[2].to_bits(),
-                row[3].to_bits(), self.head.touched[i]
+                row[0].to_bits(),
+                row[1].to_bits(),
+                row[2].to_bits(),
+                row[3].to_bits(),
+                self.head.touched[i]
             ));
         }
         out
@@ -258,13 +323,17 @@ impl MorAnfRecurrent {
     /// snapshot. A mid-write interruption invalidates rather than resuming.
     pub fn checkpoint(&mut self, root: &Path) -> Result<()> {
         self.atlas.checkpoint(root)?;
-        let mut head = OpenOptions::new().write(true).create_new(true)
+        let mut head = OpenOptions::new()
+            .write(true)
+            .create_new(true)
             .open(root.join("mor_anf_head.tsv"))?;
         head.write_all(self.encode_head().as_bytes())?;
         head.sync_all()?;
         let weights_sha = hash_file(&root.join("mor_anf_head.tsv"))?;
         let atlas_sha = hash_file(&root.join("snapshot.tsv"))?;
-        let mut manifest = OpenOptions::new().write(true).create_new(true)
+        let mut manifest = OpenOptions::new()
+            .write(true)
+            .create_new(true)
             .open(root.join("joint.sha256.tsv"))?;
         writeln!(manifest, "{VERSION}\t{atlas_sha}\t{weights_sha}")?;
         manifest.sync_all()?;
@@ -273,10 +342,13 @@ impl MorAnfRecurrent {
     }
 
     pub fn reopen(root: &Path, config: SparseConfig) -> Result<Self> {
-        if config.pages < 2 { return Err("MOR needs at least two pages".into()); }
+        if config.pages < 2 {
+            return Err("MOR needs at least two pages".into());
+        }
         let evidence = fs::read_to_string(root.join("joint.sha256.tsv"))?;
         let signature: Vec<_> = evidence.trim_end().split('\t').collect();
-        if signature.len() != 3 || signature[0] != VERSION
+        if signature.len() != 3
+            || signature[0] != VERSION
             || signature[1] != hash_file(&root.join("snapshot.tsv"))?
             || signature[2] != hash_file(&root.join("mor_anf_head.tsv"))?
         {
@@ -287,7 +359,8 @@ impl MorAnfRecurrent {
         let mut lines = text.lines();
         let headline = lines.next().ok_or("missing MOR header")?;
         let h: Vec<_> = headline.split('\t').collect();
-        if h.len() != 11 || h[0] != VERSION
+        if h.len() != 11
+            || h[0] != VERSION
             || h[1].parse::<u64>()? != config.pages
             || h[2].parse::<usize>()? != config.max_cached_pages
             || h[3].parse::<u32>()? != config.learning_rate.to_bits()
@@ -306,10 +379,14 @@ impl MorAnfRecurrent {
         };
         let recurrence = lines.next().ok_or("missing RTRL weights")?;
         let r: Vec<_> = recurrence.split('\t').collect();
-        if r.len() != 4 || r[0] != "R" { return Err("bad RTRL record".into()); }
+        if r.len() != 4 || r[0] != "R" {
+            return Err("bad RTRL record".into());
+        }
         for (dest, val) in head.recurrence.iter_mut().zip(&r[1..]) {
             *dest = f64::from_bits(u64::from_str_radix(val, 16)?);
-            if !dest.is_finite() || dest.abs() > 2.0 { return Err("bad RTRL weight".into()); }
+            if !dest.is_finite() || dest.abs() > 2.0 {
+                return Err("bad RTRL weight".into());
+            }
         }
         let mut unique = 0u64;
         for (idx, row) in head.gate.iter_mut().enumerate() {
@@ -320,13 +397,18 @@ impl MorAnfRecurrent {
             }
             for (dest, val) in row.iter_mut().zip(&f[1..5]) {
                 *dest = f64::from_bits(u64::from_str_radix(val, 16)?);
-                if !dest.is_finite() || dest.abs() > 4.0 { return Err("bad MOR weight".into()); }
+                if !dest.is_finite() || dest.abs() > 4.0 {
+                    return Err("bad MOR weight".into());
+                }
             }
             head.touched[idx] = f[5].parse()?;
-            if head.touched[idx] >= 16 { return Err("bad router touch mask".into()); }
+            if head.touched[idx] >= 16 {
+                return Err("bad router touch mask".into());
+            }
             unique += u64::from(head.touched[idx].count_ones());
         }
-        if lines.next().is_some() || unique != head.counters.unique_router_parameters
+        if lines.next().is_some()
+            || unique != head.counters.unique_router_parameters
             || head.counters.routed_expert_updates != head.counters.supervised_target_bits * 2
             || head.counters.supervised_target_bits != head.counters.recurrence_steps * 8
         {
@@ -341,11 +423,18 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
     fn path(tag: &str) -> std::path::PathBuf {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("sml-mor-anf-{tag}-{}-{now}", std::process::id()))
     }
     fn config() -> SparseConfig {
-        SparseConfig { pages: 32, max_cached_pages: 2, learning_rate: 0.25 }
+        SparseConfig {
+            pages: 32,
+            max_cached_pages: 2,
+            learning_rate: 0.25,
+        }
     }
 
     #[test]
@@ -356,12 +445,16 @@ mod tests {
         let params = [0.62, 0.31, 0.17];
         let mut trace = Trace::default();
         let seq = [(0x11, 0x93), (0x9a, 0xf0), (0x12, 0x32), (0x07, 0x14)];
-        for (a, b) in seq { trace = trace.advance(a, b, &params); }
+        for (a, b) in seq {
+            trace = trace.advance(a, b, &params);
+        }
         for k in 0..3 {
             let mut perturbed = params;
             perturbed[k] += 1e-5;
             let mut probe = Trace::default();
-            for (a, b) in seq { probe = probe.advance(a, b, &perturbed); }
+            for (a, b) in seq {
+                probe = probe.advance(a, b, &perturbed);
+            }
             let numeric = (probe.h - trace.h) / 1e-5;
             assert!((trace.dh[k] - numeric).abs() < 2e-5, "parameter {k}");
         }
@@ -371,10 +464,14 @@ mod tests {
     fn mor_anf_recurrent_learns_and_checkpoint_is_immutable() {
         let root = path("fit");
         let mut train = MorAnfRecurrent::create(&root, config()).unwrap();
-        let doc: Vec<u8> = (0..300usize).map(|n| if n % 17 < 9 { b'a' } else { b'b' }).collect();
+        let doc: Vec<u8> = (0..300usize)
+            .map(|n| if n % 17 < 9 { b'a' } else { b'b' })
+            .collect();
         let (before, n) = train.evaluate_document(&doc).unwrap();
         assert!((before / n as f64 - 8.0).abs() < 1e-10);
-        for _ in 0..3 { train.train_document(&doc).unwrap(); }
+        for _ in 0..3 {
+            train.train_document(&doc).unwrap();
+        }
         let (after, count) = train.evaluate_document(&doc).unwrap();
         assert_eq!(n, count);
         assert!(after < before * 0.8, "before {before} after {after}");
@@ -405,7 +502,14 @@ mod tests {
     #[test]
     fn two_candidates_differ_and_invalid_capacity_is_rejected() {
         let root = path("candidates");
-        assert!(MorAnfRecurrent::create(&root, SparseConfig { pages: 1, ..config() }).is_err());
+        assert!(MorAnfRecurrent::create(
+            &root,
+            SparseConfig {
+                pages: 1,
+                ..config()
+            }
+        )
+        .is_err());
         let mut model = MorAnfRecurrent::create(&root, config()).unwrap();
         for a in 0..10u8 {
             let (first, second, _) = model.candidates(a, 123, 7);
