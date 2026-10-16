@@ -56,7 +56,11 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
     if lines.next().transpose()?.as_deref() != Some(HEADER) {
         return Err("wrong SEC provenance ledger schema".into());
     }
-    let cfg = SparseConfig { pages: PAGES, max_cached_pages: CACHE, learning_rate: 0.15 };
+    let cfg = SparseConfig {
+        pages: PAGES,
+        max_cached_pages: CACHE,
+        learning_rate: 0.15,
+    };
     let mut model = SparseGradientAtlas::create(out, cfg)?;
     let mut train_bytes = 0u64;
     let mut dev_bytes = 0u64;
@@ -74,8 +78,11 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
         }
         let line = line?;
         let f: Vec<_> = line.split('\t').collect();
-        if f.len() != 8 || f[0].is_empty() || f[1].parse::<usize>().is_err()
-            || f[5].is_empty() || f[6].is_empty()
+        if f.len() != 8
+            || f[0].is_empty()
+            || f[1].parse::<usize>().is_err()
+            || f[5].is_empty()
+            || f[6].is_empty()
             || !matches!(f[4], "PD_CLAIM" | "CC0" | "CC_BY_ATTRIBUTION")
         {
             return Err("corrupt or unqualified training source ledger".into());
@@ -117,7 +124,10 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
             dev_events += events;
         }
     }
-    if train_docs == 0 || dev_docs == 0 || train_events == 0 || dev_events == 0
+    if train_docs == 0
+        || dev_docs == 0
+        || train_events == 0
+        || dev_events == 0
         || model.counters().distinct_updated_parameters == 0
     {
         return Err("insufficient learned weights or out-of-sample slice".into());
@@ -131,7 +141,9 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
         train_loss / train_events as f64, dev_loss / dev_events as f64,
         cfg.train_master_bytes(), cfg.packed_q4_bytes()
     );
-    let mut report = OpenOptions::new().write(true).create_new(true)
+    let mut report = OpenOptions::new()
+        .write(true)
+        .create_new(true)
         .open(out.join("pilot.tsv"))?;
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
