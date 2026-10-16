@@ -89,6 +89,7 @@ pub mod gru_side;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;
+pub mod learned_mor_anf_recurrent;
 pub mod memory;
 pub mod mor;
 pub mod mor_affinity;
