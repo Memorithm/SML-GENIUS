@@ -243,11 +243,11 @@ fn write_new(dir: &Path, name: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
+fn run(scirst: &Path, tdi: &Path, flat: &Path, ccos: &Path, sml: &Path, output: &Path) -> Result<()> {
     if output.exists() {
         return Err("new output directory must not already exist".into());
     }
-    for root in [scirst, tdi, sml] {
+    for root in [scirst, tdi, flat, ccos, sml] {
         if root.symlink_metadata()?.file_type().is_symlink() || !root.is_dir() {
             return Err("repository root must be a non-symlink directory".into());
         }
@@ -263,6 +263,8 @@ fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
         false,
     )?;
     scan(tdi, "Memorithm/TDI", "TRAIN", &mut train, &mut bank, false)?;
+    scan(flat, "Memorithm/FLAT-ATTENTION", "TRAIN", &mut train, &mut bank, false)?;
+    scan(ccos, "Memorithm/CCOS-Enterprise", "TRAIN", &mut train, &mut bank, false)?;
     if train.bytes < MIN_TRAIN {
         return Err(format!(
             "large corpus minimum not met: {} < {MIN_TRAIN}",
@@ -319,8 +321,8 @@ fn run(scirst: &Path, tdi: &Path, sml: &Path, output: &Path) -> Result<()> {
 
 fn main() {
     let a: Vec<String> = env::args().collect();
-    if a.len() != 5 {
-        eprintln!("usage: sml-boolean-large-corpus-fit SCIRUST TDI SML-GENIUS NEW_OUTPUT_DIR");
+    if a.len() != 7 {
+        eprintln!("usage: sml-boolean-large-corpus-fit SCIRUST TDI FLAT-ATTENTION CCOS-Enterprise SML-GENIUS NEW_OUTPUT_DIR");
         std::process::exit(2);
     }
     if let Err(e) = run(
@@ -328,6 +330,8 @@ fn main() {
         Path::new(&a[2]),
         Path::new(&a[3]),
         Path::new(&a[4]),
+        Path::new(&a[5]),
+        Path::new(&a[6]),
     ) {
         eprintln!("BOOLEAN_LARGE_FIT_STOP {e}");
         std::process::exit(1);
