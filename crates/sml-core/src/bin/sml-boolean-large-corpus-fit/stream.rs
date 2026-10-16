@@ -446,7 +446,8 @@ mod tests {
     use super::*;
     #[test]
     fn supports_25_gib_without_allocating_corpus() {
-        assert!(MAX_TRAIN >= 25 * 1024 * 1024 * 1024);
+        let capacity = std::hint::black_box(MAX_TRAIN);
+        assert!(capacity >= 25 * 1024 * 1024 * 1024);
         assert_eq!(super::super::SLOTS, 8192);
         assert_eq!(CHECKPOINT_EVERY, 256);
     }
