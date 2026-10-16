@@ -91,3 +91,60 @@ licence déclarée CC-BY-4.0 n'a pas été évaluée.
 **Bilan : 7 identifiants prospectifs, 0 document admis, 0 octet
 TRAIN/VAL/TEST, `G0_admitted=false`.** Le volet Rust natif
 (au moins 2 Mio dans TRAIN selon le protocole) reste nécessaire.
+
+
+## G0-HF2b — trois textes Gutenberg téléchargés et hachés (15 octobre 2026)
+
+**Preuve nouvelle : octets bruts de source officielle observés, PAS admission juridique ni correspondance avec une ligne du dataset Hugging Face.**
+Le contrôle Rust RemoteOps/ops/bmx-gru/v2_gutenberg_byte_probe.rs a exécuté
+sur le runner Dell le workflow
+[RemoteOps #38806094147](https://github.com/Memorithm/RemoteOps/actions/runs/38806094147)
+(**SUCCESS**, job 116667218759, commit exécuté
+697d621e668089057803c96d1ea8900eda5b24ad).
+Il a vérifié l'identité eBook, l'UTF-8 et les bornes START/END,
+puis calculé des SHA-256 sur les octets téléchargés depuis Gutenberg :
+
+| eBook | Octets bruts constatés | SHA-256 brut |
+| --- | ---: | --- |
+| 1342 — Pride and Prejudice | 772 386 | 3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75 |
+| 2701 — Moby-Dick | 1 276 315 | b5e88b71a1cda068e9ab1d94344c9d932338ba6da1a66def97a1aecd9cfcc87d |
+| 84 — Frankenstein | 448 885 | 7810cd483cffcf2cc8a1d8f0d5807931e69d4f48cd14149b8c76f88af82fead3 |
+| **Total** | **2 497 586** | — |
+
+Le TSV de métadonnées a pour SHA-256
+5166b7cf3d5256b4a3e3b2d3a76264267f52ac2d92da16d87fdf96d29b6d781f ;
+l'[artefact privé #12005704230](https://github.com/Memorithm/RemoteOps/actions/runs/38806094147/artifacts/12005704230)
+n'embarque **aucun texte**. Les octets n'ont pas été conservés dans ce lot ;
+leur URL n'est pas une référence de contenu immuable. Au moment d'une
+matérialisation future, le nouveau SHA-256 devra être recalculé.
+
+**Périmètre de la preuve :** les octets proviennent du site Gutenberg,
+pas d'un enregistrement lu à la révision
+01dc90a5002f8977c7fb03a372c14bca29c65cf1
+du dataset common-pile/project_gutenberg. Une égalité de titre ou
+d'identifiant dans l'aperçu Hugging Face ne suffit pas :
+l'équivalence œuvre–édition–transcription–octets reste
+**HF_REVISION_ROW_NOT_VERIFIED**.
+
+**Barrière de sécurité :** la revue de
+[RemoteOps PR #437](https://github.com/Memorithm/RemoteOps/pull/437)
+a signalé un défaut de nettoyage lors d'un échec : l'appel immédiat à
+process::exit empêchait l'exécution du destructeur du répertoire privé.
+La correction avec test régressif a été proposée dans
+[RemoteOps PR #447](https://github.com/Memorithm/RemoteOps/pull/447).
+Ne pas réemployer cette sonde comme collecteur répété avant sa validation
+sur le commit exact.
+
+**Prochain verrou mesurable :** contrôle séparé des droits de
+l'édition/transcription effectivement matérialisée, comparaison à la
+révision Hugging Face épinglée si elle doit servir de source, reçus
+privés REVIEWED signés par une autorité indépendante, puis attribution
+des familles TRAIN/VAL/TEST avant scoring. Aucun des trois eBooks
+n'est admis ici. Les quatre autres identifiants pilotes
+(2 Gallica, 2 USPTO) n'ont pas non plus de payload admis.
+
+gutenberg_source_bytes_observed=2497586 ;
+hf_pinned_payload_bytes_matched=0 ;
+rights_reviewed_files=0 ;
+G0_admitted=false ;
+v2_training_started=false.
