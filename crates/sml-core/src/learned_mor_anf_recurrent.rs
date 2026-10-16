@@ -128,13 +128,13 @@ impl RecurrentMorAnf {
             ];
             for (i, &v) in step.x.iter().enumerate() {
                 r_grad[i] += d_gate * v;
-                for expert in 0..2 {
-                    e_grad[expert][i] += d_expert[expert] * v;
+                for (gradient, derivative) in e_grad.iter_mut().zip(d_expert) {
+                    gradient[i] += derivative * v;
                 }
             }
             let mut d_state = next_state_grad + d_gate * self.router[5];
-            for expert in 0..2 {
-                d_state += d_expert[expert] * self.expert[expert][5];
+            for (derivative, expert) in d_expert.iter().zip(&self.expert) {
+                d_state += derivative * expert[5];
             }
             let d_pre = d_state * (1.0 - step.h * step.h);
             h_grad[0] += d_pre * step.prev_h;
@@ -151,18 +151,16 @@ impl RecurrentMorAnf {
             .map(|x| (x / denom).powi(2))
             .sum();
         let scale = 1.0 / norm2.sqrt().max(1.0);
-        for i in 0..6 {
-            self.router[i] =
-                check_finite(self.router[i] - learning_rate * r_grad[i] / denom * scale)?;
-            for expert in 0..2 {
-                self.expert[expert][i] = check_finite(
-                    self.expert[expert][i] - learning_rate * e_grad[expert][i] / denom * scale,
-                )?;
+        for (weight, gradient) in self.router.iter_mut().zip(r_grad) {
+            *weight = check_finite(*weight - learning_rate * gradient / denom * scale)?;
+        }
+        for (weights, gradient) in self.expert.iter_mut().zip(e_grad) {
+            for (weight, derivative) in weights.iter_mut().zip(gradient) {
+                *weight = check_finite(*weight - learning_rate * derivative / denom * scale)?;
             }
         }
-        for i in 0..3 {
-            self.recurrent[i] =
-                check_finite(self.recurrent[i] - learning_rate * h_grad[i] / denom * scale)?;
+        for (weight, gradient) in self.recurrent.iter_mut().zip(h_grad) {
+            *weight = check_finite(*weight - learning_rate * gradient / denom * scale)?;
         }
         check_finite(loss / denom)
     }
