@@ -3,7 +3,7 @@
 //! The held-out slice is a diagnostic within TRAIN source years, not frozen 2023 DEV.
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
-    sparse_gradient_atlas::{SparseConfig, SparseGradientAtlas},
+    sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig, SparseGradientAtlas},
 };
 use std::{
     collections::HashSet,
@@ -22,6 +22,8 @@ const TRAIN_MAX: u64 = 2 * 1024 * 1024;
 const HOLDOUT_MAX: u64 = 1024 * 1024;
 const PAGES: u64 = 4096;
 const CACHE: usize = 32;
+const PAGES_50M: u64 = 48_829;
+const BATCH_BYTES: usize = 4096;
 
 fn full_sha256(path: &Path) -> Result<String> {
     let mut reader = BufReader::with_capacity(1024 * 1024, File::open(path)?);
@@ -37,7 +39,7 @@ fn full_sha256(path: &Path) -> Result<String> {
     Ok(hex(&hash.finish()))
 }
 
-fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
+fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) -> Result<()> {
     if parse_hex(digest).is_none() || corpus == ledger || out.exists() {
         return Err("invalid pinned SHA-256, overlapping input files, or output exists".into());
     }
@@ -57,7 +59,7 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
         return Err("wrong SEC provenance ledger schema".into());
     }
     let cfg = SparseConfig {
-        pages: PAGES,
+        pages: if fifty_m { PAGES_50M } else { PAGES },
         max_cached_pages: CACHE,
         learning_rate: 0.15,
     };
@@ -71,6 +73,8 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
     let mut train_docs = 0u64;
     let mut dev_docs = 0u64;
     let mut seen = HashSet::new();
+    let mut heldout = Vec::new();
+    let start = std::time::Instant::now();
     for (row_index, line) in lines.enumerate() {
         // Early stop: a small finite prefix experiment, NOT a full 10GiB fit.
         if train_bytes >= TRAIN_MAX && dev_bytes >= HOLDOUT_MAX {
@@ -111,13 +115,18 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
             continue;
         }
         if train_bytes < TRAIN_MAX {
-            let (loss, events) = model.train_document(&doc)?;
+            let (loss, events) = if fifty_m {
+                model.train_document_grouped(&doc, BATCH_BYTES)?
+            } else {
+                model.train_document(&doc)?
+            };
             train_bytes += len as u64;
             train_docs += 1;
             train_loss += loss;
             train_events += events;
         } else if dev_bytes < HOLDOUT_MAX {
             let (loss, events) = model.evaluate_document(&doc)?;
+            heldout.push(doc.clone());
             dev_bytes += len as u64;
             dev_docs += 1;
             dev_loss += loss;
@@ -135,11 +144,28 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
     model.checkpoint(out)?;
     model.export_q4(&out.join("weights.q4"))?;
     let counts = model.counters();
+    let mut q4 = QuantizedSparseAtlas::open(&out.join("weights.q4"), cfg)?;
+    let mut q4_loss = 0f64;
+    let mut q4_events = 0u64;
+    for doc in &heldout {
+        let (loss, events) = q4.evaluate_document(doc)?;
+        q4_loss += loss;
+        q4_events = q4_events.checked_add(events).ok_or("Q4 events overflow")?;
+    }
+    if q4_events != dev_events || !q4_loss.is_finite() {
+        return Err("Q4 vs f32 heldout event mismatch".into());
+    }
+    let dev_f32 = dev_loss / dev_events as f64;
+    let dev_q4 = q4_loss / dev_events as f64;
+    let elapsed_seconds = start.elapsed().as_secs_f64();
     let metrics = format!(
-        "model\tcapacity_parameters\tupdated_unique\tparameter_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\tholdout_docs\tholdout_bytes\tholdout_events\tholdout_bpc\tbaseline_uniform_bpc\tmaster_bytes\tq4_bytes\tg0\ttest\nsml_sparse_sgd_v1\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{}\t{}\tNOT_ADMITTED\tUNOPENED\n",
+        "model\tcapacity_parameters\tupdated_unique\tparameter_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\tholdout_docs\tholdout_bytes\tholdout_events\tholdout_bpc\tbaseline_uniform_bpc\tmaster_bytes\tq4_bytes\tg0\ttest\tholdout_q4_bpc\tq4_minus_f32_bpc\ttrain_elapsed_seconds\ttrain_page_loads\ttrain_page_evictions\ttraining_order\n{}\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{dev_f32:.9}\t8.000000000\t{}\t{}\tNOT_ADMITTED\tUNOPENED\t{dev_q4:.9}\t{:.9}\t{elapsed_seconds:.4}\t{}\t{}\t{}\n",
+        if fifty_m { "sml_sparse_sgd_50m_grouped_v2" } else { "sml_sparse_sgd_4m_online_v2" },
         cfg.total_parameters(), counts.distinct_updated_parameters, counts.parameter_updates,
-        train_loss / train_events as f64, dev_loss / dev_events as f64,
-        cfg.train_master_bytes(), cfg.packed_q4_bytes()
+        train_loss / train_events as f64,
+        cfg.train_master_bytes(), cfg.packed_q4_bytes(),
+        dev_q4 - dev_f32, counts.page_loads, counts.page_evictions,
+        if fifty_m { "PAGE_GROUPED_4096" } else { "ONLINE" }
     );
     let mut report = OpenOptions::new()
         .write(true)
@@ -148,7 +174,7 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path) -> Result<()> {
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
     print!("{metrics}");
-    println!("SPARSE_GRADIENT_PILOT_DONE source_sha256={actual} training_is_real=true params_actually_updated={} fit_scope=PREFIX_ONLY g0=NOT_ADMITTED test=UNOPENED", counts.distinct_updated_parameters);
+    println!("SPARSE_GRADIENT_PILOT_DONE source_sha256={actual} training_is_real=true params_actually_updated={} total_params={} holdout_f32_bpc={dev_f32:.9} holdout_q4_bpc={dev_q4:.9} fit_scope=PREFIX_ONLY g0=NOT_ADMITTED test=UNOPENED", counts.distinct_updated_parameters, cfg.total_parameters());
     Ok(())
 }
 
@@ -156,8 +182,10 @@ fn main() {
     let args: Vec<_> = env::args().collect();
     let result = match args.as_slice() {
         [_, arg, corpus, ledger, sha, out] if arg == "--pilot" =>
-            run(Path::new(corpus), Path::new(ledger), sha, Path::new(out)),
-        _ => Err("usage: sml-sparse-gradient-fit --pilot CORPUS.utf8 provenance.tsv SOURCE_SHA256 OUT_DIR".into()),
+            run(Path::new(corpus), Path::new(ledger), sha, Path::new(out), false),
+        [_, arg, corpus, ledger, sha, out] if arg == "--pilot-50m" =>
+            run(Path::new(corpus), Path::new(ledger), sha, Path::new(out), true),
+        _ => Err("usage: sml-sparse-gradient-fit [--pilot|--pilot-50m] CORPUS.utf8 provenance.tsv SOURCE_SHA256 OUT_DIR".into()),
     };
     if let Err(e) = result {
         eprintln!("SPARSE_GRADIENT_FAIL {e}");
