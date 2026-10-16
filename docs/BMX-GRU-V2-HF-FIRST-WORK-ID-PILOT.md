@@ -130,10 +130,14 @@ l'équivalence œuvre–édition–transcription–octets reste
 [RemoteOps PR #437](https://github.com/Memorithm/RemoteOps/pull/437)
 a signalé un défaut de nettoyage lors d'un échec : l'appel immédiat à
 process::exit empêchait l'exécution du destructeur du répertoire privé.
-La correction avec test régressif a été proposée dans
-[RemoteOps PR #447](https://github.com/Memorithm/RemoteOps/pull/447).
-Ne pas réemployer cette sonde comme collecteur répété avant sa validation
-sur le commit exact.
+La correction avec test régressif a été fusionnée dans
+[RemoteOps PR #447](https://github.com/Memorithm/RemoteOps/pull/447)
+(commit squash 86270703c0cc4528363c76d06d25703c60d8d476) :
+le [workflow Dell #38861084697](https://github.com/Memorithm/RemoteOps/actions/runs/38861084697)
+a terminé SUCCESS sur le head exact
+402a7fe37869c4c94d0fad39ded12e069be81320.
+Ce correctif de sûreté ne qualifie pas les droits et ne prouve pas
+l'identité d'un document Hugging Face à la révision épinglée.
 
 **Prochain verrou mesurable :** contrôle séparé des droits de
 l'édition/transcription effectivement matérialisée, comparaison à la
