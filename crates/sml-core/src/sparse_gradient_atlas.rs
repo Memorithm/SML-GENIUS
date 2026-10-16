@@ -954,7 +954,7 @@ mod tests {
         let masked_dir = temp("assistant-mask");
         let full_dir = temp("assistant-full");
         let config = cfg(64, 2);
-        let bytes: Vec<u8> = (0..512).map(|i| (i * 7 ^ (i / 5)) as u8).collect();
+        let bytes: Vec<u8> = (0..512).map(|i| ((i * 7) ^ (i / 5)) as u8).collect();
         let mut masked = SparseGradientAtlas::create(&masked_dir, config).unwrap();
         let mut full = SparseGradientAtlas::create(&full_dir, config).unwrap();
         assert!(masked.train_assistant_bytes(&bytes, 0, 128).is_err());
