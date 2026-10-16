@@ -75,6 +75,7 @@ pub mod delta_kv_panel;
 pub mod delta_kv_recurrent;
 pub mod delta_kv_resolution;
 pub mod delta_kv_semantic;
+pub mod elastic_activation;
 pub mod elastic_ngram;
 pub mod elastic_ngram_long;
 pub mod elastic_ngram_packed;
