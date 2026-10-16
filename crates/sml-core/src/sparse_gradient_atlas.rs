@@ -949,6 +949,50 @@ mod tests {
         fs::remove_dir_all(second).unwrap();
     }
 
+    #[test]
+    fn assistant_targets_mask_prompt_and_match_full_fit_at_offset_two() {
+        let masked_dir = temp("assistant-mask");
+        let full_dir = temp("assistant-full");
+        let config = cfg(64, 2);
+        let bytes: Vec<u8> = (0..512)
+            .map(|i| (i * 7 ^ (i / 5)) as u8)
+            .collect();
+        let mut masked = SparseGradientAtlas::create(&masked_dir, config).unwrap();
+        let mut full = SparseGradientAtlas::create(&full_dir, config).unwrap();
+        assert!(masked.train_assistant_bytes(&bytes, 0, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 1, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 512, 128).is_err());
+        assert!(masked.train_assistant_bytes(&bytes, 256, 0).is_err());
+        let (loss, events) = masked.train_assistant_bytes(&bytes, 256, 128).unwrap();
+        assert!(loss.is_finite());
+        assert_eq!(events, 256);
+        assert_eq!(masked.counters().supervised_bits, 256 * 8);
+        let before = masked.counters();
+        let (dev_loss, dev_events) = masked.evaluate_assistant_bytes(&bytes, 256, 128).unwrap();
+        assert_eq!(dev_events, 256);
+        assert!(dev_loss.is_finite());
+        assert_eq!(masked.counters(), before);
+        assert!(masked.evaluate_assistant_bytes(&bytes, 1, 128).is_err());
+        assert!(masked.evaluate_assistant_bytes(&bytes, 256, 0).is_err());
+        let (_, count) = full.train_document_grouped(&bytes, 128).unwrap();
+        assert_eq!(count, 510);
+        assert_eq!(full.counters().supervised_bits, 510 * 8);
+        let parity_dir = temp("assistant-parity");
+        let mut parity = SparseGradientAtlas::create(&parity_dir, config).unwrap();
+        let (_, parity_count) = parity.train_assistant_bytes(&bytes, 2, 128).unwrap();
+        assert_eq!(parity_count, count);
+        full.flush().unwrap();
+        parity.flush().unwrap();
+        assert_eq!(full_master(&full_dir), full_master(&parity_dir));
+        assert_eq!(
+            fs::read(full_dir.join("touched.bit")).unwrap(),
+            fs::read(parity_dir.join("touched.bit")).unwrap()
+        );
+        fs::remove_dir_all(masked_dir).unwrap();
+        fs::remove_dir_all(full_dir).unwrap();
+        fs::remove_dir_all(parity_dir).unwrap();
+    }
+
     fn full_master(dir: &Path) -> Vec<u8> {
         fs::read(dir.join("master.f32")).unwrap()
     }
