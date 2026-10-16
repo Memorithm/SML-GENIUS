@@ -18,6 +18,7 @@ const SLOTS: usize = BITS * CLASSES * PAIRS;
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL: u64 = 256 * 1024 * 1024;
 const MIN_TRAIN: u64 = 8 * 1024 * 1024;
+const MIN_TRAIN_MULTI: u64 = 16 * 1024 * 1024;
 const MIN_DEV: u64 = 64 * 1024;
 const MAX_FILES: usize = 50_000;
 // Frozen Laplace smoothing; no DEV-driven model choice.
@@ -90,6 +91,7 @@ struct Corpus {
     files: usize,
     provenance: String,
     fingerprints: HashSet<[u8; 32]>,
+    duplicates_skipped: u64,
 }
 
 impl Corpus {
@@ -100,12 +102,17 @@ impl Corpus {
             files: 0,
             provenance: String::from("role\trepository\tpath\tbytes\tsha256\n"),
             fingerprints: HashSet::new(),
+            duplicates_skipped: 0,
         }
     }
 
     fn take(&mut self, role: &str, repo: &str, rel: &Path, bytes: &[u8]) -> Result<bool> {
         let fingerprint = sha256(bytes);
         if !self.fingerprints.insert(fingerprint) {
+            self.duplicates_skipped = self
+                .duplicates_skipped
+                .checked_add(1)
+                .ok_or("duplicate overflow")?;
             return Ok(false);
         }
         self.files += 1;
@@ -243,64 +250,61 @@ fn write_new(dir: &Path, name: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn run(
-    scirst: &Path,
-    tdi: &Path,
-    flat: &Path,
-    ccos: &Path,
-    sml: &Path,
-    output: &Path,
-) -> Result<()> {
+fn valid_repository(name: &str) -> bool {
+    let Some(short) = name.strip_prefix("Memorithm/") else {
+        return false;
+    };
+    !short.is_empty()
+        && short.len() <= 64
+        && short
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+}
+
+// The prior four-root invocation is preserved; --multi introduces frozen 16 MiB scale gate.
+fn run(roots: &[(&str, &Path)], dev_root: &Path, output: &Path) -> Result<()> {
     if output.exists() {
         return Err("new output directory must not already exist".into());
     }
-    for root in [scirst, tdi, flat, ccos, sml] {
-        if root.symlink_metadata()?.file_type().is_symlink() || !root.is_dir() {
-            return Err("repository root must be a non-symlink directory".into());
+    if !(4..=24).contains(&roots.len()) {
+        return Err("expected 4 to 24 pinned TRAIN repositories".into());
+    }
+    let mut names = HashSet::new();
+    for (repo, path) in roots {
+        if !valid_repository(repo) || !names.insert(*repo) {
+            return Err("invalid or duplicate TRAIN repository name".into());
         }
+        if path.symlink_metadata()?.file_type().is_symlink() || !path.is_dir() {
+            return Err("TRAIN repository root must be a non-symlink directory".into());
+        }
+    }
+    if dev_root.symlink_metadata()?.file_type().is_symlink() || !dev_root.is_dir() {
+        return Err("DEV repository root must be a non-symlink directory".into());
     }
     let mut bank = Bank::new();
     let mut train = Corpus::new();
-    scan(
-        scirst,
-        "Memorithm/SciRust",
-        "TRAIN",
-        &mut train,
-        &mut bank,
-        false,
-    )?;
-    scan(tdi, "Memorithm/TDI", "TRAIN", &mut train, &mut bank, false)?;
-    scan(
-        flat,
-        "Memorithm/FLAT-ATTENTION",
-        "TRAIN",
-        &mut train,
-        &mut bank,
-        false,
-    )?;
-    scan(
-        ccos,
-        "Memorithm/CCOS-Enterprise",
-        "TRAIN",
-        &mut train,
-        &mut bank,
-        false,
-    )?;
-    if train.bytes < MIN_TRAIN {
-        return Err(format!(
-            "large corpus minimum not met: {} < {MIN_TRAIN}",
-            train.bytes
-        )
-        .into());
+    for (repo, root) in roots {
+        scan(root, repo, "TRAIN", &mut train, &mut bank, false)?;
+    }
+    let floor = if roots.len() > 4 {
+        MIN_TRAIN_MULTI
+    } else {
+        MIN_TRAIN
+    };
+    if train.bytes < floor {
+        return Err(format!("large corpus minimum not met: {} < {floor}", train.bytes).into());
     }
     let changed = bank.changed_slots();
     if changed < 100 {
         return Err("Boolean bank has insufficient learned states".into());
     }
-    // SML-GENIUS is separate DEV only, and never affects the trained counts.
+
+    // Identical content cannot be used by both TRAIN and frozen DEV.
+    // Keep this exclusion explicit in reported counters rather than silently scoring leakage.
     let mut dev = Corpus::new();
+    dev.fingerprints.extend(train.fingerprints.iter().copied());
     let neglog = scan(
-        sml,
+        dev_root,
         "Memorithm/SML-GENIUS",
         "DEV",
         &mut dev,
@@ -312,8 +316,17 @@ fn run(
     }
     let dev_bpc = neglog / dev.events as f64;
     let summary = format!(
-        "model\ttrain_bytes\ttrain_files\ttrain_target_bytes\tdev_bytes\tdev_files\tdev_target_bytes\tlearned_slots\tdev_bpc\tuniform_baseline_bpc\ttest\tg0\nboolean_context_8192\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{dev_bpc:.9}\t8.000000000\tUNOPENED\tNOT_ADMITTED\n",
-        train.bytes, train.files, train.events, dev.bytes, dev.files, dev.events, changed
+        "model\ttrain_roots\ttrain_bytes\ttrain_files\ttrain_target_bytes\ttrain_duplicates_skipped\tdev_bytes\tdev_files\tdev_target_bytes\tdev_identical_files_excluded\tlearned_slots\tdev_bpc\tuniform_baseline_bpc\ttest\tg0\nboolean_context_8192\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{dev_bpc:.9}\t8.000000000\tUNOPENED\tNOT_ADMITTED\n",
+        roots.len(),
+        train.bytes,
+        train.files,
+        train.events,
+        train.duplicates_skipped,
+        dev.bytes,
+        dev.files,
+        dev.events,
+        dev.duplicates_skipped,
+        changed
     );
     let mut weights = String::from("slot\tzeros\tones\talpha\n");
     for (idx, counts) in bank.counts.iter().enumerate() {
@@ -328,7 +341,7 @@ fn run(
                 .provenance
                 .lines()
                 .skip(1)
-                .map(|s| format!("{s}\n"))
+                .map(|line| format!("{line}\n"))
                 .collect::<String>()),
     )?;
     write_new(output, "summary.tsv", &summary)?;
@@ -340,20 +353,33 @@ fn run(
     Ok(())
 }
 
+fn execute_args(args: &[String]) -> Result<()> {
+    if args.len() == 7 && args[1] != "--multi" {
+        let repos = [
+            ("Memorithm/SciRust", Path::new(&args[1])),
+            ("Memorithm/TDI", Path::new(&args[2])),
+            ("Memorithm/FLAT-ATTENTION", Path::new(&args[3])),
+            ("Memorithm/CCOS-Enterprise", Path::new(&args[4])),
+        ];
+        return run(&repos, Path::new(&args[5]), Path::new(&args[6]));
+    }
+    if args.len() < 12 || args[1] != "--multi" || (args.len() - 4) % 2 != 0 {
+        return Err("usage: sml-boolean-large-corpus-fit --multi REPO ROOT [REPO ROOT ...] DEV_ROOT NEW_OUTPUT_DIR".into());
+    }
+    let repos: Vec<(&str, &Path)> = args[2..args.len() - 2]
+        .chunks_exact(2)
+        .map(|part| (part[0].as_str(), Path::new(&part[1])))
+        .collect();
+    run(
+        &repos,
+        Path::new(&args[args.len() - 2]),
+        Path::new(&args[args.len() - 1]),
+    )
+}
+
 fn main() {
     let a: Vec<String> = env::args().collect();
-    if a.len() != 7 {
-        eprintln!("usage: sml-boolean-large-corpus-fit SCIRUST TDI FLAT-ATTENTION CCOS-Enterprise SML-GENIUS NEW_OUTPUT_DIR");
-        std::process::exit(2);
-    }
-    if let Err(e) = run(
-        Path::new(&a[1]),
-        Path::new(&a[2]),
-        Path::new(&a[3]),
-        Path::new(&a[4]),
-        Path::new(&a[5]),
-        Path::new(&a[6]),
-    ) {
+    if let Err(e) = execute_args(&a) {
         eprintln!("BOOLEAN_LARGE_FIT_STOP {e}");
         std::process::exit(1);
     }
@@ -374,6 +400,21 @@ mod tests {
         assert_eq!(scored, n);
         assert!(loss.is_finite() && loss >= 0.0);
         assert_eq!(before, bank.counts);
+    }
+    #[test]
+    fn cross_split_identical_file_is_excluded_before_dev_scoring() {
+        let mut train = Corpus::new();
+        let bytes = b"independent repeated text bytes";
+        assert!(train
+            .take("TRAIN", "Memorithm/SciRust", Path::new("src/a.rs"), bytes)
+            .unwrap());
+        let mut dev = Corpus::new();
+        dev.fingerprints.extend(train.fingerprints.iter().copied());
+        assert!(!dev
+            .take("DEV", "Memorithm/SML-GENIUS", Path::new("docs/a.md"), bytes)
+            .unwrap());
+        assert_eq!(dev.bytes, 0);
+        assert_eq!(dev.duplicates_skipped, 1);
     }
     #[test]
     fn rejects_wrong_sources_and_contexts_remain_bounded() {
