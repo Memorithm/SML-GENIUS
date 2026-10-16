@@ -102,6 +102,7 @@ pub mod mor_runtime;
 pub mod mor_runtime_sequence_objective;
 pub mod mor_sequence_objective;
 pub mod mor_sequence_train;
+pub mod learned_mor_anf_recurrent;
 pub mod mor_specialization;
 pub mod mor_temporal;
 pub mod mor_temporal_search;
