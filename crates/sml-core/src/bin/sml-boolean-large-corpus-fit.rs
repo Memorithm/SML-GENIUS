@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "sml-boolean-large-corpus-fit/stream.rs"]
 mod stream;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
