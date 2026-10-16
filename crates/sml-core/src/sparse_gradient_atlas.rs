@@ -333,6 +333,63 @@ impl SparseGradientAtlas {
         Ok((page, sigmoid(score / SCALE)))
     }
 
+    /// Finite mixture-of-experts primitive: predict from an explicit sparse
+    /// expert page rather than the legacy immutable hash route. The caller
+    /// owns the learnt router and must use the SAME page pair on evaluation.
+    pub fn probability_on_page(
+        &mut self, page_id: u64, a: u8, b: u8, bit: usize,
+    ) -> Result<f64> {
+        if page_id >= self.config.pages || bit >= 8 {
+            return Err("invalid learned expert page / output bit".into());
+        }
+        let page = self.cached(page_id)?;
+        let mut score = 0f64;
+        for feature in 0..FEATURES {
+            let slot = feature_slot(a, b, bit, feature);
+            score += f64::from(self.cache[page].master[slot]) * feature_sign(a, b, feature);
+        }
+        Ok(sigmoid(score / SCALE))
+    }
+
+    /// Apply an externally computed exact d(loss_nats)/d(expert_raw_score).
+    /// Used by a differentiable two-expert MOR gate. The separate head counts
+    /// one supervised target; these atlas counters count expert updates.
+    pub fn apply_expert_gradient(
+        &mut self, page_id: u64, a: u8, b: u8, bit: usize, derivative: f64,
+    ) -> Result<()> {
+        if page_id >= self.config.pages || bit >= 8
+            || !derivative.is_finite() || derivative.abs() > 32.0
+        {
+            return Err("invalid expert gradient or address".into());
+        }
+        let page = self.cached(page_id)?;
+        let eta = f64::from(self.config.learning_rate);
+        for feature in 0..FEATURES {
+            let slot = feature_slot(a, b, bit, feature);
+            let before = self.cache[page].master[slot];
+            let after = (f64::from(before) - eta * derivative * feature_sign(a, b, feature))
+                .clamp(-4.0, 4.0) as f32;
+            if !after.is_finite() { return Err("nonfinite expert update".into()); }
+            self.cache[page].master[slot] = after;
+            let index = slot / 8;
+            let mask = 1u8 << (slot % 8);
+            if self.cache[page].touched[index] & mask == 0 {
+                self.cache[page].touched[index] |= mask;
+                self.counters.distinct_updated_parameters =
+                    self.counters.distinct_updated_parameters.checked_add(1)
+                        .ok_or("first-touch overflow")?;
+            }
+            self.counters.parameter_updates =
+                self.counters.parameter_updates.checked_add(1)
+                    .ok_or("expert update count overflow")?;
+        }
+        self.cache[page].dirty = true;
+        self.counters.supervised_bits =
+            self.counters.supervised_bits.checked_add(1)
+                .ok_or("expert exposure overflow")?;
+        Ok(())
+    }
+
     /// Online logistic cross-entropy, *actual gradient updates* of selected
     /// master scalars, with the exact first-touch bitmap persisted on disk.
     pub fn train_bit(&mut self, a: u8, b: u8, bit: usize, label: bool) -> Result<f64> {
