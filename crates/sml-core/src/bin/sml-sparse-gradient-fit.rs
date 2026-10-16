@@ -125,7 +125,11 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
             train_loss += loss;
             train_events += events;
         } else if dev_bytes < HOLDOUT_MAX {
-            let (loss, events) = model.evaluate_document(&doc)?;
+            let (loss, events) = if fifty_m {
+                model.evaluate_document_grouped(&doc, BATCH_BYTES)?
+            } else {
+                model.evaluate_document(&doc)?
+            };
             heldout.push(doc.clone());
             dev_bytes += len as u64;
             dev_docs += 1;
@@ -148,7 +152,11 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
     let mut q4_loss = 0f64;
     let mut q4_events = 0u64;
     for doc in &heldout {
-        let (loss, events) = q4.evaluate_document(doc)?;
+        let (loss, events) = if fifty_m {
+            q4.evaluate_document_grouped(doc, BATCH_BYTES)?
+        } else {
+            q4.evaluate_document(doc)?
+        };
         q4_loss += loss;
         q4_events = q4_events.checked_add(events).ok_or("Q4 events overflow")?;
     }
