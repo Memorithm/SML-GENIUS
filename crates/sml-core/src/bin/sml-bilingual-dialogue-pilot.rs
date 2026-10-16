@@ -32,18 +32,22 @@ fn parse_line(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
     if parts.len() != 5 {
         return Err("invalid dialogue TSV columns".into());
     }
-    let (split, lang, tree, prompt, answer) =
-        (parts[0], parts[1], parts[2], parts[3], parts[4]);
+    let (split, lang, tree, prompt, answer) = (parts[0], parts[1], parts[2], parts[3], parts[4]);
     if !matches!(split, "train" | "dev") || !matches!(lang, "fr" | "en") {
         return Err("invalid dialogue split/language".into());
     }
-    if tree.len() < 8 || tree.len() > 80 || !tree.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
+    if tree.len() < 8
+        || tree.len() > 80
+        || !tree.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+    {
         return Err("invalid conversation tree identifier".into());
     }
     for text in [prompt, answer] {
         if text.len() < 4
             || text.len() > 6000
-            || text.bytes().any(|b| b == 0 || b == b'\n' || b == b'\r' || b == b'\t')
+            || text
+                .bytes()
+                .any(|b| b == 0 || b == b'\n' || b == b'\r' || b == b'\t')
         {
             return Err("invalid dialogue turn".into());
         }
@@ -147,16 +151,14 @@ fn train(source: &Path, expected: &str, output: &Path) -> Result<()> {
     let mut train_loss = [0.0f64; 2];
     let mut train_events = [0u64; 2];
     for pair in &train {
-        let (loss, n) =
-            model.train_assistant_bytes(&pair.bytes, pair.answer_start, WINDOW)?;
+        let (loss, n) = model.train_assistant_bytes(&pair.bytes, pair.answer_start, WINDOW)?;
         train_loss[pair.language] += loss;
         train_events[pair.language] += n;
     }
     let mut dev_loss = [0.0f64; 2];
     let mut dev_events = [0u64; 2];
     for pair in &dev {
-        let (loss, n) =
-            model.evaluate_assistant_bytes(&pair.bytes, pair.answer_start, WINDOW)?;
+        let (loss, n) = model.evaluate_assistant_bytes(&pair.bytes, pair.answer_start, WINDOW)?;
         dev_loss[pair.language] += loss;
         dev_events[pair.language] += n;
     }
