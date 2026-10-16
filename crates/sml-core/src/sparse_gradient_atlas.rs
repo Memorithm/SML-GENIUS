@@ -450,6 +450,42 @@ impl SparseGradientAtlas {
         Ok((loss, predicted_bytes))
     }
 
+    /// Exact held-out prediction with page-local data access. Unlike SGD,
+    /// score order is immaterial because weights are immutable in this method.
+    pub fn evaluate_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid held-out page batch window".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                for bit in 0..8usize {
+                    scheduled.push((
+                        route(document[position], document[position + 1], bit, self.config.pages),
+                        position,
+                        bit,
+                    ));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, pos, bit) in scheduled {
+                let (_, p) = self.bit_probability(document[pos], document[pos + 1], bit)?;
+                loss += binary_loss_bits(p, document[pos + 2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() {
+            return Err("nonfinite grouped DEV loss".into());
+        }
+        Ok((loss, predicted as u64))
+    }
+
     #[must_use]
     pub fn counters(&self) -> SparseCounters {
         self.counters
@@ -605,6 +641,38 @@ impl QuantizedSparseAtlas {
         Ok((loss, document.len().saturating_sub(2) as u64))
     }
 
+    pub fn evaluate_document_grouped(
+        &mut self,
+        document: &[u8],
+        batch_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if !(1..=8192).contains(&batch_bytes) {
+            return Err("invalid Q4 evaluation batch window".into());
+        }
+        let predicted = document.len().saturating_sub(2);
+        let mut loss = 0f64;
+        for begin in (0..predicted).step_by(batch_bytes) {
+            let end = (begin + batch_bytes).min(predicted);
+            let mut scheduled = Vec::with_capacity((end - begin) * 8);
+            for position in begin..end {
+                for bit in 0..8usize {
+                    scheduled.push((
+                        route(document[position], document[position + 1], bit, self.config.pages),
+                        position,
+                        bit,
+                    ));
+                }
+            }
+            scheduled.sort_by_key(|entry| entry.0);
+            for (_, pos, bit) in scheduled {
+                let probability = self.probability(document[pos], document[pos + 1], bit)?;
+                loss += binary_loss_bits(probability, document[pos + 2] & (1 << bit) != 0);
+            }
+        }
+        if !loss.is_finite() { return Err("nonfinite grouped Q4 loss".into()); }
+        Ok((loss, predicted as u64))
+    }
+
     pub fn resident_bytes_upper_bound(&self) -> usize {
         self.config.max_cached_pages * (PAGE_PARAMETERS / 2)
     }
@@ -730,6 +798,10 @@ mod tests {
             fs::read(second.join("touched.bit")).unwrap()
         );
         assert!(grouped.counters().page_loads < serial.counters().page_loads);
+        let (online_dev, count_online) = serial.evaluate_document(&bytes).unwrap();
+        let (grouped_dev, count_grouped) = grouped.evaluate_document_grouped(&bytes, 512).unwrap();
+        assert_eq!(count_online, count_grouped);
+        assert!((online_dev / count_online as f64 - grouped_dev / count_grouped as f64).abs() < 1e-10);
         assert!(grouped.train_document_grouped(&bytes, 0).is_err());
         assert!(grouped.train_document_grouped(&bytes, 8193).is_err());
         fs::remove_dir_all(first).unwrap();
@@ -755,6 +827,9 @@ mod tests {
         assert!(loss.is_finite());
         assert!(loss / n as f64 < 8.0);
         assert_eq!(inference.resident_bytes_upper_bound(), 1024);
+        let (grouped_loss, grouped_n) = inference.evaluate_document_grouped(&bytes, 64).unwrap();
+        assert_eq!(grouped_n, n);
+        assert!((loss / n as f64 - grouped_loss / grouped_n as f64).abs() < 1e-10);
         assert!(inference.page_loads() > 0);
         assert_eq!(fs::read(root.join("weights.q4")).unwrap(), before);
         assert!(QuantizedSparseAtlas::open(&root.join("weights.q4"), cfg(257, 2)).is_err());
