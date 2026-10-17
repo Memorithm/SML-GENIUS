@@ -1158,6 +1158,91 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    fn multiscale_test_policy() -> RtlrV2Policy {
+        RtlrV2Policy {
+            ewma_alpha: 0.25, plateau_tolerance_bpc: 0.05,
+            marginal_cost_bpc_per_cell: 0.001,
+        }
+    }
+
+    fn multiscale_test_root(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "rtlr-v3-{tag}-{}-{}", std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ))
+    }
+
+    #[test]
+    fn v3_scalar_is_bit_exact_and_cell_rates_are_distinct() {
+        let mut old = RtlrElastic::new(config(1)).unwrap();
+        let root = multiscale_test_root("anchor");
+        let mut multi = RtlrElastic::new_v3(config(4), multiscale_test_policy(), &root).unwrap();
+        for i in 1..4 {
+            multi.cells.push(new_cell(i, 17));
+        }
+        assert_eq!(multi.leak_rate(0).unwrap(), 1.0);
+        assert_eq!(multi.leak_rate(1).unwrap(), 0.25);
+        assert_eq!(multi.leak_rate(2).unwrap(), 0.0625);
+        assert_eq!(multi.leak_rate(3).unwrap(), 0.015625);
+        for &(a,b) in &[(b'a',b'z'),(b'b',b'r'),(b'c',b'v')] {
+            old.advance_train(a,b).unwrap();
+            multi.advance_train(a,b).unwrap();
+            assert_eq!(old.cells[0].h.to_bits(), multi.cells[0].h.to_bits());
+            assert_eq!(old.cells[0].sensitivity, multi.cells[0].sensitivity);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v3_forward_local_gradient_matches_centered_finite_difference() {
+        let root = multiscale_test_root("jac");
+        let mut m = RtlrElastic::new_v3(config(4), multiscale_test_policy(), &root).unwrap();
+        m.cells.push(new_cell(1,17));
+        m.cells.push(new_cell(2,17));
+        let steps = [(b'a',b'q'),(b'b',b'r'),(b'c',b's'),
+            (b'd',b't'),(b'e',b'u'),(b'f',b'v')];
+        for &(a,b) in &steps {
+            m.advance_train(a,b).unwrap();
+        }
+        for i in 1..3 {
+            for p in 0..3 {
+                let mut plus = m.clone();
+                let mut minus = m.clone();
+                plus.reset_state();
+                minus.reset_state();
+                const EPS: f64 = 1e-6;
+                plus.cells[i].weights[p] += EPS;
+                minus.cells[i].weights[p] -= EPS;
+                for &(a,b) in &steps {
+                    plus.advance_inference(a,b).unwrap();
+                    minus.advance_inference(a,b).unwrap();
+                }
+                let numeric = (plus.cells[i].h-minus.cells[i].h)/(2.0*EPS);
+                assert!((numeric-m.cells[i].sensitivity[p]).abs()<1e-8,
+                    "cell={i} parameter={p} numeric={numeric} analytic={}",
+                    m.cells[i].sensitivity[p]);
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v3_long_lag_impulse_survives_when_scalar_anchor_has_decayed() {
+        let root=multiscale_test_root("impulse");
+        let mut m=RtlrElastic::new_v3(config(8),multiscale_test_policy(),&root).unwrap();
+        for i in 1..5 {m.cells.push(new_cell(i,17));}
+        for cell in &mut m.cells {
+            cell.weights=[0.65,0.0,0.0];
+            cell.h=0.8;
+            cell.sensitivity=[0.0;3];
+        }
+        for _ in 0..128 {m.advance_inference(0,0).unwrap();}
+        assert!(m.cells[0].h.abs()<1e-20);
+        assert!(m.cells[4].h>0.1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn validation_rejects_invalid_policy_and_nan_credit() {
         let mut invalid = config(0);
