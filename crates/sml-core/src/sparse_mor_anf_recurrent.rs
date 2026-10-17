@@ -1558,9 +1558,19 @@ mod paged_bptt_tests {
         }
         // Force a real SHA-checked, non-empty dormant bank with one live
         // anchor, while retaining trained recurrent weights.
-        rt.observe_train_document_v2(4.5, 4.5).unwrap();
-        rt.observe_train_document_v2(4.5, 4.5).unwrap();
-        rt.observe_train_document_v2(6.0, 5.0).unwrap();
+        for _ in 0..8 {
+            if rt.active() > 1 {
+                break;
+            }
+            rt.observe_train_document_v2(4.5, 4.5).unwrap();
+        }
+        assert!(rt.active() > 1);
+        for _ in 0..8 {
+            if rt.active() == 1 {
+                break;
+            }
+            rt.observe_train_document_v2(6.0, 5.0).unwrap();
+        }
         assert_eq!(rt.active(), 1);
         assert!(root.join("rtlr_v2_dormant/cell-001.tsv").is_file());
         let (baseline, count) = model
