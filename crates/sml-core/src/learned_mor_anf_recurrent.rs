@@ -169,9 +169,13 @@ impl RecurrentMorAnf {
     /// Ordering: expert0 (6), expert1 (6), MOR router (6), recurrence (3).
     pub fn weights_le_bytes(&self) -> [u8; Self::PARAMETERS * 8] {
         let mut out = [0u8; Self::PARAMETERS * 8];
-        for (i, value) in self.expert.iter().flatten()
+        for (i, value) in self
+            .expert
+            .iter()
+            .flatten()
             .chain(self.router.iter())
-            .chain(self.recurrent.iter()).enumerate()
+            .chain(self.recurrent.iter())
+            .enumerate()
         {
             out[i * 8..(i + 1) * 8].copy_from_slice(&value.to_le_bytes());
         }
@@ -237,9 +241,12 @@ mod tests {
             };
             let analytic = (origin - moved) / epsilon;
             let numerical = (plus.loss(&inputs, &labels).unwrap()
-                - minus.loss(&inputs, &labels).unwrap()) / (2.0 * epsilon);
-            assert!((analytic - numerical).abs() < 1e-7,
-                "component={component} analytic={analytic} numerical={numerical}");
+                - minus.loss(&inputs, &labels).unwrap())
+                / (2.0 * epsilon);
+            assert!(
+                (analytic - numerical).abs() < 1e-7,
+                "component={component} analytic={analytic} numerical={numerical}"
+            );
         }
     }
 
@@ -248,14 +255,18 @@ mod tests {
         let mut model = RecurrentMorAnf::default();
         let before = model.weights_le_bytes();
         assert_eq!(before.len(), RecurrentMorAnf::PARAMETERS * 8);
-        model.train_sequence(
-            &[(true, false), (true, true), (false, true)],
-            &[true, false, true], 0.1
-        ).unwrap();
+        model
+            .train_sequence(
+                &[(true, false), (true, true), (false, true)],
+                &[true, false, true],
+                0.1,
+            )
+            .unwrap();
         let after = model.weights_le_bytes();
         assert_ne!(before, after);
-        assert!(after.chunks_exact(8).all(|chunk|
-            f64::from_le_bytes(chunk.try_into().unwrap()).is_finite()));
+        assert!(after
+            .chunks_exact(8)
+            .all(|chunk| f64::from_le_bytes(chunk.try_into().unwrap()).is_finite()));
     }
 
     #[test]
