@@ -20,6 +20,28 @@ const HEADER: &str =
 const TRAIN_TARGET: u64 = 384 * 1024;
 const DEV_TARGET: u64 = 192 * 1024;
 const DOCUMENT_MAX: usize = 2 * 1024 * 1024;
+const MATCHED_TRAIN_TARGET: u64 = 64 * 1024;
+const MATCHED_DEV_TARGET: u64 = 32 * 1024;
+const MATCHED_WINDOW: usize = 128;
+const MATCHED_SAMPLE_MAX: usize = 1024;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PilotMode {
+    LegacyRtrl,
+    LegacyBptt,
+    MatchedRtrl,
+    MatchedBptt,
+}
+
+impl PilotMode {
+    fn is_bptt(self) -> bool {
+        matches!(self, Self::LegacyBptt | Self::MatchedBptt)
+    }
+
+    fn is_matched(self) -> bool {
+        matches!(self, Self::MatchedRtrl | Self::MatchedBptt)
+    }
+}
 
 fn sha(path: &Path) -> Result<String> {
     let mut reader = BufReader::with_capacity(1024 * 1024, File::open(path)?);
@@ -40,7 +62,7 @@ fn execute(
     provenance: &Path,
     expected_sha: &str,
     output: &Path,
-    bptt: bool,
+    mode: PilotMode,
 ) -> Result<()> {
     if parse_hex(expected_sha).is_none() || corpus == provenance || output.exists() {
         return Err("overlapping paths, existing output or invalid source SHA".into());
@@ -55,8 +77,10 @@ fn execute(
     if digest != expected_sha {
         return Err("source changed since admission".into());
     }
+    let bptt = mode.is_bptt();
+    let matched = mode.is_matched();
     let config = SparseConfig {
-        pages: if bptt { 48_829 } else { 4096 },
+        pages: if bptt || matched { 48_829 } else { 4096 },
         max_cached_pages: 32,
         learning_rate: 0.20,
     };
@@ -76,8 +100,22 @@ fn execute(
     let mut dev_events = 0u64;
     let mut dev_loss = 0f64;
     let start = std::time::Instant::now();
-    let train_target = if bptt { 12 * 1024 } else { TRAIN_TARGET };
-    let dev_target = if bptt { 8 * 1024 } else { DEV_TARGET };
+    let train_target = if matched {
+        MATCHED_TRAIN_TARGET
+    } else if bptt {
+        12 * 1024
+    } else {
+        TRAIN_TARGET
+    };
+    let dev_target = if matched {
+        MATCHED_DEV_TARGET
+    } else if bptt {
+        8 * 1024
+    } else {
+        DEV_TARGET
+    };
+    let mut train_fingerprint = Sha256::default();
+    let mut dev_fingerprint = Sha256::default();
     for line in lines.take(1000) {
         if train_bytes >= train_target && dev_bytes >= dev_target {
             break;
@@ -112,23 +150,37 @@ fn execute(
         }
         // The BPTT arm intentionally limits each verified source report to a
         // small document prefix. Report consumed bytes, not original file size.
-        let sample = if bptt {
-            &bytes[..bytes.len().min(1024)]
+        let sample = if bptt || matched {
+            &bytes[..bytes.len().min(MATCHED_SAMPLE_MAX)]
         } else {
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if bptt {
-                model.train_document_bptt(sample, 128)?
+            let (loss, events) = if matched && bptt {
+                model.train_document_bptt(sample, MATCHED_WINDOW)?
+            } else if matched {
+                model.train_document_rtrl_windowed(sample, MATCHED_WINDOW)?
+            } else if bptt {
+                model.train_document_bptt(sample, MATCHED_WINDOW)?
             } else {
                 model.train_document(sample)?
             };
+            if matched {
+                append_selection_fingerprint(&mut train_fingerprint, &expected, sample);
+            }
             train_docs += 1;
             train_bytes += sample.len() as u64;
             train_events += events;
             train_loss += loss;
         } else if dev_bytes < dev_target {
-            let (loss, events) = model.evaluate_document(sample)?;
+            let (loss, events) = if matched {
+                model.evaluate_document_windowed(sample, MATCHED_WINDOW)?
+            } else {
+                model.evaluate_document(sample)?
+            };
+            if matched {
+                append_selection_fingerprint(&mut dev_fingerprint, &expected, sample);
+            }
             dev_docs += 1;
             dev_bytes += sample.len() as u64;
             dev_events += events;
@@ -149,10 +201,11 @@ fn execute(
         return Err("joint gradient pathway not confirmed".into());
     }
     model.checkpoint(output)?;
-    let architecture = if bptt {
-        "sml_mor_anf_paged_bptt_v1"
-    } else {
-        "sml_mor_anf_rtrl_v1"
+    let architecture = match mode {
+        PilotMode::LegacyRtrl => "sml_mor_anf_rtrl_v1",
+        PilotMode::LegacyBptt => "sml_mor_anf_paged_bptt_v1",
+        PilotMode::MatchedRtrl => "sml_mor_anf_paged_rtrl_matched_v2",
+        PilotMode::MatchedBptt => "sml_mor_anf_paged_bptt_matched_v2",
     };
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
@@ -170,15 +223,43 @@ fn execute(
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
     print!("{metrics}");
-    let marker = if bptt {
-        "SML_MOR_ANF_BPTT_DONE"
-    } else {
-        "SML_MOR_ANF_RTRL_DONE"
+    if matched {
+        let mut selection = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join("paired_selection.tsv"))?;
+        writeln!(
+            selection,
+            "version\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_fingerprint\theldout_docs\theldout_bytes\theldout_events\theldout_fingerprint\twindow"
+        )?;
+        writeln!(
+            selection,
+            "PAIRED_V2\t{train_docs}\t{train_bytes}\t{train_events}\t{}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{}\t{MATCHED_WINDOW}",
+            hex(&train_fingerprint.finish()),
+            hex(&dev_fingerprint.finish())
+        )?;
+        selection.sync_all()?;
+    }
+    let marker = match mode {
+        PilotMode::LegacyRtrl => "SML_MOR_ANF_RTRL_DONE",
+        PilotMode::LegacyBptt => "SML_MOR_ANF_BPTT_DONE",
+        PilotMode::MatchedRtrl => "SML_MOR_ANF_MATCHED_RTRL_DONE",
+        PilotMode::MatchedBptt => "SML_MOR_ANF_MATCHED_BPTT_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
         counters.unique_router_parameters, counters.recurrent_parameter_updates);
     Ok(())
+}
+
+/// Ordered SHA commitment to the exact consumed prefixes, with no SEC text
+/// in the artifact. Both arms must have identical fingerprints.
+fn append_selection_fingerprint(hasher: &mut Sha256, source: &[u8; 32], sample: &[u8]) {
+    let mut prefix_hash = Sha256::default();
+    prefix_hash.update(sample);
+    hasher.update(source);
+    hasher.update(&prefix_hash.finish());
+    hasher.update(&(sample.len() as u64).to_le_bytes());
 }
 
 fn main() {
@@ -189,17 +270,31 @@ fn main() {
             Path::new(ledger),
             digest,
             Path::new(output),
-            false,
+            PilotMode::LegacyRtrl,
         ),
         [_, flag, corpus, ledger, digest, output] if flag == "--pilot-bptt" => execute(
             Path::new(corpus),
             Path::new(ledger),
             digest,
             Path::new(output),
-            true,
+            PilotMode::LegacyBptt,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-paired-rtrl" => execute(
+            Path::new(corpus),
+            Path::new(ledger),
+            digest,
+            Path::new(output),
+            PilotMode::MatchedRtrl,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-paired-bptt" => execute(
+            Path::new(corpus),
+            Path::new(ledger),
+            digest,
+            Path::new(output),
+            PilotMode::MatchedBptt,
         ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
