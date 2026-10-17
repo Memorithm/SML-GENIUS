@@ -111,6 +111,7 @@ pub struct RtlrElastic {
     shrink_streak: u64,
     stats: RtlrElasticStats,
     v2: Option<RtlrV2State>,
+    multiscale: bool,
 }
 
 fn sha_bytes(bytes: &[u8]) -> String {
@@ -191,6 +192,7 @@ impl RtlrElastic {
             grow_streak: 0,
             shrink_streak: 0,
             v2: None,
+            multiscale: false,
             stats: RtlrElasticStats {
                 peak_active: 1,
                 ..RtlrElasticStats::default()
@@ -235,7 +237,7 @@ impl RtlrElastic {
             return Err("RTLR-V2 checkpoint must bind its own physical model bank".into());
         }
         let joint = fs::read(root.join("joint.sha256.tsv"))?;
-        let mut body = String::from("RTLR_V2_FULL_V1\n");
+        let mut body = String::from(if self.multiscale { "RTLR_V3_MULTISCALE_V1\n" } else { "RTLR_V2_FULL_V1\n" });
         body.push_str(&format!(
             "C\t{}\t{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\n",
             self.config.max_active,
@@ -399,9 +401,11 @@ impl RtlrElastic {
         }
         let content = std::str::from_utf8(&raw)?;
         let mut lines = content.lines();
-        if lines.next() != Some("RTLR_V2_FULL_V1") {
-            return Err("RTLR-V2 unknown checkpoint schema".into());
-        }
+        let multiscale = match lines.next() {
+            Some("RTLR_V2_FULL_V1") => false,
+            Some("RTLR_V3_MULTISCALE_V1") => true,
+            _ => return Err("RTLR unknown checkpoint schema".into()),
+        };
         let c = read_cols(&mut lines, "C", 8)?;
         let config = RtlrElasticConfig {
             max_active: c[1].parse()?,
@@ -493,6 +497,7 @@ impl RtlrElastic {
         }
         let mut model = Self::new(config)?;
         model.cells = cells;
+        model.multiscale = multiscale;
         model.residual_gate = gate;
         model.grow_streak = grow_streak;
         model.shrink_streak = shrink_streak;
@@ -552,6 +557,33 @@ impl RtlrElastic {
             return Err("RTLR-V2 dormant accounting mismatch".into());
         }
         Ok(model)
+    }
+
+    /// Opt-in V3 exact-local independent recurrent time scales.
+    /// Anchor leak=1 remains the original exact RTRL-2 scalar path.
+    pub fn new_v3(
+        config: RtlrElasticConfig, policy: RtlrV2Policy, bank_directory: &Path,
+    ) -> Result<Self> {
+        let mut model = Self::new_v2(config, policy, bank_directory)?;
+        model.multiscale = true;
+        Ok(model)
+    }
+
+    pub fn is_multiscale(&self) -> bool {
+        self.multiscale
+    }
+
+    /// Fixed, reproducible leak rates 1, 1/4, 1/16, ..., independent
+    /// of learned weights, TRAIN labels and width-controller decisions.
+    pub fn leak_rate(&self, index: usize) -> Result<f64> {
+        if index >= self.active() {
+            return Err("RTLR-V3 invalid or inactive cell index".into());
+        }
+        Ok(if self.multiscale && index > 0 {
+            4.0f64.powi(-(index.min(12) as i32))
+        } else {
+            1.0
+        })
     }
 
     pub fn anchor_state(&self) -> f64 {
@@ -756,16 +788,38 @@ impl RtlrElastic {
     fn advance(&mut self, a: u8, b: u8, derivatives: bool) -> Result<f64> {
         let x = signal(b);
         let phi = anf(a, b);
-        for cell in &mut self.cells {
+        for (index, cell) in self.cells.iter_mut().enumerate() {
             let prior = cell.h;
-            cell.h = (cell.weights[0] * prior + cell.weights[1] * x + cell.weights[2] * phi).tanh();
+            let leak = if self.multiscale && index > 0 {
+                4.0f64.powi(-(index.min(12) as i32))
+            } else {
+                1.0
+            };
+            let candidate = (cell.weights[0] * prior
+                + cell.weights[1] * x
+                + cell.weights[2] * phi)
+                .tanh();
+            cell.h = if leak == 1.0 {
+                candidate
+            } else {
+                prior + leak * (candidate - prior)
+            };
             if derivatives {
-                let d = 1.0 - cell.h * cell.h;
-                cell.sensitivity = [
-                    d * (prior + cell.weights[0] * cell.sensitivity[0]),
-                    d * (x + cell.weights[0] * cell.sensitivity[1]),
-                    d * (phi + cell.weights[0] * cell.sensitivity[2]),
-                ];
+                let d = 1.0 - candidate * candidate;
+                if leak == 1.0 {
+                    cell.sensitivity = [
+                        d * (prior + cell.weights[0] * cell.sensitivity[0]),
+                        d * (x + cell.weights[0] * cell.sensitivity[1]),
+                        d * (phi + cell.weights[0] * cell.sensitivity[2]),
+                    ];
+                } else {
+                    let carry = (1.0 - leak) + leak * d * cell.weights[0];
+                    cell.sensitivity = [
+                        carry * cell.sensitivity[0] + leak * d * prior,
+                        carry * cell.sensitivity[1] + leak * d * x,
+                        carry * cell.sensitivity[2] + leak * d * phi,
+                    ];
+                }
             }
             if !cell.h.is_finite()
                 || (derivatives && cell.sensitivity.iter().any(|v| !v.is_finite()))
