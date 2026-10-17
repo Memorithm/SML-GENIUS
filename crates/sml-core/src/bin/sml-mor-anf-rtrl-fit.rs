@@ -418,8 +418,7 @@ fn execute(
             model.checkpoint_rtlr_v2(output, state)?;
             // Fail closed unless the actual disk-paged experts, trained MOR
             // gate, active recurrence and dormant bank reopen identically.
-            let (mut restored, recurrent) =
-                MorAnfRecurrent::reopen_rtlr_v2(output, config)?;
+            let (mut restored, recurrent) = MorAnfRecurrent::reopen_rtlr_v2(output, config)?;
             if restored.counters() != model.counters()
                 || recurrent.stats() != state.stats()
                 || recurrent.active() != state.active()
@@ -427,8 +426,7 @@ fn execute(
                 return Err("RTLR-V2 checkpoint roundtrip counters mismatch".into());
             }
             let probe = b"rtlr-elastic-independent-restored-inference-probe";
-            let (original, count) =
-                model.evaluate_document_rtlr_elastic_paged(probe, state)?;
+            let (original, count) = model.evaluate_document_rtlr_elastic_paged(probe, state)?;
             let (reloaded, count_reloaded) =
                 restored.evaluate_document_rtlr_elastic_paged(probe, &recurrent)?;
             if original != reloaded || count != count_reloaded {
