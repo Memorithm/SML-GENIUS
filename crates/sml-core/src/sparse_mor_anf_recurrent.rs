@@ -626,8 +626,7 @@ impl MorAnfRecurrent {
         for (index, begin) in (0..text.len() - 2).step_by(window_bytes).enumerate() {
             let end = begin.saturating_add(window_bytes).min(text.len() - 2);
             let context = &text[begin..end + 2];
-            let do_bptt = u64::try_from(index)? % HYBRID_CYCLE_WINDOWS
-                == HYBRID_CYCLE_WINDOWS - 1;
+            let do_bptt = u64::try_from(index)? % HYBRID_CYCLE_WINDOWS == HYBRID_CYCLE_WINDOWS - 1;
             let (loss, events) = if do_bptt {
                 self.train_document_bptt(context, window_bytes)?
             } else {
@@ -1007,13 +1006,14 @@ mod paged_bptt_tests {
         for (index, begin) in (0..text.len() - 2).step_by(bytes_per_window).enumerate() {
             let end = (begin + bytes_per_window).min(text.len() - 2);
             let slice = &text[begin..end + 2];
-            let (local_loss, n) = if index % HYBRID_CYCLE_WINDOWS as usize
-                == HYBRID_CYCLE_WINDOWS as usize - 1
-            {
-                explicit.train_document_bptt(slice, bytes_per_window).unwrap()
-            } else {
-                explicit.train_document(slice).unwrap()
-            };
+            let (local_loss, n) =
+                if index % HYBRID_CYCLE_WINDOWS as usize == HYBRID_CYCLE_WINDOWS as usize - 1 {
+                    explicit
+                        .train_document_bptt(slice, bytes_per_window)
+                        .unwrap()
+                } else {
+                    explicit.train_document(slice).unwrap()
+                };
             control_loss += local_loss;
             control_events += n;
         }
