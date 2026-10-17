@@ -113,6 +113,36 @@ pub struct RtlrElastic {
     v2: Option<RtlrV2State>,
 }
 
+fn sha_bytes(bytes: &[u8]) -> String {
+    let mut hash = Sha256::default();
+    hash.update(bytes);
+    hex(&hash.finish())
+}
+
+fn read_f64(field: &str) -> Result<f64> {
+    if field.len() != 16 || !field.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("RTLR-V2 bad float encoding".into());
+    }
+    let value = f64::from_bits(u64::from_str_radix(field, 16)?);
+    if !value.is_finite() {
+        return Err("RTLR-V2 nonfinite float".into());
+    }
+    Ok(value)
+}
+
+fn read_cols<'a>(
+    lines: &mut impl Iterator<Item = &'a str>,
+    prefix: &str,
+    fields: usize,
+) -> Result<Vec<&'a str>> {
+    let next = lines.next().ok_or("RTLR-V2 truncated checkpoint")?;
+    let items: Vec<_> = next.split('\t').collect();
+    if items.len() != fields || items[0] != prefix {
+        return Err("RTLR-V2 malformed checkpoint record".into());
+    }
+    Ok(items)
+}
+
 fn signal(b: u8) -> f64 {
     (f64::from(b.count_ones()) - 4.0) / 4.0
 }
@@ -188,6 +218,339 @@ impl RtlrElastic {
             bank: bank_directory.to_path_buf(),
             train_ewma: None,
         });
+        Ok(model)
+    }
+
+    /// A complete, read-only-verifiable recurrent checkpoint tied to a
+    /// previously sealed *physical* MOR/atlas joint manifest. This is not
+    /// a self-contained model: use MorAnfRecurrent::reopen_rtlr_v2.
+    /// Snapshots must occur at completed document boundaries.
+    pub fn checkpoint_v2(&self, root: &Path) -> Result<()> {
+        let state = self.v2.as_ref().ok_or("RTLR-V2 checkpoint requires v2")?;
+        let root_meta = fs::symlink_metadata(root)?;
+        if !root_meta.is_dir()
+            || root_meta.file_type().is_symlink()
+            || fs::canonicalize(&state.bank)? != fs::canonicalize(root.join("rtlr_v2_dormant"))?
+        {
+            return Err("RTLR-V2 checkpoint must bind its own physical model bank".into());
+        }
+        let joint = fs::read(root.join("joint.sha256.tsv"))?;
+        let mut body = String::from("RTLR_V2_FULL_V1\n");
+        body.push_str(&format!(
+            "C\t{}\t{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\n",
+            self.config.max_active,
+            self.config.learning_rate.to_bits(),
+            self.config.grow_above_bpc.to_bits(),
+            self.config.shrink_below_bpc.to_bits(),
+            self.config.patience,
+            self.config.warmup_documents,
+            self.config.seed
+        ));
+        let p = state.policy;
+        body.push_str(&format!(
+            "P\t{:016x}\t{:016x}\t{:016x}\n",
+            p.ewma_alpha.to_bits(),
+            p.plateau_tolerance_bpc.to_bits(),
+            p.marginal_cost_bpc_per_cell.to_bits()
+        ));
+        let ewma = state
+            .train_ewma
+            .map(|v| format!("{:016x}", v.to_bits()))
+            .unwrap_or_else(|| "-".to_owned());
+        body.push_str(&format!(
+            "D\t{:016x}\t{}\t{}\t{}\n",
+            self.residual_gate.to_bits(),
+            self.grow_streak,
+            self.shrink_streak,
+            ewma
+        ));
+        let c = self.stats;
+        body.push_str(&format!(
+            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            c.training_documents,
+            c.grown,
+            c.pruned,
+            c.peak_active,
+            c.recurrent_parameter_changes,
+            c.gate_parameter_changes,
+            c.recurrent_steps,
+            c.bank_parks,
+            c.bank_restores,
+            c.peak_parked,
+            c.train_shadow_documents
+        ));
+        body.push_str(&format!("A\t{}\n", self.cells.len()));
+        for (i, cell) in self.cells.iter().enumerate() {
+            let v = [
+                cell.weights[0],
+                cell.weights[1],
+                cell.weights[2],
+                cell.h,
+                cell.sensitivity[0],
+                cell.sensitivity[1],
+                cell.sensitivity[2],
+            ];
+            if v.iter().any(|n| !n.is_finite())
+                || cell.weights.iter().any(|n| !(-2.0..=2.0).contains(n))
+            {
+                return Err("RTLR-V2 invalid active checkpoint cell".into());
+            }
+            body.push_str(&format!("W\t{i}"));
+            for value in v {
+                body.push_str(&format!("\t{:016x}", value.to_bits()));
+            }
+            body.push('\n');
+        }
+        let mut parked = 0usize;
+        for i in self.cells.len()..self.capacity() {
+            let file = self.bank_path(i)?;
+            match fs::symlink_metadata(&file) {
+                Ok(meta) => {
+                    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 512 {
+                        return Err("RTLR-V2 unsafe parked checkpoint file".into());
+                    }
+                    let data = fs::read(&file)?;
+                    self.verify_parked_bytes(i, &data)?;
+                    body.push_str(&format!("B\t{i}\t{}\n", sha_bytes(&data)));
+                    parked += 1;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
+        for i in 1..self.active() {
+            if fs::symlink_metadata(self.bank_path(i)?).is_ok() {
+                return Err("RTLR-V2 duplicate active/dormant cell".into());
+            }
+        }
+        if c.bank_parks.checked_sub(c.bank_restores) != Some(parked as u64)
+            || c.grown.checked_sub(c.pruned).and_then(|v| v.checked_add(1))
+                != Some(self.active() as u64)
+        {
+            return Err("RTLR-V2 checkpoint capacity conservation mismatch".into());
+        }
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(root.join("rtlr_v2_full.tsv"))?;
+        file.write_all(body.as_bytes())?;
+        file.sync_all()?;
+        let mut manifest = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(root.join("rtlr_v2_joint.sha256.tsv"))?;
+        writeln!(
+            manifest,
+            "RTLR_V2_JOIN_V1\t{}\t{}",
+            sha_bytes(&joint),
+            sha_bytes(body.as_bytes())
+        )?;
+        manifest.sync_all()?;
+        fs::File::open(root)?.sync_all()?;
+        Ok(())
+    }
+
+    fn verify_parked_bytes(&self, index: usize, bytes: &[u8]) -> Result<[f64; LOCAL]> {
+        let text = std::str::from_utf8(bytes)?;
+        let (record, sum) = text
+            .split_once("sha256\t")
+            .ok_or("RTLR-V2 missing parked hash")?;
+        if sha_bytes(record.as_bytes()) != sum.trim_end_matches('\n') || !sum.ends_with('\n') {
+            return Err("RTLR-V2 parked cell SHA mismatch".into());
+        }
+        let cols: Vec<_> = record.trim_end_matches('\n').split('\t').collect();
+        if cols.len() != 5
+            || cols[0] != "RTLR_ELASTIC_PARKED_V2"
+            || cols[1].parse::<usize>()? != index
+        {
+            return Err("RTLR-V2 bad parked cell schema".into());
+        }
+        let mut weights = [0f64; LOCAL];
+        for (out, field) in weights.iter_mut().zip(cols[2..].iter()) {
+            *out = read_f64(field)?;
+            if !(-2.0..=2.0).contains(out) {
+                return Err("RTLR-V2 out-of-range parked weight".into());
+            }
+        }
+        Ok(weights)
+    }
+
+    /// Reopen the full active topology, TRAIN policy, online eligibility and
+    /// SHA-checked bank after the physical MOR/atlas snapshot was verified.
+    /// No data are modified while validating; no silent scalar fallback.
+    pub fn reopen_v2(root: &Path) -> Result<Self> {
+        let root_meta = fs::symlink_metadata(root)?;
+        if !root_meta.is_dir() || root_meta.file_type().is_symlink() {
+            return Err("RTLR-V2 invalid checkpoint directory".into());
+        }
+        let signature = fs::read_to_string(root.join("rtlr_v2_joint.sha256.tsv"))?;
+        let fields: Vec<_> = signature.trim_end_matches('\n').split('\t').collect();
+        if fields.len() != 3 || fields[0] != "RTLR_V2_JOIN_V1" {
+            return Err("RTLR-V2 missing integrated manifest".into());
+        }
+        let joint = fs::read(root.join("joint.sha256.tsv"))?;
+        let meta = fs::symlink_metadata(root.join("rtlr_v2_full.tsv"))?;
+        if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 16384 {
+            return Err("RTLR-V2 unsafe checkpoint body".into());
+        }
+        let raw = fs::read(root.join("rtlr_v2_full.tsv"))?;
+        if fields[1] != sha_bytes(&joint) || fields[2] != sha_bytes(&raw) {
+            return Err("RTLR-V2 integrated SHA mismatch".into());
+        }
+        let content = std::str::from_utf8(&raw)?;
+        let mut lines = content.lines();
+        if lines.next() != Some("RTLR_V2_FULL_V1") {
+            return Err("RTLR-V2 unknown checkpoint schema".into());
+        }
+        let c = read_cols(&mut lines, "C", 8)?;
+        let config = RtlrElasticConfig {
+            max_active: c[1].parse()?,
+            learning_rate: read_f64(c[2])?,
+            grow_above_bpc: read_f64(c[3])?,
+            shrink_below_bpc: read_f64(c[4])?,
+            patience: c[5].parse()?,
+            warmup_documents: c[6].parse()?,
+            seed: c[7].parse()?,
+        }
+        .validate()?;
+        let p = read_cols(&mut lines, "P", 4)?;
+        let policy = RtlrV2Policy {
+            ewma_alpha: read_f64(p[1])?,
+            plateau_tolerance_bpc: read_f64(p[2])?,
+            marginal_cost_bpc_per_cell: read_f64(p[3])?,
+        }
+        .validate()?;
+        let d = read_cols(&mut lines, "D", 5)?;
+        let gate = read_f64(d[1])?;
+        let grow_streak: u64 = d[2].parse()?;
+        let shrink_streak: u64 = d[3].parse()?;
+        let ewma = if d[4] == "-" {
+            None
+        } else {
+            Some(read_f64(d[4])?)
+        };
+        if !(0.0..=0.5).contains(&gate)
+            || ewma.is_some_and(|x| !(0.0..=16.0).contains(&x))
+            || grow_streak >= config.patience
+            || shrink_streak >= config.patience
+        {
+            return Err("RTLR-V2 invalid saved scheduler".into());
+        }
+        let st = read_cols(&mut lines, "S", 12)?;
+        let nums: Vec<u64> = st[1..]
+            .iter()
+            .map(|v| v.parse::<u64>())
+            .collect::<std::result::Result<_, _>>()?;
+        let stats = RtlrElasticStats {
+            training_documents: nums[0],
+            grown: nums[1],
+            pruned: nums[2],
+            peak_active: usize::try_from(nums[3])?,
+            recurrent_parameter_changes: nums[4],
+            gate_parameter_changes: nums[5],
+            recurrent_steps: nums[6],
+            bank_parks: nums[7],
+            bank_restores: nums[8],
+            peak_parked: usize::try_from(nums[9])?,
+            train_shadow_documents: nums[10],
+        };
+        let count = read_cols(&mut lines, "A", 2)?[1].parse::<usize>()?;
+        if !(1..=config.max_active).contains(&count)
+            || stats.peak_active < count
+            || stats.peak_active > config.max_active
+            || stats.train_shadow_documents != stats.training_documents
+            || stats
+                .grown
+                .checked_sub(stats.pruned)
+                .and_then(|v| v.checked_add(1))
+                != Some(count as u64)
+        {
+            return Err("RTLR-V2 impossible active count".into());
+        }
+        let mut cells = Vec::with_capacity(count);
+        for i in 0..count {
+            let record = read_cols(&mut lines, "W", 9)?;
+            if record[1].parse::<usize>()? != i {
+                return Err("RTLR-V2 bad recurrent cell index".into());
+            }
+            let mut v = [0.0f64; 7];
+            for (dest, field) in v.iter_mut().zip(record[2..].iter()) {
+                *dest = read_f64(field)?;
+            }
+            if v[..3].iter().any(|w| !(-2.0..=2.0).contains(w)) {
+                return Err("RTLR-V2 recurrent coefficient outside range".into());
+            }
+            cells.push(Cell {
+                weights: [v[0], v[1], v[2]],
+                h: v[3],
+                sensitivity: [v[4], v[5], v[6]],
+            });
+        }
+        let bank = root.join("rtlr_v2_dormant");
+        let dir = fs::symlink_metadata(&bank)?;
+        if !dir.is_dir() || dir.file_type().is_symlink() {
+            return Err("RTLR-V2 invalid dormant checkpoint bank".into());
+        }
+        let mut model = Self::new(config)?;
+        model.cells = cells;
+        model.residual_gate = gate;
+        model.grow_streak = grow_streak;
+        model.shrink_streak = shrink_streak;
+        model.stats = stats;
+        model.v2 = Some(RtlrV2State {
+            policy,
+            bank: bank.clone(),
+            train_ewma: ewma,
+        });
+        let mut parked = 0u64;
+        let mut recorded = std::collections::BTreeSet::new();
+        for line in lines {
+            let cols: Vec<_> = line.split('\t').collect();
+            if cols.len() != 3 || cols[0] != "B" {
+                return Err("RTLR-V2 invalid dormant record".into());
+            }
+            let index: usize = cols[1].parse()?;
+            if index < count || index >= config.max_active || !recorded.insert(index) {
+                return Err("RTLR-V2 invalid/duplicate parked index".into());
+            }
+            let path = model.bank_path(index)?;
+            let meta = fs::symlink_metadata(&path)?;
+            if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 512 {
+                return Err("RTLR-V2 unsafe dormant cell".into());
+            }
+            let data = fs::read(&path)?;
+            if sha_bytes(&data) != cols[2] {
+                return Err("RTLR-V2 dormant file mismatches joint snapshot".into());
+            }
+            model.verify_parked_bytes(index, &data)?;
+            parked += 1;
+        }
+        // Reject unmanifested files, including symlinks and irrelevant
+        // entries; no extra dormant state may escape the integrity seal.
+        let mut observed = 0u64;
+        for item in fs::read_dir(&bank)? {
+            let item = item?;
+            if !item.file_type()?.is_file()
+                || !recorded.contains(
+                    &item
+                        .file_name()
+                        .to_string_lossy()
+                        .strip_prefix("cell-")
+                        .and_then(|x| x.strip_suffix(".tsv"))
+                        .and_then(|x| x.parse::<usize>().ok())
+                        .ok_or("RTLR-V2 unknown dormant entry")?,
+                )
+            {
+                return Err("RTLR-V2 extraneous or linked dormant file".into());
+            }
+            observed += 1;
+        }
+        if observed != parked
+            || stats.bank_parks.checked_sub(stats.bank_restores) != Some(parked)
+            || stats.peak_parked < parked as usize
+        {
+            return Err("RTLR-V2 dormant accounting mismatch".into());
+        }
         Ok(model)
     }
 

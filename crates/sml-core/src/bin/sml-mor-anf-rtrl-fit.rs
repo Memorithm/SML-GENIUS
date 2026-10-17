@@ -413,7 +413,31 @@ fn execute(
         )?;
         report.sync_all()?;
     }
-    model.checkpoint(output)?;
+    if let Some(ref state) = rtlr {
+        if state.is_v2() {
+            model.checkpoint_rtlr_v2(output, state)?;
+            // Fail closed unless the actual disk-paged experts, trained MOR
+            // gate, active recurrence and dormant bank reopen identically.
+            let (mut restored, recurrent) = MorAnfRecurrent::reopen_rtlr_v2(output, config)?;
+            if restored.counters() != model.counters()
+                || recurrent.stats() != state.stats()
+                || recurrent.active() != state.active()
+            {
+                return Err("RTLR-V2 checkpoint roundtrip counters mismatch".into());
+            }
+            let probe = b"rtlr-elastic-independent-restored-inference-probe";
+            let (original, count) = model.evaluate_document_rtlr_elastic_paged(probe, state)?;
+            let (reloaded, count_reloaded) =
+                restored.evaluate_document_rtlr_elastic_paged(probe, &recurrent)?;
+            if original != reloaded || count != count_reloaded {
+                return Err("RTLR-V2 checkpoint inference roundtrip mismatch".into());
+            }
+        } else {
+            model.checkpoint(output)?;
+        }
+    } else {
+        model.checkpoint(output)?;
+    }
     if let Some(ref state) = rtlr {
         state.write_evidence(&output.join("rtlr_elastic_weights.tsv"))?;
         let stats = state.stats();
