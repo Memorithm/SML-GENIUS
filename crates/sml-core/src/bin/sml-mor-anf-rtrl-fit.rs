@@ -3,6 +3,7 @@
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
     sparse_gradient_atlas::SparseConfig,
+    rtrl3_elastic::{ElasticRtrl3, Rtrl3Config},
     sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent, RtrlClipStats},
 };
 use std::{
@@ -43,6 +44,9 @@ enum PilotMode {
     Rtrl2Continuous,
     Rtrl2ClipSmall,
     Rtrl2ClipLarge,
+    Rtrl3Paged1,
+    Rtrl3Paged8,
+    Rtrl3Paged16,
 }
 
 impl PilotMode {
@@ -65,6 +69,9 @@ impl PilotMode {
                 | Self::Rtrl2Continuous
                 | Self::Rtrl2ClipSmall
                 | Self::Rtrl2ClipLarge
+                | Self::Rtrl3Paged1
+                | Self::Rtrl3Paged8
+                | Self::Rtrl3Paged16
         )
     }
 }
@@ -117,6 +124,25 @@ fn execute(
         learning_rate: 0.20,
     };
     let mut model = MorAnfRecurrent::create(output, config)?;
+    let mut rtrl3 = if matches!(mode, PilotMode::Rtrl3Paged1 | PilotMode::Rtrl3Paged8 | PilotMode::Rtrl3Paged16) {
+        let hidden = match mode {
+            PilotMode::Rtrl3Paged1 => 1,
+            PilotMode::Rtrl3Paged8 => 8,
+            PilotMode::Rtrl3Paged16 => 16,
+            _ => unreachable!(),
+        };
+        Some(ElasticRtrl3::for_mor(Rtrl3Config {
+            hidden,
+            eligibility_rank: if hidden == 16 { 4 } else if hidden == 8 { 2 } else { 1 },
+            mixing_rank: if hidden == 1 { 0 } else { 2 },
+            learning_rate: 0.005,
+            recurrent_clip_norm: 1e30,
+            seed: 11,
+        })?)
+    } else {
+        None
+    };
+    let mut rtrl3_clipped = 0u64;
     let mut reader = BufReader::new(File::open(corpus)?);
     let mut lines = BufReader::new(File::open(provenance)?).lines();
     if lines.next().transpose()?.as_deref() != Some(HEADER) {
@@ -190,7 +216,14 @@ fn execute(
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if mode == PilotMode::Rtrl2Window16 {
+            let (loss, events) = if rtrl3.is_some() {
+                let (loss, events, clipped) = model.train_document_rtrl3_paged(
+                    sample,
+                    rtrl3.as_mut().ok_or("missing RTRL-3 trainer")?,
+                )?;
+                rtrl3_clipped += clipped;
+                (loss, events)
+            } else if mode == PilotMode::Rtrl2Window16 {
                 model.train_document_rtrl_windowed(sample, BOUNDARY_WINDOW)?
             } else if mode == PilotMode::Rtrl2Continuous {
                 model.train_document(sample)?
@@ -236,7 +269,9 @@ fn execute(
             train_events += events;
             train_loss += loss;
         } else if dev_bytes < dev_target {
-            let (loss, events) = if boundary_mode {
+            let (loss, events) = if let Some(ref state) = rtrl3 {
+                model.evaluate_document_rtrl3_paged(sample, state)?
+            } else if boundary_mode {
                 // Equal readout protocol for all four arms: uninterrupted
                 // document recurrence. Updates remain frozen on DEV.
                 model.evaluate_document(sample)?
@@ -305,6 +340,12 @@ fn execute(
         report.sync_all()?;
     }
     model.checkpoint(output)?;
+    if let Some(ref state) = rtrl3 {
+        if rtrl3_clipped > 0 {
+            return Err("RTRL-3 control unexpectedly clipped gradients".into());
+        }
+        state.write_mor_weights(&output.join("rtrl3_recurrence.tsv"))?;
+    }
     if matches!(mode, PilotMode::MatchedHybrid | PilotMode::BoundaryHybrid1) {
         let mut manifest = OpenOptions::new()
             .write(true)
@@ -335,12 +376,18 @@ fn execute(
         PilotMode::Rtrl2Continuous => "sml_mor_anf_rtrl2_continuous_control_v1",
         PilotMode::Rtrl2ClipSmall => "sml_mor_anf_rtrl2_continuous_clip0125_v1",
         PilotMode::Rtrl2ClipLarge => "sml_mor_anf_rtrl2_continuous_clip1_v1",
+        PilotMode::Rtrl3Paged1 => "sml_mor_anf_rtrl3_paged_h1_v1",
+        PilotMode::Rtrl3Paged8 => "sml_mor_anf_rtrl3_paged_h8_v1",
+        PilotMode::Rtrl3Paged16 => "sml_mor_anf_rtrl3_paged_h16_v1",
     };
+    let recurrent_capacity = rtrl3
+        .as_ref()
+        .map_or(3, ElasticRtrl3::recurrent_trainable_parameters);
     let metrics = format!(
-        "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
+        "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
         config.total_parameters(), experts.distinct_updated_parameters, experts.parameter_updates,
         counters.unique_router_parameters, counters.router_parameter_updates,
-        counters.recurrent_parameter_updates,
+        recurrent_capacity, counters.recurrent_parameter_updates,
         train_loss / train_events as f64,
         dev_loss / dev_events as f64,
         start.elapsed().as_secs_f64()
@@ -384,6 +431,9 @@ fn execute(
         PilotMode::Rtrl2Continuous => "SML_MOR_ANF_RTRL2_CONTINUOUS_DONE",
         PilotMode::Rtrl2ClipSmall => "SML_MOR_ANF_RTRL2_CLIP0125_DONE",
         PilotMode::Rtrl2ClipLarge => "SML_MOR_ANF_RTRL2_CLIP1_DONE",
+        PilotMode::Rtrl3Paged1 => "SML_MOR_ANF_RTRL3_PAGED_H1_DONE",
+        PilotMode::Rtrl3Paged8 => "SML_MOR_ANF_RTRL3_PAGED_H8_DONE",
+        PilotMode::Rtrl3Paged16 => "SML_MOR_ANF_RTRL3_PAGED_H16_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -491,8 +541,20 @@ fn main() {
             Path::new(corpus), Path::new(ledger), digest, Path::new(output),
             PilotMode::Rtrl2ClipLarge,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl3-paged1" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl3Paged1,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl3-paged8" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl3Paged8,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl3-paged16" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl3Paged16,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
