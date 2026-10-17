@@ -35,7 +35,7 @@ fn sha(path: &Path) -> Result<String> {
     Ok(hex(&state.finish()))
 }
 
-fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) -> Result<()> {
+fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path, bptt: bool) -> Result<()> {
     if parse_hex(expected_sha).is_none() || corpus == provenance || output.exists() {
         return Err("overlapping paths, existing output or invalid source SHA".into());
     }
@@ -50,7 +50,7 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         return Err("source changed since admission".into());
     }
     let config = SparseConfig {
-        pages: 4096,
+        pages: if bptt { 48_829 } else { 4096 },
         max_cached_pages: 32,
         learning_rate: 0.20,
     };
@@ -70,8 +70,10 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
     let mut dev_events = 0u64;
     let mut dev_loss = 0f64;
     let start = std::time::Instant::now();
+    let train_target = if bptt { 12 * 1024 } else { TRAIN_TARGET };
+    let dev_target = if bptt { 8 * 1024 } else { DEV_TARGET };
     for line in lines.take(1000) {
-        if train_bytes >= TRAIN_TARGET && dev_bytes >= DEV_TARGET {
+        if train_bytes >= train_target && dev_bytes >= dev_target {
             break;
         }
         let line = line?;
@@ -102,16 +104,27 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         if length > DOCUMENT_MAX {
             continue;
         }
-        if train_bytes < TRAIN_TARGET {
-            let (loss, events) = model.train_document(&bytes)?;
+        // The BPTT arm intentionally limits each verified source report to a
+        // small document prefix. Report consumed bytes, not original file size.
+        let sample = if bptt {
+            &bytes[..bytes.len().min(1024)]
+        } else {
+            &bytes
+        };
+        if train_bytes < train_target {
+            let (loss, events) = if bptt {
+                model.train_document_bptt(sample, 128)?
+            } else {
+                model.train_document(sample)?
+            };
             train_docs += 1;
-            train_bytes += length as u64;
+            train_bytes += sample.len() as u64;
             train_events += events;
             train_loss += loss;
-        } else if dev_bytes < DEV_TARGET {
-            let (loss, events) = model.evaluate_document(&bytes)?;
+        } else if dev_bytes < dev_target {
+            let (loss, events) = model.evaluate_document(sample)?;
             dev_docs += 1;
-            dev_bytes += length as u64;
+            dev_bytes += sample.len() as u64;
             dev_events += events;
             dev_loss += loss;
         }
@@ -130,8 +143,13 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
         return Err("joint gradient pathway not confirmed".into());
     }
     model.checkpoint(output)?;
+    let architecture = if bptt {
+        "sml_mor_anf_paged_bptt_v1"
+    } else {
+        "sml_mor_anf_rtrl_v1"
+    };
     let metrics = format!(
-        "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\nsml_mor_anf_rtrl_v1\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
+        "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
         config.total_parameters(), experts.distinct_updated_parameters, experts.parameter_updates,
         counters.unique_router_parameters, counters.router_parameter_updates,
         counters.recurrent_parameter_updates,
@@ -146,7 +164,8 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path) 
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
     print!("{metrics}");
-    println!("SML_MOR_ANF_RTRL_DONE source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
+    let marker = if bptt { "SML_MOR_ANF_BPTT_DONE" } else { "SML_MOR_ANF_RTRL_DONE" };
+    println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED", 
         config.total_parameters(), experts.distinct_updated_parameters,
         counters.unique_router_parameters, counters.recurrent_parameter_updates);
     Ok(())
@@ -160,9 +179,17 @@ fn main() {
             Path::new(ledger),
             digest,
             Path::new(output),
+            false,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-bptt" => execute(
+            Path::new(corpus),
+            Path::new(ledger),
+            digest,
+            Path::new(output),
+            true,
         ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit --pilot CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
