@@ -722,6 +722,39 @@ impl MorAnfRecurrent {
         Ok(())
     }
 
+    /// Seal the original expert master, MOR router and complete RTLR-V2
+    /// recurrent topology/controller in a single linked snapshot.
+    pub fn checkpoint_rtlr_v2(
+        &mut self,
+        root: &Path,
+        recurrence: &RtlrElastic,
+    ) -> Result<()> {
+        if !recurrence.is_v2() {
+            return Err("RTLR-V2 checkpoint requires a V2 recurrent model".into());
+        }
+        self.checkpoint(root)?;
+        recurrence.checkpoint_v2(root)?;
+        Ok(())
+    }
+
+    /// Full fail-closed read-only restore. The sparse expert master and
+    /// gate are SHA-validated by the established MOR opener, while the
+    /// RTLR-V2 joint manifest binds all live/dormant recurrent state.
+    pub fn reopen_rtlr_v2(
+        root: &Path,
+        config: SparseConfig,
+    ) -> Result<(Self, RtlrElastic)> {
+        let recurrence = RtlrElastic::reopen_v2(root)?;
+        let model = Self::reopen(root, config)?;
+        if model.counters().recurrence_steps != recurrence.stats().recurrent_steps
+            || model.counters().recurrent_parameter_updates
+                != recurrence.stats().recurrent_parameter_changes
+        {
+            return Err("RTLR-V2 physical MOR/recurrent training counters diverge".into());
+        }
+        Ok((model, recurrence))
+    }
+
     pub fn reopen(root: &Path, config: SparseConfig) -> Result<Self> {
         if config.pages < 2 {
             return Err("MOR needs at least two pages".into());
@@ -1501,6 +1534,68 @@ mod paged_bptt_tests {
         drop(joined);
         fs::remove_dir_all(path_old).unwrap();
         fs::remove_dir_all(path_new).unwrap();
+    }
+
+    #[test]
+    fn rtlr_v2_integrated_physical_checkpoint_roundtrip_and_corruption_gates() {
+        use crate::rtlr_elastic::{RtlrElasticConfig, RtlrV2Policy};
+        let (mut model, root) = model();
+        let policy = RtlrV2Policy {
+            ewma_alpha: 0.25,
+            plateau_tolerance_bpc: 0.05,
+            marginal_cost_bpc_per_cell: 0.001,
+        };
+        let mut rt = RtlrElastic::new_v2(RtlrElasticConfig {
+            max_active: 4, learning_rate: 0.005, grow_above_bpc: 4.1,
+            shrink_below_bpc: 3.8, patience: 1,
+            warmup_documents: 1, seed: 17,
+        }, policy, &root.join("rtlr_v2_dormant")).unwrap();
+        let doc = b"ababaccccccabababababaadddabbccaaadadadadab";
+        for _ in 0..4 {
+            model.train_document_rtlr_v2_paged(doc, &mut rt).unwrap();
+        }
+        // Force a real SHA-checked, non-empty dormant bank with one live
+        // anchor, while retaining trained recurrent weights.
+        rt.observe_train_document_v2(4.5, 4.5).unwrap();
+        rt.observe_train_document_v2(4.5, 4.5).unwrap();
+        rt.observe_train_document_v2(6.0, 5.0).unwrap();
+        assert_eq!(rt.active(), 1);
+        assert!(root.join("rtlr_v2_dormant/cell-001.tsv").is_file());
+        let (baseline, count) = model.evaluate_document_rtlr_elastic_paged(doc, &rt).unwrap();
+        let original_counters = model.counters();
+        let original_stats = rt.stats();
+        model.checkpoint_rtlr_v2(&root, &rt).unwrap();
+        let (mut reopened, restored) =
+            MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).unwrap();
+        let (after, events) = reopened
+            .evaluate_document_rtlr_elastic_paged(doc, &restored).unwrap();
+        assert_eq!(baseline, after);
+        assert_eq!(count, events);
+        assert_eq!(original_counters, reopened.counters());
+        assert_eq!(original_stats, restored.stats());
+        assert_eq!(restored.active(), rt.active());
+        let recurrent_data = fs::read(root.join("rtlr_v2_full.tsv")).unwrap();
+        fs::write(root.join("rtlr_v2_full.tsv"), b"corrupted").unwrap();
+        assert!(MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).is_err());
+        fs::write(root.join("rtlr_v2_full.tsv"), &recurrent_data).unwrap();
+        let bank_file = root.join("rtlr_v2_dormant/cell-001.tsv");
+        let parked = fs::read(&bank_file).unwrap();
+        fs::write(&bank_file, b"tampered").unwrap();
+        assert!(MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).is_err());
+        fs::write(&bank_file, parked).unwrap();
+        let head = fs::read(root.join("mor_anf_head.tsv")).unwrap();
+        fs::write(root.join("mor_anf_head.tsv"), b"wrong gate").unwrap();
+        assert!(MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).is_err());
+        fs::write(root.join("mor_anf_head.tsv"), head).unwrap();
+        let (mut final_model, final_recurrence) =
+            MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).unwrap();
+        let (again, _) = final_model
+            .evaluate_document_rtlr_elastic_paged(doc, &final_recurrence).unwrap();
+        assert_eq!(again, baseline);
+        drop(final_model);
+        drop(reopened);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
