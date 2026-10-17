@@ -695,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn mor_scalar_exact_online_gradient_and_inference_match_RTRL2_equations() {
+    fn mor_scalar_exact_online_gradient_and_inference_match_rtrl2_equations() {
         let mut model = ElasticRtrl3::for_mor(config(1, 0, 1, 1)).unwrap();
         model.cfg.recurrent_clip_norm = 1e30;
         let mut reference = [0.65, 0.3, 0.2];
