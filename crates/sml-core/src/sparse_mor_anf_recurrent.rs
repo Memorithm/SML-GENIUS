@@ -7,6 +7,7 @@
 //! ANF/MOR architecture, NOT a 25B language model, and not a discrete 1-bit
 //! ANF weight learner. Monomials are fixed; gate/readout weights are learned.
 use crate::{
+    rtrl3_elastic::{ElasticRtrl3, MorRtrl3Update},
     elastic_ngram_paged_sha::{hex, Sha256},
     sparse_gradient_atlas::{SparseConfig, SparseGradientAtlas},
 };
@@ -311,6 +312,102 @@ impl MorAnfRecurrent {
         }
         if !loss.is_finite() {
             return Err("nonfinite training document loss".into());
+        }
+        Ok((loss, events))
+    }
+
+    /// Shared physical expert/MOR learning with elastic RTRL-3 online
+    /// recurrence. The same train_target() updates the *same* two disk
+    /// pages per bit and the *same* learned gate as RTRL-2. Only the
+    /// recurrent feature and recurrent eligibility optimizer change.
+    ///
+    /// Exactly 8 labels per predicted byte, one recurrent credit step
+    /// per predicted byte, one document-local recurrent-state reset.
+    pub fn train_document_rtrl3_paged(
+        &mut self,
+        text: &[u8],
+        recurrent: &mut ElasticRtrl3,
+    ) -> Result<(f64, u64, u64)> {
+        if text.len() < 3 {
+            return Err("RTRL-3 paged needs at least three source bytes".into());
+        }
+        recurrent.reset_state();
+        let mut loss = 0.0f64;
+        let mut events = 0u64;
+        let mut clipped = 0u64;
+        for triple in text.windows(3) {
+            let hidden = recurrent.advance_mor(triple[0], triple[1])?;
+            let feature = Trace {
+                h: hidden,
+                dh: [0.0; 3],
+            };
+            let mut credit = 0.0f64;
+            for bit in 0..8 {
+                let (cost, local) = self.train_target(
+                    triple[0],
+                    triple[1],
+                    bit,
+                    (triple[2] >> bit) & 1 == 1,
+                    feature,
+                )?;
+                loss += cost;
+                credit += local;
+            }
+            let MorRtrl3Update {
+                changed_parameters,
+                clipped: did_clip,
+                ..
+            } = recurrent.learn_mor_credit(credit)?;
+            self.head.counters.recurrent_parameter_updates = self
+                .head
+                .counters
+                .recurrent_parameter_updates
+                .checked_add(changed_parameters)
+                .ok_or("RTRL-3 recurrent parameter update counter overflow")?;
+            self.head.counters.recurrence_steps += 1;
+            events += 1;
+            clipped += u64::from(did_clip);
+        }
+        if !loss.is_finite() || events != (text.len() - 2) as u64 {
+            return Err("invalid RTRL-3 paged train totals".into());
+        }
+        Ok((loss, events, clipped))
+    }
+
+    /// Same expert pages and trained MOR gate as RTRL-2; only replace
+    /// the recurrence with the frozen RTRL-3 state. Evaluation must
+    /// never update the recurrent weights, sketches, or expert pages.
+    pub fn evaluate_document_rtrl3_paged(
+        &mut self,
+        text: &[u8],
+        recurrent: &ElasticRtrl3,
+    ) -> Result<(f64, u64)> {
+        if text.len() < 3 {
+            return Err("RTRL-3 paged evaluation needs three bytes".into());
+        }
+        let mut state = recurrent.clone();
+        state.reset_state();
+        let before = self.head.counters;
+        let mut loss = 0.0f64;
+        let mut events = 0u64;
+        for triple in text.windows(3) {
+            let hidden = state.advance_mor_inference(triple[0], triple[1])?;
+            let trace = Trace {
+                h: hidden,
+                dh: [0.0; 3],
+            };
+            for bit in 0..8 {
+                let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
+                loss += if triple[2] & (1 << bit) != 0 {
+                    -p.log2()
+                } else {
+                    -(1.0 - p).log2()
+                };
+            }
+            events += 1;
+        }
+        if !loss.is_finite() || before != self.head.counters {
+            return Err("RTRL-3 paged heldout mutated parameters or nonfinite loss".into());
         }
         Ok((loss, events))
     }
@@ -1218,6 +1315,73 @@ mod paged_bptt_tests {
             (analytical - numerical).abs() < 1e-6,
             "analytical={analytical} numerical={numerical}"
         );
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rtrl3_scalar_paged_matches_rtrl2_shared_experts_and_router_exactly() {
+        use crate::rtrl3_elastic::Rtrl3Config;
+        let (mut reference, path_ref) = model();
+        let (mut joined, path_joined) = model();
+        let mut recurrence = ElasticRtrl3::for_mor(Rtrl3Config {
+            hidden: 1,
+            mixing_rank: 0,
+            eligibility_rank: 1,
+            learning_rate: 0.005,
+            recurrent_clip_norm: 1e30,
+            seed: 11,
+        }).unwrap();
+        let text = b"ababaccccccabababababaadddabbccaaadadadadab";
+        let (loss_old, events_old) = reference.train_document(text).unwrap();
+        let (loss_new, events_new, clipped) = joined
+            .train_document_rtrl3_paged(text, &mut recurrence)
+            .unwrap();
+        assert_eq!(loss_old, loss_new);
+        assert_eq!(events_old, events_new);
+        assert_eq!(clipped, 0);
+        assert_eq!(reference.counters(), joined.counters());
+        assert_eq!(reference.atlas_counters().parameter_updates,
+                   joined.atlas_counters().parameter_updates);
+        let (read_old, count_old) = reference.evaluate_document(text).unwrap();
+        let before = joined.counters();
+        let (read_new, count_new) = joined.evaluate_document_rtrl3_paged(text, &recurrence).unwrap();
+        assert_eq!(read_old, read_new);
+        assert_eq!(count_old, count_new);
+        assert_eq!(joined.counters(), before);
+        drop(reference);
+        drop(joined);
+        fs::remove_dir_all(path_ref).unwrap();
+        fs::remove_dir_all(path_joined).unwrap();
+    }
+
+    #[test]
+    fn rtrl3_multistate_updates_real_physical_experts_and_gate() {
+        use crate::rtrl3_elastic::Rtrl3Config;
+        let (mut model, root) = model();
+        let mut recurrent = ElasticRtrl3::for_mor(Rtrl3Config {
+            hidden: 8,
+            mixing_rank: 2,
+            eligibility_rank: 2,
+            learning_rate: 0.005,
+            recurrent_clip_norm: 1e30,
+            seed: 11,
+        }).unwrap();
+        let text = b"abaabbacacababbccbcabcabcbbacabaaacabbbbcabaaabbbcc";
+        let (loss, events, clipped) = model
+            .train_document_rtrl3_paged(text, &mut recurrent).unwrap();
+        assert!(loss.is_finite());
+        assert_eq!(events, (text.len()-2) as u64);
+        assert_eq!(clipped, 0);
+        let counts = model.counters();
+        assert_eq!(counts.supervised_target_bits, events * 8);
+        assert_eq!(counts.routed_expert_updates, events * 16);
+        assert!(counts.unique_router_parameters > 0);
+        assert!(model.atlas_counters().distinct_updated_parameters > 0);
+        assert!(counts.recurrent_parameter_updates > 0);
+        let (_, read_events) = model.evaluate_document_rtrl3_paged(text, &recurrent).unwrap();
+        assert_eq!(read_events, events);
+        assert_eq!(counts, model.counters());
         drop(model);
         fs::remove_dir_all(root).unwrap();
     }
