@@ -5,7 +5,8 @@
 //! local parameters for frozen weights; they do not implement full cross-cell
 //! RTRL. Structural decisions use TRAIN loss only, at document boundaries.
 //! The original paged MOR/ANF experts remain completely outside this module.
-use std::error::Error;
+use std::{error::Error, fs, io::Write, path::{Path, PathBuf}};
+use crate::elastic_ngram_paged_sha::{hex, Sha256};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const LOCAL: usize = 3;
@@ -58,6 +59,41 @@ pub struct RtlrElasticStats {
     pub recurrent_parameter_changes: u64,
     pub gate_parameter_changes: u64,
     pub recurrent_steps: u64,
+    pub bank_parks: u64,
+    pub bank_restores: u64,
+    pub peak_parked: usize,
+    pub train_shadow_documents: u64,
+}
+
+/// TRAIN-only V2 width scheduler. All rates are predetermined, not tuned on
+/// the already inspected SEC DEV set. Costs are in bits/byte/cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RtlrV2Policy {
+    pub ewma_alpha: f64,
+    pub plateau_tolerance_bpc: f64,
+    pub marginal_cost_bpc_per_cell: f64,
+}
+
+impl RtlrV2Policy {
+    pub fn validate(self) -> Result<Self> {
+        if !self.ewma_alpha.is_finite() || !(0.0..=1.0).contains(&self.ewma_alpha)
+            || self.ewma_alpha == 0.0
+            || !self.plateau_tolerance_bpc.is_finite()
+            || !(0.0..=1.0).contains(&self.plateau_tolerance_bpc)
+            || !self.marginal_cost_bpc_per_cell.is_finite()
+            || !(0.0..=0.5).contains(&self.marginal_cost_bpc_per_cell)
+        {
+            return Err("invalid RTLR-V2 TRAIN-only marginal policy".into());
+        }
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RtlrV2State {
+    policy: RtlrV2Policy,
+    bank: PathBuf,
+    train_ewma: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,6 +104,7 @@ pub struct RtlrElastic {
     grow_streak: u64,
     shrink_streak: u64,
     stats: RtlrElasticStats,
+    v2: Option<RtlrV2State>,
 }
 
 fn signal(b: u8) -> f64 {
@@ -117,11 +154,184 @@ impl RtlrElastic {
             residual_gate: 0.125,
             grow_streak: 0,
             shrink_streak: 0,
+            v2: None,
             stats: RtlrElasticStats {
                 peak_active: 1,
                 ..RtlrElasticStats::default()
             },
         })
+    }
+
+    /// Create a new private non-symlink bank. Its files persist parked
+    /// *weights*, while volatile recurrence state and eligibility are reset
+    /// on reactivation. This is not a complete resumable model checkpoint.
+    pub fn new_v2(
+        config: RtlrElasticConfig,
+        policy: RtlrV2Policy,
+        bank_directory: &Path,
+    ) -> Result<Self> {
+        let policy = policy.validate()?;
+        let metadata = bank_directory.symlink_metadata();
+        if metadata.is_ok() {
+            return Err("RTLR-V2 bank path already exists".into());
+        }
+        fs::create_dir(bank_directory)?;
+        let mut model = Self::new(config)?;
+        model.v2 = Some(RtlrV2State {
+            policy,
+            bank: bank_directory.to_path_buf(),
+            train_ewma: None,
+        });
+        Ok(model)
+    }
+
+    pub fn anchor_state(&self) -> f64 {
+        self.cells[0].h
+    }
+
+    pub fn is_v2(&self) -> bool {
+        self.v2.is_some()
+    }
+
+    fn bank_path(&self, index: usize) -> Result<PathBuf> {
+        let v2 = self.v2.as_ref().ok_or("RTLR-V2 bank not enabled")?;
+        if index == 0 || index >= self.capacity() {
+            return Err("RTLR-V2 invalid dormant cell index".into());
+        }
+        let meta = fs::symlink_metadata(&v2.bank)?;
+        if !meta.is_dir() || meta.file_type().is_symlink() {
+            return Err("RTLR-V2 bank directory replaced or linked".into());
+        }
+        Ok(v2.bank.join(format!("cell-{index:03}.tsv")))
+    }
+
+    fn park_last_cell(&mut self) -> Result<()> {
+        let index = self.cells.len().checked_sub(1).ok_or("empty cell set")?;
+        let path = self.bank_path(index)?;
+        let cell = &self.cells[index];
+        // Hex IEEE 754 roundtrip, plus explicit SHA256 to reject bit-flips.
+        let record = format!(
+            "RTLR_ELASTIC_PARKED_V2\\t{index}\\t{:016x}\\t{:016x}\\t{:016x}\\n",
+            cell.weights[0].to_bits(), cell.weights[1].to_bits(), cell.weights[2].to_bits()
+        );
+        let mut hash = Sha256::default();
+        hash.update(record.as_bytes());
+        let digest = hex(&hash.finish());
+        let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        output.write_all(record.as_bytes())?;
+        writeln!(output, "sha256\\t{digest}")?;
+        output.sync_all()?;
+        self.cells.pop();
+        self.stats.pruned += 1;
+        self.stats.bank_parks += 1;
+        self.stats.peak_parked = self.stats.peak_parked.max(self.capacity() - self.active());
+        Ok(())
+    }
+
+    fn restore_or_allocate(&mut self) -> Result<()> {
+        if self.active() >= self.capacity() {
+            return Err("RTLR-V2 capacity exceeded".into());
+        }
+        let index = self.active();
+        let path = self.bank_path(index)?;
+        let cell = match fs::symlink_metadata(&path) {
+            Ok(meta) => {
+                if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 512 {
+                    return Err("RTLR-V2 unsafe parked cell file".into());
+                }
+                let contents = fs::read_to_string(&path)?;
+                let (record, digest_line) = contents
+                    .split_once("sha256\\t")
+                    .ok_or("RTLR-V2 missing cell digest")?;
+                let digest = digest_line.strip_suffix('\\n').ok_or("bad cell digest suffix")?;
+                let mut hash = Sha256::default();
+                hash.update(record.as_bytes());
+                if hex(&hash.finish()) != digest {
+                    return Err("RTLR-V2 parked cell SHA256 mismatch".into());
+                }
+                let parts: Vec<_> = record.trim_end_matches('\\n').split('\\t').collect();
+                if parts.len() != 5 || parts[0] != "RTLR_ELASTIC_PARKED_V2"
+                    || parts[1] != index.to_string()
+                {
+                    return Err("RTLR-V2 invalid cell schema or index".into());
+                }
+                let mut weights = [0.0; LOCAL];
+                for (slot, string) in weights.iter_mut().zip(&parts[2..]) {
+                    *slot = f64::from_bits(u64::from_str_radix(string, 16)?);
+                    if !slot.is_finite() || !(-2.0..=2.0).contains(slot) {
+                        return Err("RTLR-V2 invalid parked weight".into());
+                    }
+                }
+                fs::remove_file(&path)?;
+                self.stats.bank_restores += 1;
+                Cell { weights, h: 0.0, sensitivity: [0.0; LOCAL] }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                new_cell(index, self.config.seed)
+            }
+            Err(e) => return Err(e.into()),
+        };
+        self.cells.push(cell);
+        self.stats.grown += 1;
+        self.stats.peak_active = self.stats.peak_active.max(self.active());
+        Ok(())
+    }
+
+    /// A paired *TRAIN-only* comparison between the active recurrent
+    /// feature and an anchor-feature shadow prediction under the same
+    /// then-current experts/router weights. This is NOT an independently
+    /// trained counterfactual RTRL-2 model and must not be described as one.
+    pub fn observe_train_document_v2(
+        &mut self,
+        live_bpc: f64,
+        shadow_anchor_bpc: f64,
+    ) -> Result<()> {
+        if self.v2.is_none() {
+            return Err("RTLR-V2 policy disabled".into());
+        }
+        if !live_bpc.is_finite() || !shadow_anchor_bpc.is_finite()
+            || !(0.0..=16.0).contains(&live_bpc)
+            || !(0.0..=16.0).contains(&shadow_anchor_bpc)
+        {
+            return Err("invalid RTLR-V2 TRAIN paired loss".into());
+        }
+        let previous = self.v2.as_ref().and_then(|v| v.train_ewma);
+        let policy = self.v2.as_ref().ok_or("missing v2")?.policy;
+        self.stats.training_documents += 1;
+        self.stats.train_shadow_documents += 1;
+        let stagnated = previous.is_some_and(|base| {
+            live_bpc >= base - policy.plateau_tolerance_bpc
+        });
+        let active = self.active();
+        let benefit = shadow_anchor_bpc - live_bpc;
+        let net_benefit = benefit
+            - policy.marginal_cost_bpc_per_cell * (active - 1) as f64;
+        if self.stats.training_documents > self.config.warmup_documents {
+            if active > 1 && net_benefit <= 0.0 {
+                self.shrink_streak += 1;
+                self.grow_streak = 0;
+                if self.shrink_streak >= self.config.patience {
+                    self.park_last_cell()?;
+                    self.shrink_streak = 0;
+                }
+            } else if stagnated && active < self.capacity() {
+                self.grow_streak += 1;
+                self.shrink_streak = 0;
+                if self.grow_streak >= self.config.patience {
+                    self.restore_or_allocate()?;
+                    self.grow_streak = 0;
+                }
+            } else {
+                self.grow_streak = 0;
+                self.shrink_streak = 0;
+            }
+        }
+        self.v2.as_mut().ok_or("v2 disappeared")?.train_ewma = Some(
+            previous.map_or(live_bpc, |mean| {
+                policy.ewma_alpha * live_bpc + (1.0 - policy.ewma_alpha) * mean
+            }),
+        );
+        Ok(())
     }
 
     pub fn active(&self) -> usize {
@@ -419,6 +629,87 @@ mod tests {
             rt.cells.iter().map(|c| c.weights).collect::<Vec<_>>(),
             weights
         );
+    }
+
+    #[test]
+    fn v2_parks_restores_identical_trained_weights_without_resident_dormant_cells() {
+        let unique = format!(
+            "rtlr-v2-bank-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let mut cfg = config(4);
+        cfg.patience = 1;
+        cfg.warmup_documents = 1;
+        let policy = RtlrV2Policy {
+            ewma_alpha: 0.5,
+            plateau_tolerance_bpc: 0.1,
+            marginal_cost_bpc_per_cell: 0.001,
+        };
+        let mut engine = RtlrElastic::new_v2(cfg, policy, &root).unwrap();
+        engine.observe_train_document_v2(4.5, 4.5).unwrap();
+        engine.observe_train_document_v2(4.5, 4.5).unwrap();
+        assert_eq!(engine.active(), 2);
+        engine.advance_train(b'a', b'z').unwrap();
+        engine.learn_credit(0.17).unwrap();
+        let saved = engine.cells[1].weights;
+        engine.observe_train_document_v2(5.5, 5.4).unwrap();
+        assert_eq!(engine.active(), 1);
+        assert_eq!(engine.stats().bank_parks, 1);
+        assert!(root.join("cell-001.tsv").exists());
+        assert_eq!(engine.active_payload_bytes(), 64);
+        engine.observe_train_document_v2(5.5, 5.5).unwrap();
+        assert_eq!(engine.active(), 2);
+        assert_eq!(engine.stats().bank_restores, 1);
+        assert_eq!(engine.cells[1].weights, saved);
+        assert_eq!(engine.cells[1].h, 0.0);
+        assert!(!root.join("cell-001.tsv").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v2_fails_closed_on_corrupted_parked_weights_and_preserves_active_state() {
+        let root = std::env::temp_dir().join(format!(
+            "rtlr-v2-corrupt-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let mut cfg = config(3);
+        cfg.patience = 1;
+        cfg.warmup_documents = 1;
+        let policy = RtlrV2Policy {
+            ewma_alpha: 0.25,
+            plateau_tolerance_bpc: 0.1,
+            marginal_cost_bpc_per_cell: 0.001,
+        };
+        let mut engine = RtlrElastic::new_v2(cfg, policy, &root).unwrap();
+        engine.observe_train_document_v2(4.0, 4.0).unwrap();
+        engine.observe_train_document_v2(4.0, 4.0).unwrap();
+        engine.observe_train_document_v2(4.5, 4.4).unwrap();
+        assert_eq!(engine.active(), 1);
+        fs::write(root.join("cell-001.tsv"), "tampered").unwrap();
+        assert!(engine.observe_train_document_v2(4.5, 4.5).is_err());
+        assert_eq!(engine.active(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v2_rejects_insecure_existing_bank_and_invalid_policy() {
+        let root = std::env::temp_dir().join(format!(
+            "rtlr-v2-existing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        assert!(RtlrElastic::new_v2(config(3), RtlrV2Policy {
+            ewma_alpha: 0.2, plateau_tolerance_bpc: 0.1,
+            marginal_cost_bpc_per_cell: 0.001,
+        }, &root).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
