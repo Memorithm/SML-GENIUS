@@ -74,6 +74,11 @@ impl RtlrBooleanHybrid {
     }
 
     #[must_use]
+    pub fn active_cells(&self) -> usize {
+        self.recurrent.active()
+    }
+
+    #[must_use]
     pub fn boolean_bytes(&self) -> usize {
         self.history.storage_bytes()
     }
@@ -184,6 +189,27 @@ impl RtlrBooleanHybrid {
         }
         self.updates += 1;
         Ok(())
+    }
+
+    /// Return raw recurrent and anchor scores for the current TRAIN
+    /// forward only. TRAIN-only width control must never see DEV labels.
+    #[must_use]
+    pub fn pending_recurrent_and_anchor(&self) -> Option<(f64, f64)> {
+        let live = self.pending.as_ref()?.experts[0];
+        let anchor = 1.0 / (1.0 + (-4.0 * self.recurrent.anchor_state()).exp());
+        Some((live, anchor))
+    }
+
+    /// Forward the existing V2/V3 structural scheduler; caller provides
+    /// paired TRAIN document losses from *recurrent* and anchor experts,
+    /// not hybrid or DEV losses. Selector is not adjusted by scheduling.
+    pub fn observe_train_document_v2(&mut self, recurrent_bpc: f64, anchor_bpc: f64) -> Result<()> {
+        if self.pending.is_some() {
+            return Err("cannot adjust topology before TRAIN commit");
+        }
+        self.recurrent
+            .observe_train_document_v2(recurrent_bpc, anchor_bpc)
+            .map_err(|_| "RTLR TRAIN-only V2/V3 width policy failed")
     }
 
     /// Read-only selector and learned-parameter path. Volatile recurrent
