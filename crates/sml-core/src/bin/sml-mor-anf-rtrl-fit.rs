@@ -2,6 +2,7 @@
 //! Only bounded corpus prefix; source is exploratory and not G0-admitted.
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
+    rtlr_elastic::{RtlrElastic, RtlrElasticConfig},
     rtrl3_elastic::{ElasticRtrl3, Rtrl3Config},
     sparse_gradient_atlas::SparseConfig,
     sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent, RtrlClipStats},
@@ -47,6 +48,9 @@ enum PilotMode {
     Rtrl3Paged1,
     Rtrl3Paged8,
     Rtrl3Paged16,
+    RtlrElastic1,
+    RtlrElastic8,
+    RtlrElastic16,
 }
 
 impl PilotMode {
@@ -72,6 +76,9 @@ impl PilotMode {
                 | Self::Rtrl3Paged1
                 | Self::Rtrl3Paged8
                 | Self::Rtrl3Paged16
+                | Self::RtlrElastic1
+                | Self::RtlrElastic8
+                | Self::RtlrElastic16
         )
     }
 }
@@ -152,6 +159,28 @@ fn execute(
         None
     };
     let mut rtrl3_clipped = 0u64;
+    let mut rtlr = if matches!(
+        mode,
+        PilotMode::RtlrElastic1 | PilotMode::RtlrElastic8 | PilotMode::RtlrElastic16
+    ) {
+        let max_active = match mode {
+            PilotMode::RtlrElastic1 => 1,
+            PilotMode::RtlrElastic8 => 8,
+            PilotMode::RtlrElastic16 => 16,
+            _ => unreachable!(),
+        };
+        Some(RtlrElastic::new(RtlrElasticConfig {
+            max_active,
+            learning_rate: 0.005,
+            grow_above_bpc: 4.1,
+            shrink_below_bpc: 3.8,
+            patience: 2,
+            warmup_documents: 2,
+            seed: 17,
+        })?)
+    } else {
+        None
+    };
     let mut reader = BufReader::new(File::open(corpus)?);
     let mut lines = BufReader::new(File::open(provenance)?).lines();
     if lines.next().transpose()?.as_deref() != Some(HEADER) {
@@ -225,7 +254,9 @@ fn execute(
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if rtrl3.is_some() {
+            let (loss, events) = if let Some(ref mut state) = rtlr {
+                model.train_document_rtlr_elastic_paged(sample, state)?
+            } else if rtrl3.is_some() {
                 let (loss, events, clipped) = model.train_document_rtrl3_paged(
                     sample,
                     rtrl3.as_mut().ok_or("missing RTRL-3 trainer")?,
@@ -278,7 +309,9 @@ fn execute(
             train_events += events;
             train_loss += loss;
         } else if dev_bytes < dev_target {
-            let (loss, events) = if let Some(ref state) = rtrl3 {
+            let (loss, events) = if let Some(ref state) = rtlr {
+                model.evaluate_document_rtlr_elastic_paged(sample, state)?
+            } else if let Some(ref state) = rtrl3 {
                 model.evaluate_document_rtrl3_paged(sample, state)?
             } else if boundary_mode {
                 // Equal readout protocol for all four arms: uninterrupted
@@ -349,6 +382,24 @@ fn execute(
         report.sync_all()?;
     }
     model.checkpoint(output)?;
+    if let Some(ref state) = rtlr {
+        state.write_evidence(&output.join("rtlr_elastic_weights.tsv"))?;
+        let stats = state.stats();
+        let mut manifest = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join("rtlr_elastic_stats.tsv"))?;
+        writeln!(manifest,
+            "version\tdocuments\tgrown\tpruned\tactive\tmax_active\tpeak_active\trecurrent_changes\tgate_changes\tsteps\tactive_payload_bytes"
+        )?;
+        writeln!(manifest, "RTLR_ELASTIC_V1\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            stats.training_documents, stats.grown, stats.pruned,
+            state.active(), state.capacity(), stats.peak_active,
+            stats.recurrent_parameter_changes, stats.gate_parameter_changes,
+            stats.recurrent_steps, state.active_payload_bytes()
+        )?;
+        manifest.sync_all()?;
+    }
     if let Some(ref state) = rtrl3 {
         if rtrl3_clipped > 0 {
             return Err("RTRL-3 control unexpectedly clipped gradients".into());
@@ -388,10 +439,16 @@ fn execute(
         PilotMode::Rtrl3Paged1 => "sml_mor_anf_rtrl3_paged_h1_v1",
         PilotMode::Rtrl3Paged8 => "sml_mor_anf_rtrl3_paged_h8_v1",
         PilotMode::Rtrl3Paged16 => "sml_mor_anf_rtrl3_paged_h16_v1",
+        PilotMode::RtlrElastic1 => "sml_mor_anf_rtlr_elastic_max1_v1",
+        PilotMode::RtlrElastic8 => "sml_mor_anf_rtlr_elastic_max8_v1",
+        PilotMode::RtlrElastic16 => "sml_mor_anf_rtlr_elastic_max16_v1",
     };
-    let recurrent_capacity = rtrl3
+    let recurrent_capacity = rtlr
         .as_ref()
-        .map_or(3, ElasticRtrl3::recurrent_trainable_parameters);
+        .map_or_else(
+            || rtrl3.as_ref().map_or(3, ElasticRtrl3::recurrent_trainable_parameters),
+            RtlrElastic::trained_local_parameters,
+        );
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
         config.total_parameters(), experts.distinct_updated_parameters, experts.parameter_updates,
@@ -443,6 +500,9 @@ fn execute(
         PilotMode::Rtrl3Paged1 => "SML_MOR_ANF_RTRL3_PAGED_H1_DONE",
         PilotMode::Rtrl3Paged8 => "SML_MOR_ANF_RTRL3_PAGED_H8_DONE",
         PilotMode::Rtrl3Paged16 => "SML_MOR_ANF_RTRL3_PAGED_H16_DONE",
+        PilotMode::RtlrElastic1 => "SML_MOR_ANF_RTLR_ELASTIC_1_DONE",
+        PilotMode::RtlrElastic8 => "SML_MOR_ANF_RTLR_ELASTIC_8_DONE",
+        PilotMode::RtlrElastic16 => "SML_MOR_ANF_RTLR_ELASTIC_16_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -562,8 +622,20 @@ fn main() {
             Path::new(corpus), Path::new(ledger), digest, Path::new(output),
             PilotMode::Rtrl3Paged16,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-elastic1" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrElastic1,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-elastic8" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrElastic8,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-elastic16" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrElastic16,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16|--pilot-rtlr-elastic1|--pilot-rtlr-elastic8|--pilot-rtlr-elastic16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
