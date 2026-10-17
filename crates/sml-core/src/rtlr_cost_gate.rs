@@ -152,7 +152,9 @@ mod tests {
             InferenceRoute::BooleanOnly
         );
         assert_eq!(gate.route(), Some(InferenceRoute::BooleanOnly));
-        assert!(gate.observe_train_batch(0, 1024, 1.0, 0.0, 2.0, 3.0).is_err());
+        assert!(gate
+            .observe_train_batch(0, 1024, 1.0, 0.0, 2.0, 3.0)
+            .is_err());
         assert!(gate.freeze_for_next_document().is_err());
     }
 
@@ -180,8 +182,12 @@ mod tests {
             InferenceRoute::BooleanOnly
         );
         let mut one_bad = TrainOnlyCostGate::new(1024, 0.001, 0.0).unwrap();
-        one_bad.observe_train_batch(0, 2048, 0.9, 0.1, 10.0, 100.0).unwrap();
-        one_bad.observe_train_batch(1, 2048, 0.8, 0.9, 10.0, 100.0).unwrap();
+        one_bad
+            .observe_train_batch(0, 2048, 0.9, 0.1, 10.0, 100.0)
+            .unwrap();
+        one_bad
+            .observe_train_batch(1, 2048, 0.8, 0.9, 10.0, 100.0)
+            .unwrap();
         assert_eq!(
             one_bad.freeze_for_next_document().unwrap(),
             InferenceRoute::BooleanOnly
@@ -194,10 +200,16 @@ mod tests {
         assert!(TrainOnlyCostGate::new(1024, f64::NAN, 0.0).is_err());
         assert!(TrainOnlyCostGate::new(1024, 0.0, -1.0).is_err());
         let mut gate = TrainOnlyCostGate::new(1024, 0.0, 0.0).unwrap();
-        assert!(gate.observe_train_batch(2, 128, 0.2, 0.1, 2.0, 3.0).is_err());
-        assert!(gate.observe_train_batch(0, 128, f64::INFINITY, 0.1, 2.0, 3.0).is_err());
+        assert!(gate
+            .observe_train_batch(2, 128, 0.2, 0.1, 2.0, 3.0)
+            .is_err());
+        assert!(gate
+            .observe_train_batch(0, 128, f64::INFINITY, 0.1, 2.0, 3.0)
+            .is_err());
         assert!(gate.observe_train_batch(0, 0, 0.2, 0.1, 2.0, 3.0).is_err());
-        assert!(gate.observe_train_batch(0, u64::MAX, 0.2, 0.1, 2.0, 3.0).is_ok());
+        assert!(gate
+            .observe_train_batch(0, u64::MAX, 0.2, 0.1, 2.0, 3.0)
+            .is_ok());
         assert!(gate.observe_train_batch(0, 1, 0.2, 0.1, 2.0, 3.0).is_err());
     }
 }
