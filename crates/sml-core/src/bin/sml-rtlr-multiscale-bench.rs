@@ -128,6 +128,18 @@ fn vm_hwm_kib() -> Option<u64> {
         .ok()
 }
 
+// Causal burn-in at a document boundary: a lag-1024 target must not ask
+// the model to predict from a reset state without seeing its 1024-byte halo.
+// This is diagnostic-only; the preserved historical 100x CLI does not prime.
+fn prime_history(model: &mut RtlrElastic, seed: u64, start: usize) -> Result<()> {
+    let prefix = start.checked_sub(MAX_LAG).ok_or("missing history halo")?;
+    let bytes = stream_range(prefix, start, seed);
+    for i in 2..bytes.len() {
+        model.advance_inference(bytes[i - 2], bytes[i - 1])?;
+    }
+    Ok(())
+}
+
 fn bench(
     mode: &str,
     seed: u64,
@@ -180,6 +192,9 @@ fn bench(
     for document in 0..8 {
         model.reset_state();
         let base = MAX_LAG + document * (train / 8);
+        if diagnostic {
+            prime_history(&mut model, training_seed, base)?;
+        }
         let end = base + train / 8;
         let mut doc_loss = 0.0;
         let mut shadow_loss = 0.0;
@@ -210,6 +225,9 @@ fn bench(
         }
     }
     model.reset_state();
+    if diagnostic {
+        prime_history(&mut model, heldout_seed, MAX_LAG)?;
+    }
     let before = model.stats();
     let mut dev_s = 0.0f64;
     let mut dev_loss = 0.0;
@@ -343,6 +361,25 @@ mod tests {
             }
         }
         assert!(LabelTask::parse("unknown").is_err());
+    }
+
+    #[test]
+    fn causal_prime_is_read_only_and_uses_past_bytes_only() {
+        let config = RtlrElasticConfig {
+            max_active: 1,
+            learning_rate: 0.005,
+            grow_above_bpc: 4.1,
+            shrink_below_bpc: 3.8,
+            patience: 2,
+            warmup_documents: 2,
+            seed: 11,
+        };
+        let mut m = RtlrElastic::new(config).unwrap();
+        let original = m.stats();
+        prime_history(&mut m, 0x91f8_31a2_00c7_6d15, MAX_LAG).unwrap();
+        assert_eq!(m.stats(), original);
+        assert!(m.anchor_state().is_finite());
+        assert!(prime_history(&mut m, 14, MAX_LAG - 1).is_err());
     }
 
     #[test]
