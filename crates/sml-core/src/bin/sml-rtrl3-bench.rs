@@ -11,13 +11,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const TRAIN_BYTES: usize = 16_386;
 const DEV_BYTES: usize = 8_194;
 const REPEATS: [u64; 3] = [11, 23, 37];
-const ARMS: [(usize, usize, usize); 5] = [
-    (1, 0, 1),
-    (8, 2, 2),
-    (16, 2, 4),
-    (32, 4, 8),
-    (64, 4, 8),
-];
+const ARMS: [(usize, usize, usize); 5] = [(1, 0, 1), (8, 2, 2), (16, 2, 4), (32, 4, 8), (64, 4, 8)];
 
 fn next_u64(state: &mut u64) -> u64 {
     let mut x = *state;
