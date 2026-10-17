@@ -165,6 +165,19 @@ impl RecurrentMorAnf {
         check_finite(loss / denom)
     }
 
+    /// Stable, self-contained F64LE research artifact, not mixed-precision SML.
+    /// Ordering: expert0 (6), expert1 (6), MOR router (6), recurrence (3).
+    pub fn weights_le_bytes(&self) -> [u8; Self::PARAMETERS * 8] {
+        let mut out = [0u8; Self::PARAMETERS * 8];
+        for (i, value) in self.expert.iter().flatten()
+            .chain(self.router.iter())
+            .chain(self.recurrent.iter()).enumerate()
+        {
+            out[i * 8..(i + 1) * 8].copy_from_slice(&value.to_le_bytes());
+        }
+        out
+    }
+
     pub fn router_weights(&self) -> [f64; 6] {
         self.router
     }
@@ -192,6 +205,57 @@ mod tests {
         assert!(after < before * 0.3, "before={before} after={after}");
         assert_ne!(old_router, model.router_weights());
         assert_ne!(old_recurrent, model.recurrent_weights());
+    }
+
+    #[test]
+    fn router_and_expert_gradients_match_finite_differences() {
+        let inputs = [(true, false), (true, true), (false, false), (false, true)];
+        let labels = [true, false, false, true];
+        let model = RecurrentMorAnf::default();
+        let epsilon = 1e-5;
+        let mut updated = model.clone();
+        updated.train_sequence(&inputs, &labels, epsilon).unwrap();
+        for (component, index) in [(0, 3), (1, 4), (2, 1)] {
+            let mut plus = model.clone();
+            let mut minus = model.clone();
+            let (origin, moved) = match component {
+                0 => {
+                    plus.router[index] += epsilon;
+                    minus.router[index] -= epsilon;
+                    (model.router[index], updated.router[index])
+                }
+                1 => {
+                    plus.expert[0][index] += epsilon;
+                    minus.expert[0][index] -= epsilon;
+                    (model.expert[0][index], updated.expert[0][index])
+                }
+                _ => {
+                    plus.expert[1][index] += epsilon;
+                    minus.expert[1][index] -= epsilon;
+                    (model.expert[1][index], updated.expert[1][index])
+                }
+            };
+            let analytic = (origin - moved) / epsilon;
+            let numerical = (plus.loss(&inputs, &labels).unwrap()
+                - minus.loss(&inputs, &labels).unwrap()) / (2.0 * epsilon);
+            assert!((analytic - numerical).abs() < 1e-7,
+                "component={component} analytic={analytic} numerical={numerical}");
+        }
+    }
+
+    #[test]
+    fn exported_weights_change_after_training_and_never_include_data() {
+        let mut model = RecurrentMorAnf::default();
+        let before = model.weights_le_bytes();
+        assert_eq!(before.len(), RecurrentMorAnf::PARAMETERS * 8);
+        model.train_sequence(
+            &[(true, false), (true, true), (false, true)],
+            &[true, false, true], 0.1
+        ).unwrap();
+        let after = model.weights_le_bytes();
+        assert_ne!(before, after);
+        assert!(after.chunks_exact(8).all(|chunk|
+            f64::from_le_bytes(chunk.try_into().unwrap()).is_finite()));
     }
 
     #[test]
