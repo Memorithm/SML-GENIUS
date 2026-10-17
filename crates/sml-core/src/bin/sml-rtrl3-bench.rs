@@ -60,7 +60,8 @@ fn checksum(data: &[u8]) -> String {
 }
 
 fn run() -> Result<()> {
-    if env::args().collect::<Vec<_>>().as_slice() != ["sml-rtrl3-bench", "--synthetic-v1"] {
+    let args: Vec<_> = env::args().collect();
+    if args.len() != 2 || args[1] != "--synthetic-v1" {
         return Err("usage: sml-rtrl3-bench --synthetic-v1".into());
     }
     let train = generate(TRAIN_BYTES, 0xf52d_4a80_1ff0_3123);
