@@ -137,7 +137,7 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
     }
     let stats = model.stats();
     println!(
-        "RTLR_TIMESCALE_CPU_V1\t{mode}\t{seed}\t{TRAIN}\t{DEV}\t{:.9}\t{:.9}\t{:.6}\t{:.6}\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "RTLR_TIMESCALE_CPU_V1\t{mode}\t{seed}\t{TRAIN}\t{DEV}\t{:.9}\t{:.9}\t{:.6}\t{:.6}\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         total_train / count_train as f64,
         dev_loss / DEV as f64,
         train_s, dev_s,
