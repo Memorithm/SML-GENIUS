@@ -724,11 +724,7 @@ impl MorAnfRecurrent {
 
     /// Seal the original expert master, MOR router and complete RTLR-V2
     /// recurrent topology/controller in a single linked snapshot.
-    pub fn checkpoint_rtlr_v2(
-        &mut self,
-        root: &Path,
-        recurrence: &RtlrElastic,
-    ) -> Result<()> {
+    pub fn checkpoint_rtlr_v2(&mut self, root: &Path, recurrence: &RtlrElastic) -> Result<()> {
         if !recurrence.is_v2() {
             return Err("RTLR-V2 checkpoint requires a V2 recurrent model".into());
         }
@@ -740,10 +736,7 @@ impl MorAnfRecurrent {
     /// Full fail-closed read-only restore. The sparse expert master and
     /// gate are SHA-validated by the established MOR opener, while the
     /// RTLR-V2 joint manifest binds all live/dormant recurrent state.
-    pub fn reopen_rtlr_v2(
-        root: &Path,
-        config: SparseConfig,
-    ) -> Result<(Self, RtlrElastic)> {
+    pub fn reopen_rtlr_v2(root: &Path, config: SparseConfig) -> Result<(Self, RtlrElastic)> {
         let recurrence = RtlrElastic::reopen_v2(root)?;
         let model = Self::reopen(root, config)?;
         if model.counters().recurrence_steps != recurrence.stats().recurrent_steps
@@ -1545,11 +1538,20 @@ mod paged_bptt_tests {
             plateau_tolerance_bpc: 0.05,
             marginal_cost_bpc_per_cell: 0.001,
         };
-        let mut rt = RtlrElastic::new_v2(RtlrElasticConfig {
-            max_active: 4, learning_rate: 0.005, grow_above_bpc: 4.1,
-            shrink_below_bpc: 3.8, patience: 1,
-            warmup_documents: 1, seed: 17,
-        }, policy, &root.join("rtlr_v2_dormant")).unwrap();
+        let mut rt = RtlrElastic::new_v2(
+            RtlrElasticConfig {
+                max_active: 4,
+                learning_rate: 0.005,
+                grow_above_bpc: 4.1,
+                shrink_below_bpc: 3.8,
+                patience: 1,
+                warmup_documents: 1,
+                seed: 17,
+            },
+            policy,
+            &root.join("rtlr_v2_dormant"),
+        )
+        .unwrap();
         let doc = b"ababaccccccabababababaadddabbccaaadadadadab";
         for _ in 0..4 {
             model.train_document_rtlr_v2_paged(doc, &mut rt).unwrap();
@@ -1561,14 +1563,17 @@ mod paged_bptt_tests {
         rt.observe_train_document_v2(6.0, 5.0).unwrap();
         assert_eq!(rt.active(), 1);
         assert!(root.join("rtlr_v2_dormant/cell-001.tsv").is_file());
-        let (baseline, count) = model.evaluate_document_rtlr_elastic_paged(doc, &rt).unwrap();
+        let (baseline, count) = model
+            .evaluate_document_rtlr_elastic_paged(doc, &rt)
+            .unwrap();
         let original_counters = model.counters();
         let original_stats = rt.stats();
         model.checkpoint_rtlr_v2(&root, &rt).unwrap();
         let (mut reopened, restored) =
             MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).unwrap();
         let (after, events) = reopened
-            .evaluate_document_rtlr_elastic_paged(doc, &restored).unwrap();
+            .evaluate_document_rtlr_elastic_paged(doc, &restored)
+            .unwrap();
         assert_eq!(baseline, after);
         assert_eq!(count, events);
         assert_eq!(original_counters, reopened.counters());
@@ -1590,7 +1595,8 @@ mod paged_bptt_tests {
         let (mut final_model, final_recurrence) =
             MorAnfRecurrent::reopen_rtlr_v2(&root, model.atlas.config()).unwrap();
         let (again, _) = final_model
-            .evaluate_document_rtlr_elastic_paged(doc, &final_recurrence).unwrap();
+            .evaluate_document_rtlr_elastic_paged(doc, &final_recurrence)
+            .unwrap();
         assert_eq!(again, baseline);
         drop(final_model);
         drop(reopened);
