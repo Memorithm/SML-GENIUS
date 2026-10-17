@@ -74,6 +74,11 @@ impl RtlrBooleanHybrid {
     }
 
     #[must_use]
+    pub fn active_cells(&self) -> usize {
+        self.recurrent.active()
+    }
+
+    #[must_use]
     pub fn boolean_bytes(&self) -> usize {
         self.history.storage_bytes()
     }
