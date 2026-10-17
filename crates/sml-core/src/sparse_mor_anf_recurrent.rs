@@ -338,15 +338,20 @@ impl MorAnfRecurrent {
             let mut credit = 0.0f64;
             for bit in 0..8 {
                 let (cost, local) = self.train_target(
-                    triple[0], triple[1], bit,
-                    (triple[2] >> bit) & 1 == 1, trace,
+                    triple[0],
+                    triple[1],
+                    bit,
+                    (triple[2] >> bit) & 1 == 1,
+                    trace,
                 )?;
                 loss += cost;
                 credit += local;
             }
             let changes = recurrent.learn_credit(credit)?;
             self.head.counters.recurrent_parameter_updates = self
-                .head.counters.recurrent_parameter_updates
+                .head
+                .counters
+                .recurrent_parameter_updates
                 .checked_add(changes)
                 .ok_or("RTLR-ELASTIC recurrent counter overflow")?;
             self.head.counters.recurrence_steps += 1;
@@ -1409,7 +1414,8 @@ mod paged_bptt_tests {
             patience: 2,
             warmup_documents: 2,
             seed: 17,
-        }).unwrap();
+        })
+        .unwrap();
         let text = b"ababaccccccabababababaadddabbccaaadadadadab";
         let (old_loss, old_events) = baseline.train_document(text).unwrap();
         let (new_loss, new_events) = joined
@@ -1450,7 +1456,8 @@ mod paged_bptt_tests {
             patience: 1,
             warmup_documents: 0,
             seed: 17,
-        }).unwrap();
+        })
+        .unwrap();
         let text = b"abcabcabcabcabcabcabcabcabcabcabcabcabcabc";
         for _ in 0..5 {
             let (loss, events) = model
@@ -1465,8 +1472,12 @@ mod paged_bptt_tests {
         assert!(counters.unique_router_parameters > 0);
         assert!(counters.recurrent_parameter_updates > 0);
         assert!(model.atlas_counters().distinct_updated_parameters > 0);
-        let (first, _) = model.evaluate_document_rtlr_elastic_paged(text, &recurrence).unwrap();
-        let (second, _) = model.evaluate_document_rtlr_elastic_paged(text, &recurrence).unwrap();
+        let (first, _) = model
+            .evaluate_document_rtlr_elastic_paged(text, &recurrence)
+            .unwrap();
+        let (second, _) = model
+            .evaluate_document_rtlr_elastic_paged(text, &recurrence)
+            .unwrap();
         assert_eq!(first, second);
         assert_eq!(counters, model.counters());
         drop(model);
