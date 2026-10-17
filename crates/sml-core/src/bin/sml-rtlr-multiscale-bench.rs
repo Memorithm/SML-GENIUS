@@ -60,11 +60,9 @@ impl LabelTask {
 fn validate_diagnostic_counts(train: usize, dev: usize) -> Result<()> {
     // Exactly eight TRAIN documents and a stable block-sized evaluation.
     // This also bounds total evaluation and avoids silent partial documents.
-    if train < BLOCK * 8
-        || train > TRAIN
+    if !(BLOCK * 8..=TRAIN).contains(&train)
         || train % (BLOCK * 8) != 0
-        || dev < BLOCK
-        || dev > DEV
+        || !(BLOCK..=DEV).contains(&dev)
         || dev % BLOCK != 0
     {
         return Err("invalid diagnostic size: require 8*65536 <= TRAIN <= 419430400, TRAIN multiple of 524288, 65536 <= DEV <= 104857600, DEV multiple of 65536".into());
