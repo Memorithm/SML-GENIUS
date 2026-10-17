@@ -23,6 +23,7 @@ const DOCUMENT_MAX: usize = 2 * 1024 * 1024;
 const MATCHED_TRAIN_TARGET: u64 = 64 * 1024;
 const MATCHED_DEV_TARGET: u64 = 32 * 1024;
 const MATCHED_WINDOW: usize = 128;
+const BOUNDARY_WINDOW: usize = 16;
 const MATCHED_SAMPLE_MAX: usize = 1024;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,10 @@ enum PilotMode {
     MatchedRtrl,
     MatchedBptt,
     MatchedHybrid,
+    BoundaryRtrl,
+    BoundaryBptt,
+    BoundaryHybrid1,
+    BoundaryHyb2,
 }
 
 impl PilotMode {
@@ -40,9 +45,16 @@ impl PilotMode {
     }
 
     fn is_matched(self) -> bool {
+        !matches!(self, Self::LegacyRtrl | Self::LegacyBptt)
+    }
+
+    fn is_boundary(self) -> bool {
         matches!(
             self,
-            Self::MatchedRtrl | Self::MatchedBptt | Self::MatchedHybrid
+            Self::BoundaryRtrl
+                | Self::BoundaryBptt
+                | Self::BoundaryHybrid1
+                | Self::BoundaryHyb2
         )
     }
 }
@@ -83,6 +95,8 @@ fn execute(
     }
     let bptt = mode.is_bptt();
     let matched = mode.is_matched();
+    let boundary_mode = mode.is_boundary();
+    let causal_window = if boundary_mode { BOUNDARY_WINDOW } else { MATCHED_WINDOW };
     let config = SparseConfig {
         pages: if bptt || matched { 48_829 } else { 4096 },
         max_cached_pages: 32,
@@ -161,7 +175,18 @@ fn execute(
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if mode == PilotMode::MatchedHybrid {
+            let (loss, events) = if mode == PilotMode::BoundaryHyb2 {
+                model.train_document_hyb2_boundary(sample, causal_window)?
+            } else if mode == PilotMode::BoundaryHybrid1 {
+                let (loss, events, counts) =
+                    model.train_document_hybrid_windowed(sample, causal_window)?;
+                accumulate_hybrid(&mut hybrid_counts, counts)?;
+                (loss, events)
+            } else if mode == PilotMode::BoundaryRtrl {
+                model.train_document_rtrl_windowed(sample, causal_window)?
+            } else if mode == PilotMode::BoundaryBptt {
+                model.train_document_bptt(sample, causal_window)?
+            } else if mode == PilotMode::MatchedHybrid {
                 let (loss, events, counts) =
                     model.train_document_hybrid_windowed(sample, MATCHED_WINDOW)?;
                 accumulate_hybrid(&mut hybrid_counts, counts)?;
@@ -183,7 +208,11 @@ fn execute(
             train_events += events;
             train_loss += loss;
         } else if dev_bytes < dev_target {
-            let (loss, events) = if matched {
+            let (loss, events) = if boundary_mode {
+                // Equal readout protocol for all four arms: uninterrupted
+                // document recurrence. Updates remain frozen on DEV.
+                model.evaluate_document(sample)?
+            } else if matched {
                 model.evaluate_document_windowed(sample, MATCHED_WINDOW)?
             } else {
                 model.evaluate_document(sample)?
@@ -240,6 +269,10 @@ fn execute(
         PilotMode::MatchedRtrl => "sml_mor_anf_paged_rtrl_matched_v2",
         PilotMode::MatchedBptt => "sml_mor_anf_paged_bptt_matched_v2",
         PilotMode::MatchedHybrid => "sml_mor_anf_paged_hybrid_3r_1b_v1",
+        PilotMode::BoundaryRtrl => "sml_mor_anf_boundary_rtrl_v3",
+        PilotMode::BoundaryBptt => "sml_mor_anf_boundary_bptt_v3",
+        PilotMode::BoundaryHybrid1 => "sml_mor_anf_boundary_hyb1_v3",
+        PilotMode::BoundaryHyb2 => "sml_mor_anf_boundary_hyb2_v3",
     };
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
@@ -268,7 +301,8 @@ fn execute(
         )?;
         writeln!(
             selection,
-            "PAIRED_V2\t{train_docs}\t{train_bytes}\t{train_events}\t{}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{}\t{MATCHED_WINDOW}",
+            "{}\t{train_docs}\t{train_bytes}\t{train_events}\t{}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{}\t{causal_window}",
+            if boundary_mode { "BOUNDARY_V3" } else { "PAIRED_V2" },
             hex(&train_fingerprint.finish()),
             hex(&dev_fingerprint.finish())
         )?;
@@ -280,6 +314,10 @@ fn execute(
         PilotMode::MatchedRtrl => "SML_MOR_ANF_MATCHED_RTRL_DONE",
         PilotMode::MatchedBptt => "SML_MOR_ANF_MATCHED_BPTT_DONE",
         PilotMode::MatchedHybrid => "SML_MOR_ANF_MATCHED_HYBRID_DONE",
+        PilotMode::BoundaryRtrl => "SML_MOR_ANF_BOUNDARY_RTRL_DONE",
+        PilotMode::BoundaryBptt => "SML_MOR_ANF_BOUNDARY_BPTT_DONE",
+        PilotMode::BoundaryHybrid1 => "SML_MOR_ANF_BOUNDARY_HYB1_DONE",
+        PilotMode::BoundaryHyb2 => "SML_MOR_ANF_BOUNDARY_HYB2_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -355,8 +393,24 @@ fn main() {
             Path::new(output),
             PilotMode::MatchedHybrid,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-boundary-rtrl" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::BoundaryRtrl,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-boundary-bptt" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::BoundaryBptt,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-boundary-hyb1" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::BoundaryHybrid1,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-boundary-hyb2" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::BoundaryHyb2,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
