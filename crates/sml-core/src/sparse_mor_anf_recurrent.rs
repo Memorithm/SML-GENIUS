@@ -583,7 +583,9 @@ impl MorAnfRecurrent {
             let end = begin.saturating_add(window_bytes).min(text.len() - 2);
             let (loss, events) = self.train_document(&text[begin..end + 2])?;
             total_loss += loss;
-            total_events = total_events.checked_add(events).ok_or("RTRL event count overflow")?;
+            total_events = total_events
+                .checked_add(events)
+                .ok_or("RTRL event count overflow")?;
         }
         if !total_loss.is_finite() {
             return Err("nonfinite windowed RTRL loss".into());
@@ -606,7 +608,9 @@ impl MorAnfRecurrent {
             let end = begin.saturating_add(window_bytes).min(text.len() - 2);
             let (loss, events) = self.evaluate_document(&text[begin..end + 2])?;
             total_loss += loss;
-            total_events = total_events.checked_add(events).ok_or("heldout event count overflow")?;
+            total_events = total_events
+                .checked_add(events)
+                .ok_or("heldout event count overflow")?;
         }
         if !total_loss.is_finite() {
             return Err("nonfinite windowed heldout loss".into());
@@ -855,8 +859,7 @@ mod paged_bptt_tests {
         let (mut grouped, root_a) = model();
         let (mut manual, root_b) = model();
         let text = b"twelve sample bytes of causal recurrent testing";
-        let (group_loss, grouped_events) =
-            grouped.train_document_rtrl_windowed(text, 7).unwrap();
+        let (group_loss, grouped_events) = grouped.train_document_rtrl_windowed(text, 7).unwrap();
         let mut manual_loss = 0.0;
         let mut manual_events = 0;
         for begin in (0..text.len() - 2).step_by(7) {
@@ -879,9 +882,14 @@ mod paged_bptt_tests {
         assert!(evaluation.is_finite());
         assert_eq!(events, grouped_events);
         assert_eq!(grouped.counters(), before);
-        assert_eq!(grouped.atlas_counters().distinct_updated_parameters, atlas_before);
+        assert_eq!(
+            grouped.atlas_counters().distinct_updated_parameters,
+            atlas_before
+        );
         assert!(grouped.train_document_rtrl_windowed(text, 0).is_err());
-        assert!(grouped.evaluate_document_windowed(text, PAGED_BPTT_MAX_BYTES + 1).is_err());
+        assert!(grouped
+            .evaluate_document_windowed(text, PAGED_BPTT_MAX_BYTES + 1)
+            .is_err());
         drop(grouped);
         drop(manual);
         fs::remove_dir_all(root_a).unwrap();
@@ -897,8 +905,14 @@ mod paged_bptt_tests {
         let (_, rtrl_count) = rtrl.train_document_rtrl_windowed(text, 8).unwrap();
         assert_eq!(bptt_count, rtrl_count);
         assert_eq!(bptt_count, (text.len() - 2) as u64);
-        assert_eq!(bptt.counters().supervised_target_bits, rtrl.counters().supervised_target_bits);
-        assert_eq!(bptt.counters().routed_expert_updates, rtrl.counters().routed_expert_updates);
+        assert_eq!(
+            bptt.counters().supervised_target_bits,
+            rtrl.counters().supervised_target_bits
+        );
+        assert_eq!(
+            bptt.counters().routed_expert_updates,
+            rtrl.counters().routed_expert_updates
+        );
         drop(bptt);
         drop(rtrl);
         fs::remove_dir_all(root_a).unwrap();
