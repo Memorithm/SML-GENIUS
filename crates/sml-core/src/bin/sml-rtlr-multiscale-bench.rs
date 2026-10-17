@@ -4,8 +4,8 @@ use sml_core::rtlr_elastic::{RtlrElastic, RtlrElasticConfig, RtlrV2Policy};
 use std::{env, error::Error, fs, path::Path, time::Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-const TRAIN: usize = 32_768;
-const DEV: usize = 8_192;
+const TRAIN: usize = 4_194_304;
+const DEV: usize = 1_048_576;
 
 fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -137,7 +137,7 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
     }
     let stats = model.stats();
     println!(
-        "RTLR_TIMESCALE_CPU_V1\t{mode}\t{seed}\t{TRAIN}\t{DEV}\t{:.9}\t{:.9}\t{:.6}\t{:.6}\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "RTLR_TIMESCALE_CPU_V1\t{mode}\t{seed}\t{TRAIN}\t{DEV}\t{:.9}\t{:.9}\t{:.6}\t{:.6}\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         total_train / count_train as f64,
         dev_loss / DEV as f64,
         train_s, dev_s,
