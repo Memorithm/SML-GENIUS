@@ -114,11 +114,7 @@ fn bench(panel: u64, lag: usize) -> Result<()> {
         kernel_seconds += tic.elapsed().as_secs_f64();
     }
     let rate = DEV as f64 / kernel_seconds;
-    if !rate.is_finite()
-        || rate <= 0.0
-        || !zero_memory_bpc.is_finite()
-        || !prior_bpc.is_finite()
-    {
+    if !rate.is_finite() || rate <= 0.0 || !zero_memory_bpc.is_finite() || !prior_bpc.is_finite() {
         return Err("invalid oracle metrics".into());
     }
     println!(
