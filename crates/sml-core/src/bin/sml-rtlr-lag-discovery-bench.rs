@@ -27,8 +27,7 @@ fn run(panel: u64, target_lag: usize) -> Result<()> {
     if panel > 2 || ![0, 64, 1023].contains(&target_lag) {
         return Err("usage: sml-rtlr-lag-discovery-bench PANEL(0|1|2) LABEL_LAG(0|64|1023)".into());
     }
-    let seed = 0x91f8_31a2_00c7_6d15_u64
-        ^ mix(panel.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+    let seed = 0x91f8_31a2_00c7_6d15_u64 ^ mix(panel.wrapping_mul(0x9e37_79b9_7f4a_7c15));
     let data = stream(seed, TRAIN + LOOKBACK);
     let independent = stream(seed ^ 0xe1aa_1b56_1f43_09b7, TRAIN + LOOKBACK);
     let mut discovery = TrainLagDiscovery::new(LOOKBACK, 32, 3, 64, 0.01)?;
