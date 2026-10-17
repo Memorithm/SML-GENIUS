@@ -56,7 +56,12 @@ fn bpc(probability: f64, positive: bool) -> f64 {
     }
 }
 
-fn prime(base: &mut RtlrElastic, hybrid: &mut RtlrBooleanHybrid, seed: u64, start: usize) -> Result<()> {
+fn prime(
+    base: &mut RtlrElastic,
+    hybrid: &mut RtlrBooleanHybrid,
+    seed: u64,
+    start: usize,
+) -> Result<()> {
     let bytes = stream_range(start - MAX_LAG, start, seed);
     for i in 2..MAX_LAG {
         base.advance_inference(bytes[i - 2], bytes[i - 1])?;
@@ -67,7 +72,9 @@ fn prime(base: &mut RtlrElastic, hybrid: &mut RtlrBooleanHybrid, seed: u64, star
 
 fn bench(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
     if panel > 2 || ![1, 16, 64, 128, 1023].contains(&lag) || ![11, 23, 37].contains(&seed) {
-        return Err("usage: binary PANEL(0..2) LAG(1|16|64|128|1023) SEED(11|23|37) UNIQUE_ROOT".into());
+        return Err(
+            "usage: binary PANEL(0..2) LAG(1|16|64|128|1023) SEED(11|23|37) UNIQUE_ROOT".into(),
+        );
     }
     fs::create_dir(root)?;
     let config = RtlrElasticConfig {
@@ -122,7 +129,9 @@ fn bench(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
             let at = i - (start - MAX_LAG);
             let y = label(&bytes, at, lag);
             hybrid.advance_train(bytes[at - 2], bytes[at - 1])?;
-            let (recurrent, anchor) = hybrid.pending_recurrent_and_anchor().ok_or("missing TRAIN recurrent measurement")?;
+            let (recurrent, anchor) = hybrid
+                .pending_recurrent_and_anchor()
+                .ok_or("missing TRAIN recurrent measurement")?;
             hybrid_recurrent_loss += bpc(recurrent, y);
             hybrid_anchor_loss += bpc(anchor, y);
             hybrid.learn_target(y)?;
@@ -192,7 +201,12 @@ fn main() -> Result<()> {
     if args.len() != 5 {
         return Err("usage: sml-rtlr-boolean-hybrid-bench PANEL LAG SEED UNIQUE_ROOT".into());
     }
-    bench(args[1].parse()?, args[2].parse()?, args[3].parse()?, Path::new(&args[4]))
+    bench(
+        args[1].parse()?,
+        args[2].parse()?,
+        args[3].parse()?,
+        Path::new(&args[4]),
+    )
 }
 
 #[cfg(test)]
