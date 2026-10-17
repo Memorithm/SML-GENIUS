@@ -364,6 +364,67 @@ impl MorAnfRecurrent {
         Ok((loss, events))
     }
 
+    /// V2: same physical MOR expert updates, with an additional read-only
+    /// pre-update TRAIN shadow prediction using only the anchor recurrent
+    /// state. The TRAIN counterfactual is never a heldout input to the
+    /// allocation policy, and the shadow does not update any weights.
+    pub fn train_document_rtlr_v2_paged(
+        &mut self,
+        text: &[u8],
+        recurrent: &mut RtlrElastic,
+    ) -> Result<(f64, u64)> {
+        if !recurrent.is_v2() || text.len() < 3 {
+            return Err("RTLR-V2 paged requires enabled policy and three bytes".into());
+        }
+        recurrent.reset_state();
+        let mut loss = 0.0f64;
+        let mut shadow = 0.0f64;
+        let mut events = 0u64;
+        for triple in text.windows(3) {
+            let h = recurrent.advance_train(triple[0], triple[1])?;
+            let trace = Trace { h, dh: [0.0; 3] };
+            let anchor = Trace {
+                h: recurrent.anchor_state(),
+                dh: [0.0; 3],
+            };
+            let mut credit = 0.0f64;
+            for bit in 0..8 {
+                let label = (triple[2] >> bit) & 1 == 1;
+                let shadow_p = if recurrent.active() > 1 {
+                    self.prediction(triple[0], triple[1], bit, anchor)?.p
+                } else {
+                    // At one active cell the readout is exactly the anchor
+                    // and both features are bit-identical.
+                    self.prediction(triple[0], triple[1], bit, trace)?.p
+                };
+                shadow += if label {
+                    -shadow_p.log2()
+                } else {
+                    -(1.0 - shadow_p).log2()
+                };
+                let (cost, local) = self.train_target(
+                    triple[0], triple[1], bit, label, trace,
+                )?;
+                loss += cost;
+                credit += local;
+            }
+            let changes = recurrent.learn_credit(credit)?;
+            self.head.counters.recurrent_parameter_updates = self.head
+                .counters.recurrent_parameter_updates
+                .checked_add(changes)
+                .ok_or("RTLR-V2 recurrent count overflow")?;
+            self.head.counters.recurrence_steps += 1;
+            events += 1;
+        }
+        if !loss.is_finite() || !shadow.is_finite()
+            || events != (text.len() - 2) as u64
+        {
+            return Err("RTLR-V2 invalid TRAIN shadow accounting".into());
+        }
+        recurrent.observe_train_document_v2(loss / events as f64, shadow / events as f64)?;
+        Ok((loss, events))
+    }
+
     /// Frozen, independent-document recurrent state, unchanged MOR experts.
     /// Policy decisions and elastic topology are never updated on heldout.
     pub fn evaluate_document_rtlr_elastic_paged(
@@ -1442,6 +1503,50 @@ mod paged_bptt_tests {
         drop(joined);
         fs::remove_dir_all(path_old).unwrap();
         fs::remove_dir_all(path_new).unwrap();
+    }
+
+    #[test]
+    fn rtlr_v2_paged_shared_experts_exact_scalar_control_and_shadow_only_train() {
+        use crate::rtlr_elastic::{RtlrElasticConfig, RtlrV2Policy};
+        let (mut baseline, root_baseline) = model();
+        let (mut joined, root_v2) = model();
+        let bank = root_v2.join("rtlr_v2_bank");
+        let mut recurrent = RtlrElastic::new_v2(
+            RtlrElasticConfig {
+                max_active: 1,
+                learning_rate: 0.005,
+                grow_above_bpc: 4.1,
+                shrink_below_bpc: 3.8,
+                patience: 2,
+                warmup_documents: 2,
+                seed: 17,
+            },
+            RtlrV2Policy {
+                ewma_alpha: 0.25,
+                plateau_tolerance_bpc: 0.05,
+                marginal_cost_bpc_per_cell: 0.001,
+            },
+            &bank,
+        ).unwrap();
+        let text = b"ababaccccccabababababaadddabbccaaadadadadab";
+        let (a, a_events) = baseline.train_document(text).unwrap();
+        let (b, b_events) = joined.train_document_rtlr_v2_paged(text, &mut recurrent).unwrap();
+        assert_eq!(a, b);
+        assert_eq!(a_events, b_events);
+        assert_eq!(baseline.counters(), joined.counters());
+        assert_eq!(baseline.atlas_counters().parameter_updates,
+            joined.atlas_counters().parameter_updates);
+        let (ea, ean) = baseline.evaluate_document(text).unwrap();
+        let stats = recurrent.stats();
+        let (eb, ebn) = joined.evaluate_document_rtlr_elastic_paged(text, &recurrent).unwrap();
+        assert_eq!(ea, eb);
+        assert_eq!(ean, ebn);
+        assert_eq!(stats, recurrent.stats());
+        assert_eq!(stats.train_shadow_documents, 1);
+        drop(baseline);
+        drop(joined);
+        fs::remove_dir_all(root_baseline).unwrap();
+        fs::remove_dir_all(root_v2).unwrap();
     }
 
     #[test]
