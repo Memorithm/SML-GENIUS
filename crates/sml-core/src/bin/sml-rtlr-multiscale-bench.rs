@@ -128,7 +128,15 @@ fn vm_hwm_kib() -> Option<u64> {
         .ok()
 }
 
-fn bench(mode: &str, seed: u64, path: &Path, task: LabelTask, train: usize, dev: usize, diagnostic: bool) -> Result<()> {
+fn bench(
+    mode: &str,
+    seed: u64,
+    path: &Path,
+    task: LabelTask,
+    train: usize,
+    dev: usize,
+    diagnostic: bool,
+) -> Result<()> {
     let width = match mode {
         "scalar" => 1,
         "v2-8" | "v3-8" => 8,
@@ -257,7 +265,10 @@ fn main() -> Result<()> {
             true,
         ),
         _ => {
-            return Err("usage: sml-rtlr-multiscale-bench MODE SEED UNIQUE_BANK_DIR [TASK TRAIN DEV]".into())
+            return Err(
+                "usage: sml-rtlr-multiscale-bench MODE SEED UNIQUE_BANK_DIR [TASK TRAIN DEV]"
+                    .into(),
+            )
         }
     };
     validate_diagnostic_counts(train, dev)?;
