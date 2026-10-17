@@ -1562,7 +1562,7 @@ mod paged_bptt_tests {
             if rt.active() > 1 {
                 break;
             }
-            rt.observe_train_document_v2(4.5, 4.5).unwrap();
+            rt.observe_train_document_v2(7.9, 7.9).unwrap();
         }
         assert!(rt.active() > 1);
         for _ in 0..8 {
