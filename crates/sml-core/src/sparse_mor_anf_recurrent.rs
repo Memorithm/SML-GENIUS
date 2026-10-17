@@ -546,3 +546,279 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+
+/// Maximum number of consecutive predicted bytes retained for an exact
+/// frozen-weight backward pass. Long documents use truncated BPTT windows.
+pub const PAGED_BPTT_MAX_BYTES: usize = 512;
+
+struct PagedBpttFrame {
+    a: u8,
+    b: u8,
+    target: u8,
+    previous_h: f64,
+    h: f64,
+    predictions: Vec<MixturePrediction>,
+}
+
+impl MorAnfRecurrent {
+    /// Train the *existing physical paged experts* and learned MOR/RTRL head
+    /// under a single truncated sequence BPTT objective. Every window first
+    /// freezes both expert predictions and every recurrent state, then computes
+    /// the full backward pass before applying ANY parameter updates.
+    ///
+    /// The address-to-candidate mapping and ANF monomial topology remain fixed.
+    /// No claim of learned discrete routing, 25B training, or chat readiness.
+    /// The recurrent state resets at every document AND truncation boundary.
+    /// The result is summed binary cross-entropy in bits and predicted bytes.
+    pub fn train_document_bptt(
+        &mut self,
+        text: &[u8],
+        window_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        if text.len() < 3 || !(1..=PAGED_BPTT_MAX_BYTES).contains(&window_bytes) {
+            return Err("invalid BPTT document length or bounded window".into());
+        }
+        let mut total_loss = 0.0;
+        let mut total_events = 0u64;
+        let predicted_bytes = text.len() - 2;
+        for begin in (0..predicted_bytes).step_by(window_bytes) {
+            let end = begin.saturating_add(window_bytes).min(predicted_bytes);
+            let mut trace = Trace::default();
+            let mut frames = Vec::with_capacity(end - begin);
+
+            // Frozen-parameter forward pass: neither head nor atlas learns yet.
+            for position in begin..end {
+                let a = text[position];
+                let b = text[position + 1];
+                let previous_h = trace.h;
+                trace = trace.advance(a, b, &self.head.recurrence);
+                let mut predictions = Vec::with_capacity(8);
+                for bit in 0..8 {
+                    predictions.push(self.prediction(a, b, bit, trace)?);
+                }
+                frames.push(PagedBpttFrame {
+                    a,
+                    b,
+                    target: text[position + 2],
+                    previous_h,
+                    h: trace.h,
+                    predictions,
+                });
+            }
+
+            let mut gate_grad = [[0.0f64; GATE_FEATURES]; BUCKETS];
+            let mut recurrent_grad = [0.0f64; 3];
+            // All sparse gradients refer to the same frozen atlas snapshot.
+            let mut expert_grad = Vec::with_capacity(frames.len() * 16);
+            let mut next_state_credit = 0.0f64;
+            let mut window_loss_nats = 0.0f64;
+
+            for frame in frames.iter().rev() {
+                let mut state_credit = next_state_credit;
+                for (bit, pred) in frame.predictions.iter().enumerate() {
+                    let y = f64::from((frame.target >> bit) & 1);
+                    let p = pred.p.clamp(1e-12, 1.0 - 1e-12);
+                    window_loss_nats -= y * p.ln() + (1.0 - y) * (1.0 - p).ln();
+                    let dl_dp = (p - y) / (p * (1.0 - p));
+                    let dl_dgate =
+                        dl_dp * (pred.p0 - pred.p1) * pred.gate * (1.0 - pred.gate);
+                    let dl_dexpert0 =
+                        dl_dp * pred.gate * pred.p0 * (1.0 - pred.p0) / 4.0;
+                    let dl_dexpert1 =
+                        dl_dp * (1.0 - pred.gate) * pred.p1 * (1.0 - pred.p1) / 4.0;
+
+                    for (feature, &value) in pred.features.iter().enumerate() {
+                        gate_grad[pred.bucket][feature] += dl_dgate * value;
+                    }
+                    // The gate is the sole path from expert loss to recurrent
+                    // state. Its hidden coefficient is read before any update.
+                    state_credit += dl_dgate * self.head.gate[pred.bucket][2];
+                    expert_grad.push((pred.first, frame.a, frame.b, bit, dl_dexpert0));
+                    expert_grad.push((pred.second, frame.a, frame.b, bit, dl_dexpert1));
+                }
+
+                let dz = state_credit * (1.0 - frame.h * frame.h);
+                recurrent_grad[0] += dz * frame.previous_h;
+                recurrent_grad[1] += dz * signal(frame.b);
+                recurrent_grad[2] += dz * anf_monomial(frame.a, frame.b);
+                next_state_credit = dz * self.head.recurrence[0];
+            }
+
+            let denom = (frames.len() * 8) as f64;
+            if !window_loss_nats.is_finite()
+                || !recurrent_grad.iter().all(|gradient| gradient.is_finite())
+                || !gate_grad
+                    .iter()
+                    .flatten()
+                    .all(|gradient| gradient.is_finite())
+                || !expert_grad.iter().all(|entry| {
+                    let normalized = entry.4 / denom;
+                    normalized.is_finite() && normalized.abs() <= 32.0
+                })
+            {
+                return Err("nonfinite or unbounded BPTT gradient".into());
+            }
+
+            // Preflight overflow before touching any trainable parameter.
+            let steps = u64::try_from(frames.len())?;
+            let targets = steps.checked_mul(8).ok_or("BPTT target overflow")?;
+            let updated_targets = self
+                .head
+                .counters
+                .supervised_target_bits
+                .checked_add(targets)
+                .ok_or("BPTT supervised count overflow")?;
+            let updated_experts = self
+                .head
+                .counters
+                .routed_expert_updates
+                .checked_add(targets.checked_mul(2).ok_or("BPTT expert count overflow")?)
+                .ok_or("BPTT expert count overflow")?;
+            let updated_steps = self
+                .head
+                .counters
+                .recurrence_steps
+                .checked_add(steps)
+                .ok_or("BPTT recurrence count overflow")?;
+
+            // Physical disk-page updates, not synthetic capacity accounting.
+            for (page, a, b, bit, derivative) in expert_grad {
+                self.atlas
+                    .apply_expert_gradient(page, a, b, bit, derivative / denom)?;
+            }
+            for (bucket, derivatives) in gate_grad.iter().enumerate() {
+                for (feature, &derivative) in derivatives.iter().enumerate() {
+                    let before = self.head.gate[bucket][feature];
+                    let after = (before - ROUTER_LR * derivative / denom).clamp(-4.0, 4.0);
+                    if after != before {
+                        let mask = 1u8 << feature;
+                        if self.head.touched[bucket] & mask == 0 {
+                            self.head.touched[bucket] |= mask;
+                            self.head.counters.unique_router_parameters += 1;
+                        }
+                        self.head.counters.router_parameter_updates += 1;
+                    }
+                    self.head.gate[bucket][feature] = after;
+                }
+            }
+            for (index, &derivative) in recurrent_grad.iter().enumerate() {
+                let before = self.head.recurrence[index];
+                let after = (before - RECURRENT_LR * derivative / denom).clamp(-2.0, 2.0);
+                if after != before {
+                    self.head.counters.recurrent_parameter_updates += 1;
+                }
+                self.head.recurrence[index] = after;
+            }
+            self.head.counters.supervised_target_bits = updated_targets;
+            self.head.counters.routed_expert_updates = updated_experts;
+            self.head.counters.recurrence_steps = updated_steps;
+            total_loss += window_loss_nats / std::f64::consts::LN_2;
+            total_events = total_events
+                .checked_add(steps)
+                .ok_or("BPTT document event overflow")?;
+        }
+        if !total_loss.is_finite() {
+            return Err("nonfinite BPTT total loss".into());
+        }
+        Ok((total_loss, total_events))
+    }
+}
+
+#[cfg(test)]
+mod paged_bptt_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn model() -> (MorAnfRecurrent, std::path::PathBuf) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "sml-paged-bptt-{}-{now}",
+            std::process::id()
+        ));
+        let model = MorAnfRecurrent::create(
+            &root,
+            SparseConfig {
+                pages: 32,
+                max_cached_pages: 3,
+                learning_rate: 0.25,
+            },
+        )
+        .unwrap();
+        (model, root)
+    }
+
+    #[test]
+    fn trainable_paged_experts_and_bptt_head_improve_supervised_loss() {
+        let (mut model, root) = model();
+        let document: Vec<u8> = (0..98)
+            .map(|i| if i % 5 < 3 { b'a' } else { b'b' })
+            .collect();
+        let (before, events) = model.evaluate_document(&document).unwrap();
+        assert_eq!(events, 96);
+        for _ in 0..16 {
+            let (_, trained_events) = model.train_document_bptt(&document, 32).unwrap();
+            assert_eq!(trained_events, events);
+        }
+        let (after, _) = model.evaluate_document(&document).unwrap();
+        assert!(after < before, "before={before} after={after}");
+        let head = model.counters();
+        let atlas = model.atlas_counters();
+        assert_eq!(head.supervised_target_bits, 16 * 96 * 8);
+        assert_eq!(head.routed_expert_updates, 2 * head.supervised_target_bits);
+        assert_eq!(head.recurrence_steps, 16 * 96);
+        assert!(head.router_parameter_updates > 0);
+        assert!(head.recurrent_parameter_updates > 0);
+        assert!(atlas.distinct_updated_parameters > 0);
+        assert_eq!(atlas.supervised_bits, head.routed_expert_updates);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recurrent_bptt_gradient_matches_finite_difference_on_paged_experts() {
+        let (mut model, root) = model();
+        let warmup = b"abcddcbaabcddcbaabcddcba";
+        for _ in 0..8 {
+            model.train_document_bptt(warmup, 32).unwrap();
+        }
+        let probe = b"abacabadabacaba";
+        let epsilon = 1e-5;
+        let original = model.head.recurrence[1];
+
+        model.head.recurrence[1] = original + epsilon;
+        let (plus, events) = model.evaluate_document(probe).unwrap();
+        model.head.recurrence[1] = original - epsilon;
+        let (minus, _) = model.evaluate_document(probe).unwrap();
+        model.head.recurrence[1] = original;
+
+        let numerical =
+            (plus - minus) / (2.0 * epsilon) * std::f64::consts::LN_2 / (events * 8) as f64;
+        model.train_document_bptt(probe, 512).unwrap();
+        let analytical = (original - model.head.recurrence[1]) / RECURRENT_LR;
+        assert!(
+            (analytical - numerical).abs() < 1e-6,
+            "analytical={analytical} numerical={numerical}"
+        );
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bptt_rejects_unbounded_windows_without_mutation() {
+        let (mut model, root) = model();
+        let before = model.counters();
+        assert!(model.train_document_bptt(b"ab", 8).is_err());
+        assert!(model.train_document_bptt(b"abc", 0).is_err());
+        assert!(model
+            .train_document_bptt(b"abcd", PAGED_BPTT_MAX_BYTES + 1)
+            .is_err());
+        assert_eq!(before, model.counters());
+        assert_eq!(model.atlas_counters().distinct_updated_parameters, 0);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
