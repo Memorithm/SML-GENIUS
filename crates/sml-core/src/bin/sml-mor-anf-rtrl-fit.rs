@@ -167,8 +167,12 @@ fn execute(
     let mut rtrl3_clipped = 0u64;
     let mut rtlr = if matches!(
         mode,
-        PilotMode::RtlrElastic1 | PilotMode::RtlrElastic8 | PilotMode::RtlrElastic16
-            | PilotMode::RtlrV2_1 | PilotMode::RtlrV2_8 | PilotMode::RtlrV2_16
+        PilotMode::RtlrElastic1
+            | PilotMode::RtlrElastic8
+            | PilotMode::RtlrElastic16
+            | PilotMode::RtlrV2_1
+            | PilotMode::RtlrV2_8
+            | PilotMode::RtlrV2_16
     ) {
         let max_active = match mode {
             PilotMode::RtlrElastic1 | PilotMode::RtlrV2_1 => 1,
@@ -189,11 +193,15 @@ fn execute(
             mode,
             PilotMode::RtlrV2_1 | PilotMode::RtlrV2_8 | PilotMode::RtlrV2_16
         ) {
-            RtlrElastic::new_v2(config, RtlrV2Policy {
-                ewma_alpha: 0.25,
-                plateau_tolerance_bpc: 0.05,
-                marginal_cost_bpc_per_cell: 0.001,
-            }, &output.join("rtlr_v2_dormant"))?
+            RtlrElastic::new_v2(
+                config,
+                RtlrV2Policy {
+                    ewma_alpha: 0.25,
+                    plateau_tolerance_bpc: 0.05,
+                    marginal_cost_bpc_per_cell: 0.001,
+                },
+                &output.join("rtlr_v2_dormant"),
+            )?
         } else {
             RtlrElastic::new(config)?
         };
@@ -432,14 +440,22 @@ fn execute(
         )?;
         manifest.sync_all()?;
         if state.is_v2() {
-            let mut v2 = OpenOptions::new().create_new(true).write(true)
+            let mut v2 = OpenOptions::new()
+                .create_new(true)
+                .write(true)
                 .open(output.join("rtlr_v2_stats.tsv"))?;
             writeln!(v2, "version\tdocuments\tparks\trestores\tpeak_parked\tshadow_train_docs\tactive\tpeak_active\tmax_active")?;
-            writeln!(v2, "RTLR_ELASTIC_V2\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                stats.training_documents, stats.bank_parks,
-                stats.bank_restores, stats.peak_parked,
-                stats.train_shadow_documents, state.active(),
-                stats.peak_active, state.capacity()
+            writeln!(
+                v2,
+                "RTLR_ELASTIC_V2\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                stats.training_documents,
+                stats.bank_parks,
+                stats.bank_restores,
+                stats.peak_parked,
+                stats.train_shadow_documents,
+                state.active(),
+                stats.peak_active,
+                state.capacity()
             )?;
             v2.sync_all()?;
         }
