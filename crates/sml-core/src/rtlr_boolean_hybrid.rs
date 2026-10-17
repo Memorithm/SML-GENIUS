@@ -91,7 +91,11 @@ impl RtlrBooleanHybrid {
     /// moment of this query, not a learned or inferred delay identity.
     #[must_use]
     pub fn expert_weights(&self) -> Vec<f64> {
-        let largest = self.scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let largest = self
+            .scores
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let raw: Vec<f64> = self.scores.iter().map(|v| (v - largest).exp()).collect();
         let total: f64 = raw.iter().sum();
         raw.into_iter().map(|v| v / total).collect()
@@ -152,7 +156,10 @@ impl RtlrBooleanHybrid {
     /// bounded multiplicative-weights update; RTRL exact-local credit is
     /// chain-rule scaled by the *previous* recurrent mixture weight.
     pub fn learn_target(&mut self, positive: bool) -> Result<()> {
-        let pending = self.pending.take().ok_or("missing TRAIN forward position")?;
+        let pending = self
+            .pending
+            .take()
+            .ok_or("missing TRAIN forward position")?;
         let target = f64::from(u8::from(positive));
         let recurrent_p = pending.experts[0];
         let grad_mixed = (pending.mixed - target) / (pending.mixed * (1.0 - pending.mixed));
@@ -167,7 +174,11 @@ impl RtlrBooleanHybrid {
             let likelihood = if positive { p } else { 1.0 - p };
             *score += self.eta * likelihood.ln();
         }
-        let max_score = self.scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let max_score = self
+            .scores
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         for score in &mut self.scores {
             *score = (*score - max_score).max(-64.0);
         }
@@ -221,13 +232,9 @@ mod tests {
             seed: 17,
         };
         for delays in [vec![], vec![0], vec![16, 16], vec![128, 16], vec![1025]] {
-            assert!(RtlrBooleanHybrid::new(
-                RtlrElastic::new(cfg).unwrap(),
-                1024,
-                delays,
-                0.25
-            )
-            .is_err());
+            assert!(
+                RtlrBooleanHybrid::new(RtlrElastic::new(cfg).unwrap(), 1024, delays, 0.25).is_err()
+            );
         }
         let h = new_hybrid(vec![1, 16, 128, 1023]);
         assert_eq!(h.boolean_bytes(), 128);
@@ -278,7 +285,10 @@ mod tests {
         }
         let selector = h.expert_weights();
         // Index 2 corresponds to the predeclared lag16 candidate.
-        assert!(selector[2] > 0.98, "selector did not learn lag16: {selector:?}");
+        assert!(
+            selector[2] > 0.98,
+            "selector did not learn lag16: {selector:?}"
+        );
         assert_eq!(h.train_updates(), 3976);
         for i in 5000..6000 {
             let p = h.advance_inference(bytes[i - 2], bytes[i - 1]).unwrap();
