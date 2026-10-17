@@ -547,7 +547,6 @@ mod tests {
     }
 }
 
-
 /// Maximum number of consecutive predicted bytes retained for an exact
 /// frozen-weight backward pass. Long documents use truncated BPTT windows.
 pub const PAGED_BPTT_MAX_BYTES: usize = 512;
@@ -571,11 +570,7 @@ impl MorAnfRecurrent {
     /// No claim of learned discrete routing, 25B training, or chat readiness.
     /// The recurrent state resets at every document AND truncation boundary.
     /// The result is summed binary cross-entropy in bits and predicted bytes.
-    pub fn train_document_bptt(
-        &mut self,
-        text: &[u8],
-        window_bytes: usize,
-    ) -> Result<(f64, u64)> {
+    pub fn train_document_bptt(&mut self, text: &[u8], window_bytes: usize) -> Result<(f64, u64)> {
         if text.len() < 3 || !(1..=PAGED_BPTT_MAX_BYTES).contains(&window_bytes) {
             return Err("invalid BPTT document length or bounded window".into());
         }
@@ -621,12 +616,9 @@ impl MorAnfRecurrent {
                     let p = pred.p.clamp(1e-12, 1.0 - 1e-12);
                     window_loss_nats -= y * p.ln() + (1.0 - y) * (1.0 - p).ln();
                     let dl_dp = (p - y) / (p * (1.0 - p));
-                    let dl_dgate =
-                        dl_dp * (pred.p0 - pred.p1) * pred.gate * (1.0 - pred.gate);
-                    let dl_dexpert0 =
-                        dl_dp * pred.gate * pred.p0 * (1.0 - pred.p0) / 4.0;
-                    let dl_dexpert1 =
-                        dl_dp * (1.0 - pred.gate) * pred.p1 * (1.0 - pred.p1) / 4.0;
+                    let dl_dgate = dl_dp * (pred.p0 - pred.p1) * pred.gate * (1.0 - pred.gate);
+                    let dl_dexpert0 = dl_dp * pred.gate * pred.p0 * (1.0 - pred.p0) / 4.0;
+                    let dl_dexpert1 = dl_dp * (1.0 - pred.gate) * pred.p1 * (1.0 - pred.p1) / 4.0;
 
                     for (feature, &value) in pred.features.iter().enumerate() {
                         gate_grad[pred.bucket][feature] += dl_dgate * value;
@@ -735,10 +727,8 @@ mod paged_bptt_tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "sml-paged-bptt-{}-{now}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("sml-paged-bptt-{}-{now}", std::process::id()));
         let model = MorAnfRecurrent::create(
             &root,
             SparseConfig {
