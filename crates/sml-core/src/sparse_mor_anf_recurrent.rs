@@ -8,6 +8,7 @@
 //! ANF weight learner. Monomials are fixed; gate/readout weights are learned.
 use crate::{
     elastic_ngram_paged_sha::{hex, Sha256},
+    rtlr_elastic::RtlrElastic,
     rtrl3_elastic::{ElasticRtrl3, MorRtrl3Update},
     sparse_gradient_atlas::{SparseConfig, SparseGradientAtlas},
 };
@@ -312,6 +313,82 @@ impl MorAnfRecurrent {
         }
         if !loss.is_finite() {
             return Err("nonfinite training document loss".into());
+        }
+        Ok((loss, events))
+    }
+
+    /// RTLR-ELASTIC: exact local RTRL on dynamically active independent
+    /// recurrent cells. Every bit still updates the *same* physical two
+    /// expert pages and same MOR gate as RTRL-2. Topology changes only
+    /// after observing the complete TRAIN document loss.
+    pub fn train_document_rtlr_elastic_paged(
+        &mut self,
+        text: &[u8],
+        recurrent: &mut RtlrElastic,
+    ) -> Result<(f64, u64)> {
+        if text.len() < 3 {
+            return Err("RTLR-ELASTIC paged training needs three bytes".into());
+        }
+        recurrent.reset_state();
+        let mut loss = 0.0f64;
+        let mut events = 0u64;
+        for triple in text.windows(3) {
+            let h = recurrent.advance_train(triple[0], triple[1])?;
+            let trace = Trace { h, dh: [0.0; 3] };
+            let mut credit = 0.0f64;
+            for bit in 0..8 {
+                let (cost, local) = self.train_target(
+                    triple[0], triple[1], bit,
+                    (triple[2] >> bit) & 1 == 1, trace,
+                )?;
+                loss += cost;
+                credit += local;
+            }
+            let changes = recurrent.learn_credit(credit)?;
+            self.head.counters.recurrent_parameter_updates = self
+                .head.counters.recurrent_parameter_updates
+                .checked_add(changes)
+                .ok_or("RTLR-ELASTIC recurrent counter overflow")?;
+            self.head.counters.recurrence_steps += 1;
+            events += 1;
+        }
+        if !loss.is_finite() || events != (text.len() - 2) as u64 {
+            return Err("RTLR-ELASTIC nonfinite or mismatched training".into());
+        }
+        recurrent.observe_train_document(loss / events as f64)?;
+        Ok((loss, events))
+    }
+
+    /// Frozen, independent-document recurrent state, unchanged MOR experts.
+    /// Policy decisions and elastic topology are never updated on heldout.
+    pub fn evaluate_document_rtlr_elastic_paged(
+        &mut self,
+        text: &[u8],
+        recurrent: &RtlrElastic,
+    ) -> Result<(f64, u64)> {
+        if text.len() < 3 {
+            return Err("RTLR-ELASTIC paged evaluation needs three bytes".into());
+        }
+        let mut state = recurrent.clone();
+        state.reset_state();
+        let before = self.head.counters;
+        let mut loss = 0.0f64;
+        let mut events = 0u64;
+        for triple in text.windows(3) {
+            let h = state.advance_inference(triple[0], triple[1])?;
+            let trace = Trace { h, dh: [0.0; 3] };
+            for bit in 0..8 {
+                let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
+                loss += if triple[2] & (1 << bit) != 0 {
+                    -p.log2()
+                } else {
+                    -(1.0 - p).log2()
+                };
+            }
+            events += 1;
+        }
+        if !loss.is_finite() || before != self.head.counters {
+            return Err("RTLR-ELASTIC heldout mutated parameters or nonfinite loss".into());
         }
         Ok((loss, events))
     }
@@ -1315,6 +1392,83 @@ mod paged_bptt_tests {
             (analytical - numerical).abs() < 1e-6,
             "analytical={analytical} numerical={numerical}"
         );
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rtlr_elastic_single_cell_is_identical_to_original_paged_rtrl2() {
+        use crate::rtlr_elastic::RtlrElasticConfig;
+        let (mut baseline, path_old) = model();
+        let (mut joined, path_new) = model();
+        let mut recurrence = RtlrElastic::new(RtlrElasticConfig {
+            max_active: 1,
+            learning_rate: 0.005,
+            grow_above_bpc: 4.1,
+            shrink_below_bpc: 3.8,
+            patience: 2,
+            warmup_documents: 2,
+            seed: 17,
+        }).unwrap();
+        let text = b"ababaccccccabababababaadddabbccaaadadadadab";
+        let (old_loss, old_events) = baseline.train_document(text).unwrap();
+        let (new_loss, new_events) = joined
+            .train_document_rtlr_elastic_paged(text, &mut recurrence)
+            .unwrap();
+        assert_eq!(old_loss, new_loss);
+        assert_eq!(old_events, new_events);
+        assert_eq!(baseline.counters(), joined.counters());
+        assert_eq!(
+            baseline.atlas_counters().parameter_updates,
+            joined.atlas_counters().parameter_updates
+        );
+        let (old_dev, old_eval_events) = baseline.evaluate_document(text).unwrap();
+        let counts = joined.counters();
+        let stats = recurrence.stats();
+        let (new_dev, new_eval_events) = joined
+            .evaluate_document_rtlr_elastic_paged(text, &recurrence)
+            .unwrap();
+        assert_eq!(old_dev, new_dev);
+        assert_eq!(old_eval_events, new_eval_events);
+        assert_eq!(counts, joined.counters());
+        assert_eq!(stats, recurrence.stats());
+        drop(baseline);
+        drop(joined);
+        fs::remove_dir_all(path_old).unwrap();
+        fs::remove_dir_all(path_new).unwrap();
+    }
+
+    #[test]
+    fn rtlr_elastic_dynamic_states_use_real_expert_pages_read_only_dev() {
+        use crate::rtlr_elastic::RtlrElasticConfig;
+        let (mut model, root) = model();
+        let mut recurrence = RtlrElastic::new(RtlrElasticConfig {
+            max_active: 4,
+            learning_rate: 0.005,
+            grow_above_bpc: 0.05,
+            shrink_below_bpc: 0.01,
+            patience: 1,
+            warmup_documents: 0,
+            seed: 17,
+        }).unwrap();
+        let text = b"abcabcabcabcabcabcabcabcabcabcabcabcabcabc";
+        for _ in 0..5 {
+            let (loss, events) = model
+                .train_document_rtlr_elastic_paged(text, &mut recurrence)
+                .unwrap();
+            assert!(loss.is_finite());
+            assert_eq!(events, (text.len() - 2) as u64);
+        }
+        assert_eq!(recurrence.active(), 4);
+        assert_eq!(recurrence.stats().grown, 3);
+        let counters = model.counters();
+        assert!(counters.unique_router_parameters > 0);
+        assert!(counters.recurrent_parameter_updates > 0);
+        assert!(model.atlas_counters().distinct_updated_parameters > 0);
+        let (first, _) = model.evaluate_document_rtlr_elastic_paged(text, &recurrence).unwrap();
+        let (second, _) = model.evaluate_document_rtlr_elastic_paged(text, &recurrence).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(counters, model.counters());
         drop(model);
         fs::remove_dir_all(root).unwrap();
     }
