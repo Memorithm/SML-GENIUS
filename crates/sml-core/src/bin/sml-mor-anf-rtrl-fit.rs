@@ -54,6 +54,8 @@ enum PilotMode {
     RtlrV2_1,
     RtlrV2_8,
     RtlrV2_16,
+    RtlrV3_8,
+    RtlrV3_16,
 }
 
 impl PilotMode {
@@ -85,6 +87,8 @@ impl PilotMode {
                 | Self::RtlrV2_1
                 | Self::RtlrV2_8
                 | Self::RtlrV2_16
+                | Self::RtlrV3_8
+                | Self::RtlrV3_16
         )
     }
 }
@@ -173,11 +177,13 @@ fn execute(
             | PilotMode::RtlrV2_1
             | PilotMode::RtlrV2_8
             | PilotMode::RtlrV2_16
+            | PilotMode::RtlrV3_8
+            | PilotMode::RtlrV3_16
     ) {
         let max_active = match mode {
             PilotMode::RtlrElastic1 | PilotMode::RtlrV2_1 => 1,
-            PilotMode::RtlrElastic8 | PilotMode::RtlrV2_8 => 8,
-            PilotMode::RtlrElastic16 | PilotMode::RtlrV2_16 => 16,
+            PilotMode::RtlrElastic8 | PilotMode::RtlrV2_8 | PilotMode::RtlrV3_8 => 8,
+            PilotMode::RtlrElastic16 | PilotMode::RtlrV2_16 | PilotMode::RtlrV3_16 => 16,
             _ => unreachable!(),
         };
         let config = RtlrElasticConfig {
@@ -189,7 +195,14 @@ fn execute(
             warmup_documents: 2,
             seed: 17,
         };
-        let model = if matches!(
+        let policy = RtlrV2Policy {
+            ewma_alpha: 0.25,
+            plateau_tolerance_bpc: 0.05,
+            marginal_cost_bpc_per_cell: 0.001,
+        };
+        let model = if matches!(mode, PilotMode::RtlrV3_8 | PilotMode::RtlrV3_16) {
+            RtlrElastic::new_v3(config, policy, &output.join("rtlr_v2_dormant"))?
+        } else if matches!(
             mode,
             PilotMode::RtlrV2_1 | PilotMode::RtlrV2_8 | PilotMode::RtlrV2_16
         ) {
@@ -420,6 +433,7 @@ fn execute(
             // gate, active recurrence and dormant bank reopen identically.
             let (mut restored, recurrent) = MorAnfRecurrent::reopen_rtlr_v2(output, config)?;
             if restored.counters() != model.counters()
+                || recurrent.is_multiscale() != state.is_multiscale()
                 || recurrent.stats() != state.stats()
                 || recurrent.active() != state.active()
             {
@@ -529,6 +543,8 @@ fn execute(
         PilotMode::RtlrV2_1 => "sml_mor_anf_rtlr_v2_max1",
         PilotMode::RtlrV2_8 => "sml_mor_anf_rtlr_v2_max8",
         PilotMode::RtlrV2_16 => "sml_mor_anf_rtlr_v2_max16",
+        PilotMode::RtlrV3_8 => "sml_mor_anf_rtlr_v3_multiscale_max8",
+        PilotMode::RtlrV3_16 => "sml_mor_anf_rtlr_v3_multiscale_max16",
     };
     let recurrent_capacity = rtlr.as_ref().map_or_else(
         || {
@@ -595,6 +611,8 @@ fn execute(
         PilotMode::RtlrV2_1 => "SML_MOR_ANF_RTLR_V2_1_DONE",
         PilotMode::RtlrV2_8 => "SML_MOR_ANF_RTLR_V2_8_DONE",
         PilotMode::RtlrV2_16 => "SML_MOR_ANF_RTLR_V2_16_DONE",
+        PilotMode::RtlrV3_8 => "SML_MOR_ANF_RTLR_V3_8_DONE",
+        PilotMode::RtlrV3_16 => "SML_MOR_ANF_RTLR_V3_16_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -738,8 +756,16 @@ fn main() {
             Path::new(corpus), Path::new(ledger), digest, Path::new(output),
             PilotMode::RtlrV2_16,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-v3-8" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrV3_8,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-v3-16" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrV3_16,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16|--pilot-rtlr-elastic1|--pilot-rtlr-elastic8|--pilot-rtlr-elastic16|--pilot-rtlr-v2-1|--pilot-rtlr-v2-8|--pilot-rtlr-v2-16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16|--pilot-rtlr-elastic1|--pilot-rtlr-elastic8|--pilot-rtlr-elastic16|--pilot-rtlr-v2-1|--pilot-rtlr-v2-8|--pilot-rtlr-v2-16|--pilot-rtlr-v3-8|--pilot-rtlr-v3-16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
