@@ -406,17 +406,21 @@ mod tests {
         let bytes = stream(MAX_LAG + 128, 0x91f8_31a2_00c7_6d15);
         let i = MAX_LAG;
         let original = LabelTask::Anf2.label(&bytes, i);
-        assert_eq!(original, f64::from((bytes[i - 2] & bytes[i - 1]).count_ones() & 1));
+        assert_eq!(
+            original,
+            f64::from((bytes[i - 2] & bytes[i - 1]).count_ones() & 1)
+        );
         for (task, lag) in [
             (LabelTask::AnfLag16, 16usize),
             (LabelTask::AnfLag128, 128),
             (LabelTask::AnfLag1023, 1023),
         ] {
-            let expected = f64::from(
-                (bytes[i - lag - 1] & bytes[i - lag]).count_ones() & 1,
-            );
+            let expected = f64::from((bytes[i - lag - 1] & bytes[i - lag]).count_ones() & 1);
             assert_eq!(task.label(&bytes, i), expected);
-            assert_eq!(task.label(&bytes, i), LabelTask::Anf2.label(&bytes, i - lag + 1));
+            assert_eq!(
+                task.label(&bytes, i),
+                LabelTask::Anf2.label(&bytes, i - lag + 1)
+            );
         }
     }
 
