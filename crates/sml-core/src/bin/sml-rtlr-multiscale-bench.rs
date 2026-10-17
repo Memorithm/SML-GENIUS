@@ -14,7 +14,13 @@ fn mix(mut x: u64) -> u64 {
 }
 
 fn stream(len: usize, seed: u64) -> Vec<u8> {
-    (0..len).map(|i| mix(seed.wrapping_add(i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)) as u8).collect()
+    (0..len)
+        .map(|i| {
+            mix(seed
+                .wrapping_add(i as u64)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15)) as u8
+        })
+        .collect()
 }
 
 fn sample_label(bytes: &[u8], i: usize) -> f64 {
@@ -32,13 +38,22 @@ fn prob(feature: f64) -> f64 {
 
 fn loss(p: f64, y: f64) -> f64 {
     let p = p.clamp(1e-12, 1.0 - 1e-12);
-    if y == 1.0 { -p.log2() } else { -(1.0 - p).log2() }
+    if y == 1.0 {
+        -p.log2()
+    } else {
+        -(1.0 - p).log2()
+    }
 }
 
 fn vm_hwm_kib() -> Option<u64> {
-    fs::read_to_string("/proc/self/status").ok()?.lines()
+    fs::read_to_string("/proc/self/status")
+        .ok()?
+        .lines()
         .find(|s| s.starts_with("VmHWM:"))?
-        .split_whitespace().nth(1)?.parse().ok()
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
 }
 
 fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
@@ -46,15 +61,25 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
         "scalar" => 1,
         "v2-8" | "v3-8" => 8,
         "v3-16" => 16,
-        _ => return Err("usage: sml-rtlr-multiscale-bench MODE scalar|v2-8|v3-8|v3-16 SEED BANK_PATH".into()),
+        _ => {
+            return Err(
+                "usage: sml-rtlr-multiscale-bench MODE scalar|v2-8|v3-8|v3-16 SEED BANK_PATH"
+                    .into(),
+            )
+        }
     };
     let config = RtlrElasticConfig {
-        max_active: width, learning_rate: 0.005,
-        grow_above_bpc: 4.1, shrink_below_bpc: 3.8,
-        patience: 2, warmup_documents: 2, seed,
+        max_active: width,
+        learning_rate: 0.005,
+        grow_above_bpc: 4.1,
+        shrink_below_bpc: 3.8,
+        patience: 2,
+        warmup_documents: 2,
+        seed,
     };
     let policy = RtlrV2Policy {
-        ewma_alpha: 0.25, plateau_tolerance_bpc: 0.05,
+        ewma_alpha: 0.25,
+        plateau_tolerance_bpc: 0.05,
         marginal_cost_bpc_per_cell: 0.001,
     };
     let mut model = match mode {
@@ -102,8 +127,11 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
         dev_loss += loss(prob(z), sample_label(&heldout, i));
     }
     let dev_s = eval_start.elapsed().as_secs_f64();
-    if before != model.stats() || !total_train.is_finite() || !dev_loss.is_finite()
-        || train_s <= 0.0 || dev_s <= 0.0
+    if before != model.stats()
+        || !total_train.is_finite()
+        || !dev_loss.is_finite()
+        || train_s <= 0.0
+        || dev_s <= 0.0
     {
         return Err("invalid or mutable read-only RTLR benchmark".into());
     }
