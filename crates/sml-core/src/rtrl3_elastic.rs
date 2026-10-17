@@ -76,6 +76,14 @@ pub struct Rtrl3Metrics {
     pub maximum_gradient_norm: f64,
 }
 
+/// Diagnostics for the shared physical MOR / ANF RTRL-3 recurrent update.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MorRtrl3Update {
+    pub changed_parameters: u64,
+    pub clipped: bool,
+    pub preclip_gradient_norm: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct ElasticRtrl3 {
     cfg: Rtrl3Config,
@@ -160,6 +168,137 @@ impl ElasticRtrl3 {
 
     pub fn config(&self) -> Rtrl3Config {
         self.cfg
+    }
+
+    /// Instantiate recurrent state for the original physical paged MOR head.
+    /// Identical local [0.65, 0.3, 0.2] coefficients make H=1,M=0
+    /// an exact control of the existing RTRL-2 scalar trajectory.
+    pub fn for_mor(cfg: Rtrl3Config) -> Result<Self> {
+        let mut model = Self::new(cfg)?;
+        for weights in &mut model.local {
+            *weights = [0.65, 0.3, 0.2];
+        }
+        Ok(model)
+    }
+
+    /// State and eligibility evolve before each of the 8 MOR target bits.
+    /// This method never changes either expert's physical page weights.
+    pub fn advance_mor(&mut self, a: u8, b: u8) -> Result<f64> {
+        self.advance(a, b)?;
+        let mean = self.mean_state();
+        if !mean.is_finite() {
+            return Err("nonfinite RTRL-3 MOR recurrence".into());
+        }
+        Ok(mean)
+    }
+
+    /// Apply the recurrent credit produced by the *same physical* MOR router
+    /// loss. Expert and router weight updates occur in the caller exactly
+    /// as in RTRL-2; no unrelated standalone logistic readout is trained.
+    pub fn learn_mor_credit(&mut self, credit: f64) -> Result<MorRtrl3Update> {
+        if !credit.is_finite() {
+            return Err("nonfinite MOR recurrent credit".into());
+        }
+        let h = self.cfg.hidden;
+        let mut gradient = vec![0.0f64; LOCAL * h];
+        if h == 1 && self.cfg.mixing_rank == 0 {
+            for (p, value) in gradient.iter_mut().enumerate() {
+                *value = credit * self.exact_scalar[p];
+            }
+        } else {
+            for factor in &self.factors {
+                let mean_u = factor.u.iter().sum::<f64>() / h as f64;
+                for (p, value) in gradient.iter_mut().enumerate() {
+                    *value += credit * mean_u * factor.v[p] / self.cfg.eligibility_rank as f64;
+                }
+            }
+        }
+        let norm = vector_norm(&gradient);
+        if !norm.is_finite() {
+            return Err("nonfinite RTRL-3 MOR norm".into());
+        }
+        let clipped = norm > self.cfg.recurrent_clip_norm;
+        let scale = if clipped {
+            self.cfg.recurrent_clip_norm / norm
+        } else {
+            1.0
+        };
+        let mut updated = 0u64;
+        for (j, weights) in self.local.iter_mut().enumerate() {
+            for (p, weight) in weights.iter_mut().enumerate() {
+                let before = *weight;
+                let after = if h == 1 && self.cfg.mixing_rank == 0 && !clipped {
+                    // Exact RTRL-2 left-associative recurrent SGD arithmetic.
+                    (before - self.cfg.learning_rate * credit * self.exact_scalar[p])
+                        .clamp(-2.0, 2.0)
+                } else {
+                    (before - self.cfg.learning_rate * gradient[LOCAL * j + p] * scale)
+                        .clamp(-2.0, 2.0)
+                };
+                if !after.is_finite() {
+                    return Err("nonfinite RTRL-3 MOR recurrent parameter".into());
+                }
+                if after != before {
+                    updated += 1;
+                }
+                *weight = after;
+            }
+        }
+        Ok(MorRtrl3Update {
+            changed_parameters: updated,
+            clipped,
+            preclip_gradient_norm: norm,
+        })
+    }
+
+    /// Read-only inference path: advance only the recurrent state, not
+    /// eligibility sketches, trained weights or random-sign generators.
+    /// Caller uses a reset clone per independent document.
+    pub fn advance_mor_inference(&mut self, a: u8, b: u8) -> Result<f64> {
+        let h = self.cfg.hidden;
+        let r = self.cfg.mixing_rank;
+        let previous = self.h.clone();
+        let mut projected = vec![0.0; r];
+        for (k, value) in projected.iter_mut().enumerate() {
+            for (j, &state) in previous.iter().enumerate() {
+                *value += self.coupling_v[k * h + j] * state / h as f64;
+            }
+        }
+        for (j, state) in self.h.iter_mut().enumerate() {
+            let mut z = self.local[j][0] * previous[j]
+                + self.local[j][1] * signal(b)
+                + self.local[j][2] * anf(a, b);
+            for (k, &value) in projected.iter().enumerate() {
+                z += self.coupling_u[j * r + k] * value;
+            }
+            *state = z.tanh();
+        }
+        let mean = self.mean_state();
+        if !mean.is_finite() {
+            return Err("nonfinite RTRL-3 MOR inference state".into());
+        }
+        Ok(mean)
+    }
+
+    /// Persist the actual local recurrent weights and configuration as
+    /// an auditable sidecar without storing volatile eligibility sketches.
+    /// The fixed U,V recurrence coupling is deterministically recreated.
+    pub fn write_mor_weights(&self, path: &std::path::Path) -> Result<()> {
+        use std::io::Write;
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        writeln!(output, "RTRL3_MOR_LOCAL_V1\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.cfg.hidden, self.cfg.eligibility_rank, self.cfg.mixing_rank,
+            self.cfg.learning_rate, self.cfg.recurrent_clip_norm, self.cfg.seed)?;
+        writeln!(output, "index\trecurrent\tsignal\tanf")?;
+        for (j, weights) in self.local.iter().enumerate() {
+            writeln!(output, "{j}\t{:.17e}\t{:.17e}\t{:.17e}",
+                weights[0], weights[1], weights[2])?;
+        }
+        output.sync_all()?;
+        Ok(())
     }
 
     /// Actual f64 payload, excluding Vec metadata; O(K*H + H*r), never H*3H.
@@ -542,6 +681,57 @@ mod tests {
             let (after, after_events) = model.evaluate_document(b"abacabadabacaba").unwrap();
             assert_eq!(events, after_events);
             assert_eq!(before, after);
+        }
+    }
+
+    #[test]
+    fn mor_scalar_exact_online_gradient_and_inference_match_RTRL2_equations() {
+        let mut model = ElasticRtrl3::for_mor(config(1, 0, 1, 1)).unwrap();
+        model.cfg.recurrent_clip_norm = 1e30;
+        let mut reference = [0.65, 0.3, 0.2];
+        let mut state = 0.0;
+        let mut sensitivity = [0.0f64; 3];
+        for (a, b) in [(b'a', b'z'), (b'c', b'd'), (b'e', b'f'), (b'g', b'h')] {
+            let prev = state;
+            state = (reference[0] * prev + reference[1] * signal(b)
+                + reference[2] * anf(a, b)).tanh();
+            let d = 1.0 - state * state;
+            let direct = [prev, signal(b), anf(a, b)];
+            for (p, value) in sensitivity.iter_mut().enumerate() {
+                *value = d * (direct[p] + reference[0] * *value);
+            }
+            let actual = model.advance_mor(a, b).unwrap();
+            assert_eq!(actual, state);
+            let credit = -0.25;
+            let update = model.learn_mor_credit(credit).unwrap();
+            assert!(!update.clipped);
+            for (p, value) in reference.iter_mut().enumerate() {
+                *value = (*value - 0.005 * credit * sensitivity[p]).clamp(-2.0, 2.0);
+            }
+            assert_eq!(model.local[0], reference);
+        }
+        let mut inference = model.clone();
+        inference.reset_state();
+        let mut training_trace = model.clone();
+        training_trace.reset_state();
+        for (a, b) in [(b'a', b'b'), (b'c', b'd')] {
+            let actual = inference.advance_mor_inference(a, b).unwrap();
+            let expect = training_trace.advance_mor(a, b).unwrap();
+            assert_eq!(actual, expect);
+        }
+    }
+
+    #[test]
+    fn mor_multi_state_updates_are_bounded_and_reject_nonfinite_credit() {
+        for (h, m, k) in [(8, 2, 2), (16, 2, 4)] {
+            let mut model = ElasticRtrl3::for_mor(config(h, m, k, 100)).unwrap();
+            assert_eq!(model.recurrent_trainable_parameters(), 3 * h);
+            for _ in 0..20 {
+                assert!(model.advance_mor(b'a', b'b').unwrap().is_finite());
+                let update = model.learn_mor_credit(0.3).unwrap();
+                assert!(update.preclip_gradient_norm.is_finite());
+            }
+            assert!(model.learn_mor_credit(f64::NAN).is_err());
         }
     }
 
