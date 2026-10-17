@@ -392,11 +392,19 @@ fn execute(
         writeln!(manifest,
             "version\tdocuments\tgrown\tpruned\tactive\tmax_active\tpeak_active\trecurrent_changes\tgate_changes\tsteps\tactive_payload_bytes"
         )?;
-        writeln!(manifest, "RTLR_ELASTIC_V1\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            stats.training_documents, stats.grown, stats.pruned,
-            state.active(), state.capacity(), stats.peak_active,
-            stats.recurrent_parameter_changes, stats.gate_parameter_changes,
-            stats.recurrent_steps, state.active_payload_bytes()
+        writeln!(
+            manifest,
+            "RTLR_ELASTIC_V1\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            stats.training_documents,
+            stats.grown,
+            stats.pruned,
+            state.active(),
+            state.capacity(),
+            stats.peak_active,
+            stats.recurrent_parameter_changes,
+            stats.gate_parameter_changes,
+            stats.recurrent_steps,
+            state.active_payload_bytes()
         )?;
         manifest.sync_all()?;
     }
@@ -443,12 +451,14 @@ fn execute(
         PilotMode::RtlrElastic8 => "sml_mor_anf_rtlr_elastic_max8_v1",
         PilotMode::RtlrElastic16 => "sml_mor_anf_rtlr_elastic_max16_v1",
     };
-    let recurrent_capacity = rtlr
-        .as_ref()
-        .map_or_else(
-            || rtrl3.as_ref().map_or(3, ElasticRtrl3::recurrent_trainable_parameters),
-            RtlrElastic::trained_local_parameters,
-        );
+    let recurrent_capacity = rtlr.as_ref().map_or_else(
+        || {
+            rtrl3
+                .as_ref()
+                .map_or(3, ElasticRtrl3::recurrent_trainable_parameters)
+        },
+        RtlrElastic::trained_local_parameters,
+    );
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
         config.total_parameters(), experts.distinct_updated_parameters, experts.parameter_updates,
