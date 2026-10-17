@@ -276,7 +276,7 @@ impl ElasticRtrl3 {
 
     /// Produce online predictions, then update 8-bit readout and recurrent
     /// parameters. Inherited eligibility across weight updates is approximate.
-    pub fn train_step(&mut self, a: u8, b: u8, target: u8) -> Result<(f64, bool)> {
+    pub fn train_step(&mut self, a: u8, b: u8, target: u8) -> Result<(f64, bool, f64)> {
         self.advance(a, b)?;
         let mean = self.mean_state();
         let mut credit = 0.0;
@@ -324,7 +324,7 @@ impl ElasticRtrl3 {
                     .clamp(-2.0, 2.0);
             }
         }
-        Ok((loss, clipped))
+        Ok((loss, clipped, norm))
     }
 
     pub fn train_document(&mut self, text: &[u8]) -> Result<Rtrl3Metrics> {
@@ -334,7 +334,8 @@ impl ElasticRtrl3 {
         self.reset_state();
         let mut metric = Rtrl3Metrics::default();
         for sample in text.windows(3) {
-            let (loss, clipped) = self.train_step(sample[0], sample[1], sample[2])?;
+            let (loss, clipped, norm) = self.train_step(sample[0], sample[1], sample[2])?;
+            metric.maximum_gradient_norm = metric.maximum_gradient_norm.max(norm);
             metric.logloss_bits += loss;
             metric.trained_bytes += 1;
             metric.trained_bits += BITS as u64;
@@ -534,6 +535,8 @@ mod tests {
             let training = model.train_document(b"aabbccddeeffaabbccddeeff").unwrap();
             assert_eq!(training.trained_bits, training.trained_bytes * 8);
             assert!(training.logloss_bits.is_finite());
+            assert!(training.maximum_gradient_norm.is_finite());
+            assert!(training.maximum_gradient_norm >= 0.0);
             assert!(training.clipped_steps <= training.trained_bytes);
             let (before, events) = model.evaluate_document(b"abacabadabacaba").unwrap();
             let (after, after_events) = model.evaluate_document(b"abacabadabacaba").unwrap();
