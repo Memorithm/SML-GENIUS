@@ -3,7 +3,7 @@
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
     sparse_gradient_atlas::SparseConfig,
-    sparse_mor_anf_recurrent::MorAnfRecurrent,
+    sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent},
 };
 use std::{
     collections::HashSet,
@@ -31,6 +31,7 @@ enum PilotMode {
     LegacyBptt,
     MatchedRtrl,
     MatchedBptt,
+    MatchedHybrid,
 }
 
 impl PilotMode {
@@ -39,7 +40,7 @@ impl PilotMode {
     }
 
     fn is_matched(self) -> bool {
-        matches!(self, Self::MatchedRtrl | Self::MatchedBptt)
+        matches!(self, Self::MatchedRtrl | Self::MatchedBptt | Self::MatchedHybrid)
     }
 }
 
@@ -116,6 +117,7 @@ fn execute(
     };
     let mut train_fingerprint = Sha256::default();
     let mut dev_fingerprint = Sha256::default();
+    let mut hybrid_counts = HybridWindowCounts::default();
     for line in lines.take(1000) {
         if train_bytes >= train_target && dev_bytes >= dev_target {
             break;
@@ -156,7 +158,12 @@ fn execute(
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if matched && bptt {
+            let (loss, events) = if mode == PilotMode::MatchedHybrid {
+                let (loss, events, counts) =
+                    model.train_document_hybrid_windowed(sample, MATCHED_WINDOW)?;
+                accumulate_hybrid(&mut hybrid_counts, counts)?;
+                (loss, events)
+            } else if matched && bptt {
                 model.train_document_bptt(sample, MATCHED_WINDOW)?
             } else if matched {
                 model.train_document_rtrl_windowed(sample, MATCHED_WINDOW)?
@@ -200,12 +207,30 @@ fn execute(
     {
         return Err("joint gradient pathway not confirmed".into());
     }
+    if mode == PilotMode::MatchedHybrid && (hybrid_counts.rtrl_windows == 0
+        || hybrid_counts.bptt_windows == 0
+        || hybrid_counts.rtrl_target_bits + hybrid_counts.bptt_target_bits != train_events * 8)
+    {
+        return Err("hybrid did not execute both update methods".into());
+    }
     model.checkpoint(output)?;
+    if mode == PilotMode::MatchedHybrid {
+        let mut manifest = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join("hybrid_schedule.tsv"))?;
+        writeln!(manifest, "version\trtrl_windows\tbptt_windows\trtrl_target_bits\tbptt_target_bits\twindow\trtrl_per_cycle\tcycle_windows")?;
+        writeln!(manifest, "HYBRID_3R_1B_V1\t{}\t{}\t{}\t{}\t{MATCHED_WINDOW}\t3\t4",
+            hybrid_counts.rtrl_windows, hybrid_counts.bptt_windows,
+            hybrid_counts.rtrl_target_bits, hybrid_counts.bptt_target_bits)?;
+        manifest.sync_all()?;
+    }
     let architecture = match mode {
         PilotMode::LegacyRtrl => "sml_mor_anf_rtrl_v1",
         PilotMode::LegacyBptt => "sml_mor_anf_paged_bptt_v1",
         PilotMode::MatchedRtrl => "sml_mor_anf_paged_rtrl_matched_v2",
         PilotMode::MatchedBptt => "sml_mor_anf_paged_bptt_matched_v2",
+        PilotMode::MatchedHybrid => "sml_mor_anf_paged_hybrid_3r_1b_v1",
     };
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
@@ -245,6 +270,7 @@ fn execute(
         PilotMode::LegacyBptt => "SML_MOR_ANF_BPTT_DONE",
         PilotMode::MatchedRtrl => "SML_MOR_ANF_MATCHED_RTRL_DONE",
         PilotMode::MatchedBptt => "SML_MOR_ANF_MATCHED_BPTT_DONE",
+        PilotMode::MatchedHybrid => "SML_MOR_ANF_MATCHED_HYBRID_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -260,6 +286,14 @@ fn append_selection_fingerprint(hasher: &mut Sha256, source: &[u8; 32], sample: 
     hasher.update(source);
     hasher.update(&prefix_hash.finish());
     hasher.update(&(sample.len() as u64).to_le_bytes());
+}
+
+fn accumulate_hybrid(total: &mut HybridWindowCounts, add: HybridWindowCounts) -> Result<()> {
+    total.rtrl_windows = total.rtrl_windows.checked_add(add.rtrl_windows).ok_or("hybrid RTRL window count overflow")?;
+    total.bptt_windows = total.bptt_windows.checked_add(add.bptt_windows).ok_or("hybrid BPTT window count overflow")?;
+    total.rtrl_target_bits = total.rtrl_target_bits.checked_add(add.rtrl_target_bits).ok_or("hybrid RTRL target count overflow")?;
+    total.bptt_target_bits = total.bptt_target_bits.checked_add(add.bptt_target_bits).ok_or("hybrid BPTT target count overflow")?;
+    Ok(())
 }
 
 fn main() {
@@ -293,8 +327,15 @@ fn main() {
             Path::new(output),
             PilotMode::MatchedBptt,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-paired-hybrid" => execute(
+            Path::new(corpus),
+            Path::new(ledger),
+            digest,
+            Path::new(output),
+            PilotMode::MatchedHybrid,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
