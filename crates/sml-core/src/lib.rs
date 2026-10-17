@@ -121,6 +121,7 @@ pub mod pvp6_sbg_kernel;
 pub mod pvp6_sbg_routing;
 pub mod pvp6_sbg_trace;
 pub mod routing_train;
+pub mod rtrl3_elastic;
 pub mod semantic;
 pub mod sparse_gradient_atlas;
 pub mod sparse_mor_anf_recurrent;
