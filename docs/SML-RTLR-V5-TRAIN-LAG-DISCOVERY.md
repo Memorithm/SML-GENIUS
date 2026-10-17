@@ -28,3 +28,14 @@ The first PR provides the **discovery primitive**, not an integrated v5 language
 The old 100x, v3 and v4 benchmark CLIs are untouched. No SEC corpus may be transferred (G0 NOT_ADMITTED, frozen 2024 TEST UNOPENED), and no physical 50M MOR, SML25B or GPU result is implied.
 
 Applicable conceptual benefit to KVLab/ElasticXxx/SciRust remains **prospective**, not implemented in those repositories.
+
+## Native CPU qualification interface
+
+Standalone Rust target: sml-rtlr-lag-discovery-bench PANEL LABEL_LAG. PANEL is 0,1,2, and LABEL_LAG is 0 (negative null), 64, or 1023. For each of nine cases, run TRAIN-only candidate mining on 65,536 synthetic one-bit labels, with causal 1,024-byte halo; every target is scored only after observing its input pair. Source panels use separate deterministic generated seeds, and unrelated-label null uses a second independent deterministic seed.
+
+Each process must emit exactly one tab-separated RTLR_LAG_DISCOVERY_V1 line with 10 fields:
+panel, actual label lag (0 indicates unrelated null), learned first lag (0 if none), candidate count, TRAIN positions, ring backing bytes, total logical discovery bytes, elapsed discovery wall-clock seconds, scored supervised positions per second.
+
+Native CPU evidence is not a DEV loss or a trained hybrid gain: it is TRAIN candidate selection correctness and overhead only. Compare to v4's known-bank inference with distinct time accounting. Fail closed if learned lag differs from actual label lag, including falsely selecting any lag on the null.
+
+The current panel's score counts are an extra 32,768 logical bytes above the 128-bit-ring-byte backing store, and must not be represented as free. Source and input buffers, compiler and allocator effects remain outside logical memory accounting. Run with Rust 1.89 fmt, focused unit tests, strict Clippy and architecture/SHA checking on both Dell/Thor before merge.
