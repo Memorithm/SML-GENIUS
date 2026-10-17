@@ -289,13 +289,23 @@ impl ElasticRtrl3 {
             .write(true)
             .create_new(true)
             .open(path)?;
-        writeln!(output, "RTRL3_MOR_LOCAL_V1\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.cfg.hidden, self.cfg.eligibility_rank, self.cfg.mixing_rank,
-            self.cfg.learning_rate, self.cfg.recurrent_clip_norm, self.cfg.seed)?;
+        writeln!(
+            output,
+            "RTRL3_MOR_LOCAL_V1\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.cfg.hidden,
+            self.cfg.eligibility_rank,
+            self.cfg.mixing_rank,
+            self.cfg.learning_rate,
+            self.cfg.recurrent_clip_norm,
+            self.cfg.seed
+        )?;
         writeln!(output, "index\trecurrent\tsignal\tanf")?;
         for (j, weights) in self.local.iter().enumerate() {
-            writeln!(output, "{j}\t{:.17e}\t{:.17e}\t{:.17e}",
-                weights[0], weights[1], weights[2])?;
+            writeln!(
+                output,
+                "{j}\t{:.17e}\t{:.17e}\t{:.17e}",
+                weights[0], weights[1], weights[2]
+            )?;
         }
         output.sync_all()?;
         Ok(())
@@ -693,8 +703,8 @@ mod tests {
         let mut sensitivity = [0.0f64; 3];
         for (a, b) in [(b'a', b'z'), (b'c', b'd'), (b'e', b'f'), (b'g', b'h')] {
             let prev = state;
-            state = (reference[0] * prev + reference[1] * signal(b)
-                + reference[2] * anf(a, b)).tanh();
+            state =
+                (reference[0] * prev + reference[1] * signal(b) + reference[2] * anf(a, b)).tanh();
             let d = 1.0 - state * state;
             let direct = [prev, signal(b), anf(a, b)];
             for (p, value) in sensitivity.iter_mut().enumerate() {
