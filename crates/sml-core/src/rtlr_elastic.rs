@@ -95,7 +95,11 @@ fn new_cell(index: usize, seed: u64) -> Cell {
         x = x.wrapping_mul(0x94d0_49bb_1331_11eb);
         x ^= x >> 31;
         let offset = (x % 1024) as f64 / 1024.0 - 0.5;
-        [0.65 + 0.25 * offset, 0.3 - 0.20 * offset, 0.2 + 0.30 * offset]
+        [
+            0.65 + 0.25 * offset,
+            0.3 - 0.20 * offset,
+            0.2 + 0.30 * offset,
+        ]
     };
     Cell {
         weights,
@@ -154,8 +158,8 @@ impl RtlrElastic {
         if self.cells.len() == 1 {
             return anchor;
         }
-        let extra_mean = self.cells[1..].iter().map(|c| c.h).sum::<f64>()
-            / (self.cells.len() - 1) as f64;
+        let extra_mean =
+            self.cells[1..].iter().map(|c| c.h).sum::<f64>() / (self.cells.len() - 1) as f64;
         anchor + self.residual_gate * (extra_mean - anchor)
     }
 
@@ -164,10 +168,7 @@ impl RtlrElastic {
         let phi = anf(a, b);
         for cell in &mut self.cells {
             let prior = cell.h;
-            cell.h = (cell.weights[0] * prior
-                + cell.weights[1] * x
-                + cell.weights[2] * phi)
-                .tanh();
+            cell.h = (cell.weights[0] * prior + cell.weights[1] * x + cell.weights[2] * phi).tanh();
             if derivatives {
                 let d = 1.0 - cell.h * cell.h;
                 cell.sensitivity = [
@@ -230,10 +231,7 @@ impl RtlrElastic {
                         .clamp(-2.0, 2.0)
                 } else {
                     (before
-                        - self.config.learning_rate
-                            * credit
-                            * readout_weight
-                            * cell.sensitivity[p])
+                        - self.config.learning_rate * credit * readout_weight * cell.sensitivity[p])
                         .clamp(-2.0, 2.0)
                 };
                 if !after.is_finite() {
@@ -247,9 +245,8 @@ impl RtlrElastic {
         }
         if extra > 0 {
             let old = self.residual_gate;
-            self.residual_gate = (old - self.config.learning_rate * credit
-                * (extra_mean - anchor))
-                .clamp(0.0, 0.5);
+            self.residual_gate =
+                (old - self.config.learning_rate * credit * (extra_mean - anchor)).clamp(0.0, 0.5);
             if !self.residual_gate.is_finite() {
                 return Err("RTLR-ELASTIC nonfinite residual gate".into());
             }
@@ -278,7 +275,8 @@ impl RtlrElastic {
             self.grow_streak += 1;
             self.shrink_streak = 0;
             if self.grow_streak >= self.config.patience {
-                self.cells.push(new_cell(self.cells.len(), self.config.seed));
+                self.cells
+                    .push(new_cell(self.cells.len(), self.config.seed));
                 self.stats.grown += 1;
                 self.stats.peak_active = self.stats.peak_active.max(self.active());
                 self.grow_streak = 0;
@@ -306,12 +304,21 @@ impl RtlrElastic {
             .create_new(true)
             .write(true)
             .open(path)?;
-        writeln!(file, "RTLR_ELASTIC_EXACT_LOCAL_V1\tactive={}\tmax={}\tgate={:.17e}\tseed={}",
-            self.active(), self.capacity(), self.residual_gate, self.config.seed)?;
+        writeln!(
+            file,
+            "RTLR_ELASTIC_EXACT_LOCAL_V1\tactive={}\tmax={}\tgate={:.17e}\tseed={}",
+            self.active(),
+            self.capacity(),
+            self.residual_gate,
+            self.config.seed
+        )?;
         writeln!(file, "index\ta\tb\tc")?;
         for (index, cell) in self.cells.iter().enumerate() {
-            writeln!(file, "{index}\t{:.17e}\t{:.17e}\t{:.17e}",
-                cell.weights[0], cell.weights[1], cell.weights[2])?;
+            writeln!(
+                file,
+                "{index}\t{:.17e}\t{:.17e}\t{:.17e}",
+                cell.weights[0], cell.weights[1], cell.weights[2]
+            )?;
         }
         file.sync_all()?;
         Ok(())
@@ -402,11 +409,16 @@ mod tests {
         let mut second = rt.clone();
         second.reset_state();
         for &(a, b) in &[(b'a', b'z'), (b'c', b'd'), (b'e', b'f')] {
-            assert_eq!(first.advance_inference(a, b).unwrap(),
-                       second.advance_inference(a, b).unwrap());
+            assert_eq!(
+                first.advance_inference(a, b).unwrap(),
+                second.advance_inference(a, b).unwrap()
+            );
         }
         assert_eq!(rt.stats(), before);
-        assert_eq!(rt.cells.iter().map(|c| c.weights).collect::<Vec<_>>(), weights);
+        assert_eq!(
+            rt.cells.iter().map(|c| c.weights).collect::<Vec<_>>(),
+            weights
+        );
     }
 
     #[test]
