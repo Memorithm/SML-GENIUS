@@ -3,7 +3,7 @@
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
     sparse_gradient_atlas::SparseConfig,
-    sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent},
+    sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent, RtrlClipStats},
 };
 use std::{
     collections::HashSet,
@@ -24,6 +24,8 @@ const MATCHED_TRAIN_TARGET: u64 = 64 * 1024;
 const MATCHED_DEV_TARGET: u64 = 32 * 1024;
 const MATCHED_WINDOW: usize = 128;
 const BOUNDARY_WINDOW: usize = 16;
+const RTRL2_CLIP_SMALL: f64 = 0.125;
+const RTRL2_CLIP_LARGE: f64 = 1.0;
 const MATCHED_SAMPLE_MAX: usize = 1024;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -37,6 +39,10 @@ enum PilotMode {
     BoundaryBptt,
     BoundaryHybrid1,
     BoundaryHyb2,
+    Rtrl2Window16,
+    Rtrl2Continuous,
+    Rtrl2ClipSmall,
+    Rtrl2ClipLarge,
 }
 
 impl PilotMode {
@@ -51,7 +57,14 @@ impl PilotMode {
     fn is_boundary(self) -> bool {
         matches!(
             self,
-            Self::BoundaryRtrl | Self::BoundaryBptt | Self::BoundaryHybrid1 | Self::BoundaryHyb2
+            Self::BoundaryRtrl
+                | Self::BoundaryBptt
+                | Self::BoundaryHybrid1
+                | Self::BoundaryHyb2
+                | Self::Rtrl2Window16
+                | Self::Rtrl2Continuous
+                | Self::Rtrl2ClipSmall
+                | Self::Rtrl2ClipLarge
         )
     }
 }
@@ -136,6 +149,7 @@ fn execute(
     let mut train_fingerprint = Sha256::default();
     let mut dev_fingerprint = Sha256::default();
     let mut hybrid_counts = HybridWindowCounts::default();
+    let mut clip_stats = RtrlClipStats::default();
     for line in lines.take(1000) {
         if train_bytes >= train_target && dev_bytes >= dev_target {
             break;
@@ -176,7 +190,21 @@ fn execute(
             &bytes
         };
         if train_bytes < train_target {
-            let (loss, events) = if mode == PilotMode::BoundaryHyb2 {
+            let (loss, events) = if mode == PilotMode::Rtrl2Window16 {
+                model.train_document_rtrl_windowed(sample, BOUNDARY_WINDOW)?
+            } else if mode == PilotMode::Rtrl2Continuous {
+                model.train_document(sample)?
+            } else if matches!(mode, PilotMode::Rtrl2ClipSmall | PilotMode::Rtrl2ClipLarge) {
+                let threshold = if mode == PilotMode::Rtrl2ClipSmall {
+                    RTRL2_CLIP_SMALL
+                } else {
+                    RTRL2_CLIP_LARGE
+                };
+                let (loss, events, stats) =
+                    model.train_document_rtrl_clipped(sample, threshold)?;
+                clip_stats.accumulate(stats)?;
+                (loss, events)
+            } else if mode == PilotMode::BoundaryHyb2 {
                 model.train_document_hyb2_boundary(sample, causal_window)?
             } else if mode == PilotMode::BoundaryHybrid1 {
                 let (loss, events, counts) =
@@ -247,6 +275,36 @@ fn execute(
     {
         return Err("hybrid did not execute both update methods".into());
     }
+    if matches!(mode, PilotMode::Rtrl2ClipSmall | PilotMode::Rtrl2ClipLarge) {
+        if clip_stats.predicted_bytes != train_events
+            || !clip_stats.max_gradient_norm.is_finite()
+            || !clip_stats.sum_gradient_norm.is_finite()
+        {
+            return Err("invalid RTRL-2 clip metrics".into());
+        }
+        let mut report = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join("rtrl2_norm.tsv"))?;
+        writeln!(
+            report,
+            "version\tclip_norm\tpredicted_bytes\tclipped_steps\tmax_preclip_norm\tmean_preclip_norm"
+        )?;
+        writeln!(
+            report,
+            "RTRL2_CLIPPED_V1\t{}\t{}\t{}\t{:.12}\t{:.12}",
+            if mode == PilotMode::Rtrl2ClipSmall {
+                RTRL2_CLIP_SMALL
+            } else {
+                RTRL2_CLIP_LARGE
+            },
+            clip_stats.predicted_bytes,
+            clip_stats.clipped_steps,
+            clip_stats.max_gradient_norm,
+            clip_stats.sum_gradient_norm / clip_stats.predicted_bytes as f64
+        )?;
+        report.sync_all()?;
+    }
     model.checkpoint(output)?;
     if matches!(mode, PilotMode::MatchedHybrid | PilotMode::BoundaryHybrid1) {
         let mut manifest = OpenOptions::new()
@@ -274,6 +332,10 @@ fn execute(
         PilotMode::BoundaryBptt => "sml_mor_anf_boundary_bptt_v3",
         PilotMode::BoundaryHybrid1 => "sml_mor_anf_boundary_hyb1_v3",
         PilotMode::BoundaryHyb2 => "sml_mor_anf_boundary_hyb2_v3",
+        PilotMode::Rtrl2Window16 => "sml_mor_anf_rtrl2_reset16_control_v1",
+        PilotMode::Rtrl2Continuous => "sml_mor_anf_rtrl2_continuous_control_v1",
+        PilotMode::Rtrl2ClipSmall => "sml_mor_anf_rtrl2_continuous_clip0125_v1",
+        PilotMode::Rtrl2ClipLarge => "sml_mor_anf_rtrl2_continuous_clip1_v1",
     };
     let metrics = format!(
         "architecture\tatlas_parameter_capacity\texpert_parameters_updated\texpert_updates\trouter_parameter_capacity\trouter_parameters_updated\trouter_updates\trecurrent_parameter_capacity\trecurrent_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\theldout_docs\theldout_bytes\theldout_events\theldout_bpc\tuniform_bpc\ttraining_elapsed_seconds\tg0\ttest\n{architecture}\t{}\t{}\t{}\t1024\t{}\t{}\t3\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{:.9}\t8.000000000\t{:.4}\tNOT_ADMITTED\tUNOPENED\n",
@@ -319,6 +381,10 @@ fn execute(
         PilotMode::BoundaryBptt => "SML_MOR_ANF_BOUNDARY_BPTT_DONE",
         PilotMode::BoundaryHybrid1 => "SML_MOR_ANF_BOUNDARY_HYB1_DONE",
         PilotMode::BoundaryHyb2 => "SML_MOR_ANF_BOUNDARY_HYB2_DONE",
+        PilotMode::Rtrl2Window16 => "SML_MOR_ANF_RTRL2_RESET16_DONE",
+        PilotMode::Rtrl2Continuous => "SML_MOR_ANF_RTRL2_CONTINUOUS_DONE",
+        PilotMode::Rtrl2ClipSmall => "SML_MOR_ANF_RTRL2_CLIP0125_DONE",
+        PilotMode::Rtrl2ClipLarge => "SML_MOR_ANF_RTRL2_CLIP1_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -410,8 +476,24 @@ fn main() {
             Path::new(corpus), Path::new(ledger), digest, Path::new(output),
             PilotMode::BoundaryHyb2,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl2-reset16" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl2Window16,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl2-continuous" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl2Continuous,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl2-clip0125" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl2ClipSmall,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtrl2-clip1" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::Rtrl2ClipLarge,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
