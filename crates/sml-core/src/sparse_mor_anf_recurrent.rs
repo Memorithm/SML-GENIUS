@@ -1227,6 +1227,138 @@ mod paged_bptt_tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    // Test the *frozen-parameter mathematical identity* independently of the
+    // online atlas optimizer, which changes parameters between blocks.
+    fn toy_target(index: usize) -> f64 {
+        if index % 7 < 3 { 0.36 } else { -0.19 }
+    }
+
+    fn toy_data() -> Vec<(u8, u8)> {
+        (0..48)
+            .map(|i| (((i * 17 + 31) % 256) as u8, ((i * 11 + 79) % 256) as u8))
+            .collect()
+    }
+
+    fn toy_loss(weights: &[f64; 3], data: &[(u8, u8)]) -> f64 {
+        let mut trace = Trace::default();
+        let mut total = 0.0;
+        for (index, &(a, b)) in data.iter().enumerate() {
+            trace = trace.advance(a, b, weights);
+            let difference = trace.h - toy_target(index);
+            total += difference * difference / 2.0;
+        }
+        total
+    }
+
+    fn toy_reference_full_bptt(weights: &[f64; 3], data: &[(u8, u8)]) -> [f64; 3] {
+        let mut trace = Trace::default();
+        let mut frames = Vec::new();
+        for (index, &(a, b)) in data.iter().enumerate() {
+            let previous = trace.h;
+            trace = trace.advance(a, b, weights);
+            frames.push((previous, trace.h, a, b, toy_target(index)));
+        }
+        let mut gradient = [0.0; 3];
+        let mut credit = 0.0;
+        for &(previous, h, a, b, target) in frames.iter().rev() {
+            let dz = (h - target + credit) * (1.0 - h * h);
+            gradient[0] += dz * previous;
+            gradient[1] += dz * signal(b);
+            gradient[2] += dz * anf_monomial(a, b);
+            credit = dz * weights[0];
+        }
+        gradient
+    }
+
+    fn toy_hyb2_gradient(
+        weights: &[f64; 3],
+        data: &[(u8, u8)],
+        block: usize,
+        use_boundary_credit: bool,
+    ) -> [f64; 3] {
+        let mut boundary = Trace::default();
+        let mut gradient = [0.0; 3];
+        for (chunk_index, chunk) in data.chunks(block).enumerate() {
+            let entry = boundary;
+            let mut frames = Vec::with_capacity(chunk.len());
+            for (index, &(a, b)) in chunk.iter().enumerate() {
+                let previous = boundary.h;
+                boundary = boundary.advance(a, b, weights);
+                frames.push((previous, boundary.h, a, b, toy_target(chunk_index * block + index)));
+            }
+            let mut credit = 0.0;
+            for &(previous, h, a, b, target) in frames.iter().rev() {
+                let dz = (h - target + credit) * (1.0 - h * h);
+                gradient[0] += dz * previous;
+                gradient[1] += dz * signal(b);
+                gradient[2] += dz * anf_monomial(a, b);
+                credit = dz * weights[0];
+            }
+            if use_boundary_credit {
+                for index in 0..3 {
+                    gradient[index] += credit * entry.dh[index];
+                }
+            }
+        }
+        gradient
+    }
+
+    #[test]
+    fn hyb2_frozen_boundary_gradients_equal_full_bptt_rtrl_and_finite_differences() {
+        let weights = [0.93, 0.03, 0.02];
+        let data = toy_data();
+        let full = toy_reference_full_bptt(&weights, &data);
+        let hybrid = toy_hyb2_gradient(&weights, &data, 5, true);
+        let truncated = toy_hyb2_gradient(&weights, &data, 5, false);
+        let mut missing_boundary_norm = 0.0;
+        for k in 0..3 {
+            let numerical = {
+                let mut high = weights;
+                let mut low = weights;
+                high[k] += 1e-6;
+                low[k] -= 1e-6;
+                (toy_loss(&high, &data) - toy_loss(&low, &data)) / 2e-6
+            };
+            assert!((hybrid[k] - full[k]).abs() < 1e-9);
+            assert!((hybrid[k] - numerical).abs() < 1e-6);
+            // Exact online RTRL sensitivity at frozen parameters is the
+            // same total gradient for the readout loss.
+            let mut trace = Trace::default();
+            let mut forward = 0.0;
+            for (index, &(a, b)) in data.iter().enumerate() {
+                trace = trace.advance(a, b, &weights);
+                forward += (trace.h - toy_target(index)) * trace.dh[k];
+            }
+            assert!((hybrid[k] - forward).abs() < 1e-9);
+            missing_boundary_norm += (truncated[k] - full[k]).abs();
+        }
+        assert!(missing_boundary_norm > 0.01, "boundary credit must matter");
+    }
+
+    #[test]
+    fn hyb2_physical_paged_training_updates_without_double_counting() {
+        let (mut model, root) = model();
+        let document: Vec<u8> = (0..74)
+            .map(|i| if i % 4 == 0 { b'a' } else { b'b' })
+            .collect();
+        let (loss, events) = model.train_document_hyb2_boundary(&document, 5).unwrap();
+        assert!(loss.is_finite() && loss > 0.0);
+        assert_eq!(events, (document.len() - 2) as u64);
+        assert_eq!(model.counters().supervised_target_bits, events * 8);
+        assert_eq!(model.counters().routed_expert_updates, events * 16);
+        assert_eq!(model.counters().recurrence_steps, events);
+        assert!(model.counters().recurrent_parameter_updates > 0);
+        assert!(model.atlas_counters().distinct_updated_parameters > 0);
+        assert!(model.train_document_hyb2_boundary(b"ab", 5).is_err());
+        assert!(model.train_document_hyb2_boundary(b"abc", 513).is_err());
+        let before = model.counters();
+        let (_, count) = model.evaluate_document(&document).unwrap();
+        assert_eq!(count, events);
+        assert_eq!(model.counters(), before);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn bptt_rejects_unbounded_windows_without_mutation() {
         let (mut model, root) = model();
