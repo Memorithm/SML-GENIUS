@@ -4,8 +4,8 @@ use sml_core::rtlr_elastic::{RtlrElastic, RtlrElasticConfig, RtlrV2Policy};
 use std::{env, error::Error, fs, path::Path, time::Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-const TRAIN: usize = 32_768;
-const DEV: usize = 8_192;
+const TRAIN: usize = 4_194_304;
+const DEV: usize = 1_048_576;
 
 fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
