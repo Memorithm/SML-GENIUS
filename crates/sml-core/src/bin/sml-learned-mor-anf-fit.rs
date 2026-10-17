@@ -27,7 +27,9 @@ fn digest(path: &Path) -> Result<String> {
     let mut block = [0u8; 1024 * 1024];
     loop {
         let n = input.read(&mut block)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         sum.update(&block[..n]);
     }
     Ok(hex(&sum.finish()))
@@ -57,7 +59,9 @@ where
             events += inputs.len() as u64;
         }
     }
-    if !loss_nats.is_finite() { return Err("MOR ANF sequence loss not finite".into()); }
+    if !loss_nats.is_finite() {
+        return Err("MOR ANF sequence loss not finite".into());
+    }
     Ok((loss_nats, events))
 }
 
@@ -71,7 +75,9 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
             return Err("input must be an ordinary non-symlink file".into());
         }
     }
-    if digest(corpus)? != required_sha { return Err("whole SEC corpus SHA mismatch".into()); }
+    if digest(corpus)? != required_sha {
+        return Err("whole SEC corpus SHA mismatch".into());
+    }
     let mut source = BufReader::new(File::open(corpus)?);
     let mut manifest = BufReader::new(File::open(ledger)?).lines();
     if manifest.next().transpose()?.as_deref() != Some(HEADER) {
@@ -85,21 +91,29 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
     let mut train_events = 0u64;
     let mut holdout = Vec::new();
     for line in manifest {
-        if train_docs >= TRAIN_DOCS && holdout_docs >= HOLDOUT_DOCS { break; }
+        if train_docs >= TRAIN_DOCS && holdout_docs >= HOLDOUT_DOCS {
+            break;
+        }
         let line = line?;
         let columns: Vec<_> = line.split('\t').collect();
-        if columns.len() != 8 || columns[5].is_empty() || columns[6].is_empty()
+        if columns.len() != 8
+            || columns[5].is_empty()
+            || columns[6].is_empty()
             || !matches!(columns[4], "CC0" | "PD_CLAIM" | "CC_BY_ATTRIBUTION")
         {
             return Err("invalid or disallowed claimed rights in SEC ledger".into());
         }
         let len: usize = columns[3].parse()?;
-        if !(128..=8 * 1024 * 1024).contains(&len) { return Err("SEC document size out of bounds".into()); }
+        if !(128..=8 * 1024 * 1024).contains(&len) {
+            return Err("SEC document size out of bounds".into());
+        }
         let mut bytes = vec![0; len];
         source.read_exact(&mut bytes)?;
         let mut boundary = [0; 1];
         source.read_exact(&mut boundary)?;
-        if boundary != [b'\n'] { return Err("invalid SEC document separator".into()); }
+        if boundary != [b'\n'] {
+            return Err("invalid SEC document separator".into());
+        }
         let expected = parse_hex(columns[2]).ok_or("incorrect document SHA")?;
         let mut hasher = Sha256::default();
         hasher.update(&bytes);
@@ -107,12 +121,12 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
             return Err("SEC document SHA mismatch or duplicate".into());
         }
         let len = bytes.len().min(BYTES_PER_DOC);
-        if len < 128 { continue; }
+        if len < 128 {
+            continue;
+        }
         bytes.truncate(len);
         if train_docs < TRAIN_DOCS {
-            let (loss, events) = sequences(&bytes, |x, y| {
-                Ok(model.train_sequence(x, y, 0.12)?)
-            })?;
+            let (loss, events) = sequences(&bytes, |x, y| Ok(model.train_sequence(x, y, 0.12)?))?;
             train_loss += loss;
             train_events += events;
             train_docs += 1;
@@ -131,7 +145,9 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
     for bytes in &holdout {
         let (a, n) = sequences(bytes, |x, y| Ok(initial.loss(x, y)?))?;
         let (b, m) = sequences(bytes, |x, y| Ok(model.loss(x, y)?))?;
-        if n != m { return Err("holdout accounting mismatch".into()); }
+        if n != m {
+            return Err("holdout accounting mismatch".into());
+        }
         initial_loss += a;
         held_loss += b;
         held_events += m;
@@ -140,11 +156,15 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
         return Err("invalid unseen SEC sample".into());
     }
     fs::create_dir(output)?;
-    let mut weights = OpenOptions::new().create_new(true).write(true)
+    let mut weights = OpenOptions::new()
+        .create_new(true)
+        .write(true)
         .open(output.join("weights.f64le"))?;
     weights.write_all(&model.weights_le_bytes())?;
     weights.sync_all()?;
-    let mut evidence = OpenOptions::new().create_new(true).write(true)
+    let mut evidence = OpenOptions::new()
+        .create_new(true)
+        .write(true)
         .open(output.join("metrics.tsv"))?;
     let metrics = format!(
         "model\tparameters\ttrain_docs\ttrain_supervised_bits\ttrain_online_bpb\tholdout_docs\tholdout_supervised_bits\tholdout_initial_bpb\tholdout_trained_bpb\tuniform_bpb\trights\ttest\tsource_sha256\nmor_anf_recurrent_bptt_v1\t{}\t{train_docs}\t{train_events}\t{:.9}\t{holdout_docs}\t{held_events}\t{:.9}\t{:.9}\t1.000000000\tNOT_ADMITTED\tUNOPENED\t{required_sha}\n",
@@ -163,9 +183,13 @@ fn run(corpus: &Path, ledger: &Path, required_sha: &str, output: &Path) -> Resul
 fn main() {
     let args: Vec<String> = env::args().collect();
     let result = match args.as_slice() {
-        [_, flag, source, manifest, sha, dest] if flag == "--sec-pilot" =>
-            run(Path::new(source), Path::new(manifest), sha, Path::new(dest)),
-        _ => Err("usage: sml-learned-mor-anf-fit --sec-pilot CORPUS.utf8 provenance.tsv SOURCE_SHA OUT".into()),
+        [_, flag, source, manifest, sha, dest] if flag == "--sec-pilot" => {
+            run(Path::new(source), Path::new(manifest), sha, Path::new(dest))
+        }
+        _ => Err(
+            "usage: sml-learned-mor-anf-fit --sec-pilot CORPUS.utf8 provenance.tsv SOURCE_SHA OUT"
+                .into(),
+        ),
     };
     if let Err(e) = result {
         eprintln!("SML_MOR_ANF_PILOT_FAIL {e}");
@@ -183,7 +207,8 @@ mod tests {
             assert_eq!(x.len(), y.len());
             assert!(x.len() <= SEQUENCE_STEPS);
             Ok(1.0)
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(n, (input.len() - 2) as u64 * 8);
     }
 }
