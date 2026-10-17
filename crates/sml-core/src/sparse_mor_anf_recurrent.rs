@@ -856,7 +856,11 @@ impl MorAnfRecurrent {
     /// of the evolving-parameter training trajectory. Gates and atlas experts
     /// use the existing frozen-window gradients and actual disk page updates.
     /// Unlike HYB-1, recurrence state is NOT reset at window boundaries.
-    pub fn train_document_hyb2_boundary(&mut self, text: &[u8], window_bytes: usize) -> Result<(f64, u64)> {
+    pub fn train_document_hyb2_boundary(
+        &mut self,
+        text: &[u8],
+        window_bytes: usize,
+    ) -> Result<(f64, u64)> {
         if text.len() < 3 || !(1..=PAGED_BPTT_MAX_BYTES).contains(&window_bytes) {
             return Err("invalid HYB2 document length or bounded window".into());
         }
@@ -1230,7 +1234,11 @@ mod paged_bptt_tests {
     // Test the *frozen-parameter mathematical identity* independently of the
     // online atlas optimizer, which changes parameters between blocks.
     fn toy_target(index: usize) -> f64 {
-        if index % 7 < 3 { 0.36 } else { -0.19 }
+        if index % 7 < 3 {
+            0.36
+        } else {
+            -0.19
+        }
     }
 
     fn toy_data() -> Vec<(u8, u8)> {
@@ -1284,7 +1292,13 @@ mod paged_bptt_tests {
             for (index, &(a, b)) in chunk.iter().enumerate() {
                 let previous = boundary.h;
                 boundary = boundary.advance(a, b, weights);
-                frames.push((previous, boundary.h, a, b, toy_target(chunk_index * block + index)));
+                frames.push((
+                    previous,
+                    boundary.h,
+                    a,
+                    b,
+                    toy_target(chunk_index * block + index),
+                ));
             }
             let mut credit = 0.0;
             for &(previous, h, a, b, target) in frames.iter().rev() {
