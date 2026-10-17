@@ -5,7 +5,7 @@ use sml_core::{
     elastic_ngram_paged_sha::{hex, Sha256},
     rtrl3_elastic::{ElasticRtrl3, Rtrl3Config},
 };
-use std::{env, error::Error, time::Instant};
+use std::{env, error::Error, fs, time::Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const TRAIN_BYTES: usize = 16_386;
@@ -114,6 +114,12 @@ fn run() -> Result<()> {
             );
         }
     }
+    let memory = fs::read_to_string("/proc/self/status")?;
+    let peak = memory
+        .lines()
+        .find(|line| line.starts_with("VmHWM:"))
+        .ok_or("missing Linux VmHWM peak memory")?;
+    println!("RTRL3_PROCESS_PEAK_MEMORY {peak}");
     println!("RTRL3_SYNTHETIC_5_ARM_DONE seeds=3 arms=5 train=16384 dev=8192 test2024=UNOPENED");
     Ok(())
 }
