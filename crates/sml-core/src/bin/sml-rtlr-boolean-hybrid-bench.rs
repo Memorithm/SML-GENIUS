@@ -180,7 +180,7 @@ fn bench(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
     println!(
         "RTLR_BOOLEAN_HYBRID_V1\t{panel}\t{lag}\t{seed}\t{TRAIN}\t{DEV}\t{:.9}\t{:.9}\t{:.2}\t{:.2}\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\t{:.9}\t{:.9}\t{:.9}\t{:.9}\t{:.9}",
         metrics[0], metrics[1], metrics[2], metrics[3], metrics[4], metrics[5],
-        base.active(), 4,
+        base.active(), hybrid.active_cells(),
         hybrid.boolean_bytes(), hybrid.logical_payload_bytes(),
         trained_weights[0], trained_weights[1], trained_weights[2], trained_weights[3], trained_weights[4]
     );
