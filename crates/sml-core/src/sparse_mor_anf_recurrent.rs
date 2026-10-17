@@ -402,23 +402,21 @@ impl MorAnfRecurrent {
                 } else {
                     -(1.0 - shadow_p).log2()
                 };
-                let (cost, local) = self.train_target(
-                    triple[0], triple[1], bit, label, trace,
-                )?;
+                let (cost, local) = self.train_target(triple[0], triple[1], bit, label, trace)?;
                 loss += cost;
                 credit += local;
             }
             let changes = recurrent.learn_credit(credit)?;
-            self.head.counters.recurrent_parameter_updates = self.head
-                .counters.recurrent_parameter_updates
+            self.head.counters.recurrent_parameter_updates = self
+                .head
+                .counters
+                .recurrent_parameter_updates
                 .checked_add(changes)
                 .ok_or("RTLR-V2 recurrent count overflow")?;
             self.head.counters.recurrence_steps += 1;
             events += 1;
         }
-        if !loss.is_finite() || !shadow.is_finite()
-            || events != (text.len() - 2) as u64
-        {
+        if !loss.is_finite() || !shadow.is_finite() || events != (text.len() - 2) as u64 {
             return Err("RTLR-V2 invalid TRAIN shadow accounting".into());
         }
         recurrent.observe_train_document_v2(loss / events as f64, shadow / events as f64)?;
@@ -1527,18 +1525,25 @@ mod paged_bptt_tests {
                 marginal_cost_bpc_per_cell: 0.001,
             },
             &bank,
-        ).unwrap();
+        )
+        .unwrap();
         let text = b"ababaccccccabababababaadddabbccaaadadadadab";
         let (a, a_events) = baseline.train_document(text).unwrap();
-        let (b, b_events) = joined.train_document_rtlr_v2_paged(text, &mut recurrent).unwrap();
+        let (b, b_events) = joined
+            .train_document_rtlr_v2_paged(text, &mut recurrent)
+            .unwrap();
         assert_eq!(a, b);
         assert_eq!(a_events, b_events);
         assert_eq!(baseline.counters(), joined.counters());
-        assert_eq!(baseline.atlas_counters().parameter_updates,
-            joined.atlas_counters().parameter_updates);
+        assert_eq!(
+            baseline.atlas_counters().parameter_updates,
+            joined.atlas_counters().parameter_updates
+        );
         let (ea, ean) = baseline.evaluate_document(text).unwrap();
         let stats = recurrent.stats();
-        let (eb, ebn) = joined.evaluate_document_rtlr_elastic_paged(text, &recurrent).unwrap();
+        let (eb, ebn) = joined
+            .evaluate_document_rtlr_elastic_paged(text, &recurrent)
+            .unwrap();
         assert_eq!(ea, eb);
         assert_eq!(ean, ebn);
         assert_eq!(stats, recurrent.stats());
