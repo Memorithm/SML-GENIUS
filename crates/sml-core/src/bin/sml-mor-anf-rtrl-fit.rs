@@ -434,8 +434,8 @@ fn execute(
         if state.is_v2() {
             let mut v2 = OpenOptions::new().create_new(true).write(true)
                 .open(output.join("rtlr_v2_stats.tsv"))?;
-            writeln!(v2, "version\\tdocuments\\tparks\\trestores\\tpeak_parked\\tshadow_train_docs\\tactive\\tpeak_active\\tmax_active")?;
-            writeln!(v2, "RTLR_ELASTIC_V2\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}",
+            writeln!(v2, "version\tdocuments\tparks\trestores\tpeak_parked\tshadow_train_docs\tactive\tpeak_active\tmax_active")?;
+            writeln!(v2, "RTLR_ELASTIC_V2\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 stats.training_documents, stats.bank_parks,
                 stats.bank_restores, stats.peak_parked,
                 stats.train_shadow_documents, state.active(),
