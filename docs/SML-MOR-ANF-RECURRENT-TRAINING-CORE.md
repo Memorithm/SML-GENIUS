@@ -10,6 +10,12 @@ Au pas `t`, la récurrence est `h_t = tanh(r0*h_(t-1) + r1*(a XOR b) + r2*(a AND
 
 La source d'initialisation brise intentionnellement la symétrie des experts : un routeur dont les experts seraient identiques ne recevrait aucun gradient.
 
+## Premier banc natif sur déclarations SEC
+
+Un binaire Rust `sml-learned-mor-anf-fit --sec-pilot` lit le corpus SEC préexistant du Dell (10 Gio), en vérifie l'empreinte SHA-256 **complète** puis lit les rapports dans l'ordre du manifeste, avec vérification SHA par document et séparation stricte entre déclarations TRAIN et holdout. Le plafond de ce pilote est de **4 rapports × 32 Kio** en apprentissage et **2 rapports × 32 Kio** en évaluation, soit un simple test de câblage du BPTT aux données réelles : chaque octet de cible fournit huit bits supervisés, avec entrées issues des deux octets précédents. Les séquences sont tronquées à 512 pas, la récurrence est réinitialisée en début de segment et aucune donnée du TEST 2024 n'est lue.
+
+Le résultat `metrics.tsv` donne la perte TRAIN *pré-mise-à-jour*, la perte holdout du modèle initial et du modèle entraîné (bits par **bit prédit**), le nombre exact de rapports et de bits, les droits provisoires et les empreintes. L'artefact de poids `weights.f64le` contient exactement 21 nombres F64LE, **pas** les documents. Ce pilote n'a pas d'interface avec le vrai routage paginé 50M ; aucun gain sur corpus réel n'est annoncé sans son run vert et ses métriques.
+
 ## Conditions expérimentales
 
 - Test de récupération sur une séquence XOR : la perte observée doit baisser significativement.
