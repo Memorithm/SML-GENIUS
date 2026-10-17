@@ -4,8 +4,10 @@ use sml_core::rtlr_elastic::{RtlrElastic, RtlrElasticConfig, RtlrV2Policy};
 use std::{env, error::Error, fs, path::Path, time::Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-const TRAIN: usize = 4_194_304;
-const DEV: usize = 1_048_576;
+const TRAIN: usize = 419_430_400;
+const DEV: usize = 104_857_600;
+const BLOCK: usize = 65_536;
+const MAX_LAG: usize = 1024;
 
 fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -13,14 +15,21 @@ fn mix(mut x: u64) -> u64 {
     x ^ (x >> 31)
 }
 
-fn stream(len: usize, seed: u64) -> Vec<u8> {
-    (0..len)
+// Seekable source: any bounded chunk yields the same bytes as the old full
+// buffer, without allocating TRAIN+DEV (more than 500 MiB at 100x).
+fn stream_range(start: usize, end: usize, seed: u64) -> Vec<u8> {
+    (start..end)
         .map(|i| {
             mix(seed
                 .wrapping_add(i as u64)
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15)) as u8
         })
         .collect()
+}
+
+#[cfg(test)]
+fn stream(len: usize, seed: u64) -> Vec<u8> {
+    stream_range(0, len, seed)
 }
 
 fn sample_label(bytes: &[u8], i: usize) -> f64 {
@@ -87,27 +96,39 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
         "v2-8" => RtlrElastic::new_v2(config, policy, path)?,
         _ => RtlrElastic::new_v3(config, policy, path)?,
     };
-    // Seed-independent TRAIN and DEV content: distinct generated streams.
-    // The tested seed only affects the recurrent initialization / bank.
-    let training = stream(TRAIN + 1024, 0x91f8_31a2_00c7_6d15);
-    let heldout = stream(DEV + 1024, 0x1357_9bdf_2468_ace0);
-    let start = Instant::now();
+    // Content is generated in bounded 65,536-position chunks. All blocks
+    // share the same deterministic absolute-offset stream as the old
+    // full-buffer benchmark; the 1,024-byte halo makes labels exact at
+    // chunk boundaries. Data generation and allocation are excluded from
+    // the timed sections on *both* CPU architectures.
+    let training_seed = 0x91f8_31a2_00c7_6d15;
+    let heldout_seed = 0x1357_9bdf_2468_ace0;
+    let mut train_s = 0.0f64;
     let mut total_train = 0.0f64;
     let mut count_train = 0usize;
     for document in 0..8 {
         model.reset_state();
-        let base = 1024 + document * (TRAIN / 8);
+        let base = MAX_LAG + document * (TRAIN / 8);
+        let end = base + TRAIN / 8;
         let mut doc_loss = 0.0;
         let mut shadow_loss = 0.0;
-        for i in base..base + TRAIN / 8 {
-            let z = model.advance_train(training[i - 2], training[i - 1])?;
-            let y = sample_label(&training, i);
-            let p = prob(z);
-            let anchor = prob(model.anchor_state());
-            doc_loss += loss(p, y);
-            shadow_loss += loss(anchor, y);
-            model.learn_credit(4.0 * (p - y))?;
-            count_train += 1;
+        for chunk_start in (base..end).step_by(BLOCK) {
+            let chunk_end = (chunk_start + BLOCK).min(end);
+            let prefix = chunk_start - MAX_LAG;
+            let bytes = stream_range(prefix, chunk_end, training_seed);
+            let start = Instant::now();
+            for i in chunk_start..chunk_end {
+                let offset = i - prefix;
+                let z = model.advance_train(bytes[offset - 2], bytes[offset - 1])?;
+                let y = sample_label(&bytes, offset);
+                let p = prob(z);
+                let anchor = prob(model.anchor_state());
+                doc_loss += loss(p, y);
+                shadow_loss += loss(anchor, y);
+                model.learn_credit(4.0 * (p - y))?;
+                count_train += 1;
+            }
+            train_s += start.elapsed().as_secs_f64();
         }
         total_train += doc_loss;
         if mode != "scalar" {
@@ -117,16 +138,23 @@ fn bench(mode: &str, seed: u64, path: &Path) -> Result<()> {
             )?;
         }
     }
-    let train_s = start.elapsed().as_secs_f64();
     model.reset_state();
     let before = model.stats();
-    let eval_start = Instant::now();
+    let mut dev_s = 0.0f64;
     let mut dev_loss = 0.0;
-    for i in 1024..DEV + 1024 {
-        let z = model.advance_inference(heldout[i - 2], heldout[i - 1])?;
-        dev_loss += loss(prob(z), sample_label(&heldout, i));
+    let end = DEV + MAX_LAG;
+    for chunk_start in (MAX_LAG..end).step_by(BLOCK) {
+        let chunk_end = (chunk_start + BLOCK).min(end);
+        let prefix = chunk_start - MAX_LAG;
+        let bytes = stream_range(prefix, chunk_end, heldout_seed);
+        let start = Instant::now();
+        for i in chunk_start..chunk_end {
+            let offset = i - prefix;
+            let z = model.advance_inference(bytes[offset - 2], bytes[offset - 1])?;
+            dev_loss += loss(prob(z), sample_label(&bytes, offset));
+        }
+        dev_s += start.elapsed().as_secs_f64();
     }
-    let dev_s = eval_start.elapsed().as_secs_f64();
     if before != model.stats()
         || !total_train.is_finite()
         || !dev_loss.is_finite()
@@ -170,6 +198,25 @@ mod tests {
         assert_eq!(a, stream(2048, 14));
         for i in 1024..2048 {
             assert!(sample_label(&a, i) == 0.0 || sample_label(&a, i) == 1.0);
+        }
+    }
+
+    #[test]
+    fn chunked_large_stream_preserves_full_source_and_long_lag_targets() {
+        let seed = 0x91f8_31a2_00c7_6d15;
+        let full = stream(BLOCK * 3 + MAX_LAG + 17, seed);
+        for &(base, end) in &[
+            (MAX_LAG, MAX_LAG + BLOCK),
+            (MAX_LAG + BLOCK, MAX_LAG + 2 * BLOCK),
+            (MAX_LAG + 2 * BLOCK, full.len()),
+        ] {
+            let prefix = base - MAX_LAG;
+            let chunk = stream_range(prefix, end, seed);
+            assert_eq!(&chunk[..], &full[prefix..end]);
+            for i in base..end {
+                let offset = i - prefix;
+                assert_eq!(sample_label(&full, i), sample_label(&chunk, offset));
+            }
         }
     }
 
