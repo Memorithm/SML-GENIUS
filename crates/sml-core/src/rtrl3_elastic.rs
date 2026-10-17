@@ -120,11 +120,7 @@ impl ElasticRtrl3 {
         let cfg = cfg.validate()?;
         let mut local = Vec::with_capacity(cfg.hidden);
         for index in 0..cfg.hidden {
-            local.push([
-                0.55 + 0.25 * index as f64 / cfg.hidden as f64,
-                0.3,
-                0.2,
-            ]);
+            local.push([0.55 + 0.25 * index as f64 / cfg.hidden as f64, 0.3, 0.2]);
         }
         // Cross coupling is fixed in this prototype. Its gradient is not
         // claimed to be learned by the local three-coefficient eligibility.
@@ -215,8 +211,7 @@ impl ElasticRtrl3 {
         if h == 1 && r == 0 {
             for (p, sensitivity) in self.exact_scalar.iter_mut().enumerate() {
                 let direct = [previous[0], features[0], features[1]][p];
-                *sensitivity = derivatives[0]
-                    * (direct + self.local[0][0] * *sensitivity);
+                *sensitivity = derivatives[0] * (direct + self.local[0][0] * *sensitivity);
             }
             return Ok(());
         }
@@ -288,18 +283,16 @@ impl ElasticRtrl3 {
         let mut loss = 0.0;
         for bit in 0..BITS {
             let y = f64::from((target >> bit) & 1);
-            let p = logistic(self.head_gain[bit] * mean + self.head_bias[bit])
-                .clamp(EPS, 1.0 - EPS);
+            let p =
+                logistic(self.head_gain[bit] * mean + self.head_bias[bit]).clamp(EPS, 1.0 - EPS);
             loss -= y * p.log2() + (1.0 - y) * (1.0 - p).log2();
             let delta = p - y;
             // Read credit before changing the head's parameters.
             credit += delta * self.head_gain[bit];
-            self.head_gain[bit] = (self.head_gain[bit]
-                - self.cfg.learning_rate * delta * mean)
-                .clamp(-4.0, 4.0);
-            self.head_bias[bit] = (self.head_bias[bit]
-                - self.cfg.learning_rate * delta)
-                .clamp(-4.0, 4.0);
+            self.head_gain[bit] =
+                (self.head_gain[bit] - self.cfg.learning_rate * delta * mean).clamp(-4.0, 4.0);
+            self.head_bias[bit] =
+                (self.head_bias[bit] - self.cfg.learning_rate * delta).clamp(-4.0, 4.0);
         }
         let mut gradient = vec![0.0; LOCAL * self.cfg.hidden];
         if self.cfg.hidden == 1 && self.cfg.mixing_rank == 0 {
@@ -310,8 +303,7 @@ impl ElasticRtrl3 {
             for factor in &self.factors {
                 let mean_u = factor.u.iter().sum::<f64>() / self.cfg.hidden as f64;
                 for (p, value) in gradient.iter_mut().enumerate() {
-                    *value += credit * mean_u * factor.v[p]
-                        / self.cfg.eligibility_rank as f64;
+                    *value += credit * mean_u * factor.v[p] / self.cfg.eligibility_rank as f64;
                 }
             }
         }
@@ -474,7 +466,9 @@ mod tests {
                     for k in 0..model.cfg.mixing_rank {
                         for (j, item) in old.iter().enumerate() {
                             slope += model.coupling_u[i * model.cfg.mixing_rank + k]
-                                * model.coupling_v[k * h + j] * item[parameter] / h as f64;
+                                * model.coupling_v[k * h + j]
+                                * item[parameter]
+                                / h as f64;
                         }
                     }
                     if parameter / LOCAL == i {
@@ -491,7 +485,10 @@ mod tests {
             minus.local[parameter / LOCAL][parameter % LOCAL] -= 1e-6;
             let numeric = (terminal_mean(plus, &inputs) - terminal_mean(minus, &inputs)) / 2e-6;
             let exact = jac.iter().map(|row| row[parameter]).sum::<f64>() / h as f64;
-            assert!((exact - numeric).abs() < 1e-7, "{parameter}: {exact}, {numeric}");
+            assert!(
+                (exact - numeric).abs() < 1e-7,
+                "{parameter}: {exact}, {numeric}"
+            );
         }
     }
 
@@ -509,17 +506,20 @@ mod tests {
             }
         }
         let reference = ElasticRtrl3::new(config(2, 1, 1, 1)).unwrap();
-        let mut z = vec![0.0; 2];
+        let mut z = [0.0; 2];
         for (i, value) in z.iter_mut().enumerate() {
             *value = (reference.local[i][1] * signal(b'z')
                 + reference.local[i][2] * anf(b'a', b'z'))
-                .tanh();
+            .tanh();
         }
         for (p, &estimate) in sums.iter().enumerate() {
             let j = p / LOCAL;
             let direct = [0.0, signal(b'z'), anf(b'a', b'z')][p % LOCAL];
             let exact = (1.0 - z[j] * z[j]) * direct / 2.0;
-            assert!((estimate - exact).abs() < 0.075, "{p}: {estimate} vs {exact}");
+            assert!(
+                (estimate - exact).abs() < 0.075,
+                "{p}: {estimate} vs {exact}"
+            );
         }
     }
 
