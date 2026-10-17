@@ -551,6 +551,13 @@ mod tests {
 /// frozen-weight backward pass. Long documents use truncated BPTT windows.
 pub const PAGED_BPTT_MAX_BYTES: usize = 512;
 
+fn validate_paged_window(text: &[u8], window_bytes: usize) -> Result<()> {
+    if text.len() < 3 || !(1..=PAGED_BPTT_MAX_BYTES).contains(&window_bytes) {
+        return Err("invalid document or bounded recurrent window".into());
+    }
+    Ok(())
+}
+
 struct PagedBpttFrame {
     a: u8,
     b: u8,
@@ -561,6 +568,56 @@ struct PagedBpttFrame {
 }
 
 impl MorAnfRecurrent {
+    /// Matched control for the bounded BPTT experiment: the established online
+    /// RTRL update, reset at exactly the same window boundaries. The two arms
+    /// see the same supervised byte positions and 2-byte causal contexts.
+    pub fn train_document_rtrl_windowed(
+        &mut self,
+        text: &[u8],
+        window_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        validate_paged_window(text, window_bytes)?;
+        let mut total_loss = 0.0;
+        let mut total_events = 0u64;
+        for begin in (0..text.len() - 2).step_by(window_bytes) {
+            let end = begin.saturating_add(window_bytes).min(text.len() - 2);
+            let (loss, events) = self.train_document(&text[begin..end + 2])?;
+            total_loss += loss;
+            total_events = total_events
+                .checked_add(events)
+                .ok_or("RTRL event count overflow")?;
+        }
+        if !total_loss.is_finite() {
+            return Err("nonfinite windowed RTRL loss".into());
+        }
+        Ok((total_loss, total_events))
+    }
+
+    /// Read-only heldout evaluator with the **same recurrent reset boundaries**
+    /// for both online RTRL and truncated BPTT, without changing learned
+    /// parameters. Only the read cache's page-load counters may advance.
+    pub fn evaluate_document_windowed(
+        &mut self,
+        text: &[u8],
+        window_bytes: usize,
+    ) -> Result<(f64, u64)> {
+        validate_paged_window(text, window_bytes)?;
+        let mut total_loss = 0.0;
+        let mut total_events = 0u64;
+        for begin in (0..text.len() - 2).step_by(window_bytes) {
+            let end = begin.saturating_add(window_bytes).min(text.len() - 2);
+            let (loss, events) = self.evaluate_document(&text[begin..end + 2])?;
+            total_loss += loss;
+            total_events = total_events
+                .checked_add(events)
+                .ok_or("heldout event count overflow")?;
+        }
+        if !total_loss.is_finite() {
+            return Err("nonfinite windowed heldout loss".into());
+        }
+        Ok((total_loss, total_events))
+    }
+
     /// Train the *existing physical paged experts* and learned MOR/RTRL head
     /// under a single truncated sequence BPTT objective. Every window first
     /// freezes both expert predictions and every recurrent state, then computes
@@ -795,6 +852,71 @@ mod paged_bptt_tests {
         );
         drop(model);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn matched_windowed_rtrl_has_identical_contexts_and_exact_event_counts() {
+        let (mut grouped, root_a) = model();
+        let (mut manual, root_b) = model();
+        let text = b"twelve sample bytes of causal recurrent testing";
+        let (group_loss, grouped_events) = grouped.train_document_rtrl_windowed(text, 7).unwrap();
+        let mut manual_loss = 0.0;
+        let mut manual_events = 0;
+        for begin in (0..text.len() - 2).step_by(7) {
+            let end = (begin + 7).min(text.len() - 2);
+            let (loss, events) = manual.train_document(&text[begin..end + 2]).unwrap();
+            manual_loss += loss;
+            manual_events += events;
+        }
+        assert_eq!(grouped_events, (text.len() - 2) as u64);
+        assert_eq!(manual_events, grouped_events);
+        assert!((manual_loss - group_loss).abs() < 1e-10);
+        assert_eq!(grouped.counters(), manual.counters());
+        assert_eq!(
+            grouped.atlas_counters().distinct_updated_parameters,
+            manual.atlas_counters().distinct_updated_parameters
+        );
+        let before = grouped.counters();
+        let atlas_before = grouped.atlas_counters().distinct_updated_parameters;
+        let (evaluation, events) = grouped.evaluate_document_windowed(text, 7).unwrap();
+        assert!(evaluation.is_finite());
+        assert_eq!(events, grouped_events);
+        assert_eq!(grouped.counters(), before);
+        assert_eq!(
+            grouped.atlas_counters().distinct_updated_parameters,
+            atlas_before
+        );
+        assert!(grouped.train_document_rtrl_windowed(text, 0).is_err());
+        assert!(grouped
+            .evaluate_document_windowed(text, PAGED_BPTT_MAX_BYTES + 1)
+            .is_err());
+        drop(grouped);
+        drop(manual);
+        fs::remove_dir_all(root_a).unwrap();
+        fs::remove_dir_all(root_b).unwrap();
+    }
+
+    #[test]
+    fn matched_bptt_and_rtrl_expose_equal_targets_for_same_windows() {
+        let (mut bptt, root_a) = model();
+        let (mut rtrl, root_b) = model();
+        let text = b"abababccababbcbcabababcabc";
+        let (_, bptt_count) = bptt.train_document_bptt(text, 8).unwrap();
+        let (_, rtrl_count) = rtrl.train_document_rtrl_windowed(text, 8).unwrap();
+        assert_eq!(bptt_count, rtrl_count);
+        assert_eq!(bptt_count, (text.len() - 2) as u64);
+        assert_eq!(
+            bptt.counters().supervised_target_bits,
+            rtrl.counters().supervised_target_bits
+        );
+        assert_eq!(
+            bptt.counters().routed_expert_updates,
+            rtrl.counters().routed_expert_updates
+        );
+        drop(bptt);
+        drop(rtrl);
+        fs::remove_dir_all(root_a).unwrap();
+        fs::remove_dir_all(root_b).unwrap();
     }
 
     #[test]
