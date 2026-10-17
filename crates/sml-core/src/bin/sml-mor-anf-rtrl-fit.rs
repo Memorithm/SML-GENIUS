@@ -2,7 +2,7 @@
 //! Only bounded corpus prefix; source is exploratory and not G0-admitted.
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
-    rtlr_elastic::{RtlrElastic, RtlrElasticConfig},
+    rtlr_elastic::{RtlrElastic, RtlrElasticConfig, RtlrV2Policy},
     rtrl3_elastic::{ElasticRtrl3, Rtrl3Config},
     sparse_gradient_atlas::SparseConfig,
     sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent, RtrlClipStats},
@@ -51,6 +51,9 @@ enum PilotMode {
     RtlrElastic1,
     RtlrElastic8,
     RtlrElastic16,
+    RtlrV2_1,
+    RtlrV2_8,
+    RtlrV2_16,
 }
 
 impl PilotMode {
@@ -79,6 +82,9 @@ impl PilotMode {
                 | Self::RtlrElastic1
                 | Self::RtlrElastic8
                 | Self::RtlrElastic16
+                | Self::RtlrV2_1
+                | Self::RtlrV2_8
+                | Self::RtlrV2_16
         )
     }
 }
@@ -161,15 +167,20 @@ fn execute(
     let mut rtrl3_clipped = 0u64;
     let mut rtlr = if matches!(
         mode,
-        PilotMode::RtlrElastic1 | PilotMode::RtlrElastic8 | PilotMode::RtlrElastic16
+        PilotMode::RtlrElastic1
+            | PilotMode::RtlrElastic8
+            | PilotMode::RtlrElastic16
+            | PilotMode::RtlrV2_1
+            | PilotMode::RtlrV2_8
+            | PilotMode::RtlrV2_16
     ) {
         let max_active = match mode {
-            PilotMode::RtlrElastic1 => 1,
-            PilotMode::RtlrElastic8 => 8,
-            PilotMode::RtlrElastic16 => 16,
+            PilotMode::RtlrElastic1 | PilotMode::RtlrV2_1 => 1,
+            PilotMode::RtlrElastic8 | PilotMode::RtlrV2_8 => 8,
+            PilotMode::RtlrElastic16 | PilotMode::RtlrV2_16 => 16,
             _ => unreachable!(),
         };
-        Some(RtlrElastic::new(RtlrElasticConfig {
+        let config = RtlrElasticConfig {
             max_active,
             learning_rate: 0.005,
             grow_above_bpc: 4.1,
@@ -177,7 +188,24 @@ fn execute(
             patience: 2,
             warmup_documents: 2,
             seed: 17,
-        })?)
+        };
+        let model = if matches!(
+            mode,
+            PilotMode::RtlrV2_1 | PilotMode::RtlrV2_8 | PilotMode::RtlrV2_16
+        ) {
+            RtlrElastic::new_v2(
+                config,
+                RtlrV2Policy {
+                    ewma_alpha: 0.25,
+                    plateau_tolerance_bpc: 0.05,
+                    marginal_cost_bpc_per_cell: 0.001,
+                },
+                &output.join("rtlr_v2_dormant"),
+            )?
+        } else {
+            RtlrElastic::new(config)?
+        };
+        Some(model)
     } else {
         None
     };
@@ -255,7 +283,11 @@ fn execute(
         };
         if train_bytes < train_target {
             let (loss, events) = if let Some(ref mut state) = rtlr {
-                model.train_document_rtlr_elastic_paged(sample, state)?
+                if state.is_v2() {
+                    model.train_document_rtlr_v2_paged(sample, state)?
+                } else {
+                    model.train_document_rtlr_elastic_paged(sample, state)?
+                }
             } else if rtrl3.is_some() {
                 let (loss, events, clipped) = model.train_document_rtrl3_paged(
                     sample,
@@ -407,6 +439,26 @@ fn execute(
             state.active_payload_bytes()
         )?;
         manifest.sync_all()?;
+        if state.is_v2() {
+            let mut v2 = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(output.join("rtlr_v2_stats.tsv"))?;
+            writeln!(v2, "version\tdocuments\tparks\trestores\tpeak_parked\tshadow_train_docs\tactive\tpeak_active\tmax_active")?;
+            writeln!(
+                v2,
+                "RTLR_ELASTIC_V2\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                stats.training_documents,
+                stats.bank_parks,
+                stats.bank_restores,
+                stats.peak_parked,
+                stats.train_shadow_documents,
+                state.active(),
+                stats.peak_active,
+                state.capacity()
+            )?;
+            v2.sync_all()?;
+        }
     }
     if let Some(ref state) = rtrl3 {
         if rtrl3_clipped > 0 {
@@ -450,6 +502,9 @@ fn execute(
         PilotMode::RtlrElastic1 => "sml_mor_anf_rtlr_elastic_max1_v1",
         PilotMode::RtlrElastic8 => "sml_mor_anf_rtlr_elastic_max8_v1",
         PilotMode::RtlrElastic16 => "sml_mor_anf_rtlr_elastic_max16_v1",
+        PilotMode::RtlrV2_1 => "sml_mor_anf_rtlr_v2_max1",
+        PilotMode::RtlrV2_8 => "sml_mor_anf_rtlr_v2_max8",
+        PilotMode::RtlrV2_16 => "sml_mor_anf_rtlr_v2_max16",
     };
     let recurrent_capacity = rtlr.as_ref().map_or_else(
         || {
@@ -513,6 +568,9 @@ fn execute(
         PilotMode::RtlrElastic1 => "SML_MOR_ANF_RTLR_ELASTIC_1_DONE",
         PilotMode::RtlrElastic8 => "SML_MOR_ANF_RTLR_ELASTIC_8_DONE",
         PilotMode::RtlrElastic16 => "SML_MOR_ANF_RTLR_ELASTIC_16_DONE",
+        PilotMode::RtlrV2_1 => "SML_MOR_ANF_RTLR_V2_1_DONE",
+        PilotMode::RtlrV2_8 => "SML_MOR_ANF_RTLR_V2_8_DONE",
+        PilotMode::RtlrV2_16 => "SML_MOR_ANF_RTLR_V2_16_DONE",
     };
     println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
@@ -644,8 +702,20 @@ fn main() {
             Path::new(corpus), Path::new(ledger), digest, Path::new(output),
             PilotMode::RtlrElastic16,
         ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-v2-1" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrV2_1,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-v2-8" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrV2_8,
+        ),
+        [_, flag, corpus, ledger, digest, output] if flag == "--pilot-rtlr-v2-16" => execute(
+            Path::new(corpus), Path::new(ledger), digest, Path::new(output),
+            PilotMode::RtlrV2_16,
+        ),
         _ => Err(
-            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16|--pilot-rtlr-elastic1|--pilot-rtlr-elastic8|--pilot-rtlr-elastic16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
+            "usage: sml-mor-anf-rtrl-fit (--pilot|--pilot-bptt|--pilot-paired-rtrl|--pilot-paired-bptt|--pilot-paired-hybrid|--pilot-boundary-rtrl|--pilot-boundary-bptt|--pilot-boundary-hyb1|--pilot-boundary-hyb2|--pilot-rtrl2-reset16|--pilot-rtrl2-continuous|--pilot-rtrl2-clip0125|--pilot-rtrl2-clip1|--pilot-rtrl3-paged1|--pilot-rtrl3-paged8|--pilot-rtrl3-paged16|--pilot-rtlr-elastic1|--pilot-rtlr-elastic8|--pilot-rtlr-elastic16|--pilot-rtlr-v2-1|--pilot-rtlr-v2-8|--pilot-rtlr-v2-16) CORPUS provenance SOURCE_SHA256 NEW_OUTPUT_DIR"
                 .into(),
         ),
     };
