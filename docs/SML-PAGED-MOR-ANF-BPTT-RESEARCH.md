@@ -25,3 +25,7 @@ The code returns summed loss in bits and the number of predicted bytes. Two phys
 * The disk atlas performs f32 updates after a frozen f64 backward pass; atomic all-or-nothing optimizer transactions have not been implemented.
 * The system does not yet learn ANF monomial selection, candidate-page addresses, or activation decisions end-to-end. No guarantee of useful learning across all 50,000,896 allocated weights.
 * No claims of FR/EN chat readiness, generalization, training on 100 GB, production use, or 25B model quality.
+
+## Native SHA-bound pilot entrypoint
+
+The existing `sml-mor-anf-rtrl-fit` tool retains `--pilot` as the unchanged RTRL control. The new `--pilot-bptt` mode uses 48,829 physical atlas pages = 50,000,896 f32 training master weights (200,003,584 bytes), with only 32 cached pages. It SHA-verifies the complete existing 10GiB SEC UTF-8 corpus and each consumed document plus provenance ledger, then actually trains on separately selected *small* document prefixes (at most 1,024 bytes each, TRAIN target 12 KiB) and evaluates on different document prefixes (DEV target 8 KiB). The metric `train_bytes` is **consumed** prefix bytes, not 10GiB, and all counters measure actual gradient application. The pilot does **not** train all allocated weights nor claim that full 10GiB received BPTT gradient updates. Retain artifact contents limited to metrics and SHA-bound manifests; keep physical master weights private on the Dell.
