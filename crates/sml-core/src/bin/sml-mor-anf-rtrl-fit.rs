@@ -51,10 +51,7 @@ impl PilotMode {
     fn is_boundary(self) -> bool {
         matches!(
             self,
-            Self::BoundaryRtrl
-                | Self::BoundaryBptt
-                | Self::BoundaryHybrid1
-                | Self::BoundaryHyb2
+            Self::BoundaryRtrl | Self::BoundaryBptt | Self::BoundaryHybrid1 | Self::BoundaryHyb2
         )
     }
 }
@@ -96,7 +93,11 @@ fn execute(
     let bptt = mode.is_bptt();
     let matched = mode.is_matched();
     let boundary_mode = mode.is_boundary();
-    let causal_window = if boundary_mode { BOUNDARY_WINDOW } else { MATCHED_WINDOW };
+    let causal_window = if boundary_mode {
+        BOUNDARY_WINDOW
+    } else {
+        MATCHED_WINDOW
+    };
     let config = SparseConfig {
         pages: if bptt || matched { 48_829 } else { 4096 },
         max_cached_pages: 32,
