@@ -23,7 +23,7 @@ For new runs, always use **a fresh unique bank directory** for `v2-8`, `v3-8`, `
 | `lag1024` | parity of `bytes[t-1024]` | long memory |
 | `parity4` | XOR of those lags (1,16,128,1024) | nonlinear integration across time |
 
-All labels use already-seen bytes; the model's two input bytes remain identical across tasks. Each task is generated deterministically in contiguous 65,536-position source blocks plus 1,024 bytes of history; 8 TRAIN documents, independent-seeded read-only DEV, same RTRL scalar/V2/V3 optimizer and train-only capacity policy. The sequence seed does **not** change with model seed, so paired trials see exactly the same generated training/DEV positions. Rust tests validate every task's boundary/label parity and argument validation.
+All labels use already-seen bytes; the model's two input bytes remain identical across tasks. Each task is generated deterministically in contiguous 65,536-position source blocks plus 1,024 bytes of history; 8 TRAIN documents, a read-only 1,024-byte pre-document hidden-state burn-in after each state reset (including DEV, excluding the burn-in from measured supervised positions), independent-seeded read-only DEV, same RTRL scalar/V2/V3 optimizer and train-only capacity policy. The sequence seed does **not** change with model seed, so paired trials see exactly the same generated training/DEV positions. Rust tests validate every task's boundary/label parity and argument validation.
 
 ## Scientific admission
 
