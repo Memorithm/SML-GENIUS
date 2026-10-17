@@ -1,0 +1,15 @@
+# RTLR-ELASTIC v5: preregistered split-TRAIN discovery + learned routing
+
+Implements a **three-phase causal CPU synthetic experiment**, not SML25B training.
+
+1. TRAIN-discovery: first 131072 supervised bit positions (two distinct causal chunks), scanning all 1024 preexisting ANF feature delay slots. A TRAIN-only two-partition confirmation returns lag64 or lag1023, or empty bank on an unrelated-label null. No DEV is visible.
+2. TRAIN-fit: next **393216 disjoint TRAIN positions** (six chunks), independently train V3-only, V4 fixed candidate bank [1,16,128,1023], and V5 with the **mined-only** candidate list, identical source panels and per-case recurrent random seed. On unrelated-label null V5 **falls back explicitly to V3**, and the separate Boolean-only baseline uses TRAIN prior; no empty candidate bank is secretly replaced by a DEV-selected lag. The RTRL scheduler reads each arm's TRAIN recurrent and anchor losses, never hybrid mixture or DEV loss.
+3. Read-only DEV: **65536** independently generated bit targets with causal 1024-byte warmup, scores V3 recurrent, V4 known-bank, V5 mined-bank, an identically mined **non-recurrent bit-ring with no trainable selector**, and a TRAIN-fit Bernoulli constant. Strictly assert V4/V5 selector weights and TRAIN counts do not change during DEV.
+
+Three data-source seed panels × targets lag64/lag1023/unrelated-label null × three model seeds 11/23/37 = **27 processes per host**. This is deliberately comparable with RemoteOps v4 results but differs in TRAIN allocation: 131072 positions are reserved for discovery and 393216 for model fit, so do not silently reuse full-524288-fit v4 logloss as an equal-budget comparator.
+
+Each process emits 29 TSV fields: schema, panel, target lag (0=null), seed, discovery/FIT/DEV counts, mined lag, count, five DEV loglosses (V3, V4, V5, Boolean-only, TRAIN-prior), discovery throughput, paired TRAIN/DEV model kernel rates, Boolean-only DEV rate, ring bytes, discovery vote+ring logical bytes, V5 recurrent active cells, active model payload and learned candidate weight, TRAIN and DEV class counts. The CPU rates exclude data construction and causal priming for model kernels; discovery timer includes generated-chunk construction and label scoring.
+
+A successful lag64 experiment should show V5 beating V4 (which does **not** contain lag64). A successful lag1023 experiment should show V5 matching V4, and both matching a **non-recurrent Boolean ring** with identical learned lag access. The unrelated-label null must select no lag and must not claim any improvement. If V5 simply matches Boolean-only, credit belongs to stored Boolean features and TRAIN-selected delay, not to recurrent credit assignment.
+
+All source/runners pinned to exact Git SHA, Rust 1.89, 1024-feature ring 128 packed backing bytes, **32896 bytes discovery vote+bit-ring logical state**, and per-host CPU throughput and artifact integrity. No arbitrary unknown-ANF-feature discovery, no physical 50M MOR/ANF, no trained 25B, no GPU. SEC **G0 NOT_ADMITTED**, frozen 2024 TEST **UNOPENED**.
