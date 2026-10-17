@@ -240,7 +240,7 @@ fn execute(
     {
         return Err("joint gradient pathway not confirmed".into());
     }
-    if mode == PilotMode::MatchedHybrid
+    if matches!(mode, PilotMode::MatchedHybrid | PilotMode::BoundaryHybrid1)
         && (hybrid_counts.rtrl_windows == 0
             || hybrid_counts.bptt_windows == 0
             || hybrid_counts.rtrl_target_bits + hybrid_counts.bptt_target_bits != train_events * 8)
@@ -248,7 +248,7 @@ fn execute(
         return Err("hybrid did not execute both update methods".into());
     }
     model.checkpoint(output)?;
-    if mode == PilotMode::MatchedHybrid {
+    if matches!(mode, PilotMode::MatchedHybrid | PilotMode::BoundaryHybrid1) {
         let mut manifest = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -256,7 +256,7 @@ fn execute(
         writeln!(manifest, "version\trtrl_windows\tbptt_windows\trtrl_target_bits\tbptt_target_bits\twindow\trtrl_per_cycle\tcycle_windows")?;
         writeln!(
             manifest,
-            "HYBRID_3R_1B_V1\t{}\t{}\t{}\t{}\t{MATCHED_WINDOW}\t3\t4",
+            "HYBRID_3R_1B_V1\t{}\t{}\t{}\t{}\t{causal_window}\t3\t4",
             hybrid_counts.rtrl_windows,
             hybrid_counts.bptt_windows,
             hybrid_counts.rtrl_target_bits,
