@@ -1309,8 +1309,8 @@ mod paged_bptt_tests {
                 credit = dz * weights[0];
             }
             if use_boundary_credit {
-                for index in 0..3 {
-                    gradient[index] += credit * entry.dh[index];
+                for (gradient_value, sensitivity) in gradient.iter_mut().zip(entry.dh) {
+                    *gradient_value += credit * sensitivity;
                 }
             }
         }
