@@ -5,8 +5,13 @@
 //! local parameters for frozen weights; they do not implement full cross-cell
 //! RTRL. Structural decisions use TRAIN loss only, at document boundaries.
 //! The original paged MOR/ANF experts remain completely outside this module.
-use std::{error::Error, fs, io::Write, path::{Path, PathBuf}};
 use crate::elastic_ngram_paged_sha::{hex, Sha256};
+use std::{
+    error::Error,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const LOCAL: usize = 3;
@@ -76,7 +81,8 @@ pub struct RtlrV2Policy {
 
 impl RtlrV2Policy {
     pub fn validate(self) -> Result<Self> {
-        if !self.ewma_alpha.is_finite() || !(0.0..=1.0).contains(&self.ewma_alpha)
+        if !self.ewma_alpha.is_finite()
+            || !(0.0..=1.0).contains(&self.ewma_alpha)
             || self.ewma_alpha == 0.0
             || !self.plateau_tolerance_bpc.is_finite()
             || !(0.0..=1.0).contains(&self.plateau_tolerance_bpc)
@@ -212,21 +218,27 @@ impl RtlrElastic {
         // Hex IEEE 754 roundtrip, plus explicit SHA256 to reject bit-flips.
         let record = format!(
             "RTLR_ELASTIC_PARKED_V2\t{index}\t{:016x}\t{:016x}\t{:016x}\n",
-            cell.weights[0].to_bits(), cell.weights[1].to_bits(), cell.weights[2].to_bits()
+            cell.weights[0].to_bits(),
+            cell.weights[1].to_bits(),
+            cell.weights[2].to_bits()
         );
         let mut hash = Sha256::default();
         hash.update(record.as_bytes());
         let digest = hex(&hash.finish());
-        let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
         output.write_all(record.as_bytes())?;
         writeln!(output, "sha256\t{digest}")?;
         output.sync_all()?;
         self.cells.pop();
         self.stats.pruned += 1;
         self.stats.bank_parks += 1;
-        self.stats.peak_parked = self.stats.peak_parked.max(
-            (self.stats.bank_parks - self.stats.bank_restores) as usize,
-        );
+        self.stats.peak_parked = self
+            .stats
+            .peak_parked
+            .max((self.stats.bank_parks - self.stats.bank_restores) as usize);
         Ok(())
     }
 
@@ -245,14 +257,17 @@ impl RtlrElastic {
                 let (record, digest_line) = contents
                     .split_once("sha256\t")
                     .ok_or("RTLR-V2 missing cell digest")?;
-                let digest = digest_line.strip_suffix('\n').ok_or("bad cell digest suffix")?;
+                let digest = digest_line
+                    .strip_suffix('\n')
+                    .ok_or("bad cell digest suffix")?;
                 let mut hash = Sha256::default();
                 hash.update(record.as_bytes());
                 if hex(&hash.finish()) != digest {
                     return Err("RTLR-V2 parked cell SHA256 mismatch".into());
                 }
                 let parts: Vec<_> = record.trim_end_matches('\n').split('\t').collect();
-                if parts.len() != 5 || parts[0] != "RTLR_ELASTIC_PARKED_V2"
+                if parts.len() != 5
+                    || parts[0] != "RTLR_ELASTIC_PARKED_V2"
                     || parts[1] != index.to_string()
                 {
                     return Err("RTLR-V2 invalid cell schema or index".into());
@@ -266,11 +281,13 @@ impl RtlrElastic {
                 }
                 fs::remove_file(&path)?;
                 self.stats.bank_restores += 1;
-                Cell { weights, h: 0.0, sensitivity: [0.0; LOCAL] }
+                Cell {
+                    weights,
+                    h: 0.0,
+                    sensitivity: [0.0; LOCAL],
+                }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                new_cell(index, self.config.seed)
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => new_cell(index, self.config.seed),
             Err(e) => return Err(e.into()),
         };
         self.cells.push(cell);
@@ -291,7 +308,8 @@ impl RtlrElastic {
         if self.v2.is_none() {
             return Err("RTLR-V2 policy disabled".into());
         }
-        if !live_bpc.is_finite() || !shadow_anchor_bpc.is_finite()
+        if !live_bpc.is_finite()
+            || !shadow_anchor_bpc.is_finite()
             || !(0.0..=16.0).contains(&live_bpc)
             || !(0.0..=16.0).contains(&shadow_anchor_bpc)
         {
@@ -301,13 +319,11 @@ impl RtlrElastic {
         let policy = self.v2.as_ref().ok_or("missing v2")?.policy;
         self.stats.training_documents += 1;
         self.stats.train_shadow_documents += 1;
-        let stagnated = previous.is_some_and(|base| {
-            live_bpc >= base - policy.plateau_tolerance_bpc
-        });
+        let stagnated =
+            previous.is_some_and(|base| live_bpc >= base - policy.plateau_tolerance_bpc);
         let active = self.active();
         let benefit = shadow_anchor_bpc - live_bpc;
-        let net_benefit = benefit
-            - policy.marginal_cost_bpc_per_cell * (active - 1) as f64;
+        let net_benefit = benefit - policy.marginal_cost_bpc_per_cell * (active - 1) as f64;
         if self.stats.training_documents > self.config.warmup_documents {
             if active > 1 && net_benefit <= 0.0 {
                 self.shrink_streak += 1;
@@ -328,11 +344,10 @@ impl RtlrElastic {
                 self.shrink_streak = 0;
             }
         }
-        self.v2.as_mut().ok_or("v2 disappeared")?.train_ewma = Some(
-            previous.map_or(live_bpc, |mean| {
+        self.v2.as_mut().ok_or("v2 disappeared")?.train_ewma =
+            Some(previous.map_or(live_bpc, |mean| {
                 policy.ewma_alpha * live_bpc + (1.0 - policy.ewma_alpha) * mean
-            }),
-        );
+            }));
         Ok(())
     }
 
@@ -639,7 +654,9 @@ mod tests {
             "rtlr-v2-bank-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         );
         let root = std::env::temp_dir().join(unique);
         let mut cfg = config(4);
@@ -677,7 +694,9 @@ mod tests {
             "rtlr-v2-corrupt-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let mut cfg = config(3);
         cfg.patience = 1;
@@ -704,13 +723,21 @@ mod tests {
             "rtlr-v2-existing-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir(&root).unwrap();
-        assert!(RtlrElastic::new_v2(config(3), RtlrV2Policy {
-            ewma_alpha: 0.2, plateau_tolerance_bpc: 0.1,
-            marginal_cost_bpc_per_cell: 0.001,
-        }, &root).is_err());
+        assert!(RtlrElastic::new_v2(
+            config(3),
+            RtlrV2Policy {
+                ewma_alpha: 0.2,
+                plateau_tolerance_bpc: 0.1,
+                marginal_cost_bpc_per_cell: 0.001,
+            },
+            &root
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 
