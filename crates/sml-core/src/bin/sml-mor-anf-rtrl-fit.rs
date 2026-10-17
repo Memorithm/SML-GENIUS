@@ -2,8 +2,8 @@
 //! Only bounded corpus prefix; source is exploratory and not G0-admitted.
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
-    sparse_gradient_atlas::SparseConfig,
     rtrl3_elastic::{ElasticRtrl3, Rtrl3Config},
+    sparse_gradient_atlas::SparseConfig,
     sparse_mor_anf_recurrent::{HybridWindowCounts, MorAnfRecurrent, RtrlClipStats},
 };
 use std::{
@@ -124,7 +124,10 @@ fn execute(
         learning_rate: 0.20,
     };
     let mut model = MorAnfRecurrent::create(output, config)?;
-    let mut rtrl3 = if matches!(mode, PilotMode::Rtrl3Paged1 | PilotMode::Rtrl3Paged8 | PilotMode::Rtrl3Paged16) {
+    let mut rtrl3 = if matches!(
+        mode,
+        PilotMode::Rtrl3Paged1 | PilotMode::Rtrl3Paged8 | PilotMode::Rtrl3Paged16
+    ) {
         let hidden = match mode {
             PilotMode::Rtrl3Paged1 => 1,
             PilotMode::Rtrl3Paged8 => 8,
@@ -133,7 +136,13 @@ fn execute(
         };
         Some(ElasticRtrl3::for_mor(Rtrl3Config {
             hidden,
-            eligibility_rank: if hidden == 16 { 4 } else if hidden == 8 { 2 } else { 1 },
+            eligibility_rank: if hidden == 16 {
+                4
+            } else if hidden == 8 {
+                2
+            } else {
+                1
+            },
             mixing_rank: if hidden == 1 { 0 } else { 2 },
             learning_rate: 0.005,
             recurrent_clip_norm: 1e30,
