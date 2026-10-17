@@ -134,6 +134,7 @@ pub mod toy_baselines;
 pub mod toy_tasks;
 pub mod trace;
 pub mod train;
+pub mod train_lag_discovery;
 pub mod v888_handoff;
 pub mod wide_anf_delta_kv;
 pub mod wide_anf_routed;
