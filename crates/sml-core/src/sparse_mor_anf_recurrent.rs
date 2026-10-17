@@ -348,7 +348,9 @@ impl MorAnfRecurrent {
                 loss += cost;
                 recurrent_derivative += credit;
             }
-            let gradient = trace.dh.map(|sensitivity| recurrent_derivative * sensitivity);
+            let gradient = trace
+                .dh
+                .map(|sensitivity| recurrent_derivative * sensitivity);
             // hypot-style scaling prevents squaring unbounded gradients.
             let max_component = gradient
                 .iter()
@@ -379,7 +381,14 @@ impl MorAnfRecurrent {
             stats.sum_gradient_norm += norm;
             for (index, &value) in gradient.iter().enumerate() {
                 let before = self.head.recurrence[index];
-                let after = (before - RECURRENT_LR * value * scale).clamp(-2.0, 2.0);
+                // Preserve the original left-associative SGD expression
+                // exactly when clipping is inactive (bitwise control).
+                let after = if scale == 1.0 {
+                    (before - RECURRENT_LR * recurrent_derivative * trace.dh[index])
+                        .clamp(-2.0, 2.0)
+                } else {
+                    (before - RECURRENT_LR * value * scale).clamp(-2.0, 2.0)
+                };
                 if !after.is_finite() {
                     return Err("nonfinite RTRL-2 recurrent parameter".into());
                 }
@@ -1219,9 +1228,8 @@ mod paged_bptt_tests {
         let (mut evolved, new_dir) = model();
         let sample = b"independent sample for exact online continuous RTRL comparison";
         let (old_loss, old_events) = old.train_document(sample).unwrap();
-        let (new_loss, new_events, stats) = evolved
-            .train_document_rtrl_clipped(sample, 1e30)
-            .unwrap();
+        let (new_loss, new_events, stats) =
+            evolved.train_document_rtrl_clipped(sample, 1e30).unwrap();
         assert!((old_loss - new_loss).abs() < 1e-12);
         assert_eq!(old_events, new_events);
         assert_eq!(stats.predicted_bytes, old_events);
@@ -1241,9 +1249,7 @@ mod paged_bptt_tests {
     fn rtrl2_aggressive_clip_bounds_online_recurrent_gradient() {
         let (mut clipped, root) = model();
         let sample = b"abababaabbacababcccaccbbbaaaacabbbabababaaaaaabbb";
-        let (loss, events, stats) = clipped
-            .train_document_rtrl_clipped(sample, 1e-12)
-            .unwrap();
+        let (loss, events, stats) = clipped.train_document_rtrl_clipped(sample, 1e-12).unwrap();
         assert!(loss.is_finite());
         assert_eq!(events, (sample.len() - 2) as u64);
         assert!(stats.clipped_steps > 0);
