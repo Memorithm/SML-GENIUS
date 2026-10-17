@@ -203,11 +203,7 @@ impl RtlrBooleanHybrid {
     /// Forward the existing V2/V3 structural scheduler; caller provides
     /// paired TRAIN document losses from *recurrent* and anchor experts,
     /// not hybrid or DEV losses. Selector is not adjusted by scheduling.
-    pub fn observe_train_document_v2(
-        &mut self,
-        recurrent_bpc: f64,
-        anchor_bpc: f64,
-    ) -> Result<()> {
+    pub fn observe_train_document_v2(&mut self, recurrent_bpc: f64, anchor_bpc: f64) -> Result<()> {
         if self.pending.is_some() {
             return Err("cannot adjust topology before TRAIN commit");
         }
