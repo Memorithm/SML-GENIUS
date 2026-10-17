@@ -175,8 +175,8 @@ impl RtlrElastic {
         if metadata.is_ok() {
             return Err("RTLR-V2 bank path already exists".into());
         }
-        fs::create_dir(bank_directory)?;
         let mut model = Self::new(config)?;
+        fs::create_dir(bank_directory)?;
         model.v2 = Some(RtlrV2State {
             policy,
             bank: bank_directory.to_path_buf(),
@@ -211,7 +211,7 @@ impl RtlrElastic {
         let cell = &self.cells[index];
         // Hex IEEE 754 roundtrip, plus explicit SHA256 to reject bit-flips.
         let record = format!(
-            "RTLR_ELASTIC_PARKED_V2\\t{index}\\t{:016x}\\t{:016x}\\t{:016x}\\n",
+            "RTLR_ELASTIC_PARKED_V2\t{index}\t{:016x}\t{:016x}\t{:016x}\n",
             cell.weights[0].to_bits(), cell.weights[1].to_bits(), cell.weights[2].to_bits()
         );
         let mut hash = Sha256::default();
@@ -219,12 +219,14 @@ impl RtlrElastic {
         let digest = hex(&hash.finish());
         let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
         output.write_all(record.as_bytes())?;
-        writeln!(output, "sha256\\t{digest}")?;
+        writeln!(output, "sha256\t{digest}")?;
         output.sync_all()?;
         self.cells.pop();
         self.stats.pruned += 1;
         self.stats.bank_parks += 1;
-        self.stats.peak_parked = self.stats.peak_parked.max(self.capacity() - self.active());
+        self.stats.peak_parked = self.stats.peak_parked.max(
+            (self.stats.bank_parks - self.stats.bank_restores) as usize,
+        );
         Ok(())
     }
 
@@ -241,15 +243,15 @@ impl RtlrElastic {
                 }
                 let contents = fs::read_to_string(&path)?;
                 let (record, digest_line) = contents
-                    .split_once("sha256\\t")
+                    .split_once("sha256\t")
                     .ok_or("RTLR-V2 missing cell digest")?;
-                let digest = digest_line.strip_suffix('\\n').ok_or("bad cell digest suffix")?;
+                let digest = digest_line.strip_suffix('\n').ok_or("bad cell digest suffix")?;
                 let mut hash = Sha256::default();
                 hash.update(record.as_bytes());
                 if hex(&hash.finish()) != digest {
                     return Err("RTLR-V2 parked cell SHA256 mismatch".into());
                 }
-                let parts: Vec<_> = record.trim_end_matches('\\n').split('\\t').collect();
+                let parts: Vec<_> = record.trim_end_matches('\n').split('\t').collect();
                 if parts.len() != 5 || parts[0] != "RTLR_ELASTIC_PARKED_V2"
                     || parts[1] != index.to_string()
                 {
