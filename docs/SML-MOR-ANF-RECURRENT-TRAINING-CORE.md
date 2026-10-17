@@ -16,6 +16,23 @@ Un binaire Rust `sml-learned-mor-anf-fit --sec-pilot` lit le corpus SEC préexis
 
 Le résultat `metrics.tsv` donne la perte TRAIN *pré-mise-à-jour*, la perte holdout du modèle initial et du modèle entraîné (bits par **bit prédit**), le nombre exact de rapports et de bits, les droits provisoires et les empreintes. L'artefact de poids `weights.f64le` contient exactement 21 nombres F64LE, **pas** les documents. Ce pilote n'a pas d'interface avec le vrai routage paginé 50M ; aucun gain sur corpus réel n'est annoncé sans son run vert et ses métriques.
 
+## Première mesure native — Dell, 17 octobre 2026
+
+La [CI RemoteOps #39007742926](https://github.com/Memorithm/RemoteOps/actions/runs/39007742926) a été **vérifiée verte** sur le Dell, après vérification SHA-256 des 10 Gio de la source SEC, du manifeste et des documents. Elle compile le binaire Rust, passe **5 tests ciblés de gradients** plus **1 test binaire** et enregistre l'artefact de preuves [#12091681825](https://github.com/Memorithm/RemoteOps/actions/runs/39007742926/artifacts/12091681825).
+
+| Mesure | Résultat natif |
+| --- | ---: |
+| Coefficients F64 entraînables | 21 |
+| Documents d'entraînement | 4 |
+| Bits supervisés TRAIN | 1 048 512 |
+| Documents diagnostiques exclus du TRAIN | 2 |
+| Bits supervisés holdout | 524 256 |
+| Perte holdout, modèle initial | 0,993846180 bit/bit |
+| Perte holdout, modèle entraîné | 0,854415082 bit/bit |
+| Référence uniforme | 1,000000000 bit/bit |
+
+**Interprétation limitée** : apprentissage utile d'une distribution de bits dans cet échantillon, soit baisse de la perte de ~14,0 % par rapport à l'initialisation, mais aucune comparaison causale avec les ablations et aucun test financier temporel indépendant. Ni le routage MOR vers les pages 50M, ni les monômes ANF appris, ni une capacité d'échange naturel ne sont démontrés. La source est **EXPLORATORY_ONLY / G0_NOT_ADMITTED** ; TEST 2024 reste intact.
+
 ## Conditions expérimentales
 
 - Test de récupération sur une séquence XOR : la perte observée doit baisser significativement.
