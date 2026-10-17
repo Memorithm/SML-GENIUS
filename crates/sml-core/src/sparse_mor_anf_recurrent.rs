@@ -76,6 +76,36 @@ impl Trace {
     }
 }
 
+/// Per-document diagnostics for RTRL-2. A bound on the global Euclidean
+/// norm of the *three-dimensional recurrent update gradient* is separate
+/// from the MOR gate and sparse expert optimizer. No dense 50M Jacobian.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RtrlClipStats {
+    pub predicted_bytes: u64,
+    pub clipped_steps: u64,
+    pub max_gradient_norm: f64,
+    pub sum_gradient_norm: f64,
+}
+
+impl RtrlClipStats {
+    pub fn accumulate(&mut self, other: Self) -> Result<()> {
+        self.predicted_bytes = self
+            .predicted_bytes
+            .checked_add(other.predicted_bytes)
+            .ok_or("RTRL-2 count overflow")?;
+        self.clipped_steps = self
+            .clipped_steps
+            .checked_add(other.clipped_steps)
+            .ok_or("RTRL-2 clipped-count overflow")?;
+        self.max_gradient_norm = self.max_gradient_norm.max(other.max_gradient_norm);
+        self.sum_gradient_norm += other.sum_gradient_norm;
+        if !self.sum_gradient_norm.is_finite() {
+            return Err("nonfinite RTRL-2 diagnostics".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MorAnfCounters {
     pub supervised_target_bits: u64,
@@ -283,6 +313,88 @@ impl MorAnfRecurrent {
             return Err("nonfinite training document loss".into());
         }
         Ok((loss, events))
+    }
+
+    /// RTRL-2: online recurrent eligibility over the **whole source document**
+    /// (without 16/128-position resets) and a bounded Euclidean update norm.
+    /// Exact for a frozen recurrent cell; with online weight updates this
+    /// remains a causal eligibility approximation, not backprop through those
+    /// updates. The original RTRL, gate learning and paged experts are unchanged.
+    ///
+    /// The norm bound is applied only to the recurrent triple's gradient, NOT
+    /// to expert or MOR gate gradients. 'clip_norm' must be finite and positive.
+    pub fn train_document_rtrl_clipped(
+        &mut self,
+        text: &[u8],
+        clip_norm: f64,
+    ) -> Result<(f64, u64, RtrlClipStats)> {
+        if text.len() < 3 || !clip_norm.is_finite() || clip_norm <= 0.0 {
+            return Err("invalid RTRL-2 document or positive gradient norm bound".into());
+        }
+        let mut trace = Trace::default();
+        let mut loss = 0.0f64;
+        let mut stats = RtrlClipStats::default();
+        for triple in text.windows(3) {
+            trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
+            let mut recurrent_derivative = 0.0f64;
+            for bit in 0..8 {
+                let (cost, credit) = self.train_target(
+                    triple[0],
+                    triple[1],
+                    bit,
+                    (triple[2] >> bit) & 1 == 1,
+                    trace,
+                )?;
+                loss += cost;
+                recurrent_derivative += credit;
+            }
+            let gradient = trace.dh.map(|sensitivity| recurrent_derivative * sensitivity);
+            // hypot-style scaling prevents squaring unbounded gradients.
+            let max_component = gradient
+                .iter()
+                .fold(0.0f64, |max, value| max.max(value.abs()));
+            if !max_component.is_finite() {
+                return Err("nonfinite RTRL-2 recurrent gradient".into());
+            }
+            let norm = if max_component == 0.0 {
+                0.0
+            } else {
+                max_component
+                    * (gradient
+                        .iter()
+                        .map(|value| (value / max_component).powi(2))
+                        .sum::<f64>())
+                    .sqrt()
+            };
+            if !norm.is_finite() {
+                return Err("nonfinite RTRL-2 recurrent norm".into());
+            }
+            let scale = if norm > clip_norm {
+                stats.clipped_steps += 1;
+                clip_norm / norm
+            } else {
+                1.0
+            };
+            stats.max_gradient_norm = stats.max_gradient_norm.max(norm);
+            stats.sum_gradient_norm += norm;
+            for (index, &value) in gradient.iter().enumerate() {
+                let before = self.head.recurrence[index];
+                let after = (before - RECURRENT_LR * value * scale).clamp(-2.0, 2.0);
+                if !after.is_finite() {
+                    return Err("nonfinite RTRL-2 recurrent parameter".into());
+                }
+                if after != before {
+                    self.head.counters.recurrent_parameter_updates += 1;
+                }
+                self.head.recurrence[index] = after;
+            }
+            self.head.counters.recurrence_steps += 1;
+            stats.predicted_bytes += 1;
+        }
+        if !loss.is_finite() || !stats.sum_gradient_norm.is_finite() {
+            return Err("nonfinite RTRL-2 total loss or norm sum".into());
+        }
+        Ok((loss, stats.predicted_bytes, stats))
     }
 
     pub fn evaluate_document(&mut self, text: &[u8]) -> Result<(f64, u64)> {
@@ -1097,6 +1209,66 @@ mod paged_bptt_tests {
             (analytical - numerical).abs() < 1e-6,
             "analytical={analytical} numerical={numerical}"
         );
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rtrl2_unclipped_matches_original_continuous_rtrl_byte_for_byte() {
+        let (mut old, old_dir) = model();
+        let (mut evolved, new_dir) = model();
+        let sample = b"independent sample for exact online continuous RTRL comparison";
+        let (old_loss, old_events) = old.train_document(sample).unwrap();
+        let (new_loss, new_events, stats) = evolved
+            .train_document_rtrl_clipped(sample, 1e30)
+            .unwrap();
+        assert!((old_loss - new_loss).abs() < 1e-12);
+        assert_eq!(old_events, new_events);
+        assert_eq!(stats.predicted_bytes, old_events);
+        assert_eq!(stats.clipped_steps, 0);
+        assert_eq!(old.counters(), evolved.counters());
+        assert_eq!(old.encode_head(), evolved.encode_head());
+        let (old_eval, _) = old.evaluate_document(sample).unwrap();
+        let (new_eval, _) = evolved.evaluate_document(sample).unwrap();
+        assert!((old_eval - new_eval).abs() < 1e-12);
+        drop(old);
+        drop(evolved);
+        fs::remove_dir_all(old_dir).unwrap();
+        fs::remove_dir_all(new_dir).unwrap();
+    }
+
+    #[test]
+    fn rtrl2_aggressive_clip_bounds_online_recurrent_gradient() {
+        let (mut clipped, root) = model();
+        let sample = b"abababaabbacababcccaccbbbaaaacabbbabababaaaaaabbb";
+        let (loss, events, stats) = clipped
+            .train_document_rtrl_clipped(sample, 1e-12)
+            .unwrap();
+        assert!(loss.is_finite());
+        assert_eq!(events, (sample.len() - 2) as u64);
+        assert!(stats.clipped_steps > 0);
+        assert!(stats.max_gradient_norm > 1e-12);
+        assert!(stats.sum_gradient_norm.is_finite());
+        assert_eq!(clipped.counters().supervised_target_bits, events * 8);
+        assert_eq!(clipped.counters().routed_expert_updates, events * 16);
+        assert!(clipped.atlas_counters().distinct_updated_parameters > 0);
+        let before = clipped.counters();
+        let (_, read_events) = clipped.evaluate_document(sample).unwrap();
+        assert_eq!(read_events, events);
+        assert_eq!(before, clipped.counters());
+        drop(clipped);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rtrl2_rejects_invalid_norms_without_mutating_parameters() {
+        let (mut model, root) = model();
+        for norm in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(model.train_document_rtrl_clipped(b"abcd", norm).is_err());
+        }
+        assert!(model.train_document_rtrl_clipped(b"ab", 1.0).is_err());
+        assert_eq!(model.counters(), MorAnfCounters::default());
+        assert_eq!(model.atlas_counters().distinct_updated_parameters, 0);
         drop(model);
         fs::remove_dir_all(root).unwrap();
     }
