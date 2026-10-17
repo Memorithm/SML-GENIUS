@@ -114,7 +114,7 @@ fn run() -> Result<()> {
             );
         }
     }
-    println!("RTRL3_SYNTHETIC_QUAD_CORE_DONE seeds=3 arms=5 train=16384 dev=8192 test2024=UNOPENED");
+    println!("RTRL3_SYNTHETIC_5_ARM_DONE seeds=3 arms=5 train=16384 dev=8192 test2024=UNOPENED");
     Ok(())
 }
 
