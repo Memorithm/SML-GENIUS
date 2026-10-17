@@ -123,6 +123,7 @@ pub mod pvp6_sbg_routing;
 pub mod pvp6_sbg_trace;
 pub mod routing_train;
 pub mod rtlr_boolean_hybrid;
+pub mod rtlr_cost_gate;
 pub mod rtlr_elastic;
 pub mod rtrl3_elastic;
 pub mod semantic;
