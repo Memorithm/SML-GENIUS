@@ -40,7 +40,10 @@ impl PilotMode {
     }
 
     fn is_matched(self) -> bool {
-        matches!(self, Self::MatchedRtrl | Self::MatchedBptt | Self::MatchedHybrid)
+        matches!(
+            self,
+            Self::MatchedRtrl | Self::MatchedBptt | Self::MatchedHybrid
+        )
     }
 }
 
@@ -207,9 +210,10 @@ fn execute(
     {
         return Err("joint gradient pathway not confirmed".into());
     }
-    if mode == PilotMode::MatchedHybrid && (hybrid_counts.rtrl_windows == 0
-        || hybrid_counts.bptt_windows == 0
-        || hybrid_counts.rtrl_target_bits + hybrid_counts.bptt_target_bits != train_events * 8)
+    if mode == PilotMode::MatchedHybrid
+        && (hybrid_counts.rtrl_windows == 0
+            || hybrid_counts.bptt_windows == 0
+            || hybrid_counts.rtrl_target_bits + hybrid_counts.bptt_target_bits != train_events * 8)
     {
         return Err("hybrid did not execute both update methods".into());
     }
@@ -220,9 +224,14 @@ fn execute(
             .create_new(true)
             .open(output.join("hybrid_schedule.tsv"))?;
         writeln!(manifest, "version\trtrl_windows\tbptt_windows\trtrl_target_bits\tbptt_target_bits\twindow\trtrl_per_cycle\tcycle_windows")?;
-        writeln!(manifest, "HYBRID_3R_1B_V1\t{}\t{}\t{}\t{}\t{MATCHED_WINDOW}\t3\t4",
-            hybrid_counts.rtrl_windows, hybrid_counts.bptt_windows,
-            hybrid_counts.rtrl_target_bits, hybrid_counts.bptt_target_bits)?;
+        writeln!(
+            manifest,
+            "HYBRID_3R_1B_V1\t{}\t{}\t{}\t{}\t{MATCHED_WINDOW}\t3\t4",
+            hybrid_counts.rtrl_windows,
+            hybrid_counts.bptt_windows,
+            hybrid_counts.rtrl_target_bits,
+            hybrid_counts.bptt_target_bits
+        )?;
         manifest.sync_all()?;
     }
     let architecture = match mode {
@@ -289,10 +298,22 @@ fn append_selection_fingerprint(hasher: &mut Sha256, source: &[u8; 32], sample: 
 }
 
 fn accumulate_hybrid(total: &mut HybridWindowCounts, add: HybridWindowCounts) -> Result<()> {
-    total.rtrl_windows = total.rtrl_windows.checked_add(add.rtrl_windows).ok_or("hybrid RTRL window count overflow")?;
-    total.bptt_windows = total.bptt_windows.checked_add(add.bptt_windows).ok_or("hybrid BPTT window count overflow")?;
-    total.rtrl_target_bits = total.rtrl_target_bits.checked_add(add.rtrl_target_bits).ok_or("hybrid RTRL target count overflow")?;
-    total.bptt_target_bits = total.bptt_target_bits.checked_add(add.bptt_target_bits).ok_or("hybrid BPTT target count overflow")?;
+    total.rtrl_windows = total
+        .rtrl_windows
+        .checked_add(add.rtrl_windows)
+        .ok_or("hybrid RTRL window count overflow")?;
+    total.bptt_windows = total
+        .bptt_windows
+        .checked_add(add.bptt_windows)
+        .ok_or("hybrid BPTT window count overflow")?;
+    total.rtrl_target_bits = total
+        .rtrl_target_bits
+        .checked_add(add.rtrl_target_bits)
+        .ok_or("hybrid RTRL target count overflow")?;
+    total.bptt_target_bits = total
+        .bptt_target_bits
+        .checked_add(add.bptt_target_bits)
+        .ok_or("hybrid BPTT target count overflow")?;
     Ok(())
 }
 
