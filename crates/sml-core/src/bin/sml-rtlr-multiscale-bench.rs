@@ -19,6 +19,9 @@ enum LabelTask {
     Lag128,
     Lag1024,
     Anf2,
+    AnfLag16,
+    AnfLag128,
+    AnfLag1023,
 }
 
 impl LabelTask {
@@ -30,7 +33,10 @@ impl LabelTask {
             "lag128" => Ok(Self::Lag128),
             "lag1024" => Ok(Self::Lag1024),
             "anf2" => Ok(Self::Anf2),
-            _ => Err("unknown RTLR diagnostic task: parity4|lag1|lag16|lag128|lag1024|anf2".into()),
+            "anf_lag16" => Ok(Self::AnfLag16),
+            "anf_lag128" => Ok(Self::AnfLag128),
+            "anf_lag1023" => Ok(Self::AnfLag1023),
+            _ => Err("unknown RTLR diagnostic task: parity4|lag1|lag16|lag128|lag1024|anf2|anf_lag16|anf_lag128|anf_lag1023".into()),
         }
     }
 
@@ -42,6 +48,9 @@ impl LabelTask {
             Self::Lag128 => "lag128",
             Self::Lag1024 => "lag1024",
             Self::Anf2 => "anf2",
+            Self::AnfLag16 => "anf_lag16",
+            Self::AnfLag128 => "anf_lag128",
+            Self::AnfLag1023 => "anf_lag1023",
         }
     }
 
@@ -53,6 +62,13 @@ impl LabelTask {
             Self::Lag128 => f64::from(bytes[i - 128].count_ones() & 1),
             Self::Lag1024 => f64::from(bytes[i - 1024].count_ones() & 1),
             Self::Anf2 => f64::from((bytes[i - 2] & bytes[i - 1]).count_ones() & 1),
+            // The ANF source feature is parity(a & b) where a and b are
+            // successive bytes. Lag L names the age of its most recent
+            // byte: L=1 is the immediately observed ANF positive control.
+            // L=1023 needs precisely the existing 1024-byte history halo.
+            Self::AnfLag16 => f64::from((bytes[i - 17] & bytes[i - 16]).count_ones() & 1),
+            Self::AnfLag128 => f64::from((bytes[i - 129] & bytes[i - 128]).count_ones() & 1),
+            Self::AnfLag1023 => f64::from((bytes[i - 1024] & bytes[i - 1023]).count_ones() & 1),
         }
     }
 }
@@ -187,6 +203,7 @@ fn bench(
     let mut train_s = 0.0f64;
     let mut total_train = 0.0f64;
     let mut count_train = 0usize;
+    let mut train_positive = 0usize;
     for document in 0..8 {
         model.reset_state();
         let base = MAX_LAG + document * (train / 8);
@@ -205,6 +222,9 @@ fn bench(
                 let offset = i - prefix;
                 let z = model.advance_train(bytes[offset - 2], bytes[offset - 1])?;
                 let y = task.label(&bytes, offset);
+                if diagnostic && y == 1.0 {
+                    train_positive += 1;
+                }
                 let p = prob(z);
                 let anchor = prob(model.anchor_state());
                 doc_loss += loss(p, y);
@@ -229,6 +249,7 @@ fn bench(
     let before = model.stats();
     let mut dev_s = 0.0f64;
     let mut dev_loss = 0.0;
+    let mut dev_positive = 0usize;
     let end = dev + MAX_LAG;
     for chunk_start in (MAX_LAG..end).step_by(BLOCK) {
         let chunk_end = (chunk_start + BLOCK).min(end);
@@ -238,7 +259,11 @@ fn bench(
         for i in chunk_start..chunk_end {
             let offset = i - prefix;
             let z = model.advance_inference(bytes[offset - 2], bytes[offset - 1])?;
-            dev_loss += loss(prob(z), task.label(&bytes, offset));
+            let label = task.label(&bytes, offset);
+            if diagnostic && label == 1.0 {
+                dev_positive += 1;
+            }
+            dev_loss += loss(prob(z), label);
         }
         dev_s += start.elapsed().as_secs_f64();
     }
@@ -251,6 +276,18 @@ fn bench(
         return Err("invalid or mutable read-only RTLR benchmark".into());
     }
     let stats = model.stats();
+    if diagnostic {
+        // Fit the Bernoulli null on TRAIN only. Independent DEV may only
+        // score that frozen null; no DEV-fitted probability is used.
+        let prior = (train_positive as f64 / count_train as f64).clamp(1e-12, 1.0 - 1e-12);
+        let null_bpc = (dev_positive as f64 * loss(prior, 1.0)
+            + (dev - dev_positive) as f64 * loss(prior, 0.0))
+            / dev as f64;
+        println!(
+            "RTLR_TRAIN_PRIOR_V1\t{}\t{mode}\t{seed}\t{train}\t{dev}\t{train_positive}\t{dev_positive}\t{prior:.9}\t{null_bpc:.9}",
+            task.name()
+        );
+    }
     let heading = if diagnostic {
         format!("RTLR_TEMPORAL_DIAG_V1\t{}", task.name())
     } else {
@@ -343,6 +380,9 @@ mod tests {
             LabelTask::Lag128,
             LabelTask::Lag1024,
             LabelTask::Anf2,
+            LabelTask::AnfLag16,
+            LabelTask::AnfLag128,
+            LabelTask::AnfLag1023,
             LabelTask::Parity4,
         ] {
             assert_eq!(LabelTask::parse(task.name()).unwrap(), task);
@@ -359,6 +399,25 @@ mod tests {
             }
         }
         assert!(LabelTask::parse("unknown").is_err());
+    }
+
+    #[test]
+    fn matched_anf_lags_use_exact_observed_source_feature() {
+        let bytes = stream(MAX_LAG + 128, 0x91f8_31a2_00c7_6d15);
+        let i = MAX_LAG;
+        let original = LabelTask::Anf2.label(&bytes, i);
+        assert_eq!(original, f64::from((bytes[i - 2] & bytes[i - 1]).count_ones() & 1));
+        for (task, lag) in [
+            (LabelTask::AnfLag16, 16usize),
+            (LabelTask::AnfLag128, 128),
+            (LabelTask::AnfLag1023, 1023),
+        ] {
+            let expected = f64::from(
+                (bytes[i - lag - 1] & bytes[i - lag]).count_ones() & 1,
+            );
+            assert_eq!(task.label(&bytes, i), expected);
+            assert_eq!(task.label(&bytes, i), LabelTask::Anf2.label(&bytes, i - lag + 1));
+        }
     }
 
     #[test]
