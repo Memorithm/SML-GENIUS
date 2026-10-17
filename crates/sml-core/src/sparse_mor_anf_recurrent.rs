@@ -7,8 +7,8 @@
 //! ANF/MOR architecture, NOT a 25B language model, and not a discrete 1-bit
 //! ANF weight learner. Monomials are fixed; gate/readout weights are learned.
 use crate::{
-    rtrl3_elastic::{ElasticRtrl3, MorRtrl3Update},
     elastic_ngram_paged_sha::{hex, Sha256},
+    rtrl3_elastic::{ElasticRtrl3, MorRtrl3Update},
     sparse_gradient_atlas::{SparseConfig, SparseGradientAtlas},
 };
 use std::{
@@ -1331,7 +1331,8 @@ mod paged_bptt_tests {
             learning_rate: 0.005,
             recurrent_clip_norm: 1e30,
             seed: 11,
-        }).unwrap();
+        })
+        .unwrap();
         let text = b"ababaccccccabababababaadddabbccaaadadadadab";
         let (loss_old, events_old) = reference.train_document(text).unwrap();
         let (loss_new, events_new, clipped) = joined
@@ -1341,11 +1342,15 @@ mod paged_bptt_tests {
         assert_eq!(events_old, events_new);
         assert_eq!(clipped, 0);
         assert_eq!(reference.counters(), joined.counters());
-        assert_eq!(reference.atlas_counters().parameter_updates,
-                   joined.atlas_counters().parameter_updates);
+        assert_eq!(
+            reference.atlas_counters().parameter_updates,
+            joined.atlas_counters().parameter_updates
+        );
         let (read_old, count_old) = reference.evaluate_document(text).unwrap();
         let before = joined.counters();
-        let (read_new, count_new) = joined.evaluate_document_rtrl3_paged(text, &recurrence).unwrap();
+        let (read_new, count_new) = joined
+            .evaluate_document_rtrl3_paged(text, &recurrence)
+            .unwrap();
         assert_eq!(read_old, read_new);
         assert_eq!(count_old, count_new);
         assert_eq!(joined.counters(), before);
@@ -1366,12 +1371,14 @@ mod paged_bptt_tests {
             learning_rate: 0.005,
             recurrent_clip_norm: 1e30,
             seed: 11,
-        }).unwrap();
+        })
+        .unwrap();
         let text = b"abaabbacacababbccbcabcabcbbacabaaacabbbbcabaaabbbcc";
         let (loss, events, clipped) = model
-            .train_document_rtrl3_paged(text, &mut recurrent).unwrap();
+            .train_document_rtrl3_paged(text, &mut recurrent)
+            .unwrap();
         assert!(loss.is_finite());
-        assert_eq!(events, (text.len()-2) as u64);
+        assert_eq!(events, (text.len() - 2) as u64);
         assert_eq!(clipped, 0);
         let counts = model.counters();
         assert_eq!(counts.supervised_target_bits, events * 8);
@@ -1379,7 +1386,9 @@ mod paged_bptt_tests {
         assert!(counts.unique_router_parameters > 0);
         assert!(model.atlas_counters().distinct_updated_parameters > 0);
         assert!(counts.recurrent_parameter_updates > 0);
-        let (_, read_events) = model.evaluate_document_rtrl3_paged(text, &recurrent).unwrap();
+        let (_, read_events) = model
+            .evaluate_document_rtrl3_paged(text, &recurrent)
+            .unwrap();
         assert_eq!(read_events, events);
         assert_eq!(counts, model.counters());
         drop(model);
