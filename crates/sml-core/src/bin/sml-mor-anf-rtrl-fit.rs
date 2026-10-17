@@ -35,7 +35,13 @@ fn sha(path: &Path) -> Result<String> {
     Ok(hex(&state.finish()))
 }
 
-fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path, bptt: bool) -> Result<()> {
+fn execute(
+    corpus: &Path,
+    provenance: &Path,
+    expected_sha: &str,
+    output: &Path,
+    bptt: bool,
+) -> Result<()> {
     if parse_hex(expected_sha).is_none() || corpus == provenance || output.exists() {
         return Err("overlapping paths, existing output or invalid source SHA".into());
     }
@@ -164,8 +170,12 @@ fn execute(corpus: &Path, provenance: &Path, expected_sha: &str, output: &Path, 
     report.write_all(metrics.as_bytes())?;
     report.sync_all()?;
     print!("{metrics}");
-    let marker = if bptt { "SML_MOR_ANF_BPTT_DONE" } else { "SML_MOR_ANF_RTRL_DONE" };
-    println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED", 
+    let marker = if bptt {
+        "SML_MOR_ANF_BPTT_DONE"
+    } else {
+        "SML_MOR_ANF_RTRL_DONE"
+    };
+    println!("{marker} source_sha256={digest} trainable_expert_capacity={} distinct_expert_weights={} router_updated={} recurrent_updates={} test=UNOPENED g0=NOT_ADMITTED",
         config.total_parameters(), experts.distinct_updated_parameters,
         counters.unique_router_parameters, counters.recurrent_parameter_updates);
     Ok(())
