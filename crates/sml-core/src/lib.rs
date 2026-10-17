@@ -10,7 +10,6 @@ use core::fmt;
 
 pub mod ablation;
 pub mod anf;
-pub mod anf_delay_line;
 pub mod anf_budgeted_four_support;
 pub mod anf_byte_backoff;
 pub mod anf_char;
@@ -19,6 +18,7 @@ pub mod anf_credit;
 pub mod anf_credit_cycles;
 pub mod anf_credit_multihop;
 pub mod anf_credit_topology;
+pub mod anf_delay_line;
 pub mod anf_dual_hidden_credit;
 pub mod anf_e5_logloss_arbiter;
 pub mod anf_e5_materialization;
