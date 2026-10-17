@@ -558,6 +558,20 @@ fn validate_paged_window(text: &[u8], window_bytes: usize) -> Result<()> {
     Ok(())
 }
 
+/// Pre-registered policy for the first mixed online / frozen-window pilot.
+/// Three RTRL windows consolidate fast, one BPTT window consolidates a frozen
+/// local history; no label is optimized twice and the split is data-independent.
+pub const HYBRID_RTRL_WINDOWS: u64 = 3;
+pub const HYBRID_CYCLE_WINDOWS: u64 = 4;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HybridWindowCounts {
+    pub rtrl_windows: u64,
+    pub bptt_windows: u64,
+    pub rtrl_target_bits: u64,
+    pub bptt_target_bits: u64,
+}
+
 struct PagedBpttFrame {
     a: u8,
     b: u8,
@@ -591,6 +605,66 @@ impl MorAnfRecurrent {
             return Err("nonfinite windowed RTRL loss".into());
         }
         Ok((total_loss, total_events))
+    }
+
+    /// Mixed optimizer schedule: 3 successive online-RTRL windows followed by
+    /// 1 exact truncated-BPTT window, all with identical causal 2-byte input
+    /// context and recurrent reset boundaries. No example is replayed.
+    ///
+    /// This is a mixed *update schedule*, NOT a sum of RTRL+BPTT derivatives
+    /// for the same target. It deliberately does not use heldout loss to choose
+    /// the mix. Experts, gate and recurrence are one shared physical model.
+    pub fn train_document_hybrid_windowed(
+        &mut self,
+        text: &[u8],
+        window_bytes: usize,
+    ) -> Result<(f64, u64, HybridWindowCounts)> {
+        validate_paged_window(text, window_bytes)?;
+        let mut loss_total = 0.0;
+        let mut events_total = 0u64;
+        let mut counts = HybridWindowCounts::default();
+        for (index, begin) in (0..text.len() - 2).step_by(window_bytes).enumerate() {
+            let end = begin.saturating_add(window_bytes).min(text.len() - 2);
+            let context = &text[begin..end + 2];
+            let do_bptt = u64::try_from(index)? % HYBRID_CYCLE_WINDOWS
+                == HYBRID_CYCLE_WINDOWS - 1;
+            let (loss, events) = if do_bptt {
+                self.train_document_bptt(context, window_bytes)?
+            } else {
+                self.train_document(context)?
+            };
+            if !loss.is_finite() || events != u64::try_from(end - begin)? {
+                return Err("invalid hybrid window exposure or loss".into());
+            }
+            let targets = events.checked_mul(8).ok_or("hybrid target overflow")?;
+            if do_bptt {
+                counts.bptt_windows = counts
+                    .bptt_windows
+                    .checked_add(1)
+                    .ok_or("hybrid BPTT windows overflow")?;
+                counts.bptt_target_bits = counts
+                    .bptt_target_bits
+                    .checked_add(targets)
+                    .ok_or("hybrid BPTT targets overflow")?;
+            } else {
+                counts.rtrl_windows = counts
+                    .rtrl_windows
+                    .checked_add(1)
+                    .ok_or("hybrid RTRL windows overflow")?;
+                counts.rtrl_target_bits = counts
+                    .rtrl_target_bits
+                    .checked_add(targets)
+                    .ok_or("hybrid RTRL targets overflow")?;
+            }
+            events_total = events_total
+                .checked_add(events)
+                .ok_or("hybrid events overflow")?;
+            loss_total += loss;
+        }
+        if !loss_total.is_finite() || events_total != u64::try_from(text.len() - 2)? {
+            return Err("invalid hybrid document aggregate".into());
+        }
+        Ok((loss_total, events_total, counts))
     }
 
     /// Read-only heldout evaluator with the **same recurrent reset boundaries**
@@ -917,6 +991,70 @@ mod paged_bptt_tests {
         drop(rtrl);
         fs::remove_dir_all(root_a).unwrap();
         fs::remove_dir_all(root_b).unwrap();
+    }
+
+    #[test]
+    fn hybrid_schedule_matches_explicit_online_bptt_sequence() {
+        let (mut hybrid, first) = model();
+        let (mut explicit, second) = model();
+        let text = b"abaabbacacababbccbcabcabcbbacabaaacabbbbcabaaabbbcc";
+        let bytes_per_window = 8;
+        let (loss, events, counts) = hybrid
+            .train_document_hybrid_windowed(text, bytes_per_window)
+            .unwrap();
+        let mut control_loss = 0.0;
+        let mut control_events = 0u64;
+        for (index, begin) in (0..text.len() - 2).step_by(bytes_per_window).enumerate() {
+            let end = (begin + bytes_per_window).min(text.len() - 2);
+            let slice = &text[begin..end + 2];
+            let (local_loss, n) = if index % HYBRID_CYCLE_WINDOWS as usize
+                == HYBRID_CYCLE_WINDOWS as usize - 1
+            {
+                explicit.train_document_bptt(slice, bytes_per_window).unwrap()
+            } else {
+                explicit.train_document(slice).unwrap()
+            };
+            control_loss += local_loss;
+            control_events += n;
+        }
+        assert_eq!(events, control_events);
+        assert_eq!(events, (text.len() - 2) as u64);
+        assert!((loss - control_loss).abs() < 1e-9);
+        assert_eq!(
+            counts.rtrl_target_bits + counts.bptt_target_bits,
+            events * 8
+        );
+        assert!(counts.rtrl_windows > 0 && counts.bptt_windows > 0);
+        assert_eq!(hybrid.counters(), explicit.counters());
+        assert_eq!(
+            hybrid.atlas_counters().distinct_updated_parameters,
+            explicit.atlas_counters().distinct_updated_parameters
+        );
+        assert!(hybrid.atlas_counters().distinct_updated_parameters > 0);
+        let previous = hybrid.counters();
+        let (_, holdout_events) = hybrid
+            .evaluate_document_windowed(text, bytes_per_window)
+            .unwrap();
+        assert_eq!(holdout_events, events);
+        assert_eq!(hybrid.counters(), previous);
+        drop(hybrid);
+        drop(explicit);
+        fs::remove_dir_all(first).unwrap();
+        fs::remove_dir_all(second).unwrap();
+    }
+
+    #[test]
+    fn hybrid_rejects_invalid_windows_without_parameter_updates() {
+        let (mut model, root) = model();
+        assert!(model.train_document_hybrid_windowed(b"ab", 8).is_err());
+        assert!(model.train_document_hybrid_windowed(b"abcd", 0).is_err());
+        assert!(model
+            .train_document_hybrid_windowed(b"abcd", PAGED_BPTT_MAX_BYTES + 1)
+            .is_err());
+        assert_eq!(model.counters(), MorAnfCounters::default());
+        assert_eq!(model.atlas_counters().distinct_updated_parameters, 0);
+        drop(model);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
