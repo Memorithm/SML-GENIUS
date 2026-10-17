@@ -200,8 +200,7 @@ fn execute(
                 } else {
                     RTRL2_CLIP_LARGE
                 };
-                let (loss, events, stats) =
-                    model.train_document_rtrl_clipped(sample, threshold)?;
+                let (loss, events, stats) = model.train_document_rtrl_clipped(sample, threshold)?;
                 clip_stats.accumulate(stats)?;
                 (loss, events)
             } else if mode == PilotMode::BoundaryHyb2 {
