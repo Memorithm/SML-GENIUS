@@ -16,6 +16,9 @@ type Result<T> = std::result::Result<T, &'static str>;
 /// Largest number of jointly addressed delays (2^4 count cells).
 pub const MAX_LAGS: usize = 4;
 
+/// Largest accepted Dirichlet pseudo-count; keeps `seen + 2 alpha` finite.
+pub const MAX_ALPHA: f64 = 1.0e9;
+
 #[derive(Clone, Debug)]
 pub struct CalibratedDelayReadout {
     lags: Vec<usize>,
@@ -27,7 +30,8 @@ pub struct CalibratedDelayReadout {
 
 impl CalibratedDelayReadout {
     /// `lags` are distinct `AnfDelayLine::read_lag` offsets; an empty set is
-    /// the TRAIN base-rate prior. `alpha` is the Dirichlet pseudo-count.
+    /// the TRAIN base-rate prior. `alpha` is the Dirichlet pseudo-count in
+    /// `(0, MAX_ALPHA]`.
     pub fn new(lags: &[usize], alpha: f64) -> Result<Self> {
         let mut sorted = lags.to_vec();
         sorted.sort_unstable();
@@ -37,6 +41,7 @@ impl CalibratedDelayReadout {
             || lags.contains(&0)
             || !alpha.is_finite()
             || alpha <= 0.0
+            || alpha > MAX_ALPHA
         {
             return Err("invalid calibrated delay readout policy");
         }
@@ -109,7 +114,7 @@ impl CalibratedDelayReadout {
 
 #[cfg(test)]
 mod tests {
-    use super::{AnfDelayLine, CalibratedDelayReadout};
+    use super::{AnfDelayLine, CalibratedDelayReadout, MAX_ALPHA};
 
     fn bytes(n: usize, mut x: u32) -> Vec<u8> {
         (0..n)
@@ -213,6 +218,14 @@ mod tests {
         assert!(CalibratedDelayReadout::new(&[1, 2, 3, 4, 5], 0.5).is_err());
         assert!(CalibratedDelayReadout::new(&[1], 0.0).is_err());
         assert!(CalibratedDelayReadout::new(&[1], f64::NAN).is_err());
+        assert!(CalibratedDelayReadout::new(&[1], f64::MAX).is_err());
+        let mut strong = CalibratedDelayReadout::new(&[], MAX_ALPHA).unwrap();
+        let mut empty_ring = AnfDelayLine::new(1).unwrap();
+        empty_ring.observe_pair(0, 0);
+        strong.observe_train(&empty_ring, true).unwrap();
+        strong.freeze().unwrap();
+        let p = strong.probability(&empty_ring).unwrap();
+        assert!(p.is_finite() && (p - 0.5).abs() < 1e-9);
 
         let mut readout = CalibratedDelayReadout::new(&[2], 0.5).unwrap();
         let mut ring = AnfDelayLine::new(8).unwrap();
