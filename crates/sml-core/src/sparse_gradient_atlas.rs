@@ -5,7 +5,10 @@
 //! pages in RAM. The 4-bit export is an **evaluation candidate**, not proof
 //! of mixed-precision 25B inference or of quantization-aware convergence.
 //! Fixed direct hash routing is a bootstrap, NOT a trained MOR router.
-use crate::elastic_ngram_paged_sha::{hex, Sha256};
+use crate::{
+    byte_factorization::ByteFactorization,
+    elastic_ngram_paged_sha::{hex, Sha256},
+};
 use std::{
     error::Error,
     fs::{self, File, OpenOptions},
@@ -19,6 +22,14 @@ pub const TOUCH_BYTES: usize = PAGE_PARAMETERS / 8;
 const FEATURES: usize = 17;
 const SCALE: f64 = 4.0;
 const VERSION: &str = "SML_SPARSE_GRADIENT_V1";
+const VERSION_MSB_TREE: &str = "SML_SPARSE_GRADIENT_V2_MSB_TREE";
+
+fn manifest_version(factorization: ByteFactorization) -> &'static str {
+    match factorization {
+        ByteFactorization::IndependentBits => VERSION,
+        ByteFactorization::MsbTree => VERSION_MSB_TREE,
+    }
+}
 
 /// Disk-backed capacity and resident-memory controls. The total capacity
 /// is *not* the number of weights that were actually updated by training.
@@ -90,6 +101,7 @@ struct Resident {
 /// pass. No full model load, no unsafe mmap, no dense attention.
 pub struct SparseGradientAtlas {
     config: SparseConfig,
+    factorization: ByteFactorization,
     master: File,
     touches: File,
     cache: Vec<Resident>,
@@ -167,7 +179,19 @@ impl SparseGradientAtlas {
     /// Creates real train-time master and exact touched-bit files.
     /// File length is allocated logically: filesystem free-space/residency
     /// must be independently checked before large physical training.
+    ///
+    /// Uses the historical [`ByteFactorization::IndependentBits`] heads.
     pub fn create(root: &Path, config: SparseConfig) -> Result<Self> {
+        Self::create_with_factorization(root, config, ByteFactorization::IndependentBits)
+    }
+
+    /// Like [`Self::create`], with an explicit next-byte factorization. The
+    /// snapshot version records it, so a reopened atlas keeps its semantics.
+    pub fn create_with_factorization(
+        root: &Path,
+        config: SparseConfig,
+        factorization: ByteFactorization,
+    ) -> Result<Self> {
         let config = config.validate()?;
         fs::create_dir(root)?;
         let master = OpenOptions::new()
@@ -184,6 +208,7 @@ impl SparseGradientAtlas {
         touches.set_len(config.pages * TOUCH_BYTES as u64)?;
         Ok(Self {
             config,
+            factorization,
             master,
             touches,
             cache: Vec::new(),
@@ -213,8 +238,12 @@ impl SparseGradientAtlas {
         }
         let manifest = fs::read_to_string(root.join("snapshot.tsv"))?;
         let fields: Vec<_> = manifest.trim_end().split('\t').collect();
+        let factorization = match fields.first() {
+            Some(&VERSION) => ByteFactorization::IndependentBits,
+            Some(&VERSION_MSB_TREE) => ByteFactorization::MsbTree,
+            _ => return Err("unknown sparse gradient snapshot version".into()),
+        };
         if fields.len() != 10
-            || fields[0] != VERSION
             || fields[1].parse::<u64>()? != config.pages
             || fields[2].parse::<usize>()? != config.max_cached_pages
             || fields[3].parse::<u32>()? != config.learning_rate.to_bits()
@@ -238,6 +267,7 @@ impl SparseGradientAtlas {
         }
         Ok(Self {
             config,
+            factorization,
             master,
             touches,
             cache: Vec::new(),
@@ -321,8 +351,8 @@ impl SparseGradientAtlas {
     }
 
     fn bit_probability(&mut self, a: u8, b: u8, bit: usize) -> Result<(usize, f64)> {
-        if bit >= 8 {
-            return Err("bit output outside 0..8".into());
+        if !self.factorization.is_head(bit) {
+            return Err("output head outside the atlas factorization".into());
         }
         let page = self.cached(route(a, b, bit, self.config.pages))?;
         let mut score = 0.0f64;
@@ -337,7 +367,7 @@ impl SparseGradientAtlas {
     /// expert page rather than the legacy immutable hash route. The caller
     /// owns the learnt router and must use the SAME page pair on evaluation.
     pub fn probability_on_page(&mut self, page_id: u64, a: u8, b: u8, bit: usize) -> Result<f64> {
-        if page_id >= self.config.pages || bit >= 8 {
+        if page_id >= self.config.pages || !self.factorization.is_head(bit) {
             return Err("invalid learned expert page / output bit".into());
         }
         let page = self.cached(page_id)?;
@@ -361,7 +391,7 @@ impl SparseGradientAtlas {
         derivative: f64,
     ) -> Result<()> {
         if page_id >= self.config.pages
-            || bit >= 8
+            || !self.factorization.is_head(bit)
             || !derivative.is_finite()
             || derivative.abs() > 32.0
         {
@@ -448,8 +478,8 @@ impl SparseGradientAtlas {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
         for window in document.windows(3) {
-            for bit in 0..8 {
-                loss += self.train_bit(window[0], window[1], bit, window[2] & (1 << bit) != 0)?;
+            for (head, label) in self.factorization.decisions(window[2]) {
+                loss += self.train_bit(window[0], window[1], head, label)?;
             }
             predicted_bytes = predicted_bytes
                 .checked_add(1)
@@ -485,15 +515,14 @@ impl SparseGradientAtlas {
             for position in begin..end {
                 let a = document[position];
                 let b = document[position + 1];
-                for bit in 0..8usize {
-                    let page = route(a, b, bit, self.config.pages);
-                    scheduled.push((page, position, bit));
+                for (head, label) in self.factorization.decisions(document[position + 2]) {
+                    let page = route(a, b, head, self.config.pages);
+                    scheduled.push((page, position, head, label));
                 }
             }
             scheduled.sort_by_key(|entry| entry.0);
-            for (_, position, bit) in scheduled {
-                let target = document[position + 2] & (1 << bit) != 0;
-                loss += self.train_bit(document[position], document[position + 1], bit, target)?;
+            for (_, position, head, label) in scheduled {
+                loss += self.train_bit(document[position], document[position + 1], head, label)?;
             }
         }
         if !loss.is_finite() {
@@ -521,27 +550,23 @@ impl SparseGradientAtlas {
             let end = (start + batch_bytes).min(document.len());
             let mut routed = Vec::with_capacity((end - start) * 8);
             for target in start..end {
-                for bit in 0..8 {
+                for (head, label) in self.factorization.decisions(document[target]) {
                     routed.push((
                         route(
                             document[target - 2],
                             document[target - 1],
-                            bit,
+                            head,
                             self.config.pages,
                         ),
                         target,
-                        bit,
+                        head,
+                        label,
                     ));
                 }
             }
             routed.sort_by_key(|entry| entry.0);
-            for (_, target, bit) in routed {
-                loss += self.train_bit(
-                    document[target - 2],
-                    document[target - 1],
-                    bit,
-                    document[target] & (1 << bit) != 0,
-                )?;
+            for (_, target, head, label) in routed {
+                loss += self.train_bit(document[target - 2], document[target - 1], head, label)?;
             }
         }
         if !loss.is_finite() {
@@ -567,24 +592,25 @@ impl SparseGradientAtlas {
             let end = (start + batch_bytes).min(document.len());
             let mut routed = Vec::with_capacity((end - start) * 8);
             for target in start..end {
-                for bit in 0..8 {
+                for (head, label) in self.factorization.decisions(document[target]) {
                     routed.push((
                         route(
                             document[target - 2],
                             document[target - 1],
-                            bit,
+                            head,
                             self.config.pages,
                         ),
                         target,
-                        bit,
+                        head,
+                        label,
                     ));
                 }
             }
             routed.sort_by_key(|entry| entry.0);
-            for (_, target, bit) in routed {
+            for (_, target, head, label) in routed {
                 let (_, p) =
-                    self.bit_probability(document[target - 2], document[target - 1], bit)?;
-                loss += binary_loss_bits(p, document[target] & (1 << bit) != 0);
+                    self.bit_probability(document[target - 2], document[target - 1], head)?;
+                loss += binary_loss_bits(p, label);
             }
         }
         if !loss.is_finite() {
@@ -597,9 +623,9 @@ impl SparseGradientAtlas {
         let mut loss = 0.0;
         let mut predicted_bytes = 0u64;
         for window in document.windows(3) {
-            for bit in 0..8 {
-                let (_, p) = self.bit_probability(window[0], window[1], bit)?;
-                loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
+            for (head, label) in self.factorization.decisions(window[2]) {
+                let (_, p) = self.bit_probability(window[0], window[1], head)?;
+                loss += binary_loss_bits(p, label);
             }
             predicted_bytes = predicted_bytes
                 .checked_add(1)
@@ -627,23 +653,24 @@ impl SparseGradientAtlas {
             let end = (begin + batch_bytes).min(predicted);
             let mut scheduled = Vec::with_capacity((end - begin) * 8);
             for position in begin..end {
-                for bit in 0..8usize {
+                for (head, label) in self.factorization.decisions(document[position + 2]) {
                     scheduled.push((
                         route(
                             document[position],
                             document[position + 1],
-                            bit,
+                            head,
                             self.config.pages,
                         ),
                         position,
-                        bit,
+                        head,
+                        label,
                     ));
                 }
             }
             scheduled.sort_by_key(|entry| entry.0);
-            for (_, pos, bit) in scheduled {
-                let (_, p) = self.bit_probability(document[pos], document[pos + 1], bit)?;
-                loss += binary_loss_bits(p, document[pos + 2] & (1 << bit) != 0);
+            for (_, pos, head, label) in scheduled {
+                let (_, p) = self.bit_probability(document[pos], document[pos + 1], head)?;
+                loss += binary_loss_bits(p, label);
             }
         }
         if !loss.is_finite() {
@@ -662,6 +689,11 @@ impl SparseGradientAtlas {
         self.config
     }
 
+    #[must_use]
+    pub fn factorization(&self) -> ByteFactorization {
+        self.factorization
+    }
+
     pub fn flush(&mut self) -> Result<()> {
         for index in 0..self.cache.len() {
             self.flush_at(index)?;
@@ -678,7 +710,8 @@ impl SparseGradientAtlas {
         let master_sha = file_digest(&mut self.master)?;
         let touches_sha = file_digest(&mut self.touches)?;
         let manifest = format!(
-            "{VERSION}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{master_sha}\t{touches_sha}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{master_sha}\t{touches_sha}\n",
+            manifest_version(self.factorization),
             self.config.pages,
             self.config.max_cached_pages,
             self.config.learning_rate.to_bits(),
@@ -732,6 +765,7 @@ impl SparseGradientAtlas {
 /// Q4 loss is explicitly measured rather than inferred from master loss.
 pub struct QuantizedSparseAtlas {
     config: SparseConfig,
+    factorization: ByteFactorization,
     packed: File,
     cache: Vec<QuantizedPage>,
     tick: u64,
@@ -745,7 +779,18 @@ struct QuantizedPage {
 }
 
 impl QuantizedSparseAtlas {
+    /// Opens an export of an [`ByteFactorization::IndependentBits`] atlas.
     pub fn open(path: &Path, config: SparseConfig) -> Result<Self> {
+        Self::open_with_factorization(path, config, ByteFactorization::IndependentBits)
+    }
+
+    /// The raw Q4 file carries no header: `factorization` must equal
+    /// `SparseGradientAtlas::factorization()` of the exported atlas.
+    pub fn open_with_factorization(
+        path: &Path,
+        config: SparseConfig,
+        factorization: ByteFactorization,
+    ) -> Result<Self> {
         let config = config.validate()?;
         let info = fs::symlink_metadata(path)?;
         if !info.is_file()
@@ -757,6 +802,7 @@ impl QuantizedSparseAtlas {
         let packed = File::open(path)?;
         Ok(Self {
             config,
+            factorization,
             packed,
             cache: Vec::new(),
             tick: 0,
@@ -797,8 +843,8 @@ impl QuantizedSparseAtlas {
     }
 
     pub fn probability(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
-        if bit >= 8 {
-            return Err("invalid output bit".into());
+        if !self.factorization.is_head(bit) {
+            return Err("invalid output head".into());
         }
         let page_id = route(a, b, bit, self.config.pages);
         let index = self.load(page_id)?;
@@ -824,9 +870,9 @@ impl QuantizedSparseAtlas {
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
         let mut loss = 0f64;
         for window in document.windows(3) {
-            for bit in 0..8 {
-                let p = self.probability(window[0], window[1], bit)?;
-                loss += binary_loss_bits(p, window[2] & (1 << bit) != 0);
+            for (head, label) in self.factorization.decisions(window[2]) {
+                let p = self.probability(window[0], window[1], head)?;
+                loss += binary_loss_bits(p, label);
             }
         }
         if !loss.is_finite() {
@@ -849,23 +895,24 @@ impl QuantizedSparseAtlas {
             let end = (begin + batch_bytes).min(predicted);
             let mut scheduled = Vec::with_capacity((end - begin) * 8);
             for position in begin..end {
-                for bit in 0..8usize {
+                for (head, label) in self.factorization.decisions(document[position + 2]) {
                     scheduled.push((
                         route(
                             document[position],
                             document[position + 1],
-                            bit,
+                            head,
                             self.config.pages,
                         ),
                         position,
-                        bit,
+                        head,
+                        label,
                     ));
                 }
             }
             scheduled.sort_by_key(|entry| entry.0);
-            for (_, pos, bit) in scheduled {
-                let probability = self.probability(document[pos], document[pos + 1], bit)?;
-                loss += binary_loss_bits(probability, document[pos + 2] & (1 << bit) != 0);
+            for (_, pos, head, label) in scheduled {
+                let probability = self.probability(document[pos], document[pos + 1], head)?;
+                loss += binary_loss_bits(probability, label);
             }
         }
         if !loss.is_finite() {
@@ -1105,5 +1152,98 @@ mod tests {
         assert!(c.resident_payload_bound() <= 34_000);
         assert!(c.train_master_bytes() >= 100_000_000_000);
         assert!(c.packed_q4_bytes() >= 12_500_000_000);
+    }
+
+    /// Bytes drawn from {0x00, 0xFF}: every bit of a target equals its
+    /// first bit, so the true conditional law has 1 bit/byte of entropy.
+    fn all_or_nothing(n: usize, seed: u64) -> Vec<u8> {
+        let mut x = seed | 1;
+        (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                if x >> 63 == 0 {
+                    0x00
+                } else {
+                    0xff
+                }
+            })
+            .collect()
+    }
+
+    fn fit_dev_bpb(factorization: ByteFactorization, label: &str) -> f64 {
+        let dir = temp(label);
+        let mut m = SparseGradientAtlas::create_with_factorization(&dir, cfg(64, 4), factorization)
+            .unwrap();
+        let train = all_or_nothing(4096, 0x51);
+        let dev = all_or_nothing(2048, 0xd3);
+        for _ in 0..6 {
+            m.train_document_grouped(&train, 512).unwrap();
+        }
+        let (loss, n) = m.evaluate_document(&dev).unwrap();
+        fs::remove_dir_all(dir).unwrap();
+        loss / n as f64
+    }
+
+    #[test]
+    fn msb_tree_models_dependence_between_bits_of_one_byte() {
+        let independent = fit_dev_bpb(ByteFactorization::IndependentBits, "indep");
+        let tree = fit_dev_bpb(ByteFactorization::MsbTree, "tree");
+        // Independent bits cannot do better than 8 x H(1/2) = 8 bits/byte.
+        assert!(independent > 7.9, "independent={independent}");
+        assert!(tree < 1.5, "tree={tree}");
+    }
+
+    #[test]
+    fn msb_tree_snapshot_records_its_factorization() {
+        let dir = temp("tree-snapshot");
+        let config = cfg(32, 2);
+        let mut m = SparseGradientAtlas::create_with_factorization(
+            &dir,
+            config,
+            ByteFactorization::MsbTree,
+        )
+        .unwrap();
+        assert!(m.train_bit(1, 2, 0, true).is_err(), "node 0 is not a head");
+        assert!(m.train_bit(1, 2, 256, true).is_err());
+        let doc: Vec<u8> = (0..600).map(|i| (i * 31 % 251) as u8).collect();
+        m.train_document(&doc).unwrap();
+        assert_eq!(m.counters().supervised_bits, 598 * 8);
+        let (sequential, n) = m.evaluate_document(&doc).unwrap();
+        let (grouped, n_grouped) = m.evaluate_document_grouped(&doc, 128).unwrap();
+        assert_eq!(n, n_grouped);
+        assert!((sequential - grouped).abs() < 1e-9);
+        m.checkpoint(&dir).unwrap();
+        let manifest = fs::read_to_string(dir.join("snapshot.tsv")).unwrap();
+        assert!(manifest.starts_with("SML_SPARSE_GRADIENT_V2_MSB_TREE\t"));
+        let mut reopened = SparseGradientAtlas::reopen(&dir, config).unwrap();
+        assert_eq!(reopened.factorization(), ByteFactorization::MsbTree);
+        let (resumed, _) = reopened.evaluate_document(&doc).unwrap();
+        assert!((resumed - sequential).abs() < 1e-9);
+
+        reopened.export_q4(&dir.join("weights.q4")).unwrap();
+        let mut q4 = QuantizedSparseAtlas::open_with_factorization(
+            &dir.join("weights.q4"),
+            config,
+            ByteFactorization::MsbTree,
+        )
+        .unwrap();
+        let (q4_loss, q4_n) = q4.evaluate_document(&doc).unwrap();
+        let (q4_grouped, _) = q4.evaluate_document_grouped(&doc, 128).unwrap();
+        assert_eq!(q4_n, n);
+        assert!(q4_loss.is_finite() && (q4_loss - q4_grouped).abs() < 1e-9);
+
+        fs::write(
+            dir.join("snapshot.tsv"),
+            manifest.replacen(
+                "SML_SPARSE_GRADIENT_V2_MSB_TREE",
+                "SML_SPARSE_GRADIENT_V9",
+                1,
+            ),
+        )
+        .unwrap();
+        assert!(SparseGradientAtlas::reopen(&dir, config).is_err());
+        fs::remove_dir_all(dir).unwrap();
     }
 }
