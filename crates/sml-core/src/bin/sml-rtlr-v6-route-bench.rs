@@ -429,6 +429,23 @@ fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
     if !routed_mps.is_finite() || routed_mps <= 0.0 {
         return Err("invalid measured routed DEV runtime".into());
     }
+    let rates = [
+        DISCOVER as f64 / discovery_seconds / 1e6,
+        FIT as f64 / t_v3 / 1e6,
+        FIT as f64 / t_v4 / 1e6,
+        DEV as f64 / v3_secs / 1e6,
+        DEV as f64 / v4_secs / 1e6,
+        DEV as f64 / bit_secs / 1e6,
+    ];
+    if rates.iter().any(|v| !v.is_finite() || *v <= 0.0)
+        || [v3_loss, v4_loss, v5_loss, bit_loss, prior_loss, routed_loss]
+            .iter()
+            .any(|v| !v.is_finite() || *v < 0.0)
+        || dev_positive > DEV as u64
+        || train_positive > FIT as u64
+    {
+        return Err("nonfinite V6 metrics or invalid supervised counts".into());
+    }
     println!(
         "RTLR_V6_ROUTE_V1\t{panel}\t{lag}\t{seed}\t{DISCOVER}\t{FIT}\t{CALIB}\t{DEV}\t{inferred}\t{route_id}\t{recurrent_calls}\t{routed_loss:.9}\t{bit_loss:.9}\t{v5_loss:.9}\t{v3_loss:.9}\t{v4_loss:.9}\t{prior_loss:.9}\t{routed_mps:.6}\t{:.6}\t{:.6}\t{miner_bytes}\t{}\t{v5_active}\t{v5_payload}\t{v5_weight:.9}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}",
         rates[5],
