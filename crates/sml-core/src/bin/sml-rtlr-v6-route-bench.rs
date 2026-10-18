@@ -129,7 +129,10 @@ fn eval_v4(m: &mut RtlrBooleanHybrid, source: &[u8], unrelated: &[u8], lag: usiz
 }
 fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
     if panel > 2 || ![0, 64, 1023].contains(&lag) || ![11, 23, 37].contains(&seed) {
-        return Err("usage: sml-rtlr-v6-route-bench PANEL(0..2) LAG(0|64|1023) SEED(11|23|37) UNIQUE_DIR".into());
+        return Err(
+            "usage: sml-rtlr-v6-route-bench PANEL(0..2) LAG(0|64|1023) SEED(11|23|37) UNIQUE_DIR"
+                .into(),
+        );
     }
     fs::create_dir(root)?;
     let train_seed = seed_for(TRAIN_SEED, panel);
@@ -246,7 +249,10 @@ fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
             ring.observe_pair(source[i - 2], source[i - 1]);
             let p = if inferred == 0 {
                 frozen_prior
-            } else if ring.read_lag(inferred).ok_or("missing TRAIN ring history")? {
+            } else if ring
+                .read_lag(inferred)
+                .ok_or("missing TRAIN ring history")?
+            {
                 0.999
             } else {
                 0.001
@@ -399,7 +405,9 @@ fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
             (sum / DEV as f64, 0_u64)
         }
         InferenceRoute::RecurrentHybrid => {
-            let model = mined.as_mut().ok_or("TRAIN gate chose nonexistent hybrid")?;
+            let model = mined
+                .as_mut()
+                .ok_or("TRAIN gate chose nonexistent hybrid")?;
             model.reset_state()?;
             prime_v4(model, dev_seed, HALO)?;
             (eval_v4(model, &source, &unrelated, lag)?, DEV as u64)
@@ -410,7 +418,9 @@ fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
         || (route_id == 0 && (routed_loss - bit_loss).abs() > 1e-12)
         || (route_id == 1 && (routed_loss - v5_loss).abs() > 1e-12)
     {
-        return Err("DEV changed route or selected path disagrees with independent comparator".into());
+        return Err(
+            "DEV changed route or selected path disagrees with independent comparator".into(),
+        );
     }
     if mined.as_ref().map(RtlrBooleanHybrid::expert_weights) != trained_mined {
         return Err("routed DEV modified learned selector".into());
