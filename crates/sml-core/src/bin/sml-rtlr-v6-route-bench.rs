@@ -420,29 +420,16 @@ fn run(panel: u64, lag: usize, seed: u64, root: &Path) -> Result<()> {
         return Err("invalid measured routed DEV runtime".into());
     }
     println!(
-        "RTLR_V6_ROUTE_V1\t{panel}\t{lag}\t{seed}\t{DISCOVER}\t{FIT}\t{CALIB}\t{DEV}\t{inferred}\t{route_id}\t{recurrent_calls}\t{routed_loss:.9}\t{bit_loss:.9}\t{v5_loss:.9}\t{v3_loss:.9}\t{v4_loss:.9}\t{prior_loss:.9}\t{routed_mps:.6}\t{:.6}\t{:.6}\t{}\t{}\t{miner_bytes}",
-        DEV as f64 / bit_secs / 1e6,
+        "RTLR_V6_ROUTE_V1\t{panel}\t{lag}\t{seed}\t{DISCOVER}\t{FIT}\t{CALIB}\t{DEV}\t{inferred}\t{route_id}\t{recurrent_calls}\t{routed_loss:.9}\t{bit_loss:.9}\t{v5_loss:.9}\t{v3_loss:.9}\t{v4_loss:.9}\t{prior_loss:.9}\t{routed_mps:.6}\t{:.6}\t{:.6}\t{miner_bytes}\t{}\t{v5_active}\t{v5_payload}\t{v5_weight:.9}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}",
+        rates[5],
         if v5_secs > 0.0 { DEV as f64 / v5_secs / 1e6 } else { 0.0 },
         ring.storage_bytes(),
-        if chosen_route == InferenceRoute::RecurrentHybrid { 1 } else { 0 }
+        rates[1],
+        rates[2],
+        if t_v5 > 0.0 { FIT as f64 / t_v5 / 1e6 } else { 0.0 },
+        rates[3],
+        rates[4],
     );
-
-    let discovered_mps = DISCOVER as f64 / discovery_seconds / 1e6;
-    let rates = [
-        discovered_mps,
-        FIT as f64 / t_v3 / 1e6,
-        FIT as f64 / t_v4 / 1e6,
-        DEV as f64 / v3_secs / 1e6,
-        DEV as f64 / v4_secs / 1e6,
-        DEV as f64 / bit_secs / 1e6,
-    ];
-    if rates.iter().any(|v| !v.is_finite() || *v <= 0.0)
-        || [v3_loss, v4_loss, v5_loss, bit_loss, prior_loss]
-            .iter()
-            .any(|v| !v.is_finite() || *v < 0.0)
-    {
-        return Err("nonfinite or invalid CPU metrics".into());
-    }
     Ok(())
 }
 fn main() -> Result<()> {
