@@ -7,6 +7,7 @@
 //! ANF/MOR architecture, NOT a 25B language model, and not a discrete 1-bit
 //! ANF weight learner. Monomials are fixed; gate/readout weights are learned.
 use crate::{
+    byte_factorization::ByteFactorization,
     elastic_ngram_paged_sha::{hex, Sha256},
     rtlr_elastic::RtlrElastic,
     rtrl3_elastic::{ElasticRtrl3, MorRtrl3Update},
@@ -166,13 +167,38 @@ fn hash_file(path: &Path) -> Result<String> {
 
 impl MorAnfRecurrent {
     pub fn create(directory: &Path, config: SparseConfig) -> Result<Self> {
+        Self::create_with_factorization(directory, config, ByteFactorization::IndependentBits)
+    }
+
+    /// Like [`Self::create`] with an explicit next-byte factorization.
+    /// `MsbTree` predicts each bit conditioned on the bits already emitted for
+    /// the same byte; the factorization is recorded in the atlas snapshot, so
+    /// [`Self::reopen`] restores it without a new manifest field.
+    pub fn create_with_factorization(
+        directory: &Path,
+        config: SparseConfig,
+        factorization: ByteFactorization,
+    ) -> Result<Self> {
         if config.pages < 2 {
             return Err("MOR needs at least two pages".into());
         }
         Ok(Self {
-            atlas: SparseGradientAtlas::create(directory, config)?,
+            atlas: SparseGradientAtlas::create_with_factorization(
+                directory,
+                config,
+                factorization,
+            )?,
             head: Head::default(),
         })
+    }
+
+    #[must_use]
+    pub fn factorization(&self) -> ByteFactorization {
+        self.atlas.factorization()
+    }
+
+    fn decisions(&self, byte: u8) -> [(usize, bool); 8] {
+        self.atlas.factorization().decisions(byte)
     }
 
     pub fn counters(&self) -> MorAnfCounters {
@@ -283,14 +309,8 @@ impl MorAnfRecurrent {
         for triple in text.windows(3) {
             trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
             let mut recurrent_derivative = 0f64;
-            for bit in 0..8 {
-                let (cost, credit) = self.train_target(
-                    triple[0],
-                    triple[1],
-                    bit,
-                    (triple[2] >> bit) & 1 == 1,
-                    trace,
-                )?;
+            for (bit, label) in self.decisions(triple[2]) {
+                let (cost, credit) = self.train_target(triple[0], triple[1], bit, label, trace)?;
                 loss += cost;
                 recurrent_derivative += credit;
             }
@@ -336,14 +356,8 @@ impl MorAnfRecurrent {
             let h = recurrent.advance_train(triple[0], triple[1])?;
             let trace = Trace { h, dh: [0.0; 3] };
             let mut credit = 0.0f64;
-            for bit in 0..8 {
-                let (cost, local) = self.train_target(
-                    triple[0],
-                    triple[1],
-                    bit,
-                    (triple[2] >> bit) & 1 == 1,
-                    trace,
-                )?;
+            for (bit, label) in self.decisions(triple[2]) {
+                let (cost, local) = self.train_target(triple[0], triple[1], bit, label, trace)?;
                 loss += cost;
                 credit += local;
             }
@@ -388,8 +402,7 @@ impl MorAnfRecurrent {
                 dh: [0.0; 3],
             };
             let mut credit = 0.0f64;
-            for bit in 0..8 {
-                let label = (triple[2] >> bit) & 1 == 1;
+            for (bit, label) in self.decisions(triple[2]) {
                 let shadow_p = if recurrent.active() > 1 {
                     self.prediction(triple[0], triple[1], bit, anchor)?.p
                 } else {
@@ -441,13 +454,9 @@ impl MorAnfRecurrent {
         for triple in text.windows(3) {
             let h = state.advance_inference(triple[0], triple[1])?;
             let trace = Trace { h, dh: [0.0; 3] };
-            for bit in 0..8 {
+            for (bit, label) in self.decisions(triple[2]) {
                 let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
-                loss += if triple[2] & (1 << bit) != 0 {
-                    -p.log2()
-                } else {
-                    -(1.0 - p).log2()
-                };
+                loss += if label { -p.log2() } else { -(1.0 - p).log2() };
             }
             events += 1;
         }
@@ -483,14 +492,8 @@ impl MorAnfRecurrent {
                 dh: [0.0; 3],
             };
             let mut credit = 0.0f64;
-            for bit in 0..8 {
-                let (cost, local) = self.train_target(
-                    triple[0],
-                    triple[1],
-                    bit,
-                    (triple[2] >> bit) & 1 == 1,
-                    feature,
-                )?;
+            for (bit, label) in self.decisions(triple[2]) {
+                let (cost, local) = self.train_target(triple[0], triple[1], bit, label, feature)?;
                 loss += cost;
                 credit += local;
             }
@@ -537,13 +540,9 @@ impl MorAnfRecurrent {
                 h: hidden,
                 dh: [0.0; 3],
             };
-            for bit in 0..8 {
+            for (bit, label) in self.decisions(triple[2]) {
                 let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
-                loss += if triple[2] & (1 << bit) != 0 {
-                    -p.log2()
-                } else {
-                    -(1.0 - p).log2()
-                };
+                loss += if label { -p.log2() } else { -(1.0 - p).log2() };
             }
             events += 1;
         }
@@ -575,14 +574,8 @@ impl MorAnfRecurrent {
         for triple in text.windows(3) {
             trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
             let mut recurrent_derivative = 0.0f64;
-            for bit in 0..8 {
-                let (cost, credit) = self.train_target(
-                    triple[0],
-                    triple[1],
-                    bit,
-                    (triple[2] >> bit) & 1 == 1,
-                    trace,
-                )?;
+            for (bit, label) in self.decisions(triple[2]) {
+                let (cost, credit) = self.train_target(triple[0], triple[1], bit, label, trace)?;
                 loss += cost;
                 recurrent_derivative += credit;
             }
@@ -650,13 +643,9 @@ impl MorAnfRecurrent {
         let mut events = 0u64;
         for triple in text.windows(3) {
             trace = trace.advance(triple[0], triple[1], &self.head.recurrence);
-            for bit in 0..8 {
+            for (bit, label) in self.decisions(triple[2]) {
                 let p = self.prediction(triple[0], triple[1], bit, trace)?.p;
-                loss += if triple[2] & (1 << bit) != 0 {
-                    -p.log2()
-                } else {
-                    -(1.0 - p).log2()
-                };
+                loss += if label { -p.log2() } else { -(1.0 - p).log2() };
             }
             events += 1;
         }
@@ -869,6 +858,83 @@ mod tests {
         }
     }
 
+    /// Bytes drawn from {0x00, 0xFF}: every bit of a target equals its first
+    /// bit, so the true conditional law has 1 bit/byte of entropy.
+    fn all_or_nothing(n: usize, seed: u64) -> Vec<u8> {
+        let mut x = seed | 1;
+        (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                if x >> 63 == 0 {
+                    0x00
+                } else {
+                    0xff
+                }
+            })
+            .collect()
+    }
+
+    fn fit_all_or_nothing(factorization: ByteFactorization, tag: &str) -> f64 {
+        let root = path(tag);
+        let mut model = MorAnfRecurrent::create_with_factorization(
+            &root,
+            SparseConfig {
+                pages: 64,
+                max_cached_pages: 4,
+                learning_rate: 0.25,
+            },
+            factorization,
+        )
+        .unwrap();
+        assert_eq!(model.factorization(), factorization);
+        let train = all_or_nothing(3000, 0x51);
+        let dev = all_or_nothing(1500, 0xd3);
+        for _ in 0..4 {
+            model.train_document(&train).unwrap();
+        }
+        let (loss, n) = model.evaluate_document(&dev).unwrap();
+        fs::remove_dir_all(root).unwrap();
+        loss / n as f64
+    }
+
+    #[test]
+    fn msb_tree_models_dependence_between_bits_of_one_byte() {
+        let independent = fit_all_or_nothing(ByteFactorization::IndependentBits, "indep");
+        let tree = fit_all_or_nothing(ByteFactorization::MsbTree, "tree");
+        // Independent bits cannot beat 8 x H(1/2) = 8 bits/byte by construction.
+        assert!(independent > 7.5, "independent={independent}");
+        assert!(tree < 2.0, "tree={tree}");
+    }
+
+    #[test]
+    fn msb_tree_survives_checkpoint_and_every_trainer_variant() {
+        let root = path("tree-ckpt");
+        let mut model =
+            MorAnfRecurrent::create_with_factorization(&root, config(), ByteFactorization::MsbTree)
+                .unwrap();
+        let doc: Vec<u8> = (0..300usize)
+            .map(|n| if n % 17 < 9 { b'a' } else { b'b' })
+            .collect();
+        let (before, events) = model.evaluate_document(&doc).unwrap();
+        assert!((before / events as f64 - 8.0).abs() < 1e-10);
+        model.train_document(&doc).unwrap();
+        model.train_document_rtrl_clipped(&doc, 1.0).unwrap();
+        model.train_document_bptt(&doc, 64).unwrap();
+        model.train_document_hyb2_boundary(&doc, 64).unwrap();
+        let (after, _) = model.evaluate_document(&doc).unwrap();
+        assert!(after < before * 0.8, "before {before} after {after}");
+        // Four trainers, each 8 supervised decisions per predicted byte.
+        assert_eq!(model.counters().supervised_target_bits, 4 * (300 - 2) * 8);
+        model.checkpoint(&root).unwrap();
+        let mut frozen = MorAnfRecurrent::reopen(&root, config()).unwrap();
+        assert_eq!(frozen.factorization(), ByteFactorization::MsbTree);
+        let (holdout, _) = frozen.evaluate_document(&doc).unwrap();
+        assert!((holdout - after).abs() < 1e-9);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn mor_anf_recurrent_learns_and_checkpoint_is_immutable() {
         let root = path("fit");
@@ -960,9 +1026,9 @@ pub struct HybridWindowCounts {
 struct PagedBpttFrame {
     a: u8,
     b: u8,
-    target: u8,
     previous_h: f64,
     h: f64,
+    decisions: [(usize, bool); 8],
     predictions: Vec<MixturePrediction>,
 }
 
@@ -1103,16 +1169,17 @@ impl MorAnfRecurrent {
                 let b = text[position + 1];
                 let previous_h = trace.h;
                 trace = trace.advance(a, b, &self.head.recurrence);
+                let decisions = self.decisions(text[position + 2]);
                 let mut predictions = Vec::with_capacity(8);
-                for bit in 0..8 {
+                for (bit, _) in decisions {
                     predictions.push(self.prediction(a, b, bit, trace)?);
                 }
                 frames.push(PagedBpttFrame {
                     a,
                     b,
-                    target: text[position + 2],
                     previous_h,
                     h: trace.h,
+                    decisions,
                     predictions,
                 });
             }
@@ -1126,8 +1193,8 @@ impl MorAnfRecurrent {
 
             for frame in frames.iter().rev() {
                 let mut state_credit = next_state_credit;
-                for (bit, pred) in frame.predictions.iter().enumerate() {
-                    let y = f64::from((frame.target >> bit) & 1);
+                for (pred, &(bit, label)) in frame.predictions.iter().zip(&frame.decisions) {
+                    let y = f64::from(u8::from(label));
                     let p = pred.p.clamp(1e-12, 1.0 - 1e-12);
                     window_loss_nats -= y * p.ln() + (1.0 - y) * (1.0 - p).ln();
                     let dl_dp = (p - y) / (p * (1.0 - p));
@@ -1267,16 +1334,17 @@ impl MorAnfRecurrent {
                 let b = text[position + 1];
                 let previous_h = trace.h;
                 trace = trace.advance(a, b, &self.head.recurrence);
+                let decisions = self.decisions(text[position + 2]);
                 let mut predictions = Vec::with_capacity(8);
-                for bit in 0..8 {
+                for (bit, _) in decisions {
                     predictions.push(self.prediction(a, b, bit, trace)?);
                 }
                 frames.push(PagedBpttFrame {
                     a,
                     b,
-                    target: text[position + 2],
                     previous_h,
                     h: trace.h,
+                    decisions,
                     predictions,
                 });
             }
@@ -1290,8 +1358,8 @@ impl MorAnfRecurrent {
 
             for frame in frames.iter().rev() {
                 let mut state_credit = next_state_credit;
-                for (bit, pred) in frame.predictions.iter().enumerate() {
-                    let y = f64::from((frame.target >> bit) & 1);
+                for (pred, &(bit, label)) in frame.predictions.iter().zip(&frame.decisions) {
+                    let y = f64::from(u8::from(label));
                     let p = pred.p.clamp(1e-12, 1.0 - 1e-12);
                     window_loss_nats -= y * p.ln() + (1.0 - y) * (1.0 - p).ln();
                     let dl_dp = (p - y) / (p * (1.0 - p));
@@ -1703,6 +1771,59 @@ mod paged_bptt_tests {
         assert_eq!(counters, model.counters());
         drop(model);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn msb_tree_rtrl3_scalar_paged_still_matches_the_scalar_trainer_exactly() {
+        use crate::rtrl3_elastic::Rtrl3Config;
+        let make = |tag: &str| {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let root = std::env::temp_dir().join(format!("sml-{tag}-{}-{now}", std::process::id()));
+            let model = MorAnfRecurrent::create_with_factorization(
+                &root,
+                SparseConfig {
+                    pages: 32,
+                    max_cached_pages: 3,
+                    learning_rate: 0.25,
+                },
+                ByteFactorization::MsbTree,
+            )
+            .unwrap();
+            (model, root)
+        };
+        let (mut reference, path_ref) = make("tree-ref");
+        let (mut joined, path_joined) = make("tree-joined");
+        let mut recurrence = ElasticRtrl3::for_mor(Rtrl3Config {
+            hidden: 1,
+            mixing_rank: 0,
+            eligibility_rank: 1,
+            learning_rate: 0.005,
+            recurrent_clip_norm: 1e30,
+            seed: 11,
+        })
+        .unwrap();
+        let text = b"ababaccccccabababababaadddabbccaaadadadadab";
+        let (loss_old, events_old) = reference.train_document(text).unwrap();
+        let (loss_new, events_new, clipped) = joined
+            .train_document_rtrl3_paged(text, &mut recurrence)
+            .unwrap();
+        assert_eq!(loss_old, loss_new);
+        assert_eq!(events_old, events_new);
+        assert_eq!(clipped, 0);
+        assert_eq!(reference.counters(), joined.counters());
+        let (read_old, count_old) = reference.evaluate_document(text).unwrap();
+        let (read_new, count_new) = joined
+            .evaluate_document_rtrl3_paged(text, &recurrence)
+            .unwrap();
+        assert_eq!(read_old, read_new);
+        assert_eq!(count_old, count_new);
+        drop(reference);
+        drop(joined);
+        fs::remove_dir_all(path_ref).unwrap();
+        fs::remove_dir_all(path_joined).unwrap();
     }
 
     #[test]
