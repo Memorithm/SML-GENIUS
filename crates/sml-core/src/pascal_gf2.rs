@@ -32,6 +32,8 @@ pub enum PascalGf2Error {
     Empty,
     /// The logical width must be a power of two.
     WidthNotPowerOfTwo { bits: usize },
+    /// Packed `u64` states need at least one full word.
+    WidthBelowWord { bits: usize },
     /// Converting packed words to a logical bit width overflowed `usize`.
     WidthOverflow,
 }
@@ -42,6 +44,9 @@ impl fmt::Display for PascalGf2Error {
             Self::Empty => write!(f, "PGF2 state must not be empty"),
             Self::WidthNotPowerOfTwo { bits } => {
                 write!(f, "PGF2 width must be a power of two, got {bits} bits")
+            }
+            Self::WidthBelowWord { bits } => {
+                write!(f, "packed PGF2 width must be at least 64 bits, got {bits}")
             }
             Self::WidthOverflow => write!(f, "PGF2 logical width overflow"),
         }
@@ -163,8 +168,8 @@ pub fn unpack_words(words: &[u64]) -> Vec<bool> {
 /// and exact multiples of 64.
 pub fn pack_bits(bits: &[bool]) -> Result<Vec<u64>, PascalGf2Error> {
     validate_bits(bits.len())?;
-    if bits.len() < u64::BITS as usize || bits.len() % u64::BITS as usize != 0 {
-        return Err(PascalGf2Error::WidthNotPowerOfTwo { bits: bits.len() });
+    if bits.len() < u64::BITS as usize {
+        return Err(PascalGf2Error::WidthBelowWord { bits: bits.len() });
     }
 
     let mut words = vec![0_u64; bits.len() / u64::BITS as usize];
@@ -202,6 +207,19 @@ mod tests {
             let twice = pascal_gf2_oracle(&once).expect("oracle inverse");
             assert_eq!(twice, input, "width={width}");
         }
+    }
+
+    #[test]
+    fn pack_bits_reports_sub_word_widths_precisely() {
+        assert_eq!(
+            pack_bits(&[false; 32]),
+            Err(PascalGf2Error::WidthBelowWord { bits: 32 })
+        );
+        assert_eq!(
+            pack_bits(&[false; 96]),
+            Err(PascalGf2Error::WidthNotPowerOfTwo { bits: 96 })
+        );
+        assert_eq!(pack_bits(&[true; 128]), Ok(vec![u64::MAX; 2]));
     }
 
     #[test]
