@@ -61,6 +61,7 @@ pub mod boolean_learning;
 pub mod boolean_overlapping;
 pub mod boolean_page;
 pub mod boolean_search_bench;
+pub mod byte_factorization;
 pub mod calibrated_delay_readout;
 pub mod candidate;
 pub mod char_baselines;
