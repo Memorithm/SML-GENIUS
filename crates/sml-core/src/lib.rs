@@ -165,9 +165,26 @@ pub struct ParameterBudget {
 
 impl ParameterBudget {
     /// Returns the exact number of learned scalar parameters represented by this budget.
+    ///
+    /// # Panics
+    ///
+    /// Panics, in every build profile, if the total does not fit in `u64`;
+    /// use [`Self::checked_total_parameters`] for untrusted budgets.
     #[must_use]
     pub const fn total_parameters(self) -> u64 {
-        self.boolean + self.ternary + self.residual4
+        match self.checked_total_parameters() {
+            Some(total) => total,
+            None => panic!("ParameterBudget total overflows u64"),
+        }
+    }
+
+    /// Returns the total parameter count, or `None` if it overflows `u64`.
+    #[must_use]
+    pub const fn checked_total_parameters(self) -> Option<u64> {
+        match self.boolean.checked_add(self.ternary) {
+            Some(partial) => partial.checked_add(self.residual4),
+            None => None,
+        }
     }
 
     /// Returns exact packed storage in bits, excluding metadata and alignment.

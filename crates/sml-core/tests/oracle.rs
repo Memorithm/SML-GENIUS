@@ -14,6 +14,21 @@ fn sml_25b_initial_budget_is_exact() {
 }
 
 #[test]
+fn overflowing_budget_is_detected() {
+    let budget = ParameterBudget {
+        boolean: u64::MAX,
+        ternary: 1,
+        residual4: 0,
+    };
+    assert_eq!(budget.checked_total_parameters(), None);
+    assert_eq!(
+        SML_25B_INITIAL_BUDGET.checked_total_parameters(),
+        Some(25_000_000_000)
+    );
+    assert!(std::panic::catch_unwind(|| budget.total_parameters()).is_err());
+}
+
+#[test]
 fn empty_budget_is_well_defined() {
     let budget = ParameterBudget::default();
     assert_eq!(budget.total_parameters(), 0);
