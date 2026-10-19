@@ -85,9 +85,12 @@ fn finite_rate(count: usize, secs: f64) -> Result<f64> {
     Ok(count as f64 / secs / 1e6)
 }
 fn run(root: &Path, output: &Path, seed: u64) -> Result<()> {
-    if ![11, 23, 37].contains(&seed) {
-        return Err("seed must be 11, 23 or 37".into());
-    }
+    let rotation = match seed {
+        11 => 0,
+        23 => 1,
+        37 => 2,
+        _ => return Err("seed must be 11, 23 or 37".into()),
+    };
     let (train, dev) = load_panels(root)?;
     fs::create_dir(output)?;
     let config = SparseConfig {
@@ -109,7 +112,7 @@ fn run(root: &Path, output: &Path, seed: u64) -> Result<()> {
         // Only TRAIN document ordering changes; both arms receive identical data.
         for epoch in 0..EPOCHS {
             for offset in 0..train.len() {
-                let index = (offset + epoch + seed as usize) % train.len();
+                let index = (offset + epoch + rotation) % train.len();
                 let (_, n) = model.train_document(&train[index])?;
                 positions += n as usize;
             }
