@@ -110,6 +110,7 @@ pub mod mor_sequence_train;
 pub mod mor_specialization;
 pub mod mor_temporal;
 pub mod mor_temporal_search;
+pub mod msb_train_gate;
 pub mod paired_panel;
 pub mod pascal_gf2;
 pub mod pascal_vector_projection;
