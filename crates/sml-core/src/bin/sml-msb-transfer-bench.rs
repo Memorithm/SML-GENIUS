@@ -30,7 +30,8 @@ fn read_bounded(root: &Path, relative: &str, limit: usize) -> Result<Vec<u8>> {
     }
     let path = root.join(relative);
     let meta = fs::symlink_metadata(&path)?;
-    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() < 3 || meta.len() > 2_000_000 {
+    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() < 3 || meta.len() > 2_000_000
+    {
         return Err(format!("invalid fixture file: {relative}").into());
     }
     let mut data = fs::read(path)?;
@@ -64,7 +65,12 @@ fn load_panels(root: &Path) -> Result<(Vec<Vec<u8>>, Vec<(&'static str, Vec<u8>)
     let train_hashes: HashSet<_> = train.iter().map(|doc| sha(doc)).collect();
     if train_hashes.len() != train.len()
         || dev.iter().any(|(_, doc)| train_hashes.contains(&sha(doc)))
-        || dev.iter().map(|(_, doc)| sha(doc)).collect::<HashSet<_>>().len() != dev.len()
+        || dev
+            .iter()
+            .map(|(_, doc)| sha(doc))
+            .collect::<HashSet<_>>()
+            .len()
+            != dev.len()
     {
         return Err("TRAIN/DEV fixture SHA collision or duplicate".into());
     }
@@ -82,7 +88,11 @@ fn run(root: &Path, output: &Path, seed: u64) -> Result<()> {
     }
     let (train, dev) = load_panels(root)?;
     fs::create_dir(output)?;
-    let config = SparseConfig { pages: 128, max_cached_pages: 128, learning_rate: 0.3 };
+    let config = SparseConfig {
+        pages: 128,
+        max_cached_pages: 128,
+        learning_rate: 0.3,
+    };
     let expected_events = train.iter().map(|d| d.len() - 2).sum::<usize>() * EPOCHS;
     let mut lines = Vec::new();
     for (tag, factorization) in [
@@ -90,7 +100,8 @@ fn run(root: &Path, output: &Path, seed: u64) -> Result<()> {
         ("msb_tree", ByteFactorization::MsbTree),
     ] {
         let dir = output.join(tag);
-        let mut model = SparseGradientAtlas::create_with_factorization(&dir, config, factorization)?;
+        let mut model =
+            SparseGradientAtlas::create_with_factorization(&dir, config, factorization)?;
         let begin = Instant::now();
         let mut positions = 0_usize;
         // Only TRAIN document ordering changes; both arms receive identical data.
@@ -118,7 +129,9 @@ fn run(root: &Path, output: &Path, seed: u64) -> Result<()> {
             return Err("factorization did not survive checkpoint reopen".into());
         }
         let mut quant = QuantizedSparseAtlas::open_with_factorization(
-            &dir.join("weights.q4"), config, factorization,
+            &dir.join("weights.q4"),
+            config,
+            factorization,
         )?;
         for (panel, doc) in &dev {
             let tick = Instant::now();
