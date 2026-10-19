@@ -201,8 +201,8 @@ mod tests {
         let truth: Vec<_> = (0..8).map(|x| x == 7).collect();
         let spectrum = uniform_walsh_spectrum(&truth).unwrap();
         near(spectrum[0], 0.75);
-        for mask in 1..8 {
-            near(spectrum[mask].abs(), 0.25);
+        for coefficient in spectrum.iter().skip(1) {
+            near(coefficient.abs(), 0.25);
         }
         let mut anf = truth.clone();
         mobius_gf2_in_place(&mut anf).unwrap();
@@ -233,9 +233,9 @@ mod tests {
             }
             mobius_gf2_in_place(&mut anf).unwrap();
             assert_eq!(truth, anf);
-            for mask in 0..truth.len() {
+            for (mask, coefficient) in fast.iter().enumerate() {
                 near(
-                    fast[mask],
+                    *coefficient,
                     uniform_walsh_coefficient_direct(&truth, mask).unwrap(),
                 );
             }
