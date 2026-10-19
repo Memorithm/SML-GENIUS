@@ -156,9 +156,8 @@ fn run(
     model.checkpoint(out)?;
     model.export_q4(&out.join("weights.q4"))?;
     let counts = model.counters();
-    let mut q4 = QuantizedSparseAtlas::open_with_factorization(
-        &out.join("weights.q4"), cfg, factorization,
-    )?;
+    let mut q4 =
+        QuantizedSparseAtlas::open_with_factorization(&out.join("weights.q4"), cfg, factorization)?;
     let mut q4_loss = 0f64;
     let mut q4_events = 0u64;
     for doc in &heldout {
@@ -239,10 +238,22 @@ mod tests {
     use super::*;
     #[test]
     fn legacy_modes_keep_independent_bits_and_new_modes_are_opt_in() {
-        assert_eq!(parse_mode("--pilot"), Some((false, ByteFactorization::IndependentBits)));
-        assert_eq!(parse_mode("--pilot-50m"), Some((true, ByteFactorization::IndependentBits)));
-        assert_eq!(parse_mode("--pilot-msb"), Some((false, ByteFactorization::MsbTree)));
-        assert_eq!(parse_mode("--pilot-50m-msb"), Some((true, ByteFactorization::MsbTree)));
+        assert_eq!(
+            parse_mode("--pilot"),
+            Some((false, ByteFactorization::IndependentBits))
+        );
+        assert_eq!(
+            parse_mode("--pilot-50m"),
+            Some((true, ByteFactorization::IndependentBits))
+        );
+        assert_eq!(
+            parse_mode("--pilot-msb"),
+            Some((false, ByteFactorization::MsbTree))
+        );
+        assert_eq!(
+            parse_mode("--pilot-50m-msb"),
+            Some((true, ByteFactorization::MsbTree))
+        );
         assert_eq!(parse_mode("--pilot-50m-tree"), None);
     }
 }
