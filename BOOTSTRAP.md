@@ -1,5 +1,9 @@
 # SML-GENIUS bootstrap
 
+## Fourier–Walsh × ANF — next model-owned research track
+
+Read [the spectral roadmap](docs/SML-FOURIER-WALSH-ANF-ROADMAP-20261019.md) before implementing new spectral search. Existing A6-C12a negative tests, A6-C12b Gauss/W2/W3 recovery and A6-E5 streaming spectral Beam, OOF log-loss arbiter and bounded materialization MUST be reused rather than rebuilt. The next slices are F1 small-width exact Fourier oracles and F2 TRAIN-only adaptive choice between existing C12c hybrid W2+Sketch/MITM and W3, with all A6-E5 frozen thresholds preserved; no corpus TEST leakage or 25B training claim.
+
 This file is the durable re-entry point for continuing the SML-GENIUS research programme from the current repository state. Read it together with `README.md`, `docs/ROADMAP.md`, the latest merged pull requests, and the executable contracts in `sml-core`.
 
 ## Current PVP6 validation slice — 2026-10-08

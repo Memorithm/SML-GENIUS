@@ -1,5 +1,9 @@
 # SML-GENIUS research roadmap
 
+## Fourier–Walsh × ANF — research sequence (2026-10-19)
+
+Detailed [evidence-gated spectral discovery roadmap](SML-FOURIER-WALSH-ANF-ROADMAP-20261019.md): reuse existing A6-C12a–h and A6-I5 results, including C12c's 508-source hybrid and C12g/h noisy-parity failures, plus A6-E5 spectral Beam, arbiter and materialization kernels; F0 audit, F1 bounded exact oracles, F2 TRAIN-only adaptive choice between already measured W2+Sketch/MITM and W3, F3 noisy/nonlinear interactions, F4 next-byte, F5 frozen A6-E5 criteria, F6 native resources, F7 model interface. No new TEST access, no reinterpretation of old successes as general-language model results, no change to 8 MiB / 2x and log-loss gates. F1/F2 require separate CI-green PRs before integration.
+
 Progression is evidence-gated. Model size does not advance because a calendar milestone elapsed.
 
 | Gate | Approximate scale | Primary question | Required evidence before progression |
