@@ -2,6 +2,7 @@
 //! This is a trainable 4,194,304-weight float master, NOT the 25B SML model.
 //! The held-out slice is a diagnostic within TRAIN source years, not frozen 2023 DEV.
 use sml_core::{
+    byte_factorization::ByteFactorization,
     elastic_ngram_paged_sha::{hex, parse_hex, Sha256},
     sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig, SparseGradientAtlas},
 };
@@ -39,7 +40,14 @@ fn full_sha256(path: &Path) -> Result<String> {
     Ok(hex(&hash.finish()))
 }
 
-fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) -> Result<()> {
+fn run(
+    corpus: &Path,
+    ledger: &Path,
+    digest: &str,
+    out: &Path,
+    fifty_m: bool,
+    factorization: ByteFactorization,
+) -> Result<()> {
     if parse_hex(digest).is_none() || corpus == ledger || out.exists() {
         return Err("invalid pinned SHA-256, overlapping input files, or output exists".into());
     }
@@ -63,7 +71,7 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
         max_cached_pages: CACHE,
         learning_rate: 0.15,
     };
-    let mut model = SparseGradientAtlas::create(out, cfg)?;
+    let mut model = SparseGradientAtlas::create_with_factorization(out, cfg, factorization)?;
     let mut train_bytes = 0u64;
     let mut dev_bytes = 0u64;
     let mut train_events = 0u64;
@@ -148,7 +156,8 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
     model.checkpoint(out)?;
     model.export_q4(&out.join("weights.q4"))?;
     let counts = model.counters();
-    let mut q4 = QuantizedSparseAtlas::open(&out.join("weights.q4"), cfg)?;
+    let mut q4 =
+        QuantizedSparseAtlas::open_with_factorization(&out.join("weights.q4"), cfg, factorization)?;
     let mut q4_loss = 0f64;
     let mut q4_events = 0u64;
     for doc in &heldout {
@@ -168,7 +177,12 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
     let elapsed_seconds = start.elapsed().as_secs_f64();
     let metrics = format!(
         "model\tcapacity_parameters\tupdated_unique\tparameter_updates\ttrain_docs\ttrain_bytes\ttrain_events\ttrain_bpc\tholdout_docs\tholdout_bytes\tholdout_events\tholdout_bpc\tbaseline_uniform_bpc\tmaster_bytes\tq4_bytes\tg0\ttest\tholdout_q4_bpc\tq4_minus_f32_bpc\ttrain_elapsed_seconds\ttrain_page_loads\ttrain_page_evictions\ttraining_order\n{}\t{}\t{}\t{}\t{train_docs}\t{train_bytes}\t{train_events}\t{:.9}\t{dev_docs}\t{dev_bytes}\t{dev_events}\t{dev_f32:.9}\t8.000000000\t{}\t{}\tNOT_ADMITTED\tUNOPENED\t{dev_q4:.9}\t{:.9}\t{elapsed_seconds:.4}\t{}\t{}\t{}\n",
-        if fifty_m { "sml_sparse_sgd_50m_grouped_v2" } else { "sml_sparse_sgd_4m_online_v2" },
+        match (fifty_m, factorization) {
+            (false, ByteFactorization::IndependentBits) => "sml_sparse_sgd_4m_online_v2",
+            (true, ByteFactorization::IndependentBits) => "sml_sparse_sgd_50m_grouped_v2",
+            (false, ByteFactorization::MsbTree) => "sml_sparse_sgd_4m_online_msb_tree_v3",
+            (true, ByteFactorization::MsbTree) => "sml_sparse_sgd_50m_grouped_msb_tree_v3",
+        },
         cfg.total_parameters(), counts.distinct_updated_parameters, counts.parameter_updates,
         train_loss / train_events as f64,
         cfg.train_master_bytes(), cfg.packed_q4_bytes(),
@@ -186,17 +200,60 @@ fn run(corpus: &Path, ledger: &Path, digest: &str, out: &Path, fifty_m: bool) ->
     Ok(())
 }
 
+/// Default CLI modes preserve all historic independent-bit pilots exactly.
+/// MSB branches are explicit opt-in and retain the same fixed TRAIN ledger gates.
+fn parse_mode(arg: &str) -> Option<(bool, ByteFactorization)> {
+    match arg {
+        "--pilot" => Some((false, ByteFactorization::IndependentBits)),
+        "--pilot-50m" => Some((true, ByteFactorization::IndependentBits)),
+        "--pilot-msb" => Some((false, ByteFactorization::MsbTree)),
+        "--pilot-50m-msb" => Some((true, ByteFactorization::MsbTree)),
+        _ => None,
+    }
+}
 fn main() {
     let args: Vec<_> = env::args().collect();
+    let usage = "usage: sml-sparse-gradient-fit [--pilot|--pilot-50m|--pilot-msb|--pilot-50m-msb] CORPUS.utf8 provenance.tsv SOURCE_SHA256 OUT_DIR";
     let result = match args.as_slice() {
-        [_, arg, corpus, ledger, sha, out] if arg == "--pilot" =>
-            run(Path::new(corpus), Path::new(ledger), sha, Path::new(out), false),
-        [_, arg, corpus, ledger, sha, out] if arg == "--pilot-50m" =>
-            run(Path::new(corpus), Path::new(ledger), sha, Path::new(out), true),
-        _ => Err("usage: sml-sparse-gradient-fit [--pilot|--pilot-50m] CORPUS.utf8 provenance.tsv SOURCE_SHA256 OUT_DIR".into()),
+        [_, arg, corpus, ledger, digest, out] => match parse_mode(arg) {
+            Some((fifty_m, factorization)) => run(
+                Path::new(corpus),
+                Path::new(ledger),
+                digest,
+                Path::new(out),
+                fifty_m,
+                factorization,
+            ),
+            None => Err(usage.into()),
+        },
+        _ => Err(usage.into()),
     };
     if let Err(e) = result {
         eprintln!("SPARSE_GRADIENT_FAIL {e}");
         std::process::exit(1);
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn legacy_modes_keep_independent_bits_and_new_modes_are_opt_in() {
+        assert_eq!(
+            parse_mode("--pilot"),
+            Some((false, ByteFactorization::IndependentBits))
+        );
+        assert_eq!(
+            parse_mode("--pilot-50m"),
+            Some((true, ByteFactorization::IndependentBits))
+        );
+        assert_eq!(
+            parse_mode("--pilot-msb"),
+            Some((false, ByteFactorization::MsbTree))
+        );
+        assert_eq!(
+            parse_mode("--pilot-50m-msb"),
+            Some((true, ByteFactorization::MsbTree))
+        );
+        assert_eq!(parse_mode("--pilot-50m-tree"), None);
     }
 }
