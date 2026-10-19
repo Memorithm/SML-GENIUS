@@ -8,6 +8,8 @@ use sml_core::{
 use std::{collections::HashSet, env, error::Error, fs, path::Path, time::Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+type DevPanel = (&'static str, Vec<u8>);
+type PanelInputs = (Vec<Vec<u8>>, Vec<DevPanel>);
 const TRAIN_FILES: [&str; 3] = ["README.md", "BOOTSTRAP.md", "docs/SML-0-SPEC.md"];
 const DEV_FILES: [&str; 3] = [
     "crates/sml-core/src/byte_factorization.rs",
@@ -52,7 +54,7 @@ fn iid_control() -> Vec<u8> {
     let mut state = 0x871e_17ca_456f_1042_u64;
     (0..IID_LEN).map(|_| rng_next(&mut state) as u8).collect()
 }
-fn load_panels(root: &Path) -> Result<(Vec<Vec<u8>>, Vec<(&'static str, Vec<u8>)>)> {
+fn load_panels(root: &Path) -> Result<PanelInputs> {
     let train = TRAIN_FILES
         .iter()
         .map(|path| read_bounded(root, path, TRAIN_CAP))
