@@ -80,11 +80,26 @@ impl PairedEvidence {
             return Err(SpectralGateError::InvalidObservation);
         }
         Ok(Self {
-            examples: self.examples.checked_add(examples).ok_or(SpectralGateError::CounterOverflow)?,
-            hybrid_errors: self.hybrid_errors.checked_add(hybrid_errors).ok_or(SpectralGateError::CounterOverflow)?,
-            w3_errors: self.w3_errors.checked_add(w3_errors).ok_or(SpectralGateError::CounterOverflow)?,
-            hybrid_search_ns: self.hybrid_search_ns.checked_add(hybrid_search_ns).ok_or(SpectralGateError::CounterOverflow)?,
-            w3_search_ns: self.w3_search_ns.checked_add(w3_search_ns).ok_or(SpectralGateError::CounterOverflow)?,
+            examples: self
+                .examples
+                .checked_add(examples)
+                .ok_or(SpectralGateError::CounterOverflow)?,
+            hybrid_errors: self
+                .hybrid_errors
+                .checked_add(hybrid_errors)
+                .ok_or(SpectralGateError::CounterOverflow)?,
+            w3_errors: self
+                .w3_errors
+                .checked_add(w3_errors)
+                .ok_or(SpectralGateError::CounterOverflow)?,
+            hybrid_search_ns: self
+                .hybrid_search_ns
+                .checked_add(hybrid_search_ns)
+                .ok_or(SpectralGateError::CounterOverflow)?,
+            w3_search_ns: self
+                .w3_search_ns
+                .checked_add(w3_search_ns)
+                .ok_or(SpectralGateError::CounterOverflow)?,
         })
     }
 
@@ -144,29 +159,33 @@ impl TrainOnlySpectralMethodGate {
         if self.frozen_route.is_some() {
             return Err(SpectralGateError::AlreadyFrozen);
         }
-        let enough = self.partitions.iter().all(|p| {
-            p.examples >= self.config.minimum_examples_per_partition
-        });
-        let w3_admitted = enough && self.partitions.iter().all(|p| {
-            let favorable = p.hybrid_errors >= p.w3_errors
-                && (u128::from(p.hybrid_errors - p.w3_errors) * 1_000_000)
-                    >= u128::from(self.config.minimum_w3_advantage_ppm) * u128::from(p.examples);
-            favorable
-                && p.qualifies(
-                    self.config.maximum_w3_error_ppm,
-                    self.config.maximum_w3_ns_per_example,
-                    p.w3_errors,
-                    p.w3_search_ns,
+        let enough = self
+            .partitions
+            .iter()
+            .all(|p| p.examples >= self.config.minimum_examples_per_partition);
+        let w3_admitted = enough
+            && self.partitions.iter().all(|p| {
+                let favorable = p.hybrid_errors >= p.w3_errors
+                    && (u128::from(p.hybrid_errors - p.w3_errors) * 1_000_000)
+                        >= u128::from(self.config.minimum_w3_advantage_ppm)
+                            * u128::from(p.examples);
+                favorable
+                    && p.qualifies(
+                        self.config.maximum_w3_error_ppm,
+                        self.config.maximum_w3_ns_per_example,
+                        p.w3_errors,
+                        p.w3_search_ns,
+                    )
+            });
+        let hybrid_admitted = enough
+            && self.partitions.iter().all(|p| {
+                p.qualifies(
+                    self.config.maximum_hybrid_error_ppm,
+                    self.config.maximum_hybrid_ns_per_example,
+                    p.hybrid_errors,
+                    p.hybrid_search_ns,
                 )
-        });
-        let hybrid_admitted = enough && self.partitions.iter().all(|p| {
-            p.qualifies(
-                self.config.maximum_hybrid_error_ppm,
-                self.config.maximum_hybrid_ns_per_example,
-                p.hybrid_errors,
-                p.hybrid_search_ns,
-            )
-        });
+            });
         let decision = if w3_admitted {
             SpectralMethod::Walsh3Exhaustive
         } else if hybrid_admitted {
@@ -275,7 +294,8 @@ mod tests {
         cfg.maximum_hybrid_ns_per_example = u64::MAX;
         cfg.maximum_w3_ns_per_example = u64::MAX;
         let mut g = TrainOnlySpectralMethodGate::new(cfg).unwrap();
-        g.observe_train(0, u64::MAX, 0, 0, u64::MAX, u64::MAX).unwrap();
+        g.observe_train(0, u64::MAX, 0, 0, u64::MAX, u64::MAX)
+            .unwrap();
         assert_eq!(
             g.observe_train(0, 1, 1, 0, 1, 1),
             Err(SpectralGateError::CounterOverflow)
