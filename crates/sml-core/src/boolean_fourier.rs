@@ -215,7 +215,9 @@ mod tests {
     #[test]
     fn majority_three_and_arbitrary_tables_satisfy_parseval() {
         let mut samples = vec![
-            (0..8).map(|x: usize| x.count_ones() >= 2).collect::<Vec<_>>(),
+            (0..8)
+                .map(|x: usize| x.count_ones() >= 2)
+                .collect::<Vec<_>>(),
             (0..32)
                 .map(|x: usize| (((x * 31 + 7) ^ (x >> 1)) % 7) < 3)
                 .collect::<Vec<_>>(),
