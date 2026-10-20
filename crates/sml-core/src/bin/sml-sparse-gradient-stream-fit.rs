@@ -126,7 +126,10 @@ fn load_roster(
         };
         if !matches!(
             fields[4],
-            "OWNED_REVIEWED" | "PUBLIC_DOMAIN_REVIEWED" | "CC0_REVIEWED" | "CC_BY_ATTRIBUTION_REVIEWED"
+            "OWNED_REVIEWED"
+                | "PUBLIC_DOMAIN_REVIEWED"
+                | "CC0_REVIEWED"
+                | "CC_BY_ATTRIBUTION_REVIEWED"
         ) {
             return Err("document rights have not been declared reviewed".into());
         }
