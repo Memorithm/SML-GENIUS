@@ -151,6 +151,17 @@ impl Evidence {
     }
 }
 
+/// A single paired TRAIN-cal observation with the prior frozen from TRAIN_fit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PairedTrainBaselineObservation {
+    pub examples: u64,
+    pub baseline_errors: u64,
+    pub hybrid_errors: u64,
+    pub w3_errors: u64,
+    pub hybrid_ns: u64,
+    pub w3_ns: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct TrainOnlySpectralBaselineGate {
     config: BaselineSpectralGateConfig,
@@ -171,12 +182,7 @@ impl TrainOnlySpectralBaselineGate {
     pub fn observe_train(
         &mut self,
         partition: usize,
-        examples: u64,
-        baseline_errors: u64,
-        hybrid_errors: u64,
-        w3_errors: u64,
-        hybrid_ns: u64,
-        w3_ns: u64,
+        evidence: PairedTrainBaselineObservation,
     ) -> Result<(), PriorSpectralError> {
         if self.route.is_some() {
             return Err(PriorSpectralError::AlreadyFrozen);
@@ -186,12 +192,12 @@ impl TrainOnlySpectralBaselineGate {
             .get(partition)
             .ok_or(PriorSpectralError::InvalidCounts)?;
         let updated = previous.observe(
-            examples,
-            baseline_errors,
-            hybrid_errors,
-            w3_errors,
-            hybrid_ns,
-            w3_ns,
+            evidence.examples,
+            evidence.baseline_errors,
+            evidence.hybrid_errors,
+            evidence.w3_errors,
+            evidence.hybrid_ns,
+            evidence.w3_ns,
         )?;
         self.partitions[partition] = updated;
         Ok(())
@@ -264,11 +270,25 @@ mod tests {
         for part in 0..2 {
             let errors = prior.count_errors(8_192, 40_960).unwrap();
             assert_eq!(errors, 8_192);
-            gate.observe_train(part, 40_960, errors, errors, errors, 10_000, 20_000)
+            gate.observe_train(part, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: errors,
+                hybrid_errors: errors,
+                w3_errors: errors,
+                hybrid_ns: 10_000,
+                w3_ns: 20_000,
+            })
                 .unwrap();
         }
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::Abstain);
-        assert!(gate.observe_train(0, 40_960, 10, 9, 8, 10, 20).is_err());
+        assert!(gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 10,
+                hybrid_errors: 9,
+                w3_errors: 8,
+                hybrid_ns: 10,
+                w3_ns: 20,
+            }).is_err());
     }
     #[test]
     fn balanced_iid_small_improvement_is_not_evidence() {
@@ -276,7 +296,14 @@ mod tests {
         assert!(!prior.predicts_one());
         let mut gate = TrainOnlySpectralBaselineGate::new(config()).unwrap();
         for part in 0..2 {
-            gate.observe_train(part, 40_960, 20_480, 20_400, 20_360, 10_000, 20_000)
+            gate.observe_train(part, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 20_480,
+                hybrid_errors: 20_400,
+                w3_errors: 20_360,
+                hybrid_ns: 10_000,
+                w3_ns: 20_000,
+            })
                 .unwrap();
         }
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::Abstain);
@@ -287,7 +314,14 @@ mod tests {
         let mut gate = TrainOnlySpectralBaselineGate::new(config()).unwrap();
         for part in 0..2 {
             let constant = prior.count_errors(20_480, 40_960).unwrap();
-            gate.observe_train(part, 40_960, constant, 20_300, 16_400, 10_000, 20_000)
+            gate.observe_train(part, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: constant,
+                hybrid_errors: 20_300,
+                w3_errors: 16_400,
+                hybrid_ns: 10_000,
+                w3_ns: 20_000,
+            })
                 .unwrap();
         }
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::Walsh3Exhaustive);
@@ -300,7 +334,14 @@ mod tests {
         assert!(!prior.predicts_one());
         let mut gate = TrainOnlySpectralBaselineGate::new(config()).unwrap();
         for part in 0..2 {
-            gate.observe_train(part, 40_960, 8_192, 6_000, 6_000, 10_000, 20_000)
+            gate.observe_train(part, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 8_192,
+                hybrid_errors: 6_000,
+                w3_errors: 6_000,
+                hybrid_ns: 10_000,
+                w3_ns: 20_000,
+            })
                 .unwrap();
         }
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::HybridW2SketchMitm);
@@ -308,14 +349,35 @@ mod tests {
     #[test]
     fn over_budget_w3_and_missing_evidence_fail_closed() {
         let mut gate = TrainOnlySpectralBaselineGate::new(config()).unwrap();
-        gate.observe_train(0, 40_960, 20_480, 12_000, 8_000, 10_000, 100_000_000_000)
+        gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 20_480,
+                hybrid_errors: 12_000,
+                w3_errors: 8_000,
+                hybrid_ns: 10_000,
+                w3_ns: 100_000_000_000,
+            })
             .unwrap();
-        gate.observe_train(1, 40_960, 20_480, 12_000, 8_000, 10_000, 100_000_000_000)
+        gate.observe_train(1, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 20_480,
+                hybrid_errors: 12_000,
+                w3_errors: 8_000,
+                hybrid_ns: 10_000,
+                w3_ns: 100_000_000_000,
+            })
             .unwrap();
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::HybridW2SketchMitm);
         let mut missing = TrainOnlySpectralBaselineGate::new(config()).unwrap();
         missing
-            .observe_train(0, 40_960, 20_480, 12_000, 8_000, 10_000, 20_000)
+            .observe_train(0, PairedTrainBaselineObservation {
+                examples: 40_960,
+                baseline_errors: 20_480,
+                hybrid_errors: 12_000,
+                w3_errors: 8_000,
+                hybrid_ns: 10_000,
+                w3_ns: 20_000,
+            })
             .unwrap();
         assert_eq!(missing.freeze().unwrap(), SpectralMethod::Abstain);
     }
@@ -335,15 +397,50 @@ mod tests {
         assert!(TrainOnlySpectralBaselineGate::new(bad).is_err());
         let mut gate = TrainOnlySpectralBaselineGate::new(config()).unwrap();
         assert_eq!(
-            gate.observe_train(2, 10, 0, 0, 0, 10, 10),
+            gate.observe_train(2, PairedTrainBaselineObservation {
+                examples: 10,
+                baseline_errors: 0,
+                hybrid_errors: 0,
+                w3_errors: 0,
+                hybrid_ns: 10,
+                w3_ns: 10,
+            }),
             Err(PriorSpectralError::InvalidCounts),
         );
-        assert!(gate.observe_train(0, 10, 11, 10, 10, 10, 10).is_err());
-        assert!(gate.observe_train(0, 10, 0, 0, 0, 0, 10).is_err());
-        gate.observe_train(0, u64::MAX, 0, 0, 0, u64::MAX, u64::MAX)
+        assert!(gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: 10,
+                baseline_errors: 11,
+                hybrid_errors: 10,
+                w3_errors: 10,
+                hybrid_ns: 10,
+                w3_ns: 10,
+            }).is_err());
+        assert!(gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: 10,
+                baseline_errors: 0,
+                hybrid_errors: 0,
+                w3_errors: 0,
+                hybrid_ns: 0,
+                w3_ns: 10,
+            }).is_err());
+        gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: u64::MAX,
+                baseline_errors: 0,
+                hybrid_errors: 0,
+                w3_errors: 0,
+                hybrid_ns: u64::MAX,
+                w3_ns: u64::MAX,
+            })
             .unwrap();
         assert_eq!(
-            gate.observe_train(0, 1, 0, 0, 0, 1, 1),
+            gate.observe_train(0, PairedTrainBaselineObservation {
+                examples: 1,
+                baseline_errors: 0,
+                hybrid_errors: 0,
+                w3_errors: 0,
+                hybrid_ns: 1,
+                w3_ns: 1,
+            }),
             Err(PriorSpectralError::CounterOverflow),
         );
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::Abstain);
