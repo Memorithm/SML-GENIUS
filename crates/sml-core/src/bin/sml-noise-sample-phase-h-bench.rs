@@ -793,7 +793,10 @@ fn wilson(success: usize, trials: usize) -> (f64, f64) {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).is_some_and(|flag| flag == "--f2b" || flag == "--f2b2") {
+    if args
+        .get(1)
+        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2")
+    {
         return run_f2b(&args);
     }
     if args.len() > 1 {
@@ -1117,7 +1120,11 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     // and their learned networks have been completely frozen.
     for partition in 0..2 {
         let mut eval_partition_ns = [0_u64; 2];
-        let stream = seed(index, task, (0xf2b1_0000_0000_0011 + partition as u64) ^ stage_salt);
+        let stream = seed(
+            index,
+            task,
+            (0xf2b1_0000_0000_0011 + partition as u64) ^ stage_salt,
+        );
         let calibration = f2b_data(stream, task, rate, VAL_STEPS, null_targets);
         let samples = (VAL_STEPS * LANES) as u64;
         calibration_counts[partition] = samples;
@@ -1274,9 +1281,10 @@ mod tests {
         let teacher = f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, false);
         assert_eq!(null.blocks[0].inputs, teacher.blocks[0].inputs);
         assert_ne!(null.blocks[0].targets, teacher.blocks[0].targets);
-        assert_eq!(null.blocks[0].targets, f2b_data(
-            0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, true,
-        ).blocks[0].targets);
+        assert_eq!(
+            null.blocks[0].targets,
+            f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, true,).blocks[0].targets
+        );
         let obs = Observed::new(&teacher, grid(32));
         assert!(count_combinations(&obs).1 <= 1_000_000);
         let obs508 = Observed::new(&teacher, grid(508));
