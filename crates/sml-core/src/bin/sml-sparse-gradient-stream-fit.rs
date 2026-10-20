@@ -507,7 +507,7 @@ mod tests {
         assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_err());
         fx.write_manifest(&(train.clone() + &dev.replace("OWNED_REVIEWED", "UNREVIEWED")));
         assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_err());
-        fx.write_manifest(&(train.clone() + &dev.replace("OWNED_REVIEWED", "OWNED_REVIEWED")));
+        fx.write_manifest(&(train.clone() + &dev));
         assert!(load_roster(&fx.data, &fx.manifest, 10000, 128).is_err());
         assert!(!fx.output.exists());
     }
@@ -524,7 +524,7 @@ mod tests {
         assert!(fx.run().is_err());
         assert!(!fx.output.join("COMPLETE").exists());
         fx.write_manifest(&(train.clone() + &dev));
-        fs::write(fx.data.join("train.bin"), &vec![b'z'; 512]).unwrap();
+        fs::write(fx.data.join("train.bin"), vec![b'z'; 512]).unwrap();
         let admitted = load_roster(&fx.data, &fx.manifest, 256, 128).unwrap();
         assert!(load_document(&admitted.entries[0]).is_err());
         assert!(!fx.output.join("COMPLETE").exists());
