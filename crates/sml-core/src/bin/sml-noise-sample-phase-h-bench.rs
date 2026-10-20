@@ -997,8 +997,7 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
     };
 
-    let usage =
-        "usage: sml-noise-sample-phase-h-bench --f2b xor|mixed 0|40 11|23";
+    let usage = "usage: sml-noise-sample-phase-h-bench --f2b xor|mixed 0|40 11|23";
     if args.len() != 5 {
         return Err(usage.into());
     }
@@ -1020,7 +1019,12 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     let words = if rate == NoiseRate::Zero { 128 } else { 512 };
     let train = prefix(
-        &data(seed(index, task, 0xf2b1_0000_0000_0001), task, rate, TRAIN_STEPS),
+        &data(
+            seed(index, task, 0xf2b1_0000_0000_0001),
+            task,
+            rate,
+            TRAIN_STEPS,
+        ),
         WIDTH + words,
     );
     let inner_train_validation = data(
@@ -1117,23 +1121,30 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     if gate.route() != Some(route) || gate.freeze().is_ok() {
         return Err("F2b route must freeze exactly once".into());
     }
-    let dev = data(seed(index, task, 0xf2b1_0000_0000_0033), task, rate, TEST_STEPS);
+    let dev = data(
+        seed(index, task, 0xf2b1_0000_0000_0033),
+        task,
+        rate,
+        TEST_STEPS,
+    );
     let dev_samples = (TEST_STEPS * LANES) as u64;
     let routed_start = Instant::now();
     let selected_error: Option<u64> = match route {
         SpectralMethod::Abstain => None,
-        SpectralMethod::Walsh3Exhaustive => {
-            Some(native_errors(
-                &fits[0].as_ref().ok_or("W3 selected without fitted model")?.committed,
-                &dev,
-            )?)
-        }
-        SpectralMethod::HybridW2SketchMitm => {
-            Some(native_errors(
-                &fits[1].as_ref().ok_or("Hybrid selected without fitted model")?.committed,
-                &dev,
-            )?)
-        }
+        SpectralMethod::Walsh3Exhaustive => Some(native_errors(
+            &fits[0]
+                .as_ref()
+                .ok_or("W3 selected without fitted model")?
+                .committed,
+            &dev,
+        )?),
+        SpectralMethod::HybridW2SketchMitm => Some(native_errors(
+            &fits[1]
+                .as_ref()
+                .ok_or("Hybrid selected without fitted model")?
+                .committed,
+            &dev,
+        )?),
     };
     let route_ns = u64::try_from(routed_start.elapsed().as_nanos())?.max(1);
     let routed_bit_predictions = if selected_error.is_some() {
