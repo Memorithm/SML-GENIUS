@@ -795,7 +795,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args
         .get(1)
-        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2" || flag == "--f2b3")
+        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4")
     {
         return run_f2b(&args);
     }
@@ -1013,22 +1013,51 @@ fn f2b_data(
     }
     sample
 }
+/// A separate Bernoulli(0.2) target stream, independent of teacher and inputs.
+fn f2b4_data(stream: u64, task: Task, rate: NoiseRate, steps: usize,
+             null_targets: bool, imbalanced_null: bool) -> LaneData {
+    if !imbalanced_null {
+        return f2b_data(stream, task, rate, steps, null_targets);
+    }
+    let mut sample = f2b_data(stream, task, rate, steps, false);
+    let mut rng = SplitMix64::new(stream ^ 0x47b4_4aca_2010_5501);
+    let cutoff = ((u128::from(u64::MAX) + 1) / 5) as u64;
+    for label in &mut sample.blocks[0].targets {
+        let mut bits = 0_u64;
+        for lane in 0..LANES {
+            if rng.next_u64() < cutoff { bits |= 1_u64 << lane; }
+        }
+        *label = bits;
+    }
+    sample
+}
+fn target_ones(sample: &LaneData, skip_steps: usize) -> Result<(u64,u64), Box<dyn Error>> {
+    if sample.blocks.len() != 1 || skip_steps >= sample.blocks[0].steps {
+        return Err("F2b4 invalid label stream".into());
+    }
+    let labels = &sample.blocks[0].targets[skip_steps..];
+    let positive = labels.iter().map(|x| u64::from(x.count_ones())).sum();
+    let total = u64::try_from(labels.len())? * LANES as u64;
+    Ok((positive,total))
+}
 fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
+    use sml_core::spectral_baseline_gate::{BaselineSpectralGateConfig, FrozenConstantBitPrior, TrainOnlySpectralBaselineGate};
     use sml_core::spectral_method_gate::{
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
     };
 
-    let confidence = args.get(1).is_some_and(|flag| flag == "--f2b3");
-    let expanded = args
-        .get(1)
-        .is_some_and(|flag| flag == "--f2b2" || flag == "--f2b3");
-    let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508 OR --f2b3 xor|mixed|null 0|40 41|53|67|79 32|508";
+    let baseline = args.get(1).is_some_and(|flag| flag == "--f2b4");
+    let confidence = args.get(1).is_some_and(|flag| flag == "--f2b3" || flag == "--f2b4");
+    let expanded = args.get(1).is_some_and(|flag| flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4");
+    let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508 OR --f2b3 xor|mixed|null 0|40 41|53|67|79 32|508 OR --f2b4 xor|mixed|null|null20 0|40 83|97|101|113 32|508";
     if args.len() != if expanded { 6 } else { 5 } {
         return Err(usage.into());
     }
-    let null_targets = expanded && args[2] == "null";
+    let null_targets = expanded && (args[2] == "null" || (baseline && args[2] == "null20"));
+    let imbalanced_null = baseline && args[2] == "null20";
     let task = match args[2].as_str() {
         "xor" | "null" if expanded || args[2] == "xor" => Task::XorXorXor,
+        "null20" if baseline => Task::XorXorXor,
         "mixed" => Task::AndXorXor,
         _ => return Err(usage.into()),
     };
@@ -1046,10 +1075,14 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         (false, "23") => (103, 0u64),
         (true, "11") if !confidence => (201, 0x00ab_0000_0000_0000),
         (true, "23") if !confidence => (203, 0x00ab_0000_0000_0000),
-        (true, "41") if confidence => (401, 0x00cd_0000_0000_0000),
-        (true, "53") if confidence => (403, 0x00cd_0000_0000_0000),
-        (true, "67") if confidence => (407, 0x00cd_0000_0000_0000),
-        (true, "79") if confidence => (409, 0x00cd_0000_0000_0000),
+        (true, "41") if !baseline && confidence => (401, 0x00cd_0000_0000_0000),
+        (true, "53") if !baseline && confidence => (403, 0x00cd_0000_0000_0000),
+        (true, "67") if !baseline && confidence => (407, 0x00cd_0000_0000_0000),
+        (true, "79") if !baseline && confidence => (409, 0x00cd_0000_0000_0000),
+        (true, "83") if baseline => (503, 0x00ef_0000_0000_0000),
+        (true, "97") if baseline => (509, 0x00ef_0000_0000_0000),
+        (true, "101") if baseline => (521, 0x00ef_0000_0000_0000),
+        (true, "113") if baseline => (523, 0x00ef_0000_0000_0000),
         _ => return Err(usage.into()),
     };
     let n = if expanded {
@@ -1063,22 +1096,20 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     let words = if rate == NoiseRate::Zero { 128 } else { 512 };
     let train = prefix(
-        &f2b_data(
+        &f2b4_data(
             seed(index, task, 0xf2b1_0000_0000_0001 ^ stage_salt),
-            task,
-            rate,
-            TRAIN_STEPS,
-            null_targets,
+            task, rate, TRAIN_STEPS, null_targets, imbalanced_null,
         ),
         WIDTH + words,
     );
-    let inner_train_validation = f2b_data(
+    let inner_train_validation = f2b4_data(
         seed(index, task, 0xf2b1_0000_0000_0002 ^ stage_salt),
-        task,
-        rate,
-        VAL_STEPS,
-        null_targets,
+        task, rate, VAL_STEPS, null_targets, imbalanced_null,
     );
+    let (fitted_train_ones, fitted_train_count) = target_ones(&train, WIDTH)?;
+    let frozen_prior = if baseline {
+        Some(FrozenConstantBitPrior::fit_train(fitted_train_ones, fitted_train_count)?)
+    } else { None };
     let observed = Observed::new(&train, grid(n));
     let w3_budget_skip = expanded && count_combinations(&observed).1 > 1_000_000;
     assert_eq!(observed.p.len(), words);
