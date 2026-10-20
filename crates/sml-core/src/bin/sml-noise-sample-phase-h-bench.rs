@@ -793,6 +793,9 @@ fn wilson(success: usize, trials: usize) -> (f64, f64) {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|flag| flag == "--f2b") {
+        return run_f2b(&args);
+    }
     if args.len() > 1 {
         return Err("usage: sml-noise-sample-phase-bench (fixed preregistered matrix)".into());
     }
@@ -983,6 +986,230 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     println!("A6C12H_COMPLETE,policies=1872,test_rows=1872,distinct_test_datasets=128,noise_rates=4,word_budgets=10,seed_count=16,core_seed_count=8,fit_repeats=3");
+    Ok(())
+}
+
+/// A new, opt-in F2b paired experiment. It *reuses* the same C12h
+/// proposers, native supervised fitter and native-error evaluator. The
+/// historical no-argument C12h matrix remains byte-for-byte unchanged.
+fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
+    use sml_core::spectral_method_gate::{
+        SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
+    };
+
+    let usage = "usage: sml-noise-sample-phase-h-bench --f2b xor|mixed 0|40 11|23";
+    if args.len() != 5 {
+        return Err(usage.into());
+    }
+    let task = match args[2].as_str() {
+        "xor" => Task::XorXorXor,
+        "mixed" => Task::AndXorXor,
+        _ => return Err(usage.into()),
+    };
+    let rate = match args[3].as_str() {
+        "0" => NoiseRate::Zero,
+        "40" => NoiseRate::TwoIn5,
+        _ => return Err(usage.into()),
+    };
+    // The new seed indices and salts do not overlap historical C12h streams.
+    let index = match args[4].as_str() {
+        "11" => 101,
+        "23" => 103,
+        _ => return Err(usage.into()),
+    };
+    let words = if rate == NoiseRate::Zero { 128 } else { 512 };
+    let train = prefix(
+        &data(
+            seed(index, task, 0xf2b1_0000_0000_0001),
+            task,
+            rate,
+            TRAIN_STEPS,
+        ),
+        WIDTH + words,
+    );
+    let inner_train_validation = data(
+        seed(index, task, 0xf2b1_0000_0000_0002),
+        task,
+        rate,
+        VAL_STEPS,
+    );
+    let observed = Observed::new(&train, grid(128));
+    assert_eq!(observed.p.len(), words);
+
+    // W3 is first, Hybrid second, exactly as in frozen C12h Method::TWO.
+    // Measure proposer+native fitter once. Do not use teacher sources to
+    // screen hypotheses, rank the models, or accept their predictions.
+    let mut fits: Vec<Option<BudgetFit>> = Vec::with_capacity(2);
+    let mut search_ns = [0_u64; 2];
+    for (method_index, method) in Method::TWO.iter().copied().enumerate() {
+        let timer = Instant::now();
+        let screen = propose(&observed, method);
+        let fit = if screen.hypotheses.is_empty() {
+            None
+        } else {
+            Some(fit_three_gate_candidates(
+                &train,
+                &inner_train_validation,
+                WIDTH,
+                &screen.hypotheses,
+            )?)
+        };
+        search_ns[method_index] = u64::try_from(timer.elapsed().as_nanos())?.max(2);
+        fits.push(fit);
+    }
+
+    let cfg = SpectralGateConfig {
+        minimum_examples_per_partition: 1024,
+        minimum_w3_advantage_ppm: 10_000,
+        maximum_hybrid_error_ppm: 500_000,
+        maximum_w3_error_ppm: 500_000,
+        maximum_hybrid_ns_per_example: 500_000,
+        maximum_w3_ns_per_example: 1_000_000,
+    };
+    let mut gate = TrainOnlySpectralMethodGate::new(cfg)?;
+    let mut errors_cal = [[0_u64; 2]; 2];
+    let mut eval_cal_ns = [0_u64; 2];
+    let mut calibration_counts = [0_u64; 2];
+
+    // Both calibration datasets are generated AFTER both search engines
+    // and their learned networks have been completely frozen.
+    for partition in 0..2 {
+        let mut eval_partition_ns = [0_u64; 2];
+        let stream = seed(index, task, 0xf2b1_0000_0000_0011 + partition as u64);
+        let calibration = data(stream, task, rate, VAL_STEPS);
+        let samples = (VAL_STEPS * LANES) as u64;
+        calibration_counts[partition] = samples;
+        for arm in 0..2 {
+            let timer = Instant::now();
+            // Failed fitting is scored as non-admissible with maximal error:
+            // never reinterpret lack of a trained model as perfect labels.
+            let err = if let Some(fit) = &fits[arm] {
+                native_errors(&fit.committed, &calibration)?
+            } else {
+                samples
+            };
+            eval_partition_ns[arm] = u64::try_from(timer.elapsed().as_nanos())?.max(1);
+            eval_cal_ns[arm] = eval_cal_ns[arm]
+                .checked_add(eval_partition_ns[arm])
+                .ok_or("F2b calibration time overflow")?;
+            if err > samples {
+                return Err("F2b calibration error counter exceeds samples".into());
+            }
+            errors_cal[partition][arm] = err;
+        }
+        // Each half gets half the true measured search+fit time plus its own
+        // evaluation cost. The nonselected scorer has NOT been made free.
+        let w3_cost = (search_ns[0] / 2)
+            .checked_add(u64::from(partition == 1 && search_ns[0] % 2 != 0))
+            .and_then(|ns| ns.checked_add(eval_partition_ns[0]))
+            .ok_or("F2b Walsh search plus calibration cost overflow")?;
+        let hybrid_cost = (search_ns[1] / 2)
+            .checked_add(u64::from(partition == 1 && search_ns[1] % 2 != 0))
+            .and_then(|ns| ns.checked_add(eval_partition_ns[1]))
+            .ok_or("F2b Hybrid search plus calibration cost overflow")?;
+        gate.observe_train(
+            partition,
+            samples,
+            errors_cal[partition][1],
+            errors_cal[partition][0],
+            hybrid_cost,
+            w3_cost,
+        )?;
+    }
+    // Freeze BEFORE constructing the independently generated DEV data.
+    let route = gate.freeze()?;
+    if gate.route() != Some(route) || gate.freeze().is_ok() {
+        return Err("F2b route must freeze exactly once".into());
+    }
+    let dev = data(
+        seed(index, task, 0xf2b1_0000_0000_0033),
+        task,
+        rate,
+        TEST_STEPS,
+    );
+    let dev_samples = (TEST_STEPS * LANES) as u64;
+    let routed_start = Instant::now();
+    let selected_error: Option<u64> = match route {
+        SpectralMethod::Abstain => None,
+        SpectralMethod::Walsh3Exhaustive => Some(native_errors(
+            &fits[0]
+                .as_ref()
+                .ok_or("W3 selected without fitted model")?
+                .committed,
+            &dev,
+        )?),
+        SpectralMethod::HybridW2SketchMitm => Some(native_errors(
+            &fits[1]
+                .as_ref()
+                .ok_or("Hybrid selected without fitted model")?
+                .committed,
+            &dev,
+        )?),
+    };
+    let route_ns = u64::try_from(routed_start.elapsed().as_nanos())?.max(1);
+    let routed_bit_predictions = if selected_error.is_some() {
+        dev_samples
+    } else {
+        0
+    };
+    // Shadow methods are executed independently, after the route was fixed.
+    // Their compute and labels cannot influence routing.
+    let shadow_start = Instant::now();
+    let mut shadow_error = [None; 2];
+    for arm in 0..2 {
+        if let Some(fit) = &fits[arm] {
+            shadow_error[arm] = Some(native_errors(&fit.committed, &dev)?);
+        }
+    }
+    let shadow_ns = u64::try_from(shadow_start.elapsed().as_nanos())?.max(1);
+    for err in shadow_error.into_iter().flatten() {
+        if err > dev_samples {
+            return Err("F2b DEV shadow error exceeds number of samples".into());
+        }
+    }
+    match route {
+        SpectralMethod::Abstain if selected_error.is_some() => {
+            return Err("F2b abstention executed a model".into());
+        }
+        SpectralMethod::Walsh3Exhaustive if selected_error != shadow_error[0] => {
+            return Err("F2b Walsh routed/shadow mismatch".into());
+        }
+        SpectralMethod::HybridW2SketchMitm if selected_error != shadow_error[1] => {
+            return Err("F2b Hybrid routed/shadow mismatch".into());
+        }
+        _ => {}
+    }
+    let route_id = match route {
+        SpectralMethod::HybridW2SketchMitm => 0,
+        SpectralMethod::Walsh3Exhaustive => 1,
+        SpectralMethod::Abstain => 2,
+    };
+    let display_err = |x: Option<u64>| x.map_or(-1, |v| v as i64);
+    // 26 tab-separated fields. The three independent stream salts are
+    // versioned above; the application RNG is fixed by the pinned source.
+    println!(
+        "F2B_ROUTE_V1\t{}\t{}\t{}\t{words}\t{}\t{}\t{}\t{}\t{dev_samples}\t{route_id}\t{routed_bit_predictions}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{route_ns}\t{shadow_ns}",
+        task.name(),
+        args[3],
+        args[4],
+        words * LANES,
+        VAL_STEPS * LANES,
+        calibration_counts[0],
+        calibration_counts[1],
+        usize::from(fits[1].is_some()),
+        usize::from(fits[0].is_some()),
+        errors_cal[0][1],
+        errors_cal[0][0],
+        errors_cal[1][1],
+        errors_cal[1][0],
+        display_err(shadow_error[1]),
+        display_err(shadow_error[0]),
+        display_err(selected_error),
+        search_ns[1],
+        search_ns[0],
+        eval_cal_ns[1],
+        eval_cal_ns[0],
+    );
     Ok(())
 }
 
