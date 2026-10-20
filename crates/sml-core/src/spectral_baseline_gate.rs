@@ -109,12 +109,30 @@ impl Evidence {
             return Err(PriorSpectralError::InvalidCounts);
         }
         Ok(Self {
-            examples: self.examples.checked_add(examples).ok_or(PriorSpectralError::CounterOverflow)?,
-            baseline_errors: self.baseline_errors.checked_add(baseline_errors).ok_or(PriorSpectralError::CounterOverflow)?,
-            hybrid_errors: self.hybrid_errors.checked_add(hybrid_errors).ok_or(PriorSpectralError::CounterOverflow)?,
-            w3_errors: self.w3_errors.checked_add(w3_errors).ok_or(PriorSpectralError::CounterOverflow)?,
-            hybrid_ns: self.hybrid_ns.checked_add(hybrid_ns).ok_or(PriorSpectralError::CounterOverflow)?,
-            w3_ns: self.w3_ns.checked_add(w3_ns).ok_or(PriorSpectralError::CounterOverflow)?,
+            examples: self
+                .examples
+                .checked_add(examples)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
+            baseline_errors: self
+                .baseline_errors
+                .checked_add(baseline_errors)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
+            hybrid_errors: self
+                .hybrid_errors
+                .checked_add(hybrid_errors)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
+            w3_errors: self
+                .w3_errors
+                .checked_add(w3_errors)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
+            hybrid_ns: self
+                .hybrid_ns
+                .checked_add(hybrid_ns)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
+            w3_ns: self
+                .w3_ns
+                .checked_add(w3_ns)
+                .ok_or(PriorSpectralError::CounterOverflow)?,
         })
     }
     fn within_budget(&self, errors: u64, elapsed: u64, max_ppm: u32, max_ns: u64) -> bool {
@@ -163,7 +181,10 @@ impl TrainOnlySpectralBaselineGate {
         if self.route.is_some() {
             return Err(PriorSpectralError::AlreadyFrozen);
         }
-        let previous = self.partitions.get(partition).ok_or(PriorSpectralError::InvalidCounts)?;
+        let previous = self
+            .partitions
+            .get(partition)
+            .ok_or(PriorSpectralError::InvalidCounts)?;
         let updated = previous.observe(
             examples,
             baseline_errors,
@@ -179,7 +200,10 @@ impl TrainOnlySpectralBaselineGate {
         if self.route.is_some() {
             return Err(PriorSpectralError::AlreadyFrozen);
         }
-        let enough = self.partitions.iter().all(|p| p.examples >= self.config.minimum_examples_per_partition);
+        let enough = self
+            .partitions
+            .iter()
+            .all(|p| p.examples >= self.config.minimum_examples_per_partition);
         let hybrid_qualified = enough
             && self.partitions.iter().all(|p| {
                 p.within_budget(
@@ -187,7 +211,10 @@ impl TrainOnlySpectralBaselineGate {
                     p.hybrid_ns,
                     self.config.maximum_error_ppm,
                     self.config.maximum_hybrid_ns_per_example,
-                ) && p.beats_prior(p.hybrid_errors, self.config.minimum_improvement_over_prior_ppm)
+                ) && p.beats_prior(
+                    p.hybrid_errors,
+                    self.config.minimum_improvement_over_prior_ppm,
+                )
             });
         let w3_qualified = enough
             && self.partitions.iter().all(|p| {
@@ -287,7 +314,8 @@ mod tests {
             .unwrap();
         assert_eq!(gate.freeze().unwrap(), SpectralMethod::HybridW2SketchMitm);
         let mut missing = TrainOnlySpectralBaselineGate::new(config()).unwrap();
-        missing.observe_train(0, 40_960, 20_480, 12_000, 8_000, 10_000, 20_000)
+        missing
+            .observe_train(0, 40_960, 20_480, 12_000, 8_000, 10_000, 20_000)
             .unwrap();
         assert_eq!(missing.freeze().unwrap(), SpectralMethod::Abstain);
     }
@@ -312,7 +340,8 @@ mod tests {
         );
         assert!(gate.observe_train(0, 10, 11, 10, 10, 10, 10).is_err());
         assert!(gate.observe_train(0, 10, 0, 0, 0, 0, 10).is_err());
-        gate.observe_train(0, u64::MAX, 0, 0, 0, u64::MAX, u64::MAX).unwrap();
+        gate.observe_train(0, u64::MAX, 0, 0, 0, u64::MAX, u64::MAX)
+            .unwrap();
         assert_eq!(
             gate.observe_train(0, 1, 0, 0, 0, 1, 1),
             Err(PriorSpectralError::CounterOverflow),
