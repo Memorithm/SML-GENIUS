@@ -325,10 +325,10 @@ fn train_stream(
     epochs: u32,
     parent: Option<&Path>,
 ) -> Result<()> {
-    if !(1..=CONTINUE_EPOCHS).contains(&epochs)
-        || parent.is_some() != (epochs == CONTINUE_EPOCHS)
-    {
-        return Err("only one fresh epoch or the frozen eight-epoch continuation is allowed".into());
+    if !(1..=CONTINUE_EPOCHS).contains(&epochs) || parent.is_some() != (epochs == CONTINUE_EPOCHS) {
+        return Err(
+            "only one fresh epoch or the frozen eight-epoch continuation is allowed".into(),
+        );
     }
     if output.exists() || output == data_root || output == manifest {
         return Err("model output already exists or overlaps input".into());
@@ -358,7 +358,8 @@ fn train_stream(
     let start = Instant::now();
     let (mut atlas, parent_proof) = match parent_canonical.as_deref() {
         Some(model) => {
-            let (atlas, proof) = open_verified_parent(model, output, &roster, config, factorization)?;
+            let (atlas, proof) =
+                open_verified_parent(model, output, &roster, config, factorization)?;
             (atlas, Some(proof))
         }
         None => (
@@ -503,13 +504,8 @@ fn train_stream(
         .write(true)
         .create_new(true)
         .open(output.join("COMPLETE"))?;
-    complete.write_all(
-        format!(
-            "{schema}\t{}\n",
-            file_sha(&output.join("metrics.tsv"))?
-        )
-        .as_bytes(),
-    )?;
+    complete
+        .write_all(format!("{schema}\t{}\n", file_sha(&output.join("metrics.tsv"))?).as_bytes())?;
     complete.sync_all()?;
     File::open(output)?.sync_all()?;
     print!("{metric}");
@@ -535,18 +531,23 @@ fn cli(args: &[String]) -> Result<()> {
                 "--stream-50m-bits" => ByteFactorization::IndependentBits,
                 _ => return Err(usage.into()),
             };
-            (factorization, None, root.as_str(), manifest.as_str(), output.as_str(), 1)
-        }
-        [_, flag, parent, root, manifest, output] if flag == "--continue-50m-msb-8" => {
             (
-                ByteFactorization::MsbTree,
-                Some(Path::new(parent)),
+                factorization,
+                None,
                 root.as_str(),
                 manifest.as_str(),
                 output.as_str(),
-                CONTINUE_EPOCHS,
+                1,
             )
         }
+        [_, flag, parent, root, manifest, output] if flag == "--continue-50m-msb-8" => (
+            ByteFactorization::MsbTree,
+            Some(Path::new(parent)),
+            root.as_str(),
+            manifest.as_str(),
+            output.as_str(),
+            CONTINUE_EPOCHS,
+        ),
         _ => return Err(usage.into()),
     };
     train_stream(
@@ -716,18 +717,28 @@ mod tests {
         assert_eq!(metrics.lines().nth(1).unwrap().split('\t').count(), 31);
         assert!(metrics.contains("UNOPENED\tNOT_PROMOTED"));
         assert!(continued.join("COMPLETE").exists());
-        assert_eq!(file_sha(&fx.output.join("master.f32")).unwrap(), parent_master_sha);
-        assert_eq!(fs::read_to_string(fx.output.join("COMPLETE")).unwrap(), parent_complete);
+        assert_eq!(
+            file_sha(&fx.output.join("master.f32")).unwrap(),
+            parent_master_sha
+        );
+        assert_eq!(
+            fs::read_to_string(fx.output.join("COMPLETE")).unwrap(),
+            parent_complete
+        );
         assert!(train_stream(
             &fx.data,
             &fx.manifest,
             &continued,
             config,
             ByteFactorization::MsbTree,
-            Limits { min_train: 256, min_dev: 128 },
+            Limits {
+                min_train: 256,
+                min_dev: 128
+            },
             CONTINUE_EPOCHS,
             Some(&fx.output),
-        ).is_err());
+        )
+        .is_err());
     }
 
     #[test]
@@ -740,12 +751,23 @@ mod tests {
         fs::write(fx.output.join("COMPLETE"), "fake complete\n").unwrap();
         let dest = fx.home.join("untrusted");
         assert!(train_stream(
-            &fx.data, &fx.manifest, &dest,
-            SparseConfig { pages: 8, max_cached_pages: 2, learning_rate: 0.15 },
+            &fx.data,
+            &fx.manifest,
+            &dest,
+            SparseConfig {
+                pages: 8,
+                max_cached_pages: 2,
+                learning_rate: 0.15
+            },
             ByteFactorization::MsbTree,
-            Limits { min_train: 256, min_dev: 128 },
-            CONTINUE_EPOCHS, Some(&fx.output)
-        ).is_err());
+            Limits {
+                min_train: 256,
+                min_dev: 128
+            },
+            CONTINUE_EPOCHS,
+            Some(&fx.output)
+        )
+        .is_err());
         assert!(!dest.join("COMPLETE").exists());
     }
 
