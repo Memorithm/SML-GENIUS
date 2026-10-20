@@ -88,6 +88,7 @@ pub mod elastic_ngram_paged_sha;
 pub mod elastic_ngram_trie;
 pub mod elastic_weights;
 pub mod eng1c_dev;
+pub mod frozen_bit_markov_prior;
 pub mod forge_topology;
 pub mod gf2;
 pub mod gru_side;
