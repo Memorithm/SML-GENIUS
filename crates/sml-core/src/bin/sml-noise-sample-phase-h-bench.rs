@@ -793,7 +793,10 @@ fn wilson(success: usize, trials: usize) -> (f64, f64) {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).is_some_and(|flag| flag == "--f2b") {
+    if args
+        .get(1)
+        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2")
+    {
         return run_f2b(&args);
     }
     if args.len() > 1 {
@@ -992,48 +995,85 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// A new, opt-in F2b paired experiment. It *reuses* the same C12h
 /// proposers, native supervised fitter and native-error evaluator. The
 /// historical no-argument C12h matrix remains byte-for-byte unchanged.
+fn f2b_data(
+    stream: u64,
+    task: Task,
+    rate: NoiseRate,
+    steps: usize,
+    null_targets: bool,
+) -> LaneData {
+    let mut sample = data(stream, task, rate, steps);
+    if null_targets {
+        // Independent target stream; no teacher labels are visible in
+        // FIT, calibration, or DEV. Unmodified raw inputs are preserved.
+        let mut rng = SplitMix64::new(stream ^ 0x2b20_e5dd_a11c_3f77);
+        for label in &mut sample.blocks[0].targets {
+            *label = rng.next_u64();
+        }
+    }
+    sample
+}
 fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     use sml_core::spectral_method_gate::{
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
     };
 
-    let usage = "usage: sml-noise-sample-phase-h-bench --f2b xor|mixed 0|40 11|23";
-    if args.len() != 5 {
+    let expanded = args.get(1).is_some_and(|flag| flag == "--f2b2");
+    let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508";
+    if args.len() != if expanded { 6 } else { 5 } {
         return Err(usage.into());
     }
+    let null_targets = expanded && args[2] == "null";
     let task = match args[2].as_str() {
-        "xor" => Task::XorXorXor,
+        "xor" | "null" if expanded || args[2] == "xor" => Task::XorXorXor,
         "mixed" => Task::AndXorXor,
         _ => return Err(usage.into()),
     };
+    if null_targets && args[3] != "0" {
+        return Err("F2b2 null control accepts only noise=0".into());
+    }
     let rate = match args[3].as_str() {
         "0" => NoiseRate::Zero,
         "40" => NoiseRate::TwoIn5,
         _ => return Err(usage.into()),
     };
-    // The new seed indices and salts do not overlap historical C12h streams.
-    let index = match args[4].as_str() {
-        "11" => 101,
-        "23" => 103,
+    // Each slice has non-overlapping salt and index domains.
+    let (index, stage_salt) = match (expanded, args[4].as_str()) {
+        (false, "11") => (101, 0u64),
+        (false, "23") => (103, 0u64),
+        (true, "11") => (201, 0x00ab_0000_0000_0000),
+        (true, "23") => (203, 0x00ab_0000_0000_0000),
         _ => return Err(usage.into()),
+    };
+    let n = if expanded {
+        match args[5].as_str() {
+            "32" => 32,
+            "508" => 508,
+            _ => return Err(usage.into()),
+        }
+    } else {
+        128
     };
     let words = if rate == NoiseRate::Zero { 128 } else { 512 };
     let train = prefix(
-        &data(
-            seed(index, task, 0xf2b1_0000_0000_0001),
+        &f2b_data(
+            seed(index, task, 0xf2b1_0000_0000_0001 ^ stage_salt),
             task,
             rate,
             TRAIN_STEPS,
+            null_targets,
         ),
         WIDTH + words,
     );
-    let inner_train_validation = data(
-        seed(index, task, 0xf2b1_0000_0000_0002),
+    let inner_train_validation = f2b_data(
+        seed(index, task, 0xf2b1_0000_0000_0002 ^ stage_salt),
         task,
         rate,
         VAL_STEPS,
+        null_targets,
     );
-    let observed = Observed::new(&train, grid(128));
+    let observed = Observed::new(&train, grid(n));
+    let w3_budget_skip = expanded && count_combinations(&observed).1 > 1_000_000;
     assert_eq!(observed.p.len(), words);
 
     // W3 is first, Hybrid second, exactly as in frozen C12h Method::TWO.
@@ -1042,6 +1082,11 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     let mut fits: Vec<Option<BudgetFit>> = Vec::with_capacity(2);
     let mut search_ns = [0_u64; 2];
     for (method_index, method) in Method::TWO.iter().copied().enumerate() {
+        if w3_budget_skip && method == Method::Walsh3Stream {
+            search_ns[method_index] = 0;
+            fits.push(None);
+            continue;
+        }
         let timer = Instant::now();
         let screen = propose(&observed, method);
         let fit = if screen.hypotheses.is_empty() {
@@ -1075,8 +1120,12 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     // and their learned networks have been completely frozen.
     for partition in 0..2 {
         let mut eval_partition_ns = [0_u64; 2];
-        let stream = seed(index, task, 0xf2b1_0000_0000_0011 + partition as u64);
-        let calibration = data(stream, task, rate, VAL_STEPS);
+        let stream = seed(
+            index,
+            task,
+            (0xf2b1_0000_0000_0011 + partition as u64) ^ stage_salt,
+        );
+        let calibration = f2b_data(stream, task, rate, VAL_STEPS, null_targets);
         let samples = (VAL_STEPS * LANES) as u64;
         calibration_counts[partition] = samples;
         for arm in 0..2 {
@@ -1121,11 +1170,12 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     if gate.route() != Some(route) || gate.freeze().is_ok() {
         return Err("F2b route must freeze exactly once".into());
     }
-    let dev = data(
-        seed(index, task, 0xf2b1_0000_0000_0033),
+    let dev = f2b_data(
+        seed(index, task, 0xf2b1_0000_0000_0033 ^ stage_salt),
         task,
         rate,
         TEST_STEPS,
+        null_targets,
     );
     let dev_samples = (TEST_STEPS * LANES) as u64;
     let routed_start = Instant::now();
@@ -1185,11 +1235,11 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         SpectralMethod::Abstain => 2,
     };
     let display_err = |x: Option<u64>| x.map_or(-1, |v| v as i64);
-    // 26 tab-separated fields. The three independent stream salts are
-    // versioned above; the application RNG is fixed by the pinned source.
-    println!(
+    // 27 tab-separated F2b-1 fields. F2b-2 preserves them and appends
+    // candidate-source grid n and explicit W3 out-of-budget status.
+    let report = format!(
         "F2B_ROUTE_V1\t{}\t{}\t{}\t{words}\t{}\t{}\t{}\t{}\t{dev_samples}\t{route_id}\t{routed_bit_predictions}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{route_ns}\t{shadow_ns}",
-        task.name(),
+        if null_targets { "iid_null" } else { task.name() },
         args[3],
         args[4],
         words * LANES,
@@ -1210,12 +1260,36 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         eval_cal_ns[1],
         eval_cal_ns[0],
     );
+    if expanded {
+        println!(
+            "{}\t{n}\t{}",
+            report.replacen("F2B_ROUTE_V1", "F2B_ROUTE_V2", 1),
+            usize::from(w3_budget_skip),
+        );
+    } else {
+        println!("{report}");
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn f2b2_independent_null_control_and_grid_budget() {
+        let null = f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, true);
+        let teacher = f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, false);
+        assert_eq!(null.blocks[0].inputs, teacher.blocks[0].inputs);
+        assert_ne!(null.blocks[0].targets, teacher.blocks[0].targets);
+        assert_eq!(
+            null.blocks[0].targets,
+            f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, true,).blocks[0].targets
+        );
+        let obs = Observed::new(&teacher, grid(32));
+        assert!(count_combinations(&obs).1 <= 1_000_000);
+        let obs508 = Observed::new(&teacher, grid(508));
+        assert!(count_combinations(&obs508).1 > 1_000_000);
+    }
     #[test]
     fn fixed_grid_and_noise_stages() {
         assert_eq!(POLICY_COUNT, 1872);
