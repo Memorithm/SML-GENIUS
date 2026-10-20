@@ -795,7 +795,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args
         .get(1)
-        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2")
+        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2" || flag == "--f2b3")
     {
         return run_f2b(&args);
     }
@@ -1018,8 +1018,11 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
     };
 
-    let expanded = args.get(1).is_some_and(|flag| flag == "--f2b2");
-    let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508";
+    let confidence = args.get(1).is_some_and(|flag| flag == "--f2b3");
+    let expanded = args
+        .get(1)
+        .is_some_and(|flag| flag == "--f2b2" || flag == "--f2b3");
+    let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508 OR --f2b3 xor|mixed|null 0|40 41|53|67|79 32|508";
     if args.len() != if expanded { 6 } else { 5 } {
         return Err(usage.into());
     }
@@ -1041,8 +1044,12 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     let (index, stage_salt) = match (expanded, args[4].as_str()) {
         (false, "11") => (101, 0u64),
         (false, "23") => (103, 0u64),
-        (true, "11") => (201, 0x00ab_0000_0000_0000),
-        (true, "23") => (203, 0x00ab_0000_0000_0000),
+        (true, "11") if !confidence => (201, 0x00ab_0000_0000_0000),
+        (true, "23") if !confidence => (203, 0x00ab_0000_0000_0000),
+        (true, "41") if confidence => (401, 0x00cd_0000_0000_0000),
+        (true, "53") if confidence => (403, 0x00cd_0000_0000_0000),
+        (true, "67") if confidence => (407, 0x00cd_0000_0000_0000),
+        (true, "79") if confidence => (409, 0x00cd_0000_0000_0000),
         _ => return Err(usage.into()),
     };
     let n = if expanded {
@@ -1103,11 +1110,14 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         fits.push(fit);
     }
 
+    // F2b-3 is a *new*, preregistered policy after the F2b-2 null FAIL.
+    // It must not alter historical F2b-1/2 admissions or their TSV schemas.
+    let max_error_ppm = if confidence { 490_000 } else { 500_000 };
     let cfg = SpectralGateConfig {
         minimum_examples_per_partition: 1024,
         minimum_w3_advantage_ppm: 10_000,
-        maximum_hybrid_error_ppm: 500_000,
-        maximum_w3_error_ppm: 500_000,
+        maximum_hybrid_error_ppm: max_error_ppm,
+        maximum_w3_error_ppm: max_error_ppm,
         maximum_hybrid_ns_per_example: 500_000,
         maximum_w3_ns_per_example: 1_000_000,
     };
@@ -1260,7 +1270,13 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         eval_cal_ns[1],
         eval_cal_ns[0],
     );
-    if expanded {
+    if confidence {
+        println!(
+            "{}\t{n}\t{}\t{max_error_ppm}",
+            report.replacen("F2B_ROUTE_V1", "F2B_ROUTE_V3", 1),
+            usize::from(w3_budget_skip),
+        );
+    } else if expanded {
         println!(
             "{}\t{n}\t{}",
             report.replacen("F2B_ROUTE_V1", "F2B_ROUTE_V2", 1),
@@ -1275,6 +1291,37 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn f2b3_fixed_chance_margin_rejects_archived_null_fluctuation() {
+        use sml_core::spectral_method_gate::{
+            SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
+        };
+        let config = SpectralGateConfig {
+            minimum_examples_per_partition: 1024,
+            minimum_w3_advantage_ppm: 10_000,
+            maximum_hybrid_error_ppm: 490_000,
+            maximum_w3_error_ppm: 490_000,
+            maximum_hybrid_ns_per_example: 500_000,
+            maximum_w3_ns_per_example: 1_000_000,
+        };
+        let mut null = TrainOnlySpectralMethodGate::new(config).unwrap();
+        null.observe_train(0, 40_960, 20_435, 20_435, 10_000, 20_000)
+            .unwrap();
+        null.observe_train(1, 40_960, 20_412, 20_412, 10_000, 20_000)
+            .unwrap();
+        assert_eq!(null.freeze().unwrap(), SpectralMethod::Abstain);
+
+        // Real 40%-noisy parity remains capable of choosing W3 if each
+        // calibration half shows a strong error advantage under the same cap.
+        let mut signal = TrainOnlySpectralMethodGate::new(config).unwrap();
+        signal
+            .observe_train(0, 40_960, 20_500, 16_500, 10_000, 20_000)
+            .unwrap();
+        signal
+            .observe_train(1, 40_960, 20_400, 16_400, 10_000, 20_000)
+            .unwrap();
+        assert_eq!(signal.freeze().unwrap(), SpectralMethod::Walsh3Exhaustive);
+    }
     #[test]
     fn f2b2_independent_null_control_and_grid_budget() {
         let null = f2b_data(0x1020_3040, Task::XorXorXor, NoiseRate::Zero, 256, true);
