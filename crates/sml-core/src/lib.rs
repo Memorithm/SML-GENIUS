@@ -132,6 +132,7 @@ pub mod rtrl3_elastic;
 pub mod semantic;
 pub mod sparse_gradient_atlas;
 pub mod sparse_mor_anf_recurrent;
+pub mod spectral_baseline_gate;
 pub mod spectral_method_gate;
 pub mod task_loss;
 pub mod tasks;
