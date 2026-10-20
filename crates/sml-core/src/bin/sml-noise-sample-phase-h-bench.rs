@@ -1070,6 +1070,7 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     // Both calibration datasets are generated AFTER both search engines
     // and their learned networks have been completely frozen.
     for partition in 0..2 {
+        let mut eval_partition_ns = [0_u64; 2];
         let stream = seed(index, task, 0xf2b1_0000_0000_0011 + partition as u64);
         let calibration = data(stream, task, rate, VAL_STEPS);
         let samples = (VAL_STEPS * LANES) as u64;
@@ -1083,8 +1084,9 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
             } else {
                 samples
             };
+            eval_partition_ns[arm] = u64::try_from(timer.elapsed().as_nanos())?.max(1);
             eval_cal_ns[arm] = eval_cal_ns[arm]
-                .checked_add(u64::try_from(timer.elapsed().as_nanos())?.max(1))
+                .checked_add(eval_partition_ns[arm])
                 .ok_or("F2b calibration time overflow")?;
             if err > samples {
                 return Err("F2b calibration error counter exceeds samples".into());
@@ -1093,12 +1095,14 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         }
         // Each half gets half the true measured search+fit time plus its own
         // evaluation cost. The nonselected scorer has NOT been made free.
-        let w3_cost = search_ns[0] / 2
-            + u64::from(partition == 1 && search_ns[0] % 2 != 0)
-            + eval_cal_ns[0] - if partition == 0 { 0 } else { 0 };
-        let hybrid_cost = search_ns[1] / 2
-            + u64::from(partition == 1 && search_ns[1] % 2 != 0)
-            + eval_cal_ns[1] - if partition == 0 { 0 } else { 0 };
+        let w3_cost = (search_ns[0] / 2)
+            .checked_add(u64::from(partition == 1 && search_ns[0] % 2 != 0))
+            .and_then(|ns| ns.checked_add(eval_partition_ns[0]))
+            .ok_or("F2b Walsh search plus calibration cost overflow")?;
+        let hybrid_cost = (search_ns[1] / 2)
+            .checked_add(u64::from(partition == 1 && search_ns[1] % 2 != 0))
+            .and_then(|ns| ns.checked_add(eval_partition_ns[1]))
+            .ok_or("F2b Hybrid search plus calibration cost overflow")?;
         gate.observe_train(
             partition,
             samples,
@@ -1173,7 +1177,7 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     // 26 tab-separated fields. The three independent stream salts are
     // versioned above; the application RNG is fixed by the pinned source.
     println!(
-        "F2B_ROUTE_V1\t{}\t{}\t{}\t{words}\t{}\t{}\t{}\t{}\t{dev_samples}\t{route_id}\t{routed_bit_predictions}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{route_ns}\t{shadow_ns}",
+        "F2B_ROUTE_V1\t{}\t{}\t{}\t{words}\t{}\t{}\t{}\t{}\t{dev_samples}\t{route_id}\t{routed_bit_predictions}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{route_ns}\t{shadow_ns}",
         task.name(),
         args[3],
         args[4],
