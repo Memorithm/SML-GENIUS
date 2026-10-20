@@ -793,10 +793,9 @@ fn wilson(success: usize, trials: usize) -> (f64, f64) {
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if args
-        .get(1)
-        .is_some_and(|flag| flag == "--f2b" || flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4")
-    {
+    if args.get(1).is_some_and(|flag| {
+        flag == "--f2b" || flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4"
+    }) {
         return run_f2b(&args);
     }
     if args.len() > 1 {
@@ -1014,8 +1013,14 @@ fn f2b_data(
     sample
 }
 /// A separate Bernoulli(0.2) target stream, independent of teacher and inputs.
-fn f2b4_data(stream: u64, task: Task, rate: NoiseRate, steps: usize,
-             null_targets: bool, imbalanced_null: bool) -> LaneData {
+fn f2b4_data(
+    stream: u64,
+    task: Task,
+    rate: NoiseRate,
+    steps: usize,
+    null_targets: bool,
+    imbalanced_null: bool,
+) -> LaneData {
     if !imbalanced_null {
         return f2b_data(stream, task, rate, steps, null_targets);
     }
@@ -1025,30 +1030,38 @@ fn f2b4_data(stream: u64, task: Task, rate: NoiseRate, steps: usize,
     for label in &mut sample.blocks[0].targets {
         let mut bits = 0_u64;
         for lane in 0..LANES {
-            if rng.next_u64() < cutoff { bits |= 1_u64 << lane; }
+            if rng.next_u64() < cutoff {
+                bits |= 1_u64 << lane;
+            }
         }
         *label = bits;
     }
     sample
 }
-fn target_ones(sample: &LaneData, skip_steps: usize) -> Result<(u64,u64), Box<dyn Error>> {
+fn target_ones(sample: &LaneData, skip_steps: usize) -> Result<(u64, u64), Box<dyn Error>> {
     if sample.blocks.len() != 1 || skip_steps >= sample.blocks[0].steps {
         return Err("F2b4 invalid label stream".into());
     }
     let labels = &sample.blocks[0].targets[skip_steps..];
     let positive = labels.iter().map(|x| u64::from(x.count_ones())).sum();
     let total = u64::try_from(labels.len())? * LANES as u64;
-    Ok((positive,total))
+    Ok((positive, total))
 }
 fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
-    use sml_core::spectral_baseline_gate::{BaselineSpectralGateConfig, FrozenConstantBitPrior, TrainOnlySpectralBaselineGate};
+    use sml_core::spectral_baseline_gate::{
+        BaselineSpectralGateConfig, FrozenConstantBitPrior, TrainOnlySpectralBaselineGate,
+    };
     use sml_core::spectral_method_gate::{
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
     };
 
     let baseline = args.get(1).is_some_and(|flag| flag == "--f2b4");
-    let confidence = args.get(1).is_some_and(|flag| flag == "--f2b3" || flag == "--f2b4");
-    let expanded = args.get(1).is_some_and(|flag| flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4");
+    let confidence = args
+        .get(1)
+        .is_some_and(|flag| flag == "--f2b3" || flag == "--f2b4");
+    let expanded = args
+        .get(1)
+        .is_some_and(|flag| flag == "--f2b2" || flag == "--f2b3" || flag == "--f2b4");
     let usage = "usage: --f2b xor|mixed 0|40 11|23 OR --f2b2 xor|mixed|null 0|40 11|23 32|508 OR --f2b3 xor|mixed|null 0|40 41|53|67|79 32|508 OR --f2b4 xor|mixed|null|null20 0|40 83|97|101|113 32|508";
     if args.len() != if expanded { 6 } else { 5 } {
         return Err(usage.into());
@@ -1098,18 +1111,31 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     let train = prefix(
         &f2b4_data(
             seed(index, task, 0xf2b1_0000_0000_0001 ^ stage_salt),
-            task, rate, TRAIN_STEPS, null_targets, imbalanced_null,
+            task,
+            rate,
+            TRAIN_STEPS,
+            null_targets,
+            imbalanced_null,
         ),
         WIDTH + words,
     );
     let inner_train_validation = f2b4_data(
         seed(index, task, 0xf2b1_0000_0000_0002 ^ stage_salt),
-        task, rate, VAL_STEPS, null_targets, imbalanced_null,
+        task,
+        rate,
+        VAL_STEPS,
+        null_targets,
+        imbalanced_null,
     );
     let (fitted_train_ones, fitted_train_count) = target_ones(&train, WIDTH)?;
     let frozen_prior = if baseline {
-        Some(FrozenConstantBitPrior::fit_train(fitted_train_ones, fitted_train_count)?)
-    } else { None };
+        Some(FrozenConstantBitPrior::fit_train(
+            fitted_train_ones,
+            fitted_train_count,
+        )?)
+    } else {
+        None
+    };
     let observed = Observed::new(&train, grid(n));
     let w3_budget_skip = expanded && count_combinations(&observed).1 > 1_000_000;
     assert_eq!(observed.p.len(), words);
@@ -1154,15 +1180,19 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     let mut gate = TrainOnlySpectralMethodGate::new(cfg)?;
     let mut prior_gate = if baseline {
-        Some(TrainOnlySpectralBaselineGate::new(BaselineSpectralGateConfig {
-            minimum_examples_per_partition: 40_960,
-            minimum_improvement_over_prior_ppm: 10_000,
-            minimum_w3_advantage_ppm: 10_000,
-            maximum_error_ppm: 490_000,
-            maximum_hybrid_ns_per_example: 500_000,
-            maximum_w3_ns_per_example: 1_000_000,
-        })?)
-    } else { None };
+        Some(TrainOnlySpectralBaselineGate::new(
+            BaselineSpectralGateConfig {
+                minimum_examples_per_partition: 40_960,
+                minimum_improvement_over_prior_ppm: 10_000,
+                minimum_w3_advantage_ppm: 10_000,
+                maximum_error_ppm: 490_000,
+                maximum_hybrid_ns_per_example: 500_000,
+                maximum_w3_ns_per_example: 1_000_000,
+            },
+        )?)
+    } else {
+        None
+    };
     let mut prior_cal_errors = [0_u64; 2];
     let mut errors_cal = [[0_u64; 2]; 2];
     let mut eval_cal_ns = [0_u64; 2];
@@ -1177,9 +1207,7 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
             task,
             (0xf2b1_0000_0000_0011 + partition as u64) ^ stage_salt,
         );
-        let calibration = f2b4_data(
-            stream, task, rate, VAL_STEPS, null_targets, imbalanced_null,
-        );
+        let calibration = f2b4_data(stream, task, rate, VAL_STEPS, null_targets, imbalanced_null);
         if let Some(prior) = frozen_prior {
             let (positive, total) = target_ones(&calibration, 0)?;
             if total != (VAL_STEPS * LANES) as u64 {
@@ -1219,14 +1247,22 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
             .ok_or("F2b Hybrid search plus calibration cost overflow")?;
         if let Some(ref mut prior_candidate_gate) = prior_gate {
             prior_candidate_gate.observe_train(
-                partition, samples, prior_cal_errors[partition],
-                errors_cal[partition][1], errors_cal[partition][0],
-                hybrid_cost, w3_cost,
+                partition,
+                samples,
+                prior_cal_errors[partition],
+                errors_cal[partition][1],
+                errors_cal[partition][0],
+                hybrid_cost,
+                w3_cost,
             )?;
         } else {
             gate.observe_train(
-                partition, samples, errors_cal[partition][1],
-                errors_cal[partition][0], hybrid_cost, w3_cost,
+                partition,
+                samples,
+                errors_cal[partition][1],
+                errors_cal[partition][0],
+                hybrid_cost,
+                w3_cost,
             )?;
         }
     }
@@ -1246,12 +1282,18 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     let dev = f2b4_data(
         seed(index, task, 0xf2b1_0000_0000_0033 ^ stage_salt),
-        task, rate, TEST_STEPS, null_targets, imbalanced_null,
+        task,
+        rate,
+        TEST_STEPS,
+        null_targets,
+        imbalanced_null,
     );
     let prior_dev_errors = if let Some(prior) = frozen_prior {
         let (positive, total) = target_ones(&dev, 0)?;
         Some(prior.count_errors(positive, total)?)
-    } else { None };
+    } else {
+        None
+    };
     let dev_samples = (TEST_STEPS * LANES) as u64;
     let routed_start = Instant::now();
     let selected_error: Option<u64> = match route {
@@ -1346,7 +1388,8 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
             "{}\t{n}\t{}\t{max_error_ppm}\t{fitted_train_ones}\t{}\t{}\t{}\t10000",
             report.replacen("F2B_ROUTE_V1", "F2B_ROUTE_V4", 1),
             usize::from(w3_budget_skip),
-            prior_cal_errors[0], prior_cal_errors[1],
+            prior_cal_errors[0],
+            prior_cal_errors[1],
             prior_dev_errors.ok_or("F2b4 missing prior DEV loss")?,
         );
     } else if confidence {
