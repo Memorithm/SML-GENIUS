@@ -315,6 +315,12 @@ struct Limits {
     min_dev: u64,
 }
 
+#[derive(Clone, Copy)]
+struct TrainingMode<'a> {
+    epochs: u32,
+    parent: Option<&'a Path>,
+}
+
 fn train_stream(
     data_root: &Path,
     manifest: &Path,
@@ -322,9 +328,10 @@ fn train_stream(
     config: SparseConfig,
     factorization: ByteFactorization,
     limits: Limits,
-    epochs: u32,
-    parent: Option<&Path>,
+    mode: TrainingMode<'_>,
 ) -> Result<()> {
+    let epochs = mode.epochs;
+    let parent = mode.parent;
     if !(1..=CONTINUE_EPOCHS).contains(&epochs) || parent.is_some() != (epochs == CONTINUE_EPOCHS) {
         return Err(
             "only one fresh epoch or the frozen eight-epoch continuation is allowed".into(),
@@ -564,8 +571,7 @@ fn cli(args: &[String]) -> Result<()> {
             min_train: MIN_TRAIN_BYTES,
             min_dev: MIN_DEV_BYTES,
         },
-        epochs,
-        parent,
+        TrainingMode { epochs, parent },
     )
 }
 
@@ -645,8 +651,10 @@ mod tests {
                     min_train: 256,
                     min_dev: 128,
                 },
-                1,
-                None,
+                TrainingMode {
+                    epochs: 1,
+                    parent: None,
+                },
             )
         }
     }
@@ -708,8 +716,10 @@ mod tests {
                 min_train: 256,
                 min_dev: 128,
             },
-            CONTINUE_EPOCHS,
-            Some(&fx.output),
+            TrainingMode {
+                epochs: CONTINUE_EPOCHS,
+                parent: Some(&fx.output),
+            },
         )
         .unwrap();
         let metrics = fs::read_to_string(continued.join("metrics.tsv")).unwrap();
@@ -735,8 +745,10 @@ mod tests {
                 min_train: 256,
                 min_dev: 128
             },
-            CONTINUE_EPOCHS,
-            Some(&fx.output),
+            TrainingMode {
+                epochs: CONTINUE_EPOCHS,
+                parent: Some(&fx.output),
+            },
         )
         .is_err());
     }
@@ -764,8 +776,10 @@ mod tests {
                 min_train: 256,
                 min_dev: 128
             },
-            CONTINUE_EPOCHS,
-            Some(&fx.output)
+            TrainingMode {
+                epochs: CONTINUE_EPOCHS,
+                parent: Some(&fx.output),
+            },
         )
         .is_err());
         assert!(!dest.join("COMPLETE").exists());
