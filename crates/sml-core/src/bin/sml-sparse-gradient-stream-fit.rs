@@ -86,8 +86,7 @@ fn load_roster(
     minimum_dev: u64,
 ) -> Result<Roster> {
     let canonical_root = fs::canonicalize(root)?;
-    if !fs::symlink_metadata(root)?.is_dir()
-        || fs::symlink_metadata(root)?.file_type().is_symlink()
+    if !fs::symlink_metadata(root)?.is_dir() || fs::symlink_metadata(root)?.file_type().is_symlink()
     {
         return Err("data root must be a directory, not a symlink".into());
     }
@@ -146,7 +145,9 @@ fn load_roster(
         match role {
             Role::Train => {
                 train_files += 1;
-                train_bytes = train_bytes.checked_add(length).ok_or("TRAIN size overflow")?;
+                train_bytes = train_bytes
+                    .checked_add(length)
+                    .ok_or("TRAIN size overflow")?;
                 if train_bytes > MAX_TRAIN_BYTES {
                     return Err("TRAIN byte budget exceeded".into());
                 }
@@ -190,6 +191,7 @@ fn load_document(entry: &Document) -> Result<Vec<u8>> {
     if data.len() as u64 != entry.length || sha256(&data) != entry.digest {
         return Err("source document SHA256 changed or is invalid".into());
     }
+    std::str::from_utf8(&data)?;
     Ok(data)
 }
 
@@ -228,7 +230,11 @@ fn train_stream(
     // Prevent writing inside the source tree, even when a different pathname
     // is used for the same physical root.
     let root_canonical = fs::canonicalize(data_root)?;
-    let parent_canonical = fs::canonicalize(output.parent().ok_or("invalid model output parent")?)?;
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent_canonical = fs::canonicalize(parent)?;
     if parent_canonical.starts_with(&root_canonical) {
         return Err("output must not contaminate the source document tree".into());
     }
@@ -241,7 +247,9 @@ fn train_stream(
         let bytes = load_document(entry)?;
         let (loss, events) = atlas.train_document_grouped(&bytes, BATCH_BYTES)?;
         train_loss += loss;
-        train_events = train_events.checked_add(events).ok_or("TRAIN events overflow")?;
+        train_events = train_events
+            .checked_add(events)
+            .ok_or("TRAIN events overflow")?;
     }
     let elapsed_train = start.elapsed().as_secs_f64();
     if train_events == 0 || atlas.counters().distinct_updated_parameters == 0 {
@@ -257,7 +265,9 @@ fn train_stream(
         let bytes = load_document(entry)?;
         let (loss, events) = atlas.evaluate_document_grouped(&bytes, BATCH_BYTES)?;
         dev_f32_loss += loss;
-        dev_events = dev_events.checked_add(events).ok_or("DEV events overflow")?;
+        dev_events = dev_events
+            .checked_add(events)
+            .ok_or("DEV events overflow")?;
     }
     let assessed = atlas.counters();
     if dev_events == 0
@@ -269,18 +279,17 @@ fn train_stream(
     }
     let q4_path = output.join("weights.q4");
     atlas.export_q4(&q4_path)?;
-    let mut quantized = QuantizedSparseAtlas::open_with_factorization(
-        &q4_path,
-        config,
-        factorization,
-    )?;
+    let mut quantized =
+        QuantizedSparseAtlas::open_with_factorization(&q4_path, config, factorization)?;
     let mut dev_q4_loss = 0f64;
     let mut dev_q4_events = 0u64;
     for entry in roster.entries.iter().filter(|d| d.role == Role::Dev) {
         let bytes = load_document(entry)?;
         let (loss, events) = quantized.evaluate_document_grouped(&bytes, BATCH_BYTES)?;
         dev_q4_loss += loss;
-        dev_q4_events = dev_q4_events.checked_add(events).ok_or("Q4 events overflow")?;
+        dev_q4_events = dev_q4_events
+            .checked_add(events)
+            .ok_or("Q4 events overflow")?;
     }
     if dev_q4_events != dev_events || !dev_f32_loss.is_finite() || !dev_q4_loss.is_finite() {
         return Err("F32/Q4 DEV comparison incomplete".into());
@@ -331,7 +340,13 @@ fn train_stream(
         .write(true)
         .create_new(true)
         .open(output.join("COMPLETE"))?;
-    complete.write_all(format!("SML50M_STREAM_V1\t{}\n", file_sha(&output.join("metrics.tsv"))?).as_bytes())?;
+    complete.write_all(
+        format!(
+            "SML50M_STREAM_V1\t{}\n",
+            file_sha(&output.join("metrics.tsv"))?
+        )
+        .as_bytes(),
+    )?;
     complete.sync_all()?;
     File::open(output)?.sync_all()?;
     print!("{metric}");
@@ -391,7 +406,10 @@ mod tests {
     }
     impl Fixture {
         fn new() -> Self {
-            let seed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let seed = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
             let home = env::temp_dir().join(format!(
                 "sml50m-stream-{}-{seed}-{}",
                 std::process::id(),
@@ -411,7 +429,11 @@ mod tests {
             fs::write(path, content).unwrap();
             format!(
                 "{}\t{}\t{}\t{}\tOWNED_REVIEWED\n",
-                if name.starts_with("train") { "TRAIN" } else { "DEV" },
+                if name.starts_with("train") {
+                    "TRAIN"
+                } else {
+                    "DEV"
+                },
                 name,
                 content.len(),
                 hex(&sha256(content)),
@@ -456,8 +478,14 @@ mod tests {
         assert!(report.contains("SML50M_STREAM_V1"));
         assert!(report.contains("UNOPENED\tNOT_PROMOTED"));
         assert_eq!(report.lines().nth(1).unwrap().split('\t').count(), 24);
-        assert_eq!(fs::metadata(fx.output.join("master.f32")).unwrap().len(), 8 * 4096);
-        assert_eq!(fs::metadata(fx.output.join("weights.q4")).unwrap().len(), 8 * 512);
+        assert_eq!(
+            fs::metadata(fx.output.join("master.f32")).unwrap().len(),
+            8 * 4096
+        );
+        assert_eq!(
+            fs::metadata(fx.output.join("weights.q4")).unwrap().len(),
+            8 * 512
+        );
         assert!(fx.output.join("COMPLETE").is_file());
         let original = fs::read(fx.output.join("master.f32")).unwrap();
         assert!(fx.run().is_err());
@@ -497,8 +525,8 @@ mod tests {
         assert!(!fx.output.join("COMPLETE").exists());
         fx.write_manifest(&(train.clone() + &dev));
         fs::write(fx.data.join("train.bin"), &vec![b'z'; 512]).unwrap();
-        assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_ok());
-        assert!(fx.run().is_err());
+        let admitted = load_roster(&fx.data, &fx.manifest, 256, 128).unwrap();
+        assert!(load_document(&admitted.entries[0]).is_err());
         assert!(!fx.output.join("COMPLETE").exists());
         let traversal = train.replace("train.bin", "../outside.bin");
         fx.write_manifest(&(traversal + &dev));
