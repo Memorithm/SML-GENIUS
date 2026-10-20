@@ -1049,7 +1049,8 @@ fn target_ones(sample: &LaneData, skip_steps: usize) -> Result<(u64, u64), Box<d
 }
 fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
     use sml_core::spectral_baseline_gate::{
-        BaselineSpectralGateConfig, FrozenConstantBitPrior, TrainOnlySpectralBaselineGate,
+        BaselineSpectralGateConfig, FrozenConstantBitPrior, PairedTrainBaselineObservation,
+        TrainOnlySpectralBaselineGate,
     };
     use sml_core::spectral_method_gate::{
         SpectralGateConfig, SpectralMethod, TrainOnlySpectralMethodGate,
@@ -1248,12 +1249,14 @@ fn run_f2b(args: &[String]) -> Result<(), Box<dyn Error>> {
         if let Some(ref mut prior_candidate_gate) = prior_gate {
             prior_candidate_gate.observe_train(
                 partition,
-                samples,
-                prior_cal_errors[partition],
-                errors_cal[partition][1],
-                errors_cal[partition][0],
-                hybrid_cost,
-                w3_cost,
+                PairedTrainBaselineObservation {
+                    examples: samples,
+                    baseline_errors: prior_cal_errors[partition],
+                    hybrid_errors: errors_cal[partition][1],
+                    w3_errors: errors_cal[partition][0],
+                    hybrid_ns: hybrid_cost,
+                    w3_ns: w3_cost,
+                },
             )?;
         } else {
             gate.observe_train(
