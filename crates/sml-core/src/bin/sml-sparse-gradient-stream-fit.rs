@@ -336,12 +336,12 @@ fn train_stream(
     // Prevent writing inside the source tree, even when a different pathname
     // is used for the same physical root.
     let root_canonical = fs::canonicalize(data_root)?;
-    let parent = output
+    let output_parent = output
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let parent_canonical = fs::canonicalize(parent)?;
-    if parent_canonical.starts_with(&root_canonical) {
+    let output_parent_canonical = fs::canonicalize(output_parent)?;
+    if output_parent_canonical.starts_with(&root_canonical) {
         return Err("output must not contaminate the source document tree".into());
     }
     let roster = load_roster(data_root, manifest, limits.min_train, limits.min_dev)?;
