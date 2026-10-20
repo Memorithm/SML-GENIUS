@@ -1305,15 +1305,21 @@ mod tests {
             maximum_w3_ns_per_example: 1_000_000,
         };
         let mut null = TrainOnlySpectralMethodGate::new(config).unwrap();
-        null.observe_train(0, 40_960, 20_435, 20_435, 10_000, 20_000).unwrap();
-        null.observe_train(1, 40_960, 20_412, 20_412, 10_000, 20_000).unwrap();
+        null.observe_train(0, 40_960, 20_435, 20_435, 10_000, 20_000)
+            .unwrap();
+        null.observe_train(1, 40_960, 20_412, 20_412, 10_000, 20_000)
+            .unwrap();
         assert_eq!(null.freeze().unwrap(), SpectralMethod::Abstain);
 
         // Real 40%-noisy parity remains capable of choosing W3 if each
         // calibration half shows a strong error advantage under the same cap.
         let mut signal = TrainOnlySpectralMethodGate::new(config).unwrap();
-        signal.observe_train(0, 40_960, 20_500, 16_500, 10_000, 20_000).unwrap();
-        signal.observe_train(1, 40_960, 20_400, 16_400, 10_000, 20_000).unwrap();
+        signal
+            .observe_train(0, 40_960, 20_500, 16_500, 10_000, 20_000)
+            .unwrap();
+        signal
+            .observe_train(1, 40_960, 20_400, 16_400, 10_000, 20_000)
+            .unwrap();
         assert_eq!(signal.freeze().unwrap(), SpectralMethod::Walsh3Exhaustive);
     }
     #[test]
