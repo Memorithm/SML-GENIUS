@@ -39,8 +39,14 @@ impl FrozenBitMarkovPrior {
         for pair in targets.windows(2) {
             let (previous, current) = (pair[0], pair[1]);
             let transition_counts = [
-                [(!previous & !current).count_ones(), (!previous & current).count_ones()],
-                [(previous & !current).count_ones(), (previous & current).count_ones()],
+                [
+                    (!previous & !current).count_ones(),
+                    (!previous & current).count_ones(),
+                ],
+                [
+                    (previous & !current).count_ones(),
+                    (previous & current).count_ones(),
+                ],
             ];
             for from in 0..2 {
                 for to in 0..2 {
@@ -110,7 +116,10 @@ mod tests {
         let prior = FrozenBitMarkovPrior::fit_train(&stream).unwrap();
         assert!(!prior.predict_one(false));
         assert!(prior.predict_one(true));
-        assert_eq!(prior.score_document(&[0, 0, u64::MAX, u64::MAX]).unwrap(), (64, 192));
+        assert_eq!(
+            prior.score_document(&[0, 0, u64::MAX, u64::MAX]).unwrap(),
+            (64, 192)
+        );
     }
 
     #[test]
@@ -139,11 +148,19 @@ mod tests {
 
     #[test]
     fn score_matches_independent_scalar_bit_lane_oracle() {
-        let train = [0x59a0_f402_734e_c166, 0xca7b_0912_55d1_22ff,
-            0x132a_c983_d081_bc32, 0xead4_33b9_9948_a159,
-            0x808f_c26c_0d01_1351];
-        let dev = [0x0023_48af_55ff_1234, 0xffdd_aa62_a861_4539,
-            0x8292_5521_aac9_0011, 0xdead_beef_a543_8830];
+        let train = [
+            0x59a0_f402_734e_c166,
+            0xca7b_0912_55d1_22ff,
+            0x132a_c983_d081_bc32,
+            0xead4_33b9_9948_a159,
+            0x808f_c26c_0d01_1351,
+        ];
+        let dev = [
+            0x0023_48af_55ff_1234,
+            0xffdd_aa62_a861_4539,
+            0x8292_5521_aac9_0011,
+            0xdead_beef_a543_8830,
+        ];
         let prior = FrozenBitMarkovPrior::fit_train(&train).unwrap();
         let (native_errors, count) = prior.score_document(&dev).unwrap();
         assert_eq!(count, (dev.len() as u64 - 1) * 64);
@@ -164,7 +181,13 @@ mod tests {
         assert_eq!(prior.score_document(&[0, u64::MAX]).unwrap(), (64, 64));
         assert_eq!(prior.score_document(&[u64::MAX, 0]).unwrap(), (0, 64));
         assert_eq!(prior.score_document(&[0, 0]).unwrap(), (0, 64));
-        assert_eq!(prior.score_document(&[u64::MAX]), Err(MarkovPriorError::TooFewSteps));
-        assert_eq!(FrozenBitMarkovPrior::fit_train(&[]), Err(MarkovPriorError::TooFewSteps));
+        assert_eq!(
+            prior.score_document(&[u64::MAX]),
+            Err(MarkovPriorError::TooFewSteps)
+        );
+        assert_eq!(
+            FrozenBitMarkovPrior::fit_train(&[]),
+            Err(MarkovPriorError::TooFewSteps)
+        );
     }
 }
