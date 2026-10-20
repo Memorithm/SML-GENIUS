@@ -124,7 +124,13 @@ fn load_roster(
             }
             _ => return Err("invalid document role/order".into()),
         };
-        if !matches!(fields[4], "OWNED_REVIEWED" | "PUBLIC_DOMAIN_REVIEWED") {
+        if !matches!(
+            fields[4],
+            "OWNED_REVIEWED"
+                | "PUBLIC_DOMAIN_REVIEWED"
+                | "CC0_REVIEWED"
+                | "CC_BY_ATTRIBUTION_REVIEWED"
+        ) {
             return Err("document rights have not been declared reviewed".into());
         }
         let length: u64 = fields[2].parse()?;
@@ -509,6 +515,31 @@ mod tests {
         assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_err());
         fx.write_manifest(&(train.clone() + &dev));
         assert!(load_roster(&fx.data, &fx.manifest, 10000, 128).is_err());
+        assert!(!fx.output.exists());
+    }
+
+    #[test]
+    fn scoped_open_license_labels_are_opt_in_and_unqualified_labels_fail() {
+        let fx = Fixture::new();
+        let train = fx.make_doc("train.bin", &vec![b'a'; 512]);
+        let dev = fx.make_doc("dev.bin", &vec![b'b'; 256]);
+        for label in ["CC0_REVIEWED", "CC_BY_ATTRIBUTION_REVIEWED"] {
+            let approved = train.replace("OWNED_REVIEWED", label);
+            fx.write_manifest(&(approved + &dev));
+            assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_ok());
+        }
+        for label in [
+            "PD_CLAIM",
+            "CC_BY_ATTRIBUTION",
+            "CC_BY_SA",
+            "CC_BY_NC",
+            "CC0",
+            "UNREVIEWED",
+        ] {
+            let unqualified = train.replace("OWNED_REVIEWED", label);
+            fx.write_manifest(&(unqualified + &dev));
+            assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_err());
+        }
         assert!(!fx.output.exists());
     }
 
