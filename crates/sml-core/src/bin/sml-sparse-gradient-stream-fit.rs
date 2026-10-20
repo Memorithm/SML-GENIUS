@@ -54,6 +54,16 @@ struct Roster {
     dev_files: usize,
 }
 
+struct ParentProof {
+    metrics_sha: String,
+    q4_sha: String,
+    original_unique: u64,
+    original_updates: u64,
+}
+
+const CONTINUE_EPOCHS: u32 = 8;
+const CONTINUE_SCHEMA: &str = "SML50M_STREAM_CONTINUE_V1";
+
 fn checked_file(path: &Path) -> Result<fs::Metadata> {
     let meta = fs::symlink_metadata(path)?;
     if !meta.is_file() || meta.file_type().is_symlink() {
@@ -216,6 +226,89 @@ fn file_sha(path: &Path) -> Result<String> {
     Ok(hex(&state.finish()))
 }
 
+fn open_verified_parent(
+    parent: &Path,
+    output: &Path,
+    roster: &Roster,
+    config: SparseConfig,
+    factorization: ByteFactorization,
+) -> Result<(SparseGradientAtlas, ParentProof)> {
+    let info = fs::symlink_metadata(parent)?;
+    if !info.is_dir() || info.file_type().is_symlink() {
+        return Err("parent checkpoint directory is not a regular directory".into());
+    }
+    if fs::canonicalize(parent)? == fs::canonicalize(output.parent().unwrap_or(Path::new(".")))? {
+        return Err("parent checkpoint is output parent".into());
+    }
+    let metrics_path = parent.join("metrics.tsv");
+    let metrics_sha = file_sha(&metrics_path)?;
+    let complete = fs::read_to_string(parent.join("COMPLETE"))?;
+    if complete != format!("SML50M_STREAM_V1\t{metrics_sha}\n") {
+        return Err("parent is incomplete or its metrics digest changed".into());
+    }
+    let contents = fs::read_to_string(metrics_path)?;
+    let lines = contents.lines().collect::<Vec<_>>();
+    if lines.len() != 2 || !lines[0].starts_with("schema\tmanifest_sha256\t") {
+        return Err("parent metrics format invalid".into());
+    }
+    let fields = lines[1].split('\t').collect::<Vec<_>>();
+    if fields.len() != 24
+        || fields[0] != "SML50M_STREAM_V1"
+        || fields[1] != roster.manifest_sha
+        || fields[2].parse::<u64>()? != config.total_parameters()
+        || fields[5].parse::<usize>()? != roster.train_files
+        || fields[6].parse::<u64>()? != roster.train_bytes
+        || fields[9].parse::<usize>()? != roster.dev_files
+        || fields[10].parse::<u64>()? != roster.dev_bytes
+        || fields[17].parse::<u64>()? != config.train_master_bytes()
+        || fields[18].parse::<u64>()? != config.packed_q4_bytes()
+        || fields[19] != "msb_tree"
+        || factorization != ByteFactorization::MsbTree
+        || fields[22] != "UNOPENED"
+        || fields[23] != "NOT_PROMOTED"
+    {
+        return Err("parent schema, corpus, dimensions or rights mismatch".into());
+    }
+    let q4_sha = file_sha(&parent.join("weights.q4"))?;
+    if fields[20] != q4_sha || fields[21] != file_sha(&parent.join("snapshot.tsv"))? {
+        return Err("parent Q4 or snapshot no longer matches released metrics".into());
+    }
+    let original = SparseGradientAtlas::reopen(parent, config)?;
+    if original.factorization() != factorization
+        || original.counters().distinct_updated_parameters != fields[3].parse::<u64>()?
+        || original.counters().parameter_updates != fields[4].parse::<u64>()?
+    {
+        return Err("parent atlas accounting or MSB-tree factorization differs".into());
+    }
+    let proof = ParentProof {
+        metrics_sha,
+        q4_sha,
+        original_unique: original.counters().distinct_updated_parameters,
+        original_updates: original.counters().parameter_updates,
+    };
+    drop(original);
+    fs::create_dir(output)?;
+    // Create all three required files exclusively in the fresh output root;
+    // no weights are ever updated inside the parent checkpoint directory.
+    for name in ["master.f32", "touched.bit", "snapshot.tsv"] {
+        let source = parent.join(name);
+        checked_file(&source)?;
+        let dest = output.join(name);
+        let mut dest_file = OpenOptions::new().write(true).create_new(true).open(dest)?;
+        let mut source_file = BufReader::new(File::open(source)?);
+        std::io::copy(&mut source_file, &mut dest_file)?;
+        dest_file.sync_all()?;
+    }
+    let reopened = SparseGradientAtlas::reopen(output, config)?;
+    if reopened.factorization() != factorization
+        || reopened.counters().distinct_updated_parameters != proof.original_unique
+        || reopened.counters().parameter_updates != proof.original_updates
+    {
+        return Err("copied parent checkpoint failed independent revalidation".into());
+    }
+    Ok((reopened, proof))
+}
+
 #[derive(Clone, Copy)]
 struct Limits {
     min_train: u64,
@@ -229,7 +322,14 @@ fn train_stream(
     config: SparseConfig,
     factorization: ByteFactorization,
     limits: Limits,
+    epochs: u32,
+    parent: Option<&Path>,
 ) -> Result<()> {
+    if !(1..=CONTINUE_EPOCHS).contains(&epochs)
+        || parent.is_some() != (epochs == CONTINUE_EPOCHS)
+    {
+        return Err("only one fresh epoch or the frozen eight-epoch continuation is allowed".into());
+    }
     if output.exists() || output == data_root || output == manifest {
         return Err("model output already exists or overlaps input".into());
     }
@@ -245,17 +345,38 @@ fn train_stream(
         return Err("output must not contaminate the source document tree".into());
     }
     let roster = load_roster(data_root, manifest, limits.min_train, limits.min_dev)?;
+    let parent_canonical = match parent {
+        Some(model) => {
+            let canon = fs::canonicalize(model)?;
+            if canon.starts_with(&root_canonical) || canon.starts_with(output) {
+                return Err("parent checkpoint overlaps input or new output".into());
+            }
+            Some(canon)
+        }
+        None => None,
+    };
     let start = Instant::now();
-    let mut atlas = SparseGradientAtlas::create_with_factorization(output, config, factorization)?;
+    let (mut atlas, parent_proof) = match parent_canonical.as_deref() {
+        Some(model) => {
+            let (atlas, proof) = open_verified_parent(model, output, &roster, config, factorization)?;
+            (atlas, Some(proof))
+        }
+        None => (
+            SparseGradientAtlas::create_with_factorization(output, config, factorization)?,
+            None,
+        ),
+    };
     let mut train_loss = 0f64;
     let mut train_events = 0u64;
-    for entry in roster.entries.iter().filter(|d| d.role == Role::Train) {
-        let bytes = load_document(entry)?;
-        let (loss, events) = atlas.train_document_grouped(&bytes, BATCH_BYTES)?;
-        train_loss += loss;
-        train_events = train_events
-            .checked_add(events)
-            .ok_or("TRAIN events overflow")?;
+    for _epoch in 0..epochs {
+        for entry in roster.entries.iter().filter(|d| d.role == Role::Train) {
+            let bytes = load_document(entry)?;
+            let (loss, events) = atlas.train_document_grouped(&bytes, BATCH_BYTES)?;
+            train_loss += loss;
+            train_events = train_events
+                .checked_add(events)
+                .ok_or("TRAIN events overflow")?;
+        }
     }
     let elapsed_train = start.elapsed().as_secs_f64();
     if train_events == 0 || atlas.counters().distinct_updated_parameters == 0 {
@@ -313,7 +434,7 @@ fn train_stream(
     let throughput = train_events as f64 / elapsed_train.max(1e-9);
     let q4_sha = file_sha(&q4_path)?;
     let snapshot_sha = file_sha(&output.join("snapshot.tsv"))?;
-    let metric = format!(
+    let mut metric = format!(
         "schema\tmanifest_sha256\tcapacity_slots\tlearned_unique\tparameter_updates\ttrain_files\ttrain_bytes\ttrain_events\ttrain_bpc\tdev_files\tdev_bytes\tdev_events\tdev_f32_bpc\tdev_q4_bpc\tq4_minus_f32_bpc\ttrain_elapsed_s\ttrain_events_per_s\tmaster_bytes\tq4_bytes\tfactorization\tq4_sha256\tsnapshot_sha256\ttest\tpublication\nSML50M_STREAM_V1\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{train_bpc:.9}\t{}\t{}\t{}\t{dev_f32_bpc:.9}\t{dev_q4_bpc:.9}\t{:.9}\t{elapsed_train:.3}\t{throughput:.3}\t{}\t{}\t{}\t{}\t{}\tUNOPENED\tNOT_PROMOTED\n",
         roster.manifest_sha,
         config.total_parameters(),
@@ -335,6 +456,42 @@ fn train_stream(
         q4_sha,
         snapshot_sha,
     );
+    let schema = if let Some(proof) = &parent_proof {
+        let additional_bytes = roster
+            .train_bytes
+            .checked_mul(u64::from(epochs))
+            .ok_or("continued exposure byte overflow")?;
+        let total_bytes = additional_bytes
+            .checked_add(roster.train_bytes)
+            .ok_or("cumulative exposure byte overflow")?;
+        let additional_parameter_updates = trained
+            .parameter_updates
+            .checked_sub(proof.original_updates)
+            .ok_or("model update counters decreased")?;
+        let additional_unique_touches = trained
+            .distinct_updated_parameters
+            .checked_sub(proof.original_unique)
+            .ok_or("model unique touched counters decreased")?;
+        let items = metric.lines().collect::<Vec<_>>();
+        if items.len() != 2 {
+            return Err("internal metric serialization unexpected".into());
+        }
+        metric = format!(
+            "{}\tparent_metrics_sha256\tparent_q4_sha256\tadditional_epochs\tadditional_train_bytes\tcumulative_exposure_bytes\tadditional_parameter_updates\tnew_distinct_touched\n{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            items[0],
+            items[1].replacen("SML50M_STREAM_V1", CONTINUE_SCHEMA, 1),
+            proof.metrics_sha,
+            proof.q4_sha,
+            epochs,
+            additional_bytes,
+            total_bytes,
+            additional_parameter_updates,
+            additional_unique_touches,
+        );
+        CONTINUE_SCHEMA
+    } else {
+        "SML50M_STREAM_V1"
+    };
     let mut report = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -348,7 +505,7 @@ fn train_stream(
         .open(output.join("COMPLETE"))?;
     complete.write_all(
         format!(
-            "SML50M_STREAM_V1\t{}\n",
+            "{schema}\t{}\n",
             file_sha(&output.join("metrics.tsv"))?
         )
         .as_bytes(),
@@ -356,18 +513,40 @@ fn train_stream(
     complete.sync_all()?;
     File::open(output)?.sync_all()?;
     print!("{metric}");
-    println!("SML50M_STREAM_DONE source_docs={} train_bytes={} dev_bytes={} updated={} model_promoted=false test=UNOPENED", roster.entries.len(), roster.train_bytes, roster.dev_bytes, trained.distinct_updated_parameters);
+    if parent_proof.is_some() {
+        println!(
+            "SML50M_CONTINUE_DONE additional_epochs={epochs} unique_train_bytes={} total_exposure_bytes={} updated={} model_promoted=false test=UNOPENED",
+            roster.train_bytes,
+            roster.train_bytes * (u64::from(epochs) + 1),
+            trained.distinct_updated_parameters,
+        );
+    } else {
+        println!("SML50M_STREAM_DONE source_docs={} train_bytes={} dev_bytes={} updated={} model_promoted=false test=UNOPENED", roster.entries.len(), roster.train_bytes, roster.dev_bytes, trained.distinct_updated_parameters);
+    }
     Ok(())
 }
 
 fn cli(args: &[String]) -> Result<()> {
-    let usage = "usage: sml-sparse-gradient-stream-fit --stream-50m-msb|--stream-50m-bits DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR";
-    let [_, flag, root, manifest, output] = args else {
-        return Err(usage.into());
-    };
-    let factorization = match flag.as_str() {
-        "--stream-50m-msb" => ByteFactorization::MsbTree,
-        "--stream-50m-bits" => ByteFactorization::IndependentBits,
+    let usage = "usage: sml-sparse-gradient-stream-fit (--stream-50m-msb|--stream-50m-bits) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR | --continue-50m-msb-8 PARENT_MODEL DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR";
+    let (factorization, parent, root, manifest, output, epochs) = match args {
+        [_, flag, root, manifest, output] => {
+            let factorization = match flag.as_str() {
+                "--stream-50m-msb" => ByteFactorization::MsbTree,
+                "--stream-50m-bits" => ByteFactorization::IndependentBits,
+                _ => return Err(usage.into()),
+            };
+            (factorization, None, root.as_str(), manifest.as_str(), output.as_str(), 1)
+        }
+        [_, flag, parent, root, manifest, output] if flag == "--continue-50m-msb-8" => {
+            (
+                ByteFactorization::MsbTree,
+                Some(Path::new(parent)),
+                root.as_str(),
+                manifest.as_str(),
+                output.as_str(),
+                CONTINUE_EPOCHS,
+            )
+        }
         _ => return Err(usage.into()),
     };
     train_stream(
@@ -384,6 +563,8 @@ fn cli(args: &[String]) -> Result<()> {
             min_train: MIN_TRAIN_BYTES,
             min_dev: MIN_DEV_BYTES,
         },
+        epochs,
+        parent,
     )
 }
 
@@ -463,6 +644,8 @@ mod tests {
                     min_train: 256,
                     min_dev: 128,
                 },
+                1,
+                None,
             )
         }
     }
@@ -496,6 +679,74 @@ mod tests {
         let original = fs::read(fx.output.join("master.f32")).unwrap();
         assert!(fx.run().is_err());
         assert_eq!(original, fs::read(fx.output.join("master.f32")).unwrap());
+    }
+
+    #[test]
+    fn frozen_continuation_updates_new_checkpoint_and_preserves_parent() {
+        let fx = Fixture::new();
+        let mut rows = fx.make_doc("train1.bin", &vec![b'a'; 512]);
+        rows.push_str(&fx.make_doc("train2.bin", &vec![b'b'; 512]));
+        rows.push_str(&fx.make_doc("dev1.bin", &vec![b'c'; 256]));
+        fx.write_manifest(&rows);
+        fx.run().unwrap();
+        let parent_master_sha = file_sha(&fx.output.join("master.f32")).unwrap();
+        let parent_complete = fs::read_to_string(fx.output.join("COMPLETE")).unwrap();
+        let continued = fx.home.join("continued");
+        let config = SparseConfig {
+            pages: 8,
+            max_cached_pages: 2,
+            learning_rate: 0.15,
+        };
+        train_stream(
+            &fx.data,
+            &fx.manifest,
+            &continued,
+            config,
+            ByteFactorization::MsbTree,
+            Limits {
+                min_train: 256,
+                min_dev: 128,
+            },
+            CONTINUE_EPOCHS,
+            Some(&fx.output),
+        )
+        .unwrap();
+        let metrics = fs::read_to_string(continued.join("metrics.tsv")).unwrap();
+        assert!(metrics.contains(CONTINUE_SCHEMA));
+        assert_eq!(metrics.lines().nth(1).unwrap().split('\t').count(), 31);
+        assert!(metrics.contains("UNOPENED\tNOT_PROMOTED"));
+        assert!(continued.join("COMPLETE").exists());
+        assert_eq!(file_sha(&fx.output.join("master.f32")).unwrap(), parent_master_sha);
+        assert_eq!(fs::read_to_string(fx.output.join("COMPLETE")).unwrap(), parent_complete);
+        assert!(train_stream(
+            &fx.data,
+            &fx.manifest,
+            &continued,
+            config,
+            ByteFactorization::MsbTree,
+            Limits { min_train: 256, min_dev: 128 },
+            CONTINUE_EPOCHS,
+            Some(&fx.output),
+        ).is_err());
+    }
+
+    #[test]
+    fn continued_training_rejects_modified_parent_receipt_or_manifest() {
+        let fx = Fixture::new();
+        let mut rows = fx.make_doc("train1.bin", &vec![b'a'; 512]);
+        rows.push_str(&fx.make_doc("dev1.bin", &vec![b'c'; 256]));
+        fx.write_manifest(&rows);
+        fx.run().unwrap();
+        fs::write(fx.output.join("COMPLETE"), "fake complete\n").unwrap();
+        let dest = fx.home.join("untrusted");
+        assert!(train_stream(
+            &fx.data, &fx.manifest, &dest,
+            SparseConfig { pages: 8, max_cached_pages: 2, learning_rate: 0.15 },
+            ByteFactorization::MsbTree,
+            Limits { min_train: 256, min_dev: 128 },
+            CONTINUE_EPOCHS, Some(&fx.output)
+        ).is_err());
+        assert!(!dest.join("COMPLETE").exists());
     }
 
     #[test]
