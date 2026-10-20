@@ -78,13 +78,11 @@ impl Partition {
         let total = u128::from(self.examples);
         let improvement = u128::from(config.minimum_improvement_over_prior_ppm) * total;
         let beat = |prior_errors: u64| {
-            prior_errors >= errors
-                && u128::from(prior_errors - errors) * 1_000_000 >= improvement
+            prior_errors >= errors && u128::from(prior_errors - errors) * 1_000_000 >= improvement
         };
         beat(self.constant_errors)
             && beat(self.markov_errors)
-            && u128::from(errors) * 1_000_000
-                <= u128::from(config.maximum_error_ppm) * total
+            && u128::from(errors) * 1_000_000 <= u128::from(config.maximum_error_ppm) * total
             && u128::from(nanoseconds) <= u128::from(maximum_ns_per_example) * total
     }
 
@@ -142,9 +140,10 @@ impl TrainOnlySpectralDualPriorGate {
         if one.seen && two.seen && one.w3_available != two.w3_available {
             return Err(PriorSpectralError::InvalidCounts);
         }
-        let enough = self.partitions.iter().all(|p| {
-            p.seen && p.examples >= self.config.minimum_examples_per_partition
-        });
+        let enough = self
+            .partitions
+            .iter()
+            .all(|p| p.seen && p.examples >= self.config.minimum_examples_per_partition);
         let hybrid_eligible = enough
             && self.partitions.iter().all(|p| {
                 p.qualifies(
@@ -273,10 +272,7 @@ mod tests {
             sample(10_000, 9_000, 8_590, None),
             sample(10_000, 9_000, 8_590, None),
         );
-        assert_eq!(
-            pass.freeze().unwrap(),
-            SpectralMethod::HybridW2SketchMitm
-        );
+        assert_eq!(pass.freeze().unwrap(), SpectralMethod::HybridW2SketchMitm);
         let mut fail = paired(
             sample(10_000, 9_000, 8_591, None),
             sample(10_000, 9_000, 8_591, None),
