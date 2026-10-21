@@ -3,7 +3,14 @@
 Propriétaire scientifique : SML-GENIUS. Exécution hôte : RemoteOps.
 Additif à `docs/SML-50M-S1A-OPEN-LICENSE-CORPUS-ADMISSION.md` et à la règle 1 de
 `docs/SML-50M-S3B-OPEN-LICENSE-SOURCE-EXPANSION-20261021.md` ; aucune modification
-rétroactive des résultats S0/S1b/S2a.
+rétroactive des résultats S0/S1b/S2a. Complémentaire de
+`docs/SML-50M-S4A-CYBER-DATASET-RIGHTS-PILOT-20261021.md` (corpus texte cyber) et de
+`docs/SML-50M-S4C-APACHE-MIT-OPERATOR-REVIEWED-LABELS.md` : le présent addendum couvre
+les jeux **tabulaires** étiquetés binaires destinés à `sml-decision`, pas le flux texte.
+
+Les étiquettes S4c `APACHE_2_0_ATTRIBUTION_REVIEWED` et `MIT_ATTRIBUTION_REVIEWED`
+**ne s'appliquent pas** à UNSW-NB15 ni aux jeux CIC ci-dessous : leur tag Apache-2.0/MIT
+Hugging Face n'est pas une licence accordée par l'éditeur amont (voir le constat ci-dessous).
 
 **Ce document est un protocole d'admission figé, pas l'affirmation qu'un téléchargement
 ou un entraînement a eu lieu.** Statut initial de chaque source : `SOURCE_CANDIDATE_ONLY`.
