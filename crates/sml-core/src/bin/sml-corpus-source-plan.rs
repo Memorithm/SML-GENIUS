@@ -180,10 +180,7 @@ mod tests {
             fields[4],
             "https://huggingface.co/datasets/common-pile/peS2o_filtered"
         );
-        assert_eq!(
-            fields[6],
-            "297747513bfb0ff1fbf61ddad3b03319d0f04597"
-        );
+        assert_eq!(fields[6], "297747513bfb0ff1fbf61ddad3b03319d0f04597");
         assert_eq!(fields[7], "SOURCE_CANDIDATE_ONLY");
     }
 
