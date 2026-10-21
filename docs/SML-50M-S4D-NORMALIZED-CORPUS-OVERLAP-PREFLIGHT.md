@@ -1,0 +1,15 @@
+# SML-50M S4d — deterministic normalized-text overlap preflight
+
+Frozen 2026-10-21 before implementation. Prerequisites: SML-GENIUS #653 and #654; RemoteOps #714 and #715. This is a **read-only, non-training** diagnostic on the existing five-column `role/path/bytes/sha256/rights_review` manifest. The S4b candidate counts are not admitted TRAIN. S1b/S2a checkpoints and held-out TEST remain immutable.
+
+## Hypothesis and scope
+
+The stream-fit manifest currently rejects byte-identical documents by SHA-256. Distinct raw UTF-8 bytes can nevertheless describe the same text with different ASCII letter casing and ASCII whitespace. Detect such overlaps *before* any new corpus admission, without changing existing model-fit behavior or conflating approximate similarity with proof of disjointness.
+
+Implement an independent Rust CLI `sml-corpus-overlap-audit`, requiring `--data-dir DIR --manifest FILE`. Enforce a 16 MiB manifest cap, at most 100,000 documents, 128-byte to 2 MiB document bounds and aggregate TRAIN ≤16 GiB / DEV ≤256 MiB limits, plus existing exact literal rights-review label syntax, TRAIN-before-DEV ordering, SHA-256, UTF-8, source-relative paths and physical file size, with no symlink file or path escape. Recompute SHA-256 from each document before normalization; reject file/digest duplicates. Canonicalize only ASCII uppercase to lowercase and all runs of ASCII whitespace to a single ASCII space, trimming leading/trailing ASCII whitespace; **do not claim Unicode case folding or near-duplicate coverage**. Hash the canonicalized content; reject cross-split and within-split normalized collisions, including groups with multiple distinct original SHA-256 digests. Output only aggregate counts; never print source bytes, paths, instructions, authors, raw hashes or samples.
+
+## Qualification and hard boundaries
+
+Use deterministic synthetic unit tests for exact disjoint texts, cross-split ASCII case/whitespace aliases, same-split aliases, tampered SHA-256, invalid traversal/symlinks and manifest schema. CI requires Rust format, clippy and tests on exact PR head before merge. New tool cannot issue review labels or create/update the existing manifest, cannot download/execute raw cyber artifacts, cannot promote a dataset or checkpoint, and cannot train or open TEST. A PASS establishes **only absence of this narrow class of detected collisions**, not provenance, ownership, author/incident/work-family disjointness, semantic near-deduplication, PII clearance, acceptable licenses, safety or model quality. An independent RemoteOps producer remains a later authorization-gated task.
+
+Expected output contract: `SML50M_NORMALIZED_OVERLAP_V1` with TRAIN/DEV document counts and within/cross-split collision-group counts, `rights_certified=false training_started=false test=UNOPENED`. Nonzero exit for malformed input or any normalized overlap.
