@@ -1,4 +1,4 @@
-# SML-D CYBER — addendum d'admission des datasets cybersécurité Hugging Face, figé le 2026-10-21
+# SML-D CYBER — addendum de pré-admission des datasets cybersécurité Hugging Face, figé le 2026-10-21
 
 Propriétaire scientifique : SML-GENIUS. Exécution hôte : RemoteOps.
 Additif à `docs/SML-50M-S1A-OPEN-LICENSE-CORPUS-ADMISSION.md` et à la règle 1 de
@@ -12,63 +12,89 @@ Les étiquettes S4c `APACHE_2_0_ATTRIBUTION_REVIEWED` et `MIT_ATTRIBUTION_REVIEW
 **ne s'appliquent pas** à UNSW-NB15 ni aux jeux CIC ci-dessous : leur tag Apache-2.0/MIT
 Hugging Face n'est pas une licence accordée par l'éditeur amont (voir le constat ci-dessous).
 
-**Ce document est un protocole d'admission figé, pas l'affirmation qu'un téléchargement
-ou un entraînement a eu lieu.** Statut initial de chaque source : `SOURCE_CANDIDATE_ONLY`.
-Ajouter une étiquette ici n'atteste pas une clearance juridique ; la revue indépendante
-reste obligatoire et l'échec est fermé.
+**Ce document est un protocole figé, pas une admission de données.** Il n'autorise par
+lui-même ni téléchargement massif, ni entraînement, ni redistribution, ni publication de
+dérivés, et n'atteste aucune clearance juridique. **Toutes les sources ci-dessous restent
+`SOURCE_CANDIDATE_ONLY`** tant qu'un reçu de revue opérateur indépendant, propre à
+l'éditeur amont et signé, n'a pas été enregistré. Aucune étiquette introduite ici n'est
+acceptée par un exécutable du dépôt ; l'échec est fermé.
 
 ## Objet
 
-Autoriser l'exploitation **massive** (dizaines à centaines de millions d'enregistrements)
+Préparer l'exploitation **massive** (dizaines à centaines de millions d'enregistrements)
 de datasets cybersécurité étiquetés binaires pour les têtes de décision `sml-decision`
-(`InputRecord` : 64 features booléennes `values` + masque `known`, tête `Binary`), sans
-affaiblir la politique de droits du dépôt.
+(`InputRecord` : 64 features booléennes `values` + masque `known`, tête `Binary`), en
+fixant à l'avance les conditions d'admission, sans affaiblir la politique de droits du
+dépôt.
 
-## Constat de licence (revue du 2026-10-21)
+## Trois niveaux distincts
 
-Le tag `license` d'un dépôt Hugging Face n'attestant pas les droits amont (règle S3b n°1),
-chaque source a été revérifiée chez son éditeur d'origine :
+Pour chaque source, ce document sépare strictement :
 
-| Source HF | Tag HF | Termes amont constatés | Classe retenue |
-| --- | --- | --- | --- |
-| [pirocheto/phishing-url](https://huggingface.co/datasets/pirocheto/phishing-url) | CC-BY-4.0 | [Mendeley Data c2gw7fy2j4 v3](https://data.mendeley.com/datasets/c2gw7fy2j4/3), DOI 10.17632/c2gw7fy2j4.3, **CC BY 4.0** (Hannousse & Yahiouche) | `CC_BY_ATTRIBUTION_REVIEWED` |
-| [CIRCL/vulnerability-scores](https://huggingface.co/datasets/CIRCL/vulnerability-scores) | CC-BY-4.0 | Publié par CIRCL lui-même, DOI 10.57967/hf/5927 ; agrège CVE List v5, GitHub Advisories, CSAF CISA/Red Hat/Cisco | `CC_BY_ATTRIBUTION_REVIEWED` **par sous-source** après vérification ligne `source` |
-| [shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems](https://huggingface.co/datasets/shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems) | CC-BY-4.0 | Miroir non officiel, carte vide ; source amont RoEduNet-SIMARGL2021 (Sensors 2021) non encore vérifiée | `PENDING_UPSTREAM_REVIEW` (non admis) |
-| [rdpahalavan/UNSW-NB15](https://huggingface.co/datasets/rdpahalavan/UNSW-NB15) | Apache-2.0 | [UNSW](https://research.unsw.edu.au/node/134656) / [UNSWorks](https://unsworks.unsw.edu.au/items/4dc0e35c-6196-4c9d-945a-c50b981e5955) : « Free use … for academic research purposes … in perpetuity » ; « Use for commercial purposes is strictly prohibited » ; citation des cinq articles obligatoire. **Le tag Apache-2.0 du miroir est incompatible avec l'amont.** | `ACADEMIC_RESEARCH_ONLY_REVIEWED` |
-| [auliraff/CIC-IDS-Collection](https://huggingface.co/datasets/auliraff/CIC-IDS-Collection) | Apache-2.0 | [CIC/UNB IDS-2017](https://www.unb.ca/cic/datasets/ids-2017.html) : « publicly available for researchers », citation obligatoire, aucune licence nommée ; même régime pour CSE-CIC-IDS2018, CIC-DoS2017, CIC-DDoS2019 | `ACADEMIC_RESEARCH_ONLY_REVIEWED` |
-| [init5iv3/network-traffic-detection](https://huggingface.co/datasets/init5iv3/network-traffic-detection) | MIT | Dérivé de BCCC-CSE-CIC-IDS2018 (York University) ; termes amont non vérifiés | `PENDING_UPSTREAM_REVIEW` (non admis) |
+1. **Termes de l'éditeur** : ce que l'éditeur amont publie, cité mot pour mot avec sa page.
+   Le tag `license` d'un miroir Hugging Face n'en fait pas partie (règle S3b n°1).
+2. **Restriction d'usage inférée** : la lecture conservatrice que SML-GENIUS en tire. C'est
+   une proposition de ce document, pas un avis juridique.
+3. **Admission opérateur signée** : reçu de revue indépendant, propre à l'éditeur, hashé et
+   signé. **Aucune source n'a ce reçu à la date de ce document.**
+
+## Niveau 1 — termes de l'éditeur (constat du 2026-10-21)
+
+| Source HF (miroir) | Tag HF | Termes publiés par l'éditeur amont |
+| --- | --- | --- |
+| [pirocheto/phishing-url](https://huggingface.co/datasets/pirocheto/phishing-url) | CC-BY-4.0 | [Mendeley Data c2gw7fy2j4 v3](https://data.mendeley.com/datasets/c2gw7fy2j4/3) (DOI 10.17632/c2gw7fy2j4.3, Hannousse & Yahiouche) : CC BY 4.0. La conformité du miroir HF à la v3 et les mentions aval restent à auditer. |
+| [CIRCL/vulnerability-scores](https://huggingface.co/datasets/CIRCL/vulnerability-scores) | CC-BY-4.0 | Publié par CIRCL lui-même (DOI 10.57967/hf/5927) ; agrège CVE List v5, GitHub Advisories, CSAF CISA / Red Hat / Cisco, dont les termes propres restent à vérifier par sous-source. |
+| [rdpahalavan/UNSW-NB15](https://huggingface.co/datasets/rdpahalavan/UNSW-NB15) | Apache-2.0 | [Page projet UNSW](https://research.unsw.edu.au/projects/unsw-nb15-dataset) : « Free use of the UNSW-NB15 dataset for academic research purposes is hereby granted in perpetuity. Use for commercial purposes should be agreed by the authors. » ; citation des articles listés obligatoire. La notice [UNSWorks](https://unsworks.unsw.edu.au/items/4dc0e35c-6196-4c9d-945a-c50b981e5955) porte une formulation plus stricte (« Use for commercial purposes is strictly prohibited ») : les deux formulations coexistent chez l'éditeur, la revue opérateur doit trancher. Le tag Apache-2.0 du miroir n'émane pas de l'éditeur. |
+| [auliraff/CIC-IDS-Collection](https://huggingface.co/datasets/auliraff/CIC-IDS-Collection) | Apache-2.0 | [CIC/UNB IDS-2017](https://www.unb.ca/cic/datasets/ids-2017.html) : données « publicly available for researchers », citation de l'article ICISSP 2018 exigée ; aucune licence nommée ni licence générale lisible par machine confirmée. CSE-CIC-IDS2018, CIC-DoS2017 et CIC-DDoS2019 non revus individuellement. Le tag Apache-2.0 du miroir n'émane pas de l'éditeur. |
+| [shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems](https://huggingface.co/datasets/shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems) | CC-BY-4.0 | Miroir non officiel, carte vide ; termes de l'éditeur RoEduNet-SIMARGL2021 non vérifiés. |
+| [init5iv3/network-traffic-detection](https://huggingface.co/datasets/init5iv3/network-traffic-detection) | MIT | Dérivé de BCCC-CSE-CIC-IDS2018 (York University) ; termes de l'éditeur non vérifiés. |
+
+Les étiquettes S4c `APACHE_2_0_ATTRIBUTION_REVIEWED` et `MIT_ATTRIBUTION_REVIEWED` ne
+peuvent pas s'appuyer sur ces tags de miroir.
+
+## Niveau 2 — restriction d'usage inférée (proposition, non admise)
+
+| Source | Lecture conservatrice proposée | Statut |
+| --- | --- | --- |
+| phishing-url | CC BY 4.0 avec attribution, sous réserve d'audit du miroir | `SOURCE_CANDIDATE_ONLY` |
+| CIRCL/vulnerability-scores | CC BY 4.0 avec attribution, sous-source par sous-source | `SOURCE_CANDIDATE_ONLY` |
+| UNSW-NB15 | Recherche académique seulement ; aucun usage commercial sans accord écrit des auteurs | `SOURCE_CANDIDATE_ONLY` |
+| CIC-IDS-Collection | Recherche seulement, par prudence, faute de licence explicite ; **pas** de classe `…_REVIEWED` sur cette base | `SOURCE_CANDIDATE_ONLY` |
+| SIMARGL2021, BCCC-CIC-IDS2018 | Aucune tant que l'éditeur n'est pas revu | `PENDING_UPSTREAM_REVIEW` |
 
 Restent **refusés** : jeux sans licence ni carte (Asad1616, MachineEX007, cybersectony,
 rr4433, bstee615/diversevul tant que l'amont n'est pas revu), CC-BY-SA
 (Mitake/PhishingURLsANDBenignURLs), LGPL (zefang-liu), et tous les jeux SFT/chat cyber.
 
-## Nouvelle classe : `ACADEMIC_RESEARCH_ONLY_REVIEWED`
+## Niveau 3 — conditions d'admission opérateur
 
-Les deux plus gros gisements (UNSW-NB15 ≈ 406 M lignes, CIC-IDS-Collection ≈ 9,17 M lignes)
-ne sont ni CC0 ni CC-BY. Leur exploitation massive est autorisée **uniquement** sous cette
-classe, avec les conséquences suivantes, non négociables :
+Une source ne quitte `SOURCE_CANDIDATE_ONLY` que lorsqu'un **reçu de revue signé** existe,
+avec : éditeur et page cités, termes copiés verbatim avec date, révision HF et SHA-256 des
+fichiers, sous-sources couvertes, obligations d'attribution et restriction retenue. Une
+déclaration d'éditeur ou un tag de miroir n'est jamais un reçu.
 
-1. **Contamination des artefacts.** Tout checkpoint, banque, tête, Q4, statistique de
-   seuil ou manifeste dérivé, même partiellement, d'une source de cette classe porte
-   `rights_class = ACADEMIC_RESEARCH_ONLY` et hérite de la restriction. Elle ne se
-   « lave » ni par quantification, ni par distillation, ni par fusion de banques.
-2. **Pas de publication de poids ni d'usage commercial**, y compris intégration dans un
-   produit, une API ou un service, sans accord écrit des auteurs (UNSW : Moustafa & Slay ;
-   CIC : Canadian Institute for Cybersecurity), archivé hors dépôt public avant toute levée.
-3. **Ségrégation physique.** Ces données et leurs dérivés vivent dans un répertoire hôte
-   distinct (`/home/remoteops/sml-corpora/cyber-research-only/`), jamais mélangé avec les
-   corpus CC0/CC-BY ; aucun checkpoint de cette classe ne sert d'initialisation à un
-   modèle de classe ouverte.
-4. **Citation.** Les articles exigés par chaque éditeur sont listés dans le manifeste de
-   run et reproduits dans tout rapport de résultats.
-5. **Recherche seulement.** Conforme au statut actuel du dépôt : modèle research-only,
-   jamais auto-promu.
+Pour les sources dont la lecture est « recherche seulement » (UNSW-NB15, CIC), il faut
+**en plus**, avant tout entraînement, dans une PR séparée testée :
 
-La classe CC-BY (`pirocheto/phishing-url`, CIRCL) n'a pas ces restrictions mais conserve
-les obligations S1a : `identifier`, `creator`, `title`, `license_source` et attribution
-à la diffusion.
+1. **Chemin d'exécution recherche-seulement distinct** : un mode d'exécution dédié, séparé
+   des chemins CC0/CC-BY, avec répertoire hôte séparé
+   (`/home/remoteops/sml-corpora/cyber-research-only/`), jamais mélangé avec les corpus
+   ouverts.
+2. **Propagation de contamination (taint) appliquée par le code** : tout checkpoint,
+   banque, tête, Q4, seuil de quantile ou manifeste dérivé, même partiellement, porte une
+   classe de droits « recherche seulement ». Elle ne se perd ni par quantification, ni par
+   distillation, ni par fusion de banques ; un artefact contaminé ne peut pas initialiser
+   un modèle de classe ouverte, et toute publication ou export échoue.
+3. **Tests positifs et négatifs** de cette propagation, verts en CI sur le SHA exact.
+4. **Citations** exigées par chaque éditeur reproduites dans le manifeste de run et dans
+   tout rapport.
 
-## Préflight par source (avant tout téléchargement massif)
+Tant que ces conditions ne sont pas remplies : pas de publication de poids, pas d'usage
+commercial, pas de redistribution, pas d'entraînement. Le modèle reste research-only et
+n'est jamais auto-promu. Les données cyber brutes restent inertes ; aucun accès modèle ou
+TEST n'est ouvert par ce document.
+
+## Préflight par source (après reçu de niveau 3, avant tout téléchargement massif)
 
 - Épingler la révision Hub immuable (hash de commit, jamais `main`) et calculer le SHA-256
   de chaque shard Parquet/CSV ; reçu hôte local, statut `SOURCE_VERIFIED_NOT_TRAINED`.
@@ -109,7 +135,7 @@ les obligations S1a : `identifier`, `creator`, `title`, `license_source` et attr
 
 ## Montée en charge
 
-1. Pilote `pirocheto/phishing-url` (≈ 11 k lignes, 2,8 Mo) : valide le convertisseur et
+1. Pilote `pirocheto/phishing-url`, une fois son reçu enregistré (≈ 11 k lignes, 2,8 Mo) : valide le convertisseur et
    le manifeste, aucune revendication de qualité.
 2. Pilote 1 M lignes CIC-IDS-Collection, puis 9,17 M complets.
 3. UNSW-NB15 Network-Flows, puis seulement après mesure de capacité, les sous-ensembles
