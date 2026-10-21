@@ -141,6 +141,8 @@ fn load_roster(
                 | "CC0_REVIEWED"
                 | "CC_BY_ATTRIBUTION_REVIEWED"
                 | "FR_OPEN_LICENSE_V2_ATTRIBUTION_REVIEWED"
+                | "APACHE_2_0_ATTRIBUTION_REVIEWED"
+                | "MIT_ATTRIBUTION_REVIEWED"
         ) {
             return Err("document rights have not been declared reviewed".into());
         }
@@ -815,6 +817,8 @@ mod tests {
             "CC0_REVIEWED",
             "CC_BY_ATTRIBUTION_REVIEWED",
             "FR_OPEN_LICENSE_V2_ATTRIBUTION_REVIEWED",
+            "APACHE_2_0_ATTRIBUTION_REVIEWED",
+            "MIT_ATTRIBUTION_REVIEWED",
         ] {
             let approved = train.replace("OWNED_REVIEWED", label);
             fx.write_manifest(&(approved + &dev));
@@ -830,6 +834,12 @@ mod tests {
             "LICENCE_OUVERTE",
             "OPEN_LICENSE",
             "FR_OPEN_LICENSE_V2",
+            "APACHE_CLAIM",
+            "MIT_CLAIM",
+            "apache-2.0",
+            "mit",
+            "WTFPL",
+            "UNKNOWN_CLAIM",
             "UNREVIEWED",
         ] {
             let unqualified = train.replace("OWNED_REVIEWED", label);
