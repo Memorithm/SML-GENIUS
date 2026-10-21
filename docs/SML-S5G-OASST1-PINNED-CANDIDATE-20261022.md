@@ -1,0 +1,7 @@
+# SML S5g — pin independent OASST1 dialogue source without promoting rights
+
+Preregistered 2026-10-22 **before modifying source catalog**. SML-GENIUS #659 introduced OASST1 as an initially unpinned `SOURCE_CANDIDATE_ONLY` source. RemoteOps [#729](https://github.com/Memorithm/RemoteOps/pull/729) independently executed the Dell non-root source quarantine, verified the publisher's SHA256 and retained publisher README/LICENSE: file `2023-04-12_oasst_all.messages.jsonl.gz`, exactly 53,622,827 compressed bytes, SHA256 `2ff4aa8999c911ffec7972ddf70359f220b3da184b731f3649f68b1391e19341`. The exact source repository revision is `fdf72ae0827c1cda404aff25b6603abec9e3399b`.
+
+Change only `research/corpus/source_catalog_v1.tsv` row `openassistant_oasst1`, from `PIN_PENDING` to the exact observed 40-hex revision. Keep `MIXED_SOURCE_REVIEW` and `SOURCE_CANDIDATE_ONLY` unchanged. Do not move the source to OPEN_REVIEW or user-facing train manifests: the Apache-2.0 *dataset badge* does not establish personal-data consent, individual conversation rights, safe training conditions, absence of private content, author/tree disjointness or independent benchmark suitability.
+
+Validate that the 60-row registry and source-lane rejectors remain intact under Rust CI. Companion RemoteOps #731 can gather *aggregate* language/tree/message source-only statistics with zero message payloads in public logs. No new TRAIN/DEV selection, trained parameters, TEST access, model quality claims or legal authorization is implied.
