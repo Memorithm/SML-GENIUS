@@ -16,6 +16,8 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const HEADER: &str = "role\tpath\tbytes\tsha256\trights_review";
 const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FILES: usize = 100_000;
+const MAX_TRAIN_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+const MAX_DEV_BYTES: u64 = 256 * 1024 * 1024;
 const MIN_DOCUMENT_BYTES: u64 = 128;
 const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -114,6 +116,7 @@ fn audit(root: &Path, manifest: &Path) -> Result<Report> {
     // The counters count source documents, not near-duplicate pairs.
     let mut canonical_groups: HashMap<[u8; 32], [usize; 2]> = HashMap::new();
     let mut counts = [0usize; 2];
+    let mut split_bytes = [0u64; 2];
     let mut dev_started = false;
     for line in lines {
         if counts[0] + counts[1] == MAX_FILES {
@@ -137,6 +140,13 @@ fn audit(root: &Path, manifest: &Path) -> Result<Report> {
         let claimed_len = fields[2].parse::<u64>()?;
         if !(MIN_DOCUMENT_BYTES..=MAX_DOCUMENT_BYTES).contains(&claimed_len) {
             return Err("document byte length outside budget".into());
+        }
+        split_bytes[split] = split_bytes[split]
+            .checked_add(claimed_len)
+            .ok_or("split byte count overflow")?;
+        let limit = if split == 0 { MAX_TRAIN_BYTES } else { MAX_DEV_BYTES };
+        if split_bytes[split] > limit {
+            return Err("TRAIN or DEV byte budget exceeded".into());
         }
         let claimed_hash = parse_hex(fields[3]).ok_or("invalid SHA256")?;
         if fields[3] != hex(&claimed_hash) {
