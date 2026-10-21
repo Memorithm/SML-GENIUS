@@ -15,7 +15,7 @@ Hugging Face n'est pas une licence accordée par l'éditeur amont (voir le const
 **Ce document est un protocole figé, pas une admission de données.** Il n'autorise par
 lui-même ni téléchargement massif, ni entraînement, ni redistribution, ni publication de
 dérivés, et n'atteste aucune clearance juridique. **Toutes les sources ci-dessous restent
-`SOURCE_CANDIDATE_ONLY`** tant qu'un reçu de revue opérateur indépendant, propre à
+`SOURCE_CANDIDATE_ONLY` ou `PENDING_UPSTREAM_REVIEW`** tant qu'un reçu de revue opérateur indépendant, propre à
 l'éditeur amont et signé, n'a pas été enregistré. Aucune étiquette introduite ici n'est
 acceptée par un exécutable du dépôt ; l'échec est fermé.
 
@@ -33,8 +33,8 @@ Pour chaque source, ce document sépare strictement :
 
 1. **Termes de l'éditeur** : ce que l'éditeur amont publie, cité mot pour mot avec sa page.
    Le tag `license` d'un miroir Hugging Face n'en fait pas partie (règle S3b n°1).
-2. **Restriction d'usage inférée** : la lecture conservatrice que SML-GENIUS en tire. C'est
-   une proposition de ce document, pas un avis juridique.
+2. **Politique d'accès conservatrice** : la règle prudente que SML-GENIUS appliquerait.
+   C'est une proposition de ce document, pas une citation d'éditeur ni un avis juridique.
 3. **Admission opérateur signée** : reçu de revue indépendant, propre à l'éditeur, hashé et
    signé. **Aucune source n'a ce reçu à la date de ce document.**
 
@@ -45,21 +45,25 @@ Pour chaque source, ce document sépare strictement :
 | [pirocheto/phishing-url](https://huggingface.co/datasets/pirocheto/phishing-url) | CC-BY-4.0 | [Mendeley Data c2gw7fy2j4 v3](https://data.mendeley.com/datasets/c2gw7fy2j4/3) (DOI 10.17632/c2gw7fy2j4.3, Hannousse & Yahiouche) : CC BY 4.0. La conformité du miroir HF à la v3 et les mentions aval restent à auditer. |
 | [CIRCL/vulnerability-scores](https://huggingface.co/datasets/CIRCL/vulnerability-scores) | CC-BY-4.0 | Publié par CIRCL lui-même (DOI 10.57967/hf/5927) ; agrège CVE List v5, GitHub Advisories, CSAF CISA / Red Hat / Cisco, dont les termes propres restent à vérifier par sous-source. |
 | [rdpahalavan/UNSW-NB15](https://huggingface.co/datasets/rdpahalavan/UNSW-NB15) | Apache-2.0 | [Page projet UNSW](https://research.unsw.edu.au/projects/unsw-nb15-dataset) : « Free use of the UNSW-NB15 dataset for academic research purposes is hereby granted in perpetuity. Use for commercial purposes should be agreed by the authors. » ; citation des articles listés obligatoire. La notice [UNSWorks](https://unsworks.unsw.edu.au/items/4dc0e35c-6196-4c9d-945a-c50b981e5955) porte une formulation plus stricte (« Use for commercial purposes is strictly prohibited ») : les deux formulations coexistent chez l'éditeur, la revue opérateur doit trancher. Le tag Apache-2.0 du miroir n'émane pas de l'éditeur. |
-| [auliraff/CIC-IDS-Collection](https://huggingface.co/datasets/auliraff/CIC-IDS-Collection) | Apache-2.0 | [CIC/UNB IDS-2017](https://www.unb.ca/cic/datasets/ids-2017.html) : données « publicly available for researchers », citation de l'article ICISSP 2018 exigée ; aucune licence nommée ni licence générale lisible par machine confirmée. CSE-CIC-IDS2018, CIC-DoS2017 et CIC-DDoS2019 non revus individuellement. Le tag Apache-2.0 du miroir n'émane pas de l'éditeur. |
+| [auliraff/CIC-IDS-Collection](https://huggingface.co/datasets/auliraff/CIC-IDS-Collection) | Apache-2.0 | [CIC/UNB IDS-2017](https://www.unb.ca/cic/datasets/ids-2017.html) : données « publicly available for researchers », citation de l'article ICISSP 2018 exigée ; aucune licence nommée ni licence générale lisible par machine confirmée. Texte lu le 2026-10-21 ; la page renvoyait ensuite une restriction d'accès externe temporaire, ces termes doivent donc être reconfirmés à la source avant toute revue. CSE-CIC-IDS2018, CIC-DoS2017 et CIC-DDoS2019 non revus individuellement. Le tag Apache-2.0 du miroir n'émane pas de l'éditeur. |
 | [shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems](https://huggingface.co/datasets/shivamjaisingh/SIMARGL2021-Intrusion-Detection-Systems) | CC-BY-4.0 | Miroir non officiel, carte vide ; termes de l'éditeur RoEduNet-SIMARGL2021 non vérifiés. |
 | [init5iv3/network-traffic-detection](https://huggingface.co/datasets/init5iv3/network-traffic-detection) | MIT | Dérivé de BCCC-CSE-CIC-IDS2018 (York University) ; termes de l'éditeur non vérifiés. |
 
 Les étiquettes S4c `APACHE_2_0_ATTRIBUTION_REVIEWED` et `MIT_ATTRIBUTION_REVIEWED` ne
 peuvent pas s'appuyer sur ces tags de miroir.
 
-## Niveau 2 — restriction d'usage inférée (proposition, non admise)
+## Niveau 2 — politique d'accès conservatrice (proposition, non admise)
+
+Ce niveau n'est pas une licence ni une citation de l'éditeur : c'est la politique d'accès
+la plus prudente que SML-GENIUS appliquerait. Tout droit non résolu reste
+`PENDING_UPSTREAM_REVIEW`.
 
 | Source | Lecture conservatrice proposée | Statut |
 | --- | --- | --- |
 | phishing-url | CC BY 4.0 avec attribution, sous réserve d'audit du miroir | `SOURCE_CANDIDATE_ONLY` |
 | CIRCL/vulnerability-scores | CC BY 4.0 avec attribution, sous-source par sous-source | `SOURCE_CANDIDATE_ONLY` |
-| UNSW-NB15 | Recherche académique seulement ; aucun usage commercial sans accord écrit des auteurs | `SOURCE_CANDIDATE_ONLY` |
-| CIC-IDS-Collection | Recherche seulement, par prudence, faute de licence explicite ; **pas** de classe `…_REVIEWED` sur cette base | `SOURCE_CANDIDATE_ONLY` |
+| UNSW-NB15 | Accès recherche académique seulement, par politique conservatrice ; aucun usage commercial sans accord écrit des auteurs | `PENDING_UPSTREAM_REVIEW` |
+| CIC-IDS-Collection | Accès recherche seulement, par politique conservatrice, faute de licence explicite ; **pas** de classe `…_REVIEWED` sur cette base | `PENDING_UPSTREAM_REVIEW` |
 | SIMARGL2021, BCCC-CIC-IDS2018 | Aucune tant que l'éditeur n'est pas revu | `PENDING_UPSTREAM_REVIEW` |
 
 Restent **refusés** : jeux sans licence ni carte (Asad1616, MachineEX007, cybersectony,
