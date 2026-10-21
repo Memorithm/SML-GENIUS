@@ -15,7 +15,7 @@ const HEADER: &str =
     "id\tdomain\tpolicy_lane\tsource_class\tsource_url\tterms_url\trevision\treview_state";
 const MAX_CATALOG_BYTES: u64 = 1024 * 1024;
 const MAX_SOURCES: usize = 10_000;
-const LANES: [&str; 7] = [
+const LANES: [&str; 8] = [
     "OPEN_REVIEW",
     "ATTRIBUTION_REVIEW",
     "SHAREALIKE_REVIEW",
@@ -23,6 +23,7 @@ const LANES: [&str; 7] = [
     "WEB_TDM_REVIEW",
     "MIXED_SOURCE_REVIEW",
     "METADATA_ONLY",
+    "EVAL_ONLY",
 ];
 const CLASSES: [&str; 4] = ["PUBLISHER", "CURATED_COLLECTION", "AGGREGATE", "MIRROR"];
 
@@ -161,8 +162,9 @@ mod tests {
     #[test]
     fn catalog_is_live_metadata_only() {
         let report = parse_catalog(CATALOG).unwrap();
-        assert!(report.sources >= 22);
+        assert!(report.sources >= 60);
         assert!(report.revision_pinned >= 3);
+        assert!(report.by_lane.get("EVAL_ONLY").copied().unwrap_or(0) >= 5);
         assert_eq!(report.by_lane.values().sum::<usize>(), report.sources);
     }
 
