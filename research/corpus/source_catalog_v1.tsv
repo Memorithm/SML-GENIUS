@@ -29,7 +29,7 @@ smollm_corpus	general	MIXED_SOURCE_REVIEW	CURATED_COLLECTION	https://huggingface
 bigcode_stack_v2	code	MIXED_SOURCE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/bigcode/the-stack-v2	https://huggingface.co/datasets/bigcode/the-stack-v2	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 allenai_pes2o	scientific	ATTRIBUTION_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/allenai/peS2o	https://huggingface.co/datasets/allenai/peS2o	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 wikimedia_wikisource	multilingual	SHAREALIKE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/wikimedia/wikisource	https://huggingface.co/datasets/wikimedia/wikisource	PIN_PENDING	SOURCE_CANDIDATE_ONLY
-openassistant_oasst1	dialogue	MIXED_SOURCE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/OpenAssistant/oasst1	https://huggingface.co/datasets/OpenAssistant/oasst1	PIN_PENDING	SOURCE_CANDIDATE_ONLY
+openassistant_oasst1	dialogue	MIXED_SOURCE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/OpenAssistant/oasst1	https://huggingface.co/datasets/OpenAssistant/oasst1	fdf72ae0827c1cda404aff25b6603abec9e3399b	SOURCE_CANDIDATE_ONLY
 culturax	multilingual	WEB_TDM_REVIEW	AGGREGATE	https://huggingface.co/datasets/uonlp/CulturaX	https://huggingface.co/datasets/uonlp/CulturaX	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 cc100	multilingual	WEB_TDM_REVIEW	AGGREGATE	https://huggingface.co/datasets/statmt/cc100	https://huggingface.co/datasets/statmt/cc100	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 allenai_c4	general	WEB_TDM_REVIEW	AGGREGATE	https://huggingface.co/datasets/allenai/c4	https://huggingface.co/datasets/allenai/c4	PIN_PENDING	SOURCE_CANDIDATE_ONLY
