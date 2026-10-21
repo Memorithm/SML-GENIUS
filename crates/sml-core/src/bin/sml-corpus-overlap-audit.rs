@@ -144,7 +144,11 @@ fn audit(root: &Path, manifest: &Path) -> Result<Report> {
         split_bytes[split] = split_bytes[split]
             .checked_add(claimed_len)
             .ok_or("split byte count overflow")?;
-        let limit = if split == 0 { MAX_TRAIN_BYTES } else { MAX_DEV_BYTES };
+        let limit = if split == 0 {
+            MAX_TRAIN_BYTES
+        } else {
+            MAX_DEV_BYTES
+        };
         if split_bytes[split] > limit {
             return Err("TRAIN or DEV byte budget exceeded".into());
         }
