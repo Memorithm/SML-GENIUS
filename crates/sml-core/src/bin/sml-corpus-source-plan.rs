@@ -54,7 +54,9 @@ fn source_url(raw: &str) -> bool {
         && !raw.contains('@')
         && !raw.contains('?')
         && !raw.contains('#')
-        && !raw.bytes().any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
+        && !raw
+            .bytes()
+            .any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
 }
 
 fn pinned_revision(raw: &str) -> bool {
