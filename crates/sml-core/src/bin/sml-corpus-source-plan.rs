@@ -169,6 +169,25 @@ mod tests {
     }
 
     #[test]
+    fn pe_s2o_publisher_pin_is_only_a_candidate_not_rights_approval() {
+        let row = CATALOG
+            .lines()
+            .find(|line| line.starts_with("common_pile_pes2o\t"))
+            .expect("publisher entry missing");
+        let fields = row.split('\t').collect::<Vec<_>>();
+        assert_eq!(fields[2], "ATTRIBUTION_REVIEW");
+        assert_eq!(
+            fields[4],
+            "https://huggingface.co/datasets/common-pile/peS2o_filtered"
+        );
+        assert_eq!(
+            fields[6],
+            "297747513bfb0ff1fbf61ddad3b03319d0f04597"
+        );
+        assert_eq!(fields[7], "SOURCE_CANDIDATE_ONLY");
+    }
+
+    #[test]
     fn independent_rights_lanes_remain_candidates() {
         let report = parse_catalog(&sample()).unwrap();
         assert_eq!(report.sources, 2);
