@@ -2,7 +2,7 @@ id	domain	policy_lane	source_class	source_url	terms_url	revision	review_state
 pleias_common_corpus	multilingual	ATTRIBUTION_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/PleIAs/common_corpus	https://huggingface.co/datasets/PleIAs/common_corpus	307910e4c5d040d6f318e6edf2a2b97849155771	SOURCE_CANDIDATE_ONLY
 common_pile_v01	multidomain	OPEN_REVIEW	CURATED_COLLECTION	https://huggingface.co/common-pile	https://www.commonpile.org/	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 common_pile_pubmed	biomedical	ATTRIBUTION_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/pubmed	https://pmc.ncbi.nlm.nih.gov/tools/textmining/	PIN_PENDING	SOURCE_CANDIDATE_ONLY
-common_pile_pes2o	scientific	ATTRIBUTION_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/peS2o	https://huggingface.co/datasets/common-pile/peS2o	PIN_PENDING	SOURCE_CANDIDATE_ONLY
+common_pile_pes2o	scientific	ATTRIBUTION_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/peS2o_filtered	https://huggingface.co/datasets/common-pile/peS2o_filtered	297747513bfb0ff1fbf61ddad3b03319d0f04597	SOURCE_CANDIDATE_ONLY
 common_pile_wikimedia	multilingual	SHAREALIKE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/wikimedia_filtered	https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 common_pile_stackexchange	qa	SHAREALIKE_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/stackexchange	https://stackoverflow.com/help/licensing	PIN_PENDING	SOURCE_CANDIDATE_ONLY
 common_pile_uspto	technical	OPEN_REVIEW	CURATED_COLLECTION	https://huggingface.co/datasets/common-pile/uspto	https://www.uspto.gov/learning-and-resources/open-data-and-mobility	PIN_PENDING	SOURCE_CANDIDATE_ONLY
