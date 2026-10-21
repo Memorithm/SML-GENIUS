@@ -140,6 +140,7 @@ fn load_roster(
                 | "PUBLIC_DOMAIN_REVIEWED"
                 | "CC0_REVIEWED"
                 | "CC_BY_ATTRIBUTION_REVIEWED"
+                | "FR_OPEN_LICENSE_V2_ATTRIBUTION_REVIEWED"
         ) {
             return Err("document rights have not been declared reviewed".into());
         }
@@ -810,7 +811,11 @@ mod tests {
         let fx = Fixture::new();
         let train = fx.make_doc("train.bin", &vec![b'a'; 512]);
         let dev = fx.make_doc("dev.bin", &vec![b'b'; 256]);
-        for label in ["CC0_REVIEWED", "CC_BY_ATTRIBUTION_REVIEWED"] {
+        for label in [
+            "CC0_REVIEWED",
+            "CC_BY_ATTRIBUTION_REVIEWED",
+            "FR_OPEN_LICENSE_V2_ATTRIBUTION_REVIEWED",
+        ] {
             let approved = train.replace("OWNED_REVIEWED", label);
             fx.write_manifest(&(approved + &dev));
             assert!(load_roster(&fx.data, &fx.manifest, 256, 128).is_ok());
@@ -821,6 +826,10 @@ mod tests {
             "CC_BY_SA",
             "CC_BY_NC",
             "CC0",
+            "ETALAB",
+            "LICENCE_OUVERTE",
+            "OPEN_LICENSE",
+            "FR_OPEN_LICENSE_V2",
             "UNREVIEWED",
         ] {
             let unqualified = train.replace("OWNED_REVIEWED", label);
