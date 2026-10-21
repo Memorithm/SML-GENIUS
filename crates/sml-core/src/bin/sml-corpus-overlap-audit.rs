@@ -353,7 +353,11 @@ mod tests {
         let fixture = Fixture::new();
         let train = fixture.doc("TRAIN", "a.txt", &vec![b'a'; 256]);
         fixture.doc("DEV", "original.txt", &vec![b'b'; 256]);
-        symlink(fixture.data.join("original.txt"), fixture.data.join("linked.txt")).unwrap();
+        symlink(
+            fixture.data.join("original.txt"),
+            fixture.data.join("linked.txt"),
+        )
+        .unwrap();
         let dev = format!(
             "DEV\tlinked.txt\t256\t{}\tOWNED_REVIEWED\n",
             hex(&sha256(&vec![b'b'; 256]))
