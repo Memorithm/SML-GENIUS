@@ -148,8 +148,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const CATALOG: &str =
-        include_str!("../../../../research/corpus/source_catalog_v1.tsv");
+    const CATALOG: &str = include_str!("../../../../research/corpus/source_catalog_v1.tsv");
 
     fn sample() -> String {
         format!(
