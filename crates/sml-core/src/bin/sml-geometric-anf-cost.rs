@@ -146,7 +146,13 @@ fn validate(fan: &RationalFan, mask: FanMask, anf: FanAnf, points: &[Point]) -> 
 
 /// Measure exactly one path, using black-boxed queries and outcomes to
 /// suppress trivially removable whole-loop work under release optimization.
-fn measure(path: Path, fan: &RationalFan, mask: FanMask, anf: FanAnf, points: &[Point]) -> (u128, u64) {
+fn measure(
+    path: Path,
+    fan: &RationalFan,
+    mask: FanMask,
+    anf: FanAnf,
+    points: &[Point],
+) -> (u128, u64) {
     let start = Instant::now();
     let mut ones = 0_u64;
     for &point in points {
@@ -165,9 +171,9 @@ fn measure(path: Path, fan: &RationalFan, mask: FanMask, anf: FanAnf, points: &[
 fn execute(mode: &str) {
     match mode {
         "deterministic" => println!("level,width,family,samples,ones,monomials"),
-        "benchmark" => println!(
-            "arch,os,level,width,family,samples,repeat,order,path,elapsed_ns,ones"
-        ),
+        "benchmark" => {
+            println!("arch,os,level,width,family,samples,repeat,order,path,elapsed_ns,ones")
+        }
         _ => panic!("mode must be deterministic or benchmark"),
     }
 
