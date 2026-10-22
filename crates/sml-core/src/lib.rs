@@ -92,6 +92,7 @@ pub mod forge_topology;
 pub mod frozen_bit_markov_prior;
 pub mod geometric_boolean;
 pub mod geometric_fan;
+pub mod geometric_fan_anf;
 pub mod gf2;
 pub mod gru_side;
 pub mod large_anf_delta_kv;
