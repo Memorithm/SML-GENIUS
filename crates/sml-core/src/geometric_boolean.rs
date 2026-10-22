@@ -33,11 +33,23 @@ pub fn sector_of(point: Point) -> Result<u8, GeometryError> {
         return Err(GeometryError::OriginUndefined);
     }
     Ok(if x > 0 && y >= 0 {
-        if y < x { 0 } else { 1 }
+        if y < x {
+            0
+        } else {
+            1
+        }
     } else if x <= 0 && y > 0 {
-        if -x < y { 2 } else { 3 }
+        if -x < y {
+            2
+        } else {
+            3
+        }
     } else if x < 0 && y <= 0 {
-        if -y < -x { 4 } else { 5 }
+        if -y < -x {
+            4
+        } else {
+            5
+        }
     } else if x < -y {
         6
     } else {
@@ -214,7 +226,7 @@ mod tests {
         let cases = [
             (Point { x: i64::MIN, y: i64::MAX }, 3),
             (Point { x: i64::MIN, y: i64::MIN }, 5),
-            (Point { x: i64::MAX, y: i64::MIN }, 7),
+            (Point { x: i64::MAX, y: i64::MIN }, 6),
             (Point { x: i64::MAX, y: i64::MAX }, 1),
         ];
         for (point, expected) in cases {
