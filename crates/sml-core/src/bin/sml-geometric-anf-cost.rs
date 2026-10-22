@@ -249,10 +249,11 @@ mod tests {
     }
 
     #[test]
-    fn splitmix64_known_first_value_is_deterministic() {
-        let mut left = SplitMix64::new(SEED);
-        let mut right = SplitMix64::new(SEED);
-        assert_eq!(left.next_u64(), right.next_u64());
-        assert_eq!(left.next_u64(), right.next_u64());
+    fn splitmix64_known_first_values_are_exact() {
+        let mut stream = SplitMix64::new(SEED);
+        assert_eq!(stream.next_u64(), 0x409d_80de_cee8_86d2);
+        assert_eq!(stream.next_u64(), 0x4058_48a5_e1da_8727);
+        assert_eq!(stream.next_u64(), 0x6c58_1646_6f24_0455);
+        assert_eq!(stream.next_u64(), 0xcb38_0b10_2748_a10b);
     }
 }
