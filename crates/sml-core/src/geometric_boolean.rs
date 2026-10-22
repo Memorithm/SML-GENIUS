@@ -224,10 +224,34 @@ mod tests {
     #[test]
     fn extreme_coordinates_do_not_overflow() {
         let cases = [
-            (Point { x: i64::MIN, y: i64::MAX }, 3),
-            (Point { x: i64::MIN, y: i64::MIN }, 5),
-            (Point { x: i64::MAX, y: i64::MIN }, 6),
-            (Point { x: i64::MAX, y: i64::MAX }, 1),
+            (
+                Point {
+                    x: i64::MIN,
+                    y: i64::MAX,
+                },
+                3,
+            ),
+            (
+                Point {
+                    x: i64::MIN,
+                    y: i64::MIN,
+                },
+                5,
+            ),
+            (
+                Point {
+                    x: i64::MAX,
+                    y: i64::MIN,
+                },
+                6,
+            ),
+            (
+                Point {
+                    x: i64::MAX,
+                    y: i64::MAX,
+                },
+                1,
+            ),
         ];
         for (point, expected) in cases {
             assert_eq!(sector_of(point), Ok(expected));
@@ -247,10 +271,7 @@ mod tests {
             assert_eq!(a.intersection(b), b.intersection(a));
             assert_eq!(a.union(SectorMask::EMPTY), a);
             assert_eq!(a.intersection(SectorMask::FULL), a);
-            assert_eq!(
-                a.angular_eighths() + a.complement().angular_eighths(),
-                8
-            );
+            assert_eq!(a.angular_eighths() + a.complement().angular_eighths(), 8);
         }
         assert_eq!(SectorMask(0b0010_0100).angular_eighths(), 2);
         assert_eq!(
@@ -317,9 +338,6 @@ mod tests {
         );
         let network = KauffmanPiNetwork::from_pi(8, 1, 0).unwrap();
         assert_eq!(network.step(&state), network.step(&state));
-        assert_ne!(
-            state,
-            initial_boolean_state(&RAYS, SectorMask(1)).unwrap()
-        );
+        assert_ne!(state, initial_boolean_state(&RAYS, SectorMask(1)).unwrap());
     }
 }
