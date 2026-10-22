@@ -302,17 +302,26 @@ mod tests {
 
     #[test]
     fn binary_weights_read_exact_pi_bits() {
-        assert_eq!(bnn_weights_from_pi(8, 0), Ok(vec![-1, -1, 1, -1, -1, 1, -1, -1]));
+        assert_eq!(
+            bnn_weights_from_pi(8, 0),
+            Ok(vec![-1, -1, 1, -1, -1, 1, -1, -1])
+        );
         assert_eq!(bnn_weights_from_pi(4, 4), Ok(vec![-1, 1, -1, -1]));
-        assert!(matches!(bnn_weights_from_pi(1, 4096), Err(PiError::Exhausted { .. })));
+        assert!(matches!(
+            bnn_weights_from_pi(1, 4096),
+            Err(PiError::Exhausted { .. })
+        ));
     }
 
     #[test]
     fn both_streams_reject_exhaustion_without_advancing() {
         let mut decimals = PiDecimalStream::new(1_599).unwrap();
-        assert!(matches!(decimals.read_index(16), Err(PiError::Exhausted { .. })));
+        assert!(matches!(
+            decimals.read_index(16),
+            Err(PiError::Exhausted { .. })
+        ));
         assert_eq!(decimals.remaining(), 1);
-        assert_eq!(decimals.read_digit().is_ok(), true);
+        assert!(decimals.read_digit().is_ok());
 
         let mut bits = PiBitStream::new(4_095).unwrap();
         assert_eq!(bits.remaining(), 1);
