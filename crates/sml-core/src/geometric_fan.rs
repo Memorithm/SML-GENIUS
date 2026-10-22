@@ -379,7 +379,9 @@ mod tests {
             );
         }
         assert_eq!(
-            RationalFan::new(1).unwrap().gb1_sector(Point { x: 1, y: 0 }),
+            RationalFan::new(1)
+                .unwrap()
+                .gb1_sector(Point { x: 1, y: 0 }),
             Err(FanError::UnsupportedLevel(1))
         );
     }
@@ -387,7 +389,9 @@ mod tests {
     #[test]
     fn child_indices_and_all_gb1_masks_preserve_membership() {
         let samples = sample_points();
-        let fans: Vec<_> = (0..=3).map(|level| RationalFan::new(level).unwrap()).collect();
+        let fans: Vec<_> = (0..=3)
+            .map(|level| RationalFan::new(level).unwrap())
+            .collect();
         for &point in &samples {
             for level in 0..3 {
                 assert_eq!(
@@ -427,9 +431,14 @@ mod tests {
             assert_eq!(high.xor(high), Ok(empty));
         }
         assert_eq!(FanMask::new(4, 0), Err(FanError::InvalidMaskWidth(4)));
-        assert_eq!(FanMask::new(8, 256), Err(FanError::OutOfDomainBits { width: 8 }));
         assert_eq!(
-            FanMask::new(8, 1).unwrap().union(FanMask::new(16, 1).unwrap()),
+            FanMask::new(8, 256),
+            Err(FanError::OutOfDomainBits { width: 8 })
+        );
+        assert_eq!(
+            FanMask::new(8, 1)
+                .unwrap()
+                .union(FanMask::new(16, 1).unwrap()),
             Err(FanError::WidthMismatch {
                 expected: 8,
                 actual: 16,
