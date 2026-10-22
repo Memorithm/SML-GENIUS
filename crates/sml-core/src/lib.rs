@@ -113,6 +113,7 @@ pub mod mor_specialization;
 pub mod mor_temporal;
 pub mod mor_temporal_search;
 pub mod paired_panel;
+pub mod pi_boolean;
 pub mod pascal_gf2;
 pub mod pascal_vector_projection;
 pub mod pvp6_executor;
