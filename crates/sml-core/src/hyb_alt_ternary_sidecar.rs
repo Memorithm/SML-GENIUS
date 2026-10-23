@@ -466,8 +466,7 @@ mod tests {
             coordinates::<128>(128),
             (0..256)
                 .map(|i| {
-                    TernaryRow::from_weights(&[if i % 2 == 0 { 1 } else { -1 }; 128], 0)
-                        .unwrap()
+                    TernaryRow::from_weights(&[if i % 2 == 0 { 1 } else { -1 }; 128], 0).unwrap()
                 })
                 .collect(),
         )
