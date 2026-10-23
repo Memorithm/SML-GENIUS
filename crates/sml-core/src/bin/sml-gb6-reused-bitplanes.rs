@@ -158,12 +158,9 @@ fn run_one(
 }
 
 fn output_checksum(output: &[u64]) -> u64 {
-    output
-        .iter()
-        .enumerate()
-        .fold(0_u64, |sum, (i, &bits)| {
-            sum.wrapping_add(bits.rotate_left(i as u32))
-        })
+    output.iter().enumerate().fold(0_u64, |sum, (i, &bits)| {
+        sum.wrapping_add(bits.rotate_left(i as u32))
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -215,11 +212,8 @@ fn execute(mode: &str) {
                 let (planes, active) = pack_sectors(&addresses, width).unwrap();
                 for reuse in REUSES {
                     let masks = &bank[..reuse];
-                    let circuits: Vec<_> = masks
-                        .iter()
-                        .copied()
-                        .map(AnfCircuit64::from_mask)
-                        .collect();
+                    let circuits: Vec<_> =
+                        masks.iter().copied().map(AnfCircuit64::from_mask).collect();
                     let expected = oracle(masks, &addresses);
                     let checksum = output_checksum(&expected);
                     for arm in Arm::ALL {
@@ -245,13 +239,7 @@ fn execute(mode: &str) {
                         for order in 0..3 {
                             let arm = Arm::ALL[(order + trial) % 3];
                             let (elapsed, actual_checksum) = measure(
-                                arm,
-                                masks,
-                                &circuits,
-                                &addresses,
-                                &planes,
-                                active,
-                                iterations,
+                                arm, masks, &circuits, &addresses, &planes, active, iterations,
                                 &expected,
                             );
                             assert_eq!(actual_checksum, checksum);
@@ -306,16 +294,19 @@ mod tests {
                     let (planes, active) = pack_sectors(&addresses, width).unwrap();
                     for reuse in REUSES {
                         let masks = &bank[..reuse];
-                        let circuits: Vec<_> = masks
-                            .iter()
-                            .copied()
-                            .map(AnfCircuit64::from_mask)
-                            .collect();
+                        let circuits: Vec<_> =
+                            masks.iter().copied().map(AnfCircuit64::from_mask).collect();
                         let expected = oracle(masks, &addresses);
                         for arm in Arm::ALL {
                             let mut actual = vec![0_u64; reuse];
                             run_one(
-                                arm, masks, &circuits, &addresses, &planes, active, &mut actual,
+                                arm,
+                                masks,
+                                &circuits,
+                                &addresses,
+                                &planes,
+                                active,
+                                &mut actual,
                             );
                             assert_eq!(actual, expected);
                         }
