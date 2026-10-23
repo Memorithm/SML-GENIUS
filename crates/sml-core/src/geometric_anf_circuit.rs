@@ -309,7 +309,7 @@ mod tests {
         for a in 0_u8..=u8::MAX {
             let am = FanMask::new(8, u64::from(a)).unwrap();
             let ac = AnfCircuit64::from_mask(am);
-            assert_eq!(ac.truth_mask(), am);
+            assert_agrees_with_lut(ac, am);
             assert_eq!(ac.complement().truth_mask(), am.complement());
             for b in 0_u8..=u8::MAX {
                 let bm = FanMask::new(8, u64::from(b)).unwrap();
