@@ -121,17 +121,30 @@ impl<const S: usize, const D: usize> SbgAnfPlan<S, D> {
         state: &SemanticState<S>,
         batch: &Pvp6BatchResult,
     ) -> Result<SemanticState<S>, SbgAnfError> {
+        let mut next = state.clone();
+        self.apply_into(&mut next, batch)?;
+        Ok(next)
+    }
+    /// Writes every destination of `batch` into `target`; the shape is checked
+    /// before any write. Gate-major packed words are read without per-bit lookups.
+    pub fn apply_into(
+        &self,
+        target: &mut SemanticState<S>,
+        batch: &Pvp6BatchResult,
+    ) -> Result<(), SbgAnfError> {
         if batch.gate_count() != self.gates || batch.query_count() != self.inputs.len() {
             return Err(SbgAnfError::Shape);
         }
-        let mut next = state.clone();
-        for (index, coordinate) in self.outputs.iter().enumerate() {
-            let value = batch
-                .value(index % self.gates, index / self.gates)
-                .ok_or(SbgAnfError::Shape)?;
-            coordinate.write(&mut next, value)?;
+        let words_per_gate = batch.query_count().div_ceil(64);
+        let packed = batch.packed_words();
+        for gate in 0..self.gates {
+            let row = &packed[gate * words_per_gate..(gate + 1) * words_per_gate];
+            for (query, coordinate) in self.outputs[gate..].iter().step_by(self.gates).enumerate() {
+                let value = row[query / 64] >> (query % 64) & 1 == 1;
+                coordinate.write(target, value)?;
+            }
         }
-        Ok(next)
+        Ok(())
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]

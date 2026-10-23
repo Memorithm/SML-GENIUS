@@ -2,7 +2,8 @@
 //! Selected pages read one snapshot and must write disjoint SBG coordinates.
 use crate::{
     mor::MorDecision,
-    pvp6_sbg::{SbgAnfError, SbgCoordinate},
+    pvp6_executor::Pvp6ExecutionPath,
+    pvp6_sbg::{SbgAnfError, SbgCoordinate, SbgField},
     pvp6_sbg_experts::{SbgAnfExpert, SbgExpertError, SbgExpertEvidence},
     semantic::SemanticState,
     PageId,
@@ -77,19 +78,41 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
             return Err(SbgAtlasError::Limit);
         }
         let mut unique = BTreeSet::new();
-        let mut writes = BTreeSet::new();
         let mut selected = Vec::new();
+        selected
+            .try_reserve_exact(ids.len())
+            .map_err(|_| SbgAtlasError::Allocation)?;
         for &id in ids {
             if !unique.insert(id.0) {
                 return Err(SbgAtlasError::DuplicateSelection(id));
             }
-            let page = self.page(id)?;
-            for &dest in page.plan().destinations() {
-                if !writes.insert(dest) {
-                    return Err(SbgAtlasError::WriteConflict(dest));
+            selected.push(self.page(id)?);
+        }
+        // A plan already rejects duplicate destinations, so one page never
+        // conflicts with itself; only several pages need the occupancy check.
+        if selected.len() > 1 {
+            let words = S.div_ceil(64);
+            let mut written = Vec::new();
+            written
+                .try_reserve_exact(4 * words)
+                .map_err(|_| SbgAtlasError::Allocation)?;
+            written.resize(4 * words, 0_u64);
+            for page in &selected {
+                for &dest in page.plan().destinations() {
+                    let field = match dest.field {
+                        SbgField::Value => 0,
+                        SbgField::Meaning => 1,
+                        SbgField::Ambiguity => 2,
+                        SbgField::Routing => 3,
+                    };
+                    let word = &mut written[field * words + dest.bit / 64];
+                    let mask = 1_u64 << (dest.bit % 64);
+                    if *word & mask != 0 {
+                        return Err(SbgAtlasError::WriteConflict(dest));
+                    }
+                    *word |= mask;
                 }
             }
-            selected.push(page);
         }
         Ok(selected)
     }
@@ -110,7 +133,9 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
 
     /// Logical execution/retained query-output cost, validated before any body executes.
     pub fn work_for(&self, ids: &[PageId]) -> Result<SbgExpertWork, SbgAtlasError> {
-        let selected = self.selected(ids)?;
+        Self::work_of(&self.selected(ids)?)
+    }
+    fn work_of(selected: &[&SbgAnfExpert<S, D>]) -> Result<SbgExpertWork, SbgAtlasError> {
         let mut work = SbgExpertWork::default();
         for page in selected {
             let q = u64::try_from(page.plan().input_lanes().len())
@@ -137,23 +162,30 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
         state: &SemanticState<S>,
         decision: &MorDecision,
     ) -> Result<SbgExpertBatch<S>, SbgAtlasError> {
-        let work = self.work_for(&decision.selected_experts)?;
+        self.execute_on(Pvp6ExecutionPath::Selected, state, decision)
+    }
+
+    /// [`Self::execute`] with an explicit exact bank arm for every selected page.
+    pub fn execute_on(
+        &self,
+        path: Pvp6ExecutionPath,
+        state: &SemanticState<S>,
+        decision: &MorDecision,
+    ) -> Result<SbgExpertBatch<S>, SbgAtlasError> {
         let selected = self.selected(&decision.selected_experts)?;
+        let work = Self::work_of(&selected)?;
         let mut next = state.clone();
         let mut evidence = Vec::new();
         evidence
             .try_reserve_exact(selected.len())
             .map_err(|_| SbgAtlasError::Allocation)?;
+        // Every page reads the same snapshot and writes disjoint coordinates
+        // straight into `next`, which is only returned once all pages succeed.
         for page in selected {
-            let result = page.execute(state).map_err(SbgAtlasError::Page)?;
-            for &dest in page.plan().destinations() {
-                let value = dest
-                    .read(&result.state)
-                    .map_err(SbgAtlasError::Projection)?;
-                dest.write(&mut next, value)
-                    .map_err(SbgAtlasError::Projection)?;
-            }
-            evidence.push(result.evidence);
+            evidence.push(
+                page.execute_into(path, state, &mut next)
+                    .map_err(SbgAtlasError::Page)?,
+            );
         }
         Ok(SbgExpertBatch {
             state: next,
@@ -297,5 +329,86 @@ mod tests {
             .replace_bank(PageId(7), revision, invalid)
             .is_err());
         assert_eq!(candidate, snapshot);
+    }
+    fn wide_page(id: u32, first_output: usize, seed: u64) -> SbgAnfExpert<128, 64> {
+        let lanes = 9;
+        let gates = 5;
+        let inputs = (0..lanes)
+            .map(|lane| {
+                (0..6)
+                    .map(|bit| SbgCoordinate {
+                        field: SbgField::Value,
+                        bit: (lane * 7 + bit * 11) % 128,
+                    })
+                    .collect()
+            })
+            .collect();
+        let outputs = (0..lanes * gates)
+            .map(|i| SbgCoordinate {
+                field: SbgField::Meaning,
+                bit: first_output + i,
+            })
+            .collect();
+        let mut state = seed;
+        let bank = (0..gates)
+            .map(|_| {
+                let mut terms = Vec::new();
+                while terms.len() < 3 {
+                    state = state
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1);
+                    let mask = (state >> 58) as u16;
+                    if !terms.contains(&mask) {
+                        terms.push(mask);
+                    }
+                }
+                Pvp6Gate::from_monomials(&terms).unwrap()
+            })
+            .collect();
+        SbgAnfExpert::new(
+            PageId(id),
+            Pvp6Bank::new(bank).unwrap(),
+            SbgAnfPlan::new(inputs, outputs).unwrap(),
+            Pvp6PopulationProfile::AffineUniform,
+        )
+        .unwrap()
+    }
+    #[test]
+    fn every_bank_arm_yields_the_identical_selected_atlas_batch() {
+        use crate::pascal_vector_projection::Pvp6Architecture;
+        let atlas = SbgExpertAtlas::new(vec![wide_page(3, 0, 1), wide_page(5, 45, 2)], 2).unwrap();
+        let paths = [
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::PascalAnfMaterialize),
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::SubmaskCoefficientQuery),
+            Pvp6ExecutionPath::Bitsliced,
+        ];
+        for seed in 0..32_u64 {
+            let mut state = SemanticState::<128>::zeroed().unwrap();
+            for bit in 0..128 {
+                let set = seed
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                    .rotate_left(bit as u32)
+                    & 1
+                    == 1;
+                state.value.set(bit, set).unwrap();
+                state.meaning_mask.set(bit, !set).unwrap();
+            }
+            for ids in [vec![3], vec![5, 3]] {
+                let reference = atlas.execute(&state, &decision(&ids)).unwrap();
+                for path in paths {
+                    assert_eq!(
+                        atlas.execute_on(path, &state, &decision(&ids)).unwrap(),
+                        reference
+                    );
+                }
+            }
+            for path in paths {
+                assert_eq!(
+                    atlas.execute_on(path, &state, &decision(&[3, 3])),
+                    atlas.execute(&state, &decision(&[3, 3]))
+                );
+            }
+        }
     }
 }
