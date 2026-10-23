@@ -44,3 +44,29 @@ Pourquoi les gains sont si faibles : sur Thor, à D=1024, k=32, Q=64 et R=32, un
 - Le bras bit-slicé est **exact** et **intégrable** sans changer le contrat de `Pvp6Bank` ni de l'atlas.
 - Dans l'état actuel du moteur, il n'apporte pas de gain matériel significatif de bout en bout. Le prochain verrou est la plomberie SBG (validation des écritures, `apply`), pas le noyau booléen.
 - Aucune règle de routage automatique ne doit être tirée de ces seuils. Énergie : non mesurée.
+
+## Deuxième campagne : plomberie SBG optimisée (`bf6a872`)
+
+Ce commit change trois choses :
+- l'atlas valide la sélection en un seul passage, avec un bitmap d'occupation à la place de deux `BTreeSet`, et seulement quand plusieurs pages sont sélectionnées ;
+- `SbgAnfPlan::apply_into` écrit directement dans l'état cible ;
+- `to_query_major_words` ne parcourt que les bits à 1.
+
+[Workflow #39996521353](https://github.com/Memorithm/RemoteOps/actions/runs/39996521353) **success** sur Dell et Thor. `deterministic.csv` est **inchangé** (`d45b7f6e…`, identique à la première campagne), donc les sorties sont identiques bit à bit.
+
+- **Coût moteur :** sur Thor, à D=1024, k=32, Q=64, R=64, un appel du chemin de production passe de 455 µs à 26 µs (≈ 17×). À R=32, il passe de 194 µs à 13,8 µs. L'étape de benchmark complète passe de 80 s à 21 s sur Thor et de 173 s à 43 s sur Dell.
+- **Bit-slice contre production, moteur complet, R=64 :**
+
+| D | k | Q | Dell | Thor |
+|---:|---:|---:|---:|---:|
+| 64 | 2 | 8 | 1,93× | 2,04× |
+| 64 | 2 | 64 | 1,82× | 1,77× |
+| 64 | 32 | 8 | 0,63× | 0,71× |
+| 256 | 2 | 8 | 2,12× | 2,53× |
+| 1024 | 2 | 8 | 2,99× | 3,84× |
+| 1024 | 8 | 64 | 1,63× | 1,93× |
+| 1024 | 32 | 8 | 0,59× | 1,10× |
+| 1024 | 32 | 64 | 1,19× | 1,40× |
+
+- **Seuils moteur :** le premier R gagnant est de 1 à 2 portes quand k ≤ 8, et de 4 portes quand k = 32 avec Q = 64. Avec k = 32 et Q = 8, le bit-slicing ne gagne jamais sur Dell, et sur Thor il ne gagne qu'à D = 1024. Le gain se manifeste maintenant au niveau du moteur, et il croît avec R.
+- Le surcoût restant, hors banque, reste du même ordre que la banque. Il vient surtout des écritures coordonnée par coordonnée et des allocations de preuve. Énergie : toujours non mesurée.
