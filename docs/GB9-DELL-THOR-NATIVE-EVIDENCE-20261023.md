@@ -70,3 +70,25 @@ Ce commit change trois choses :
 
 - **Seuils moteur :** le premier R gagnant est de 1 à 2 portes quand k ≤ 8, et de 4 portes quand k = 32 avec Q = 64. Avec k = 32 et Q = 8, le bit-slicing ne gagne jamais sur Dell, et sur Thor il ne gagne qu'à D = 1024. Le gain se manifeste maintenant au niveau du moteur, et il croît avec R.
 - Le surcoût restant, hors banque, reste du même ordre que la banque. Il vient surtout des écritures coordonnée par coordonnée et des allocations de preuve. Énergie : toujours non mesurée.
+
+## Troisième campagne : confirmation sur `main` fusionné (`1a61a9a`)
+
+Source SML `1a61a9ab6982eaf4a289cb452e975f1882ebfdad`, commit de fusion de la PR #674, épinglé par [RemoteOps PR #802](https://github.com/Memorithm/RemoteOps/pull/802). [Workflow #40005356026](https://github.com/Memorithm/RemoteOps/actions/runs/40005356026) **success** : [Dell job 120591764198](https://github.com/Memorithm/RemoteOps/actions/runs/40005356026/job/120591764198), [Thor job 120591763863](https://github.com/Memorithm/RemoteOps/actions/runs/40005356026/job/120591763863). Mêmes tests de parité et même admission `validate_csv.py` (9 072 mesures par hôte).
+
+- `deterministic.csv` est **inchangé** sur Dell et Thor (`d45b7f6e…`, identique aux deux premières campagnes).
+- **Bit-slice contre production, moteur complet, R=64** (entre parenthèses, la valeur de `bf6a872`) :
+
+| D | k | Q | Dell | Thor |
+|---:|---:|---:|---:|---:|
+| 64 | 2 | 8 | 1,93× (1,93×) | 2,05× (2,04×) |
+| 64 | 2 | 64 | 1,83× (1,82×) | 1,78× (1,77×) |
+| 64 | 32 | 8 | 0,63× (0,63×) | 0,71× (0,71×) |
+| 256 | 2 | 8 | 2,15× (2,12×) | 2,52× (2,53×) |
+| 1024 | 2 | 8 | 2,97× (2,99×) | 3,82× (3,84×) |
+| 1024 | 8 | 64 | 1,62× (1,63×) | 1,93× (1,93×) |
+| 1024 | 32 | 8 | 0,59× (0,59×) | 1,10× (1,10×) |
+| 1024 | 32 | 64 | 1,18× (1,19×) | 1,41× (1,40×) |
+
+- Les écarts restent inférieurs à 1,5 %, et les seuils moteur sont inchangés : premier R gagnant de 1 à 2 portes quand k ≤ 8, et de 4 portes quand k = 32 avec Q = 64. Avec k = 32 et Q = 8, aucun gain sur Dell ; sur Thor, gain seulement à D = 1024 (dès R = 4).
+- Coût d'un appel du chemin de production sur Thor à D=1024, k=32, Q=64, R=64 : 26,5 µs. Étape de benchmark : 21 s sur Thor, 43 s sur Dell.
+- Les résultats de la deuxième campagne sont donc **confirmés sur `main`**. Les réserves restent valables : aucune règle de routage automatique, énergie non mesurée (GB-7), aucune revendication de mémoire, de SIMD/GPU ni de qualité de modèle.
