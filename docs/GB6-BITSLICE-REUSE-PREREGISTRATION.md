@@ -13,8 +13,8 @@ Comparer exactement les mêmes `64 × R` sorties logiques de R circuits, dont la
 
 - `M∈{8,16,32,64}` secteurs, `R∈{1,2,4,8,16,32}` fonctions (banque) et toujours 64 lanes.
 - `famille∈{sparse, alternating, pi}` :
-  - `sparse` : bit de cellule `((7*g)%M)` pour le g-ième circuit ;
-  - `alternating` : motif pair/impair `0xAA...`, XOR d'un bit `((5*g)%M)` pour faire varier les fonctions ;
+  - `sparse` : pour `g<M`, un singleton au secteur `g`; pour `g≥M`, la paire lexicographique numéro `g-M` parmi les couples `a<b` (au maximum deux bits sélectionnés). Les 32 masques restent distincts même pour M=8 ;
+  - `alternating` : motif pair/impair `0xAA...`, XOR des **cinq bits de poids faible** du numéro d'expert `g∈[0,31]` ; les 32 fonctions sont distinctes ;
   - `pi` : le g-ième masque consomme les M bits à l'offset `g*M` du préfixe binaire π qualifié GB-1, sans rebouclage. Le dernier bit à M=64 et R=32 est à l'offset 2047, inférieur à 4096.
 - `queries∈{cyclic,clustered}` :
   - `cyclic` : adresse `i mod M` pour `i=0..63` ;
