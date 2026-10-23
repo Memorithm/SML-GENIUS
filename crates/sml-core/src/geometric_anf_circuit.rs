@@ -411,9 +411,9 @@ mod tests {
             }
             let f = AnfCircuit64::from_mask(FanMask::new(width, 1).unwrap());
             assert_eq!(f.permute_variables(&[]), Err(Gb5Error::InvalidPermutation));
-            let wrong = vec![0; variables];
+            let wrong = [0_u8; 6];
             assert_eq!(
-                f.permute_variables(&wrong),
+                f.permute_variables(&wrong[..variables]),
                 Err(Gb5Error::InvalidPermutation)
             );
             assert_eq!(
