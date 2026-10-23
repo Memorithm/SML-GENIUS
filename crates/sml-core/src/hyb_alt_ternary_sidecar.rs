@@ -444,7 +444,7 @@ mod tests {
             Err(HybridAltError::IntegerOverflow)
         );
         assert_eq!(
-            head.add_to_baseline(&state, &[1], i32::MAX),
+            head.add_to_baseline(&state, &[0], i32::MAX),
             Ok(vec![i32::MAX])
         );
         assert_eq!(
