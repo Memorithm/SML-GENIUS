@@ -214,12 +214,10 @@ fn measure(
                     .unwrap()
                     .bits(),
             ),
-            Arm::AnfAnd => {
-                black_box(circuit)
-                    .and(black_box(other_circuit))
-                    .unwrap()
-                    .coefficients()
-            }
+            Arm::AnfAnd => black_box(circuit)
+                .and(black_box(other_circuit))
+                .unwrap()
+                .coefficients(),
             Arm::LutRestrict => lut_restrict(black_box(mask)).bits(),
             Arm::AnfRestrict => black_box(circuit)
                 .restrict_variable(0, true)
@@ -267,7 +265,14 @@ fn execute(mode: &str) {
             let circuit = AnfCircuit64::from_mask(mask);
             let other_circuit = AnfCircuit64::from_mask(other);
             validate(
-                mask, other, circuit, other_circuit, &reverse, &sectors, &planes, active,
+                mask,
+                other,
+                circuit,
+                other_circuit,
+                &reverse,
+                &sectors,
+                &planes,
+                active,
             );
             for methods in GROUPS {
                 let trials = if mode == "deterministic" {
@@ -279,8 +284,15 @@ fn execute(mode: &str) {
                     for slot in 0..methods.len() {
                         let method = methods[(slot + repetition) % methods.len()];
                         let (elapsed, checksum) = measure(
-                            method, mask, other, circuit, other_circuit, &reverse, &sectors,
-                            &planes, active,
+                            method,
+                            mask,
+                            other,
+                            circuit,
+                            other_circuit,
+                            &reverse,
+                            &sectors,
+                            &planes,
+                            active,
                         );
                         if mode == "deterministic" {
                             println!(
