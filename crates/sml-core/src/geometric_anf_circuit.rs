@@ -234,10 +234,7 @@ impl AnfCircuit64 {
 
 /// Transpose 0..64 sector identifiers to six u64 bitplanes.
 /// The returned lane mask is 0 for an empty batch and u64::MAX for 64 lanes.
-pub fn pack_sectors(
-    sectors: &[u8],
-    width: u8,
-) -> Result<([u64; 6], u64), Gb5Error> {
+pub fn pack_sectors(sectors: &[u8], width: u8) -> Result<([u64; 6], u64), Gb5Error> {
     if sectors.len() > 64 {
         return Err(Gb5Error::TooManyLanes {
             lanes: sectors.len(),
@@ -318,7 +315,10 @@ mod tests {
                 let bm = FanMask::new(8, u64::from(b)).unwrap();
                 let bc = AnfCircuit64::from_mask(bm);
                 assert_eq!(ac.xor(bc).unwrap().truth_mask(), am.xor(bm).unwrap());
-                assert_eq!(ac.and(bc).unwrap().truth_mask(), am.intersection(bm).unwrap());
+                assert_eq!(
+                    ac.and(bc).unwrap().truth_mask(),
+                    am.intersection(bm).unwrap()
+                );
                 assert_eq!(ac.or(bc).unwrap().truth_mask(), am.union(bm).unwrap());
             }
         }
@@ -335,10 +335,7 @@ mod tests {
                 for &bm in &masks {
                     let b = AnfCircuit64::from_mask(bm);
                     assert_eq!(a.xor(b).unwrap().truth_mask(), am.xor(bm).unwrap());
-                    assert_eq!(
-                        a.and(b).unwrap().truth_mask(),
-                        am.intersection(bm).unwrap()
-                    );
+                    assert_eq!(a.and(b).unwrap().truth_mask(), am.intersection(bm).unwrap());
                     assert_eq!(a.or(b).unwrap().truth_mask(), am.union(bm).unwrap());
                     let left = a.and(b).unwrap().complement();
                     let right = a.complement().or(b.complement()).unwrap();
@@ -357,17 +354,13 @@ mod tests {
                 for value in [false, true] {
                     let restricted = circuit.restrict_variable(variable, value).unwrap();
                     for sector in 0..8_u8 {
-                        let forced = (sector & !(1_u8 << variable))
-                            | (u8::from(value) << variable);
+                        let forced = (sector & !(1_u8 << variable)) | (u8::from(value) << variable);
                         assert_eq!(
                             restricted.evaluate_sector(sector),
                             circuit.evaluate_sector(forced)
                         );
                     }
-                    assert_eq!(
-                        restricted.coefficients() & coeffs_with_var(variable, 8),
-                        0
-                    );
+                    assert_eq!(restricted.coefficients() & coeffs_with_var(variable, 8), 0);
                 }
             }
         }
@@ -401,14 +394,11 @@ mod tests {
                             old_address |= 1_u8 << old_var;
                         }
                     }
-                    assert_eq!(
-                        permuted.evaluate_sector(x),
-                        f.evaluate_sector(old_address)
-                    );
+                    assert_eq!(permuted.evaluate_sector(x), f.evaluate_sector(old_address));
                     for variable in 0..variables as u8 {
                         for value in [false, true] {
-                            let selected = (x & !(1_u8 << variable))
-                                | (u8::from(value) << variable);
+                            let selected =
+                                (x & !(1_u8 << variable)) | (u8::from(value) << variable);
                             assert_eq!(
                                 f.restrict_variable(variable, value)
                                     .unwrap()
@@ -422,7 +412,10 @@ mod tests {
             let f = AnfCircuit64::from_mask(FanMask::new(width, 1).unwrap());
             assert_eq!(f.permute_variables(&[]), Err(Gb5Error::InvalidPermutation));
             let wrong = vec![0; variables];
-            assert_eq!(f.permute_variables(&wrong), Err(Gb5Error::InvalidPermutation));
+            assert_eq!(
+                f.permute_variables(&wrong),
+                Err(Gb5Error::InvalidPermutation)
+            );
             assert_eq!(
                 f.restrict_variable(variables as u8, true),
                 Err(Gb5Error::InvalidVariable {
@@ -495,11 +488,20 @@ mod tests {
             Point { x: 1, y: 2 },
             Point { x: 0, y: 1 },
             Point { x: -9, y: 2 },
-            Point { x: i64::MIN, y: i64::MAX },
+            Point {
+                x: i64::MIN,
+                y: i64::MAX,
+            },
             Point { x: -4, y: -5 },
-            Point { x: i64::MAX, y: i64::MIN },
+            Point {
+                x: i64::MAX,
+                y: i64::MIN,
+            },
         ];
-        let sectors: Vec<u8> = points.iter().map(|&p| fan.classify(p).unwrap() as u8).collect();
+        let sectors: Vec<u8> = points
+            .iter()
+            .map(|&p| fan.classify(p).unwrap() as u8)
+            .collect();
         assert_lane_parity(mask, &sectors);
         for (&p, &s) in points.iter().zip(sectors.iter()) {
             assert_eq!(fan.classify_scan(p), Ok(usize::from(s)));
