@@ -59,8 +59,11 @@ impl Arm {
     }
 
     const fn iterations(self) -> u32 {
-        match self.group() {
-            "C_64lanes" => C_ITERATIONS,
+        match self {
+            Self::ScalarLut
+            | Self::ScalarAnf
+            | Self::BitslicePrepacked
+            | Self::BitsliceIncludingPack => C_ITERATIONS,
             _ => A_B_ITERATIONS,
         }
     }
