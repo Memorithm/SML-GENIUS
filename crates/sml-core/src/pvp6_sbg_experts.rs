@@ -2,7 +2,7 @@
 //! These are declared ANF pages, not aliases for PackedBooleanPage encodings.
 use crate::{
     pascal_vector_projection::{Pvp6PopulationProfile, Pvp6Selection, Pvp6Workload},
-    pvp6_executor::{Pvp6Bank, Pvp6ExecutionError},
+    pvp6_executor::{Pvp6Bank, Pvp6ExecutionError, Pvp6ExecutionPath},
     pvp6_sbg::{SbgAnfError, SbgAnfPlan},
     semantic::SemanticState,
     PageId,
@@ -125,6 +125,15 @@ impl<const S: usize, const D: usize> SbgAnfExpert<S, D> {
     /// Stateless page execution: every query reads the same incoming SBG state.
     /// No inactive page is consulted and no truth-table cache is retained.
     pub fn execute(&self, state: &SemanticState<S>) -> Result<SbgExpertResult<S>, SbgExpertError> {
+        self.execute_on(Pvp6ExecutionPath::Selected, state)
+    }
+
+    /// [`Self::execute`] with an explicit exact bank arm; the result is identical.
+    pub fn execute_on(
+        &self,
+        path: Pvp6ExecutionPath,
+        state: &SemanticState<S>,
+    ) -> Result<SbgExpertResult<S>, SbgExpertError> {
         let queries = self
             .plan
             .queries(state)
@@ -132,7 +141,7 @@ impl<const S: usize, const D: usize> SbgAnfExpert<S, D> {
         let workload = Pvp6Workload::new(self.density, queries.len() as u32, 1, self.population);
         let batch = self
             .bank
-            .evaluate(workload, &queries)
+            .evaluate_on(path, workload, &queries)
             .map_err(SbgExpertError::Execution)?;
         let next = self
             .plan

@@ -12,6 +12,20 @@ use crate::{
     pascal_vector_projection::{Pvp6Architecture, Pvp6Selection, Pvp6SelectionError, Pvp6Workload},
 };
 
+/// Exact arm used to compute one batch; every arm returns the same result.
+///
+/// `Selected` runs the policy architecture. `Scalar` forces one admitted scalar
+/// arm and `Bitsliced` transposes up to 64 queries into `log2(BITS)` u64
+/// bitplanes shared by every gate of the bank (GB-9). The returned selection
+/// stays the policy label in all three cases; forcing an arm is a diagnostic
+/// control, not a routing rule or a performance promotion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pvp6ExecutionPath {
+    Selected,
+    Scalar(Pvp6Architecture),
+    Bitsliced,
+}
+
 /// One canonical ANF gate for a packed Boolean domain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pvp6Gate<const BITS: usize> {
@@ -99,6 +113,16 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         workload: Pvp6Workload,
         queries: &[usize],
     ) -> Result<Pvp6BatchResult, Pvp6ExecutionError> {
+        self.evaluate_on(Pvp6ExecutionPath::Selected, workload, queries)
+    }
+
+    /// Same contract and output as [`Self::evaluate`], computed by `path`.
+    pub fn evaluate_on(
+        &self,
+        path: Pvp6ExecutionPath,
+        workload: Pvp6Workload,
+        queries: &[usize],
+    ) -> Result<Pvp6BatchResult, Pvp6ExecutionError> {
         let selection = workload.select().map_err(Pvp6ExecutionError::Selection)?;
         let expected_queries =
             usize::try_from(workload.query_count).map_err(|_| Pvp6ExecutionError::Overflow)?;
@@ -140,9 +164,29 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
             .map_err(|_| Pvp6ExecutionError::Allocation)?;
         packed.resize(output_words, 0);
 
+        let architecture = match path {
+            Pvp6ExecutionPath::Selected => selection.architecture,
+            Pvp6ExecutionPath::Scalar(architecture) => architecture,
+            Pvp6ExecutionPath::Bitsliced => {
+                bitslice_into(
+                    &self.gates,
+                    queries,
+                    query_count,
+                    words_per_gate,
+                    &mut packed,
+                );
+                return Ok(Pvp6BatchResult {
+                    selection,
+                    gate_count: self.gates.len(),
+                    query_count,
+                    words_per_gate,
+                    packed,
+                });
+            }
+        };
         for (gate_index, gate) in self.gates.iter().enumerate() {
             let base = gate_index * words_per_gate;
-            let materialized = if selection.architecture == Pvp6Architecture::PascalAnfMaterialize {
+            let materialized = if architecture == Pvp6Architecture::PascalAnfMaterialize {
                 let mut truth = zero_words(gate.coefficients.len())?;
                 truth.copy_from_slice(&gate.coefficients);
                 pascal_gf2_in_place(&mut truth).map_err(Pvp6ExecutionError::Pascal)?;
@@ -152,7 +196,7 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
             };
             for repeat in 0..reuse {
                 for (position, &query) in queries.iter().enumerate() {
-                    let value = match selection.architecture {
+                    let value = match architecture {
                         Pvp6Architecture::PascalAnfMaterialize => get_bit(
                             materialized.as_deref().expect("materialized Pascal arm"),
                             query,
@@ -278,6 +322,50 @@ fn sparse_eval(monomials: &[u16], query: usize) -> bool {
     monomials.iter().copied().fold(false, |value, mask| {
         value ^ (usize::from(mask) & query == usize::from(mask))
     })
+}
+
+/// Gate-major bit-sliced evaluation. Each chunk of 64 logical queries is
+/// transposed once, then every gate reads the same bitplanes: a monomial is the
+/// AND of its variable planes and a gate is the XOR of its monomials.
+fn bitslice_into<const BITS: usize>(
+    gates: &[Pvp6Gate<BITS>],
+    queries: &[usize],
+    query_count: usize,
+    words_per_gate: usize,
+    packed: &mut [u64],
+) {
+    let variables = BITS.trailing_zeros() as usize;
+    let mut planes = [0_u64; usize::BITS as usize];
+    for chunk in 0..words_per_gate {
+        let start = chunk * 64;
+        let lanes = (query_count - start).min(64);
+        planes[..variables].fill(0);
+        for lane in 0..lanes {
+            let mut bits = queries[(start + lane) % queries.len()];
+            while bits != 0 {
+                planes[bits.trailing_zeros() as usize] |= 1_u64 << lane;
+                bits &= bits - 1;
+            }
+        }
+        let active = if lanes == 64 {
+            u64::MAX
+        } else {
+            (1_u64 << lanes) - 1
+        };
+        for (gate_index, gate) in gates.iter().enumerate() {
+            let mut output = 0_u64;
+            for &mask in &gate.monomials {
+                let mut product = active;
+                let mut support = mask;
+                while support != 0 {
+                    product &= planes[support.trailing_zeros() as usize];
+                    support &= support - 1;
+                }
+                output ^= product;
+            }
+            packed[gate_index * words_per_gate + chunk] = output;
+        }
+    }
 }
 
 fn submask_eval(coefficients: &[u64], query: usize) -> bool {
@@ -519,6 +607,105 @@ mod tests {
         qualify_width::<512>();
         qualify_width::<1024>();
         qualify_width::<2048>();
+    }
+
+    const ALL_PATHS: [Pvp6ExecutionPath; 5] = [
+        Pvp6ExecutionPath::Selected,
+        Pvp6ExecutionPath::Scalar(Pvp6Architecture::PascalAnfMaterialize),
+        Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
+        Pvp6ExecutionPath::Scalar(Pvp6Architecture::SubmaskCoefficientQuery),
+        Pvp6ExecutionPath::Bitsliced,
+    ];
+
+    fn lcg(state: &mut u64) -> u64 {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *state >> 11
+    }
+
+    fn random_bank<const WIDTH: usize>(seed: u64, gates: usize, density: usize) -> Pvp6Bank<WIDTH> {
+        let mut state = seed;
+        let gates = (0..gates)
+            .map(|_| {
+                let mut terms = Vec::new();
+                while terms.len() < density {
+                    let mask = (lcg(&mut state) % WIDTH as u64) as u16;
+                    if !terms.contains(&mask) {
+                        terms.push(mask);
+                    }
+                }
+                Pvp6Gate::from_monomials(&terms).unwrap()
+            })
+            .collect();
+        Pvp6Bank::new(gates).unwrap()
+    }
+
+    fn qualify_paths<const WIDTH: usize>() {
+        let mut seed = WIDTH as u64;
+        for gates in [1, 3, 64, 65] {
+            for density in [1, 2, 7, WIDTH / 2] {
+                let bank = random_bank::<WIDTH>(lcg(&mut seed), gates, density);
+                for count in [1, 31, 63, 64, 65, 129] {
+                    let queries = (0..count)
+                        .map(|_| (lcg(&mut seed) % WIDTH as u64) as usize)
+                        .collect::<Vec<_>>();
+                    for reuse in [1, 3] {
+                        let workload = Pvp6Workload::new(
+                            density as u32,
+                            count as u32,
+                            reuse,
+                            Pvp6PopulationProfile::AffineUniform,
+                        );
+                        let reference = bank.evaluate(workload, &queries).unwrap();
+                        for path in ALL_PATHS {
+                            assert_eq!(
+                                bank.evaluate_on(path, workload, &queries).unwrap(),
+                                reference,
+                                "{path:?} WIDTH={WIDTH} gates={gates} density={density} count={count} reuse={reuse}"
+                            );
+                        }
+                        for gate in 0..gates.min(3) {
+                            for i in 0..reference.query_count() {
+                                assert_eq!(
+                                    reference.value(gate, i),
+                                    Some(literal_oracle(
+                                        bank.gates()[gate].monomials(),
+                                        queries[i % count]
+                                    ))
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bitsliced_and_forced_scalar_arms_return_the_selected_result_exactly() {
+        qualify_paths::<64>();
+        qualify_paths::<128>();
+        qualify_paths::<256>();
+        qualify_paths::<1024>();
+        qualify_paths::<4096>();
+    }
+
+    #[test]
+    fn bitsliced_path_keeps_inactive_lanes_zero_for_constant_gates() {
+        let bank = Pvp6Bank::<64>::new(vec![Pvp6Gate::from_monomials(&[0]).unwrap(); 2]).unwrap();
+        let workload = Pvp6Workload::new(1, 5, 1, Pvp6PopulationProfile::AffineUniform);
+        let result = bank
+            .evaluate_on(Pvp6ExecutionPath::Bitsliced, workload, &[0, 1, 2, 3, 4])
+            .unwrap();
+        assert_eq!(result.packed_words(), &[0b1_1111, 0b1_1111]);
+        assert_eq!(
+            bank.evaluate_on(Pvp6ExecutionPath::Bitsliced, workload, &[0, 1, 2, 3]),
+            Err(Pvp6ExecutionError::QueryCountMismatch {
+                expected: 5,
+                actual: 4
+            })
+        );
     }
 
     #[test]
