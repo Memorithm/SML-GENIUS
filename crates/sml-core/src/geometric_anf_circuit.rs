@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn composition_and_de_morgan_hold_across_all_domain_widths() {
-        for width in [16, 32, 64] {
+        for width in [16_u8, 32, 64] {
             let masks = frozen_masks(width);
             for &am in &masks {
                 let a = AnfCircuit64::from_mask(am);
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn restrictions_and_permutations_preserve_64_sector_truth() {
-        for width in [16, 32, 64] {
+        for width in [16_u8, 32, 64] {
             let variables = width.ilog2() as usize;
             let forward: Vec<u8> = (0..variables as u8).collect();
             let reverse: Vec<u8> = forward.iter().copied().rev().collect();
