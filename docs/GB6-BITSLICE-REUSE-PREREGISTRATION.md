@@ -15,7 +15,7 @@ Comparer exactement les mêmes `64 × R` sorties logiques de R circuits, dont la
 - `famille∈{sparse, alternating, pi}` :
   - `sparse` : pour `g<M`, un singleton au secteur `g`; pour `g≥M`, la paire lexicographique numéro `g-M` parmi les couples `a<b` (au maximum deux bits sélectionnés). Les 32 masques restent distincts même pour M=8 ;
   - `alternating` : motif pair/impair `0xAA...`, XOR des **cinq bits de poids faible** du numéro d'expert `g∈[0,31]` ; les 32 fonctions sont distinctes ;
-  - `pi` : le g-ième masque consomme les M bits à l'offset `g*M` du préfixe binaire π qualifié GB-1, sans rebouclage. Le dernier bit à M=64 et R=32 est à l'offset 2047, inférieur à 4096.
+  - `pi` : parcourir, dans l'ordre, les blocs successifs de M bits du préfixe binaire π qualifié GB-1, conserver seulement le premier exemplaire de chaque masque et ignorer ses éventuelles répétitions. Arrêter après 32 masques uniques ; échec explicite si les 4096 bits sont épuisés. **Aucun tirage aléatoire ni rebouclage**.
 - `queries∈{cyclic,clustered}` :
   - `cyclic` : adresse `i mod M` pour `i=0..63` ;
   - `clustered` : adresse `floor(i/4) mod M`. Les deux modes contiennent 64 directions logiques valides, mais diffèrent en diversité et localité.
