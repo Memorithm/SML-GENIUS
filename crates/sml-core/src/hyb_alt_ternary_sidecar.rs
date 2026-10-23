@@ -475,6 +475,6 @@ mod tests {
         assert_eq!(head.class_count(), 256);
         assert_eq!(head.input_bits(), 128);
         let state = SemanticState::<128>::zeroed().unwrap();
-        assert_eq!(head.scores(&state), vec![0; 256]);
+        assert_eq!(head.scores(&state), Ok(vec![0; 256]));
     }
 }
