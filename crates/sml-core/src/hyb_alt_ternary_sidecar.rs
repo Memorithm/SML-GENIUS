@@ -55,7 +55,12 @@ impl TernaryRow {
                 1 => positive[slot] |= bit,
                 -1 => negative[slot] |= bit,
                 0 => {}
-                _ => return Err(HybridAltError::InvalidWeight { index, value: weight }),
+                _ => {
+                    return Err(HybridAltError::InvalidWeight {
+                        index,
+                        value: weight,
+                    })
+                }
             }
         }
         Self::from_masks(width, positive, negative, bias)
@@ -90,9 +95,7 @@ impl TernaryRow {
         }
         // Safe for all active patterns: score ∈ [bias - width, bias + width].
         let max_magnitude = width as i32;
-        if bias.checked_add(max_magnitude).is_none()
-            || bias.checked_sub(max_magnitude).is_none()
-        {
+        if bias.checked_add(max_magnitude).is_none() || bias.checked_sub(max_magnitude).is_none() {
             return Err(HybridAltError::BiasCouldOverflow);
         }
         Ok(Self {
@@ -133,11 +136,7 @@ impl TernaryRow {
         }
         let mut positive = 0_i32;
         let mut negative = 0_i32;
-        for ((&x, &p), &n) in activations
-            .iter()
-            .zip(&self.positive)
-            .zip(&self.negative)
-        {
+        for ((&x, &p), &n) in activations.iter().zip(&self.positive).zip(&self.negative) {
             positive += (x & p).count_ones() as i32;
             negative += (x & n).count_ones() as i32;
         }
@@ -239,23 +238,20 @@ impl<const S: usize> TernaryResidualSidecar<S> {
     /// Exact integer corrections. Does not mutate state or maintain hidden state.
     pub fn scores(&self, state: &SemanticState<S>) -> Result<Vec<i32>, HybridAltError> {
         let x = self.project(state)?;
-        self.rows
-            .iter()
-            .map(|row| row.score_packed(&x))
-            .collect()
+        self.rows.iter().map(|row| row.score_packed(&x)).collect()
     }
 
     /// Independently reads and scores each feature with scalar ternary weights.
-    pub fn reference_scores(
-        &self,
-        state: &SemanticState<S>,
-    ) -> Result<Vec<i32>, HybridAltError> {
+    pub fn reference_scores(&self, state: &SemanticState<S>) -> Result<Vec<i32>, HybridAltError> {
         let x = self
             .features
             .iter()
             .map(|&coordinate| Self::read_feature(coordinate, state))
             .collect::<Result<Vec<_>, _>>()?;
-        self.rows.iter().map(|row| row.score_reference(&x)).collect()
+        self.rows
+            .iter()
+            .map(|row| row.score_reference(&x))
+            .collect()
     }
 
     /// Add integer residual logits to a frozen baseline without saturation.
@@ -469,7 +465,10 @@ mod tests {
         let head = TernaryResidualSidecar::<128>::new(
             coordinates::<128>(128),
             (0..256)
-                .map(|i| TernaryRow::from_weights(&vec![if i % 2 == 0 { 1 } else { -1 }; 128], 0).unwrap())
+                .map(|i| {
+                    TernaryRow::from_weights(&vec![if i % 2 == 0 { 1 } else { -1 }; 128], 0)
+                        .unwrap()
+                })
                 .collect(),
         )
         .unwrap();
