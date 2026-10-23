@@ -90,6 +90,7 @@ pub mod elastic_weights;
 pub mod eng1c_dev;
 pub mod forge_topology;
 pub mod frozen_bit_markov_prior;
+pub mod gb11_relaxed_anf;
 pub mod geometric_anf_circuit;
 pub mod geometric_boolean;
 pub mod geometric_fan;
