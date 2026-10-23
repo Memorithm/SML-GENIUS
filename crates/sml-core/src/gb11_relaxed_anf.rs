@@ -960,15 +960,14 @@ pub fn pvp6_parity(hard: &HardModel, data: &Dataset) -> Result<(u64, u64), Pvp6E
     Ok((checks, mismatches))
 }
 
-/// Trains one arm on `train`, then reports VAL/TEST, parsimony and parity.
-pub fn train_and_report(
+/// Adam over all non-frozen parameters; returns the last epoch's mean loss.
+fn optimize(
+    model: &mut Model,
     arm: &Arm,
     config: &TrainConfig,
     train: &Dataset,
-    val: &Dataset,
-    test: &Dataset,
-) -> Result<(Model, RunReport), Pvp6ExecutionError> {
-    let mut model = Model::init_with(arm.kind, config.seed, config.selector_init);
+    frozen: &[bool],
+) -> f64 {
     let mut order: Vec<usize> = (0..train.inputs.len()).collect();
     let mut rng = SplitMix64::new(config.seed.wrapping_mul(0x2545_F491_4F6C_DD1D));
     let mut noise_rng = SplitMix64::new(config.seed ^ 0xC0C0_C0C0_C0C0_C0C0);
@@ -1014,6 +1013,9 @@ pub fn train_and_report(
             let c1 = 1.0 - 0.9_f64.powi(step);
             let c2 = 1.0 - 0.999_f64.powi(step);
             for (k, g) in grad.iter().enumerate() {
+                if frozen.get(k).copied().unwrap_or(false) {
+                    continue;
+                }
                 m1[k] = 0.9 * m1[k] + 0.1 * g;
                 m2[k] = 0.999 * m2[k] + 0.001 * g * g;
                 let lr = if k < SELECTOR_LEN {
@@ -1027,20 +1029,20 @@ pub fn train_and_report(
             batches += 1;
         }
         final_loss = epoch_loss / f64::from(batches);
-        if std::env::var_os("GB11_TRACE").is_some() {
-            let hard = model.harden();
-            let (h, _) = bit_accuracy(|x| hard.predict(x).1, val);
-            let (sacc, _) = bit_accuracy(|x| model.soft_predict(x, sched.tau), val);
-            let k: usize = hard.gates.iter().map(Vec::len).sum();
-            eprintln!("TRACE {} e{epoch} tau {:.3} loss {final_loss:.4} soft {sacc:.4} hard {h:.4} k {k} addr {:?}", arm.name, sched.tau, hard.addresses);
-        }
     }
+    final_loss
+}
 
-    let hard = model.harden();
+/// VAL/TEST accuracy, parsimony, routing and `Pvp6Bank` parity of a hard model.
+pub fn report(
+    hard: &HardModel,
+    final_loss: f64,
+    soft_test_bit_accuracy: f64,
+    val: &Dataset,
+    test: &Dataset,
+) -> Result<RunReport, Pvp6ExecutionError> {
     let (val_bit_accuracy, _) = bit_accuracy(|x| hard.predict(x).1, val);
     let (test_bit_accuracy, test_byte_accuracy) = bit_accuracy(|x| hard.predict(x).1, test);
-    let final_tau = config.schedule(config.epochs - 1, false).tau;
-    let (soft_test_bit_accuracy, _) = bit_accuracy(|x| model.soft_predict(x, final_tau), test);
 
     let expert_k: Vec<usize> = hard.gates[..BANKS * GATES].iter().map(Vec::len).collect();
     let router_k = hard.gates[BANKS * GATES..].iter().map(Vec::len).collect();
@@ -1092,30 +1094,441 @@ pub fn train_and_report(
         .iter()
         .map(|row| row.iter().sum::<u64>() as f64 / n)
         .fold(f64::INFINITY, f64::min);
-    let (parity_checks, parity_mismatches) = pvp6_parity(&hard, test)?;
+    let (parity_checks, parity_mismatches) = pvp6_parity(hard, test)?;
 
-    Ok((
-        model,
-        RunReport {
-            final_loss,
-            val_bit_accuracy,
-            test_bit_accuracy,
-            test_byte_accuracy,
-            soft_test_bit_accuracy,
-            expert_k,
-            router_k,
-            mean_degree,
-            zero_gates,
-            distinct_address_bits,
-            sub_banks,
-            routing_purity,
-            min_bank_load,
-            and_ops,
-            xor_ops,
-            parity_checks,
-            parity_mismatches,
-        },
-    ))
+    Ok(RunReport {
+        final_loss,
+        val_bit_accuracy,
+        test_bit_accuracy,
+        test_byte_accuracy,
+        soft_test_bit_accuracy,
+        expert_k,
+        router_k,
+        mean_degree,
+        zero_gates,
+        distinct_address_bits,
+        sub_banks,
+        routing_purity,
+        min_bank_load,
+        and_ops,
+        xor_ops,
+        parity_checks,
+        parity_mismatches,
+    })
+}
+
+/// Trains one arm on `train`, then reports VAL/TEST, parsimony and parity.
+pub fn train_and_report(
+    arm: &Arm,
+    config: &TrainConfig,
+    train: &Dataset,
+    val: &Dataset,
+    test: &Dataset,
+) -> Result<(Model, RunReport), Pvp6ExecutionError> {
+    let mut model = Model::init_with(arm.kind, config.seed, config.selector_init);
+    let final_loss = optimize(&mut model, arm, config, train, &[]);
+    let hard = model.harden();
+    let final_tau = config.schedule(config.epochs - 1, false).tau;
+    let (soft, _) = bit_accuracy(|x| model.soft_predict(x, final_tau), test);
+    let report = report(&hard, final_loss, soft, val, test)?;
+    Ok((model, report))
+}
+
+// ---------------------------------------------------------------------------
+// P0b amendment: relaxed initialization, discrete hard-EM refinement of the
+// addresses and the router, then relaxed sparse-ANF experts on frozen wiring.
+// ---------------------------------------------------------------------------
+
+/// Hard wiring searched by the discrete refinement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Wiring {
+    pub router_address: [usize; ADDRESS_BITS],
+    /// Bank chosen for each router address cell (a LUT router).
+    pub cell_bank: [usize; MONOMIALS],
+    pub bank_addresses: [[usize; ADDRESS_BITS]; BANKS],
+}
+
+/// Majority truth table per gate and the matched-bit count, for one bank.
+fn majority_fit(
+    samples: &[(u32, u8)],
+    address: &[usize; ADDRESS_BITS],
+) -> ([[bool; MONOMIALS]; GATES], u64) {
+    let mut ones = [[0_u32; GATES]; MONOMIALS];
+    let mut totals = [0_u32; MONOMIALS];
+    for &(x, y) in samples {
+        let cell = address_of(x, address);
+        totals[cell] += 1;
+        for (g, count) in ones[cell].iter_mut().enumerate() {
+            *count += u32::from((y >> g) & 1);
+        }
+    }
+    let mut tables = [[false; MONOMIALS]; GATES];
+    let mut matched = 0_u64;
+    for cell in 0..MONOMIALS {
+        for g in 0..GATES {
+            let one = ones[cell][g];
+            let zero = totals[cell] - one;
+            tables[g][cell] = one > zero;
+            matched += u64::from(one.max(zero));
+        }
+    }
+    (tables, matched)
+}
+
+impl Wiring {
+    /// Reads the wiring of a hard model; the router becomes a cell LUT.
+    #[must_use]
+    pub fn from_hard(hard: &HardModel) -> Self {
+        let mut cell_bank = [0; MONOMIALS];
+        for (cell, bank) in cell_bank.iter_mut().enumerate() {
+            *bank = unit_gates(ROUTER_UNIT).enumerate().fold(0, |acc, (j, g)| {
+                acc | (usize::from(anf_eval(&hard.gates[g], cell)) << j)
+            });
+        }
+        let mut bank_addresses = [[0; ADDRESS_BITS]; BANKS];
+        bank_addresses.copy_from_slice(&hard.addresses[..BANKS]);
+        Self {
+            router_address: hard.addresses[ROUTER_UNIT],
+            cell_bank,
+            bank_addresses,
+        }
+    }
+
+    #[must_use]
+    pub fn route(&self, x: u32) -> usize {
+        self.cell_bank[address_of(x, &self.router_address)]
+    }
+
+    fn partition(&self, data: &Dataset) -> Vec<Vec<(u32, u8)>> {
+        let mut parts = vec![Vec::new(); BANKS];
+        for (&x, &y) in data.inputs.iter().zip(&data.labels) {
+            parts[self.route(x)].push((x, y));
+        }
+        parts
+    }
+
+    /// Total matched TRAIN bits with refit majority experts.
+    #[must_use]
+    pub fn fit(&self, data: &Dataset) -> u64 {
+        self.partition(data)
+            .iter()
+            .zip(&self.bank_addresses)
+            .map(|(part, address)| majority_fit(part, address).1)
+            .sum()
+    }
+
+    /// One coordinate pass over bank slots; accepts strict improvements.
+    fn refine_banks(&mut self, data: &Dataset) -> bool {
+        let parts = self.partition(data);
+        let mut improved = false;
+        for (b, part) in parts.iter().enumerate() {
+            let mut best = majority_fit(part, &self.bank_addresses[b]).1;
+            for slot in 0..ADDRESS_BITS {
+                for input in 0..INPUT_BITS {
+                    if self.bank_addresses[b].contains(&input) {
+                        continue;
+                    }
+                    let mut candidate = self.bank_addresses[b];
+                    candidate[slot] = input;
+                    let fit = majority_fit(part, &candidate).1;
+                    if fit > best {
+                        best = fit;
+                        self.bank_addresses[b] = candidate;
+                        improved = true;
+                    }
+                }
+            }
+        }
+        improved
+    }
+
+    /// One coordinate pass over router slots with the cell map refit by argmax
+    /// of each bank's fixed majority expert score; accepts strict improvements.
+    fn refine_router(&mut self, data: &Dataset) -> bool {
+        let parts = self.partition(data);
+        let tables: Vec<[[bool; MONOMIALS]; GATES]> = parts
+            .iter()
+            .zip(&self.bank_addresses)
+            .map(|(part, address)| majority_fit(part, address).0)
+            .collect();
+        let scores: Vec<[u32; BANKS]> = data
+            .inputs
+            .iter()
+            .zip(&data.labels)
+            .map(|(&x, &y)| {
+                core::array::from_fn(|b| {
+                    let cell = address_of(x, &self.bank_addresses[b]);
+                    (0..GATES)
+                        .filter(|&g| tables[b][g][cell] == ((y >> g) & 1 == 1))
+                        .count() as u32
+                })
+            })
+            .collect();
+        let evaluate = |address: &[usize; ADDRESS_BITS]| {
+            let mut sums = [[0_u64; BANKS]; MONOMIALS];
+            for (&x, score) in data.inputs.iter().zip(&scores) {
+                let cell = address_of(x, address);
+                for b in 0..BANKS {
+                    sums[cell][b] += u64::from(score[b]);
+                }
+            }
+            let mut map = [0; MONOMIALS];
+            let mut total = 0;
+            for (cell, s) in sums.iter().enumerate() {
+                let best = (0..BANKS).fold(0, |best, b| if s[b] > s[best] { b } else { best });
+                map[cell] = best;
+                total += s[best];
+            }
+            (map, total)
+        };
+        let (map, mut best) = evaluate(&self.router_address);
+        let current = scores
+            .iter()
+            .zip(&data.inputs)
+            .map(|(s, &x)| u64::from(s[self.route(x)]))
+            .sum::<u64>();
+        let mut improved = false;
+        if best > current {
+            self.cell_bank = map;
+            improved = true;
+        }
+        for slot in 0..ADDRESS_BITS {
+            for input in 0..INPUT_BITS {
+                if self.router_address.contains(&input) {
+                    continue;
+                }
+                let mut candidate = self.router_address;
+                candidate[slot] = input;
+                let (map, total) = evaluate(&candidate);
+                if total > best {
+                    best = total;
+                    self.router_address = candidate;
+                    self.cell_bank = map;
+                    improved = true;
+                }
+            }
+        }
+        improved
+    }
+
+    /// Alternates router and bank passes until no strict improvement.
+    pub fn refine(&mut self, data: &Dataset, max_rounds: usize) -> usize {
+        for round in 0..max_rounds {
+            let router = self.refine_router(data);
+            let banks = self.refine_banks(data);
+            if !router && !banks {
+                return round;
+            }
+        }
+        max_rounds
+    }
+
+    /// Hard model with majority experts converted to ANF by GF(2) Möbius.
+    #[must_use]
+    pub fn majority_model(&self, data: &Dataset) -> HardModel {
+        let parts = self.partition(data);
+        let mut addresses = [[0; ADDRESS_BITS]; UNITS];
+        addresses[..BANKS].copy_from_slice(&self.bank_addresses);
+        addresses[ROUTER_UNIT] = self.router_address;
+        let mut gates = Vec::with_capacity(GATE_COUNT);
+        for (part, address) in parts.iter().zip(&self.bank_addresses) {
+            for mut table in majority_fit(part, address).0 {
+                gf2_mobius(&mut table);
+                gates.push(
+                    (0..MONOMIALS)
+                        .filter(|&m| table[m])
+                        .map(|m| m as u16)
+                        .collect(),
+                );
+            }
+        }
+        for j in 0..ROUTER_GATES {
+            let mut table: [bool; MONOMIALS] =
+                core::array::from_fn(|cell| (self.cell_bank[cell] >> j) & 1 == 1);
+            gf2_mobius(&mut table);
+            gates.push(
+                (0..MONOMIALS)
+                    .filter(|&m| table[m])
+                    .map(|m| m as u16)
+                    .collect(),
+            );
+        }
+        HardModel { addresses, gates }
+    }
+}
+
+/// P0b expert stage after the hybrid wiring search.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HybridExperts {
+    /// Majority truth tables, GF(2) Möbius to ANF.
+    Majority,
+    /// Relaxed ANF fine-tune with this cost weight, wiring frozen.
+    RelaxedAnf { lambda: f64 },
+}
+
+/// One P0b arm.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HybridArm {
+    pub name: &'static str,
+    /// `false`: no discrete refinement (pure relaxation with the P0b fixes).
+    pub refine: bool,
+    pub experts: HybridExperts,
+}
+
+pub const HYBRID_ARMS: [HybridArm; 4] = [
+    HybridArm {
+        name: "relaxed_fixed",
+        refine: false,
+        experts: HybridExperts::RelaxedAnf { lambda: 1.0e-3 },
+    },
+    HybridArm {
+        name: "hem_lut",
+        refine: true,
+        experts: HybridExperts::Majority,
+    },
+    HybridArm {
+        name: "hem_anf_cost_m",
+        refine: true,
+        experts: HybridExperts::RelaxedAnf { lambda: 1.0e-3 },
+    },
+    HybridArm {
+        name: "hem_anf_cost_l",
+        refine: true,
+        experts: HybridExperts::RelaxedAnf { lambda: 3.0e-3 },
+    },
+];
+
+/// P0b stage lengths and fixes, frozen by the amendment.
+pub const P0B_RELAXED_EPOCHS: usize = 20;
+pub const P0B_EXPERT_EPOCHS: usize = 15;
+pub const P0B_DIVERSITY: f64 = 0.5;
+pub const P0B_MAX_ROUNDS: usize = 20;
+/// Refinement restarts: restart 0 starts from the relaxed wiring, the others
+/// from random wirings; the best TRAIN fit wins (ties: lowest restart).
+pub const P0B_RESTARTS: usize = 16;
+
+/// Writes a hard model into frozen selector and gate logits of `model`.
+fn load_hard(model: &mut Model, hard: &HardModel, frozen: &mut [bool], freeze_experts: bool) {
+    for (unit, address) in hard.addresses.iter().enumerate() {
+        for (slot, &chosen) in address.iter().enumerate() {
+            for i in 0..INPUT_BITS {
+                let k = selector_index(unit, slot, i);
+                model.params[k] = if i == chosen { 30.0 } else { 0.0 };
+                frozen[k] = true;
+            }
+        }
+    }
+    for (gate, monomials) in hard.gates.iter().enumerate() {
+        let router = gate >= BANKS * GATES;
+        let magnitude = if router { 30.0 } else { 3.0 };
+        for m in 0..MONOMIALS {
+            let k = gate_index(gate, m);
+            let on = monomials.contains(&(m as u16));
+            model.params[k] = if on { magnitude } else { -magnitude };
+            frozen[k] = router || freeze_experts;
+        }
+    }
+}
+
+/// Runs one P0b arm; returns the hard model, the winning restart with its
+/// refinement rounds, and the report.
+pub fn hybrid_train_and_report(
+    arm: &HybridArm,
+    seed: u64,
+    train: &Dataset,
+    val: &Dataset,
+    test: &Dataset,
+) -> Result<(HardModel, (usize, usize), RunReport), Pvp6ExecutionError> {
+    let lambda = match arm.experts {
+        HybridExperts::RelaxedAnf { lambda } => lambda,
+        HybridExperts::Majority => 0.0,
+    };
+    let stage_a = TrainConfig {
+        epochs: P0B_RELAXED_EPOCHS,
+        ste_fraction: 0.0,
+        diversity: P0B_DIVERSITY,
+        ..TrainConfig::preregistered(seed)
+    };
+    let relaxed_arm = Arm {
+        name: arm.name,
+        kind: ExpertKind::Anf,
+        lambda: if arm.refine { 0.0 } else { lambda },
+        concrete: false,
+    };
+    let mut model = Model::init(ExpertKind::Anf, seed);
+    let loss_a = optimize(&mut model, &relaxed_arm, &stage_a, train, &[]);
+    if !arm.refine {
+        let hard = model.harden();
+        let tau = stage_a.schedule(stage_a.epochs - 1, false).tau;
+        let (soft, _) = bit_accuracy(|x| model.soft_predict(x, tau), test);
+        return Ok((
+            hard.clone(),
+            (0, 0),
+            report(&hard, loss_a, soft, val, test)?,
+        ));
+    }
+
+    let mut rng = SplitMix64::new(seed ^ 0x0B0B_5EA2_C4ED_0001);
+    let mut best: Option<(u64, usize, usize, Wiring)> = None;
+    for restart in 0..P0B_RESTARTS {
+        let mut wiring = if restart == 0 {
+            Wiring::from_hard(&model.harden())
+        } else {
+            let mut cell_bank = [0; MONOMIALS];
+            for bank in &mut cell_bank {
+                *bank = rng.below(BANKS);
+            }
+            let router_address = distinct_selection(&mut rng);
+            let mut bank_addresses = [[0; ADDRESS_BITS]; BANKS];
+            for address in &mut bank_addresses {
+                *address = distinct_selection(&mut rng);
+            }
+            Wiring {
+                router_address,
+                cell_bank,
+                bank_addresses,
+            }
+        };
+        let rounds = wiring.refine(train, P0B_MAX_ROUNDS);
+        let fit = wiring.fit(train);
+        if best.as_ref().is_none_or(|(f, ..)| fit > *f) {
+            best = Some((fit, restart, rounds, wiring));
+        }
+    }
+    let (_, restart, rounds, wiring) = best.expect("at least one restart");
+    let rounds = (restart, rounds);
+    let majority = wiring.majority_model(train);
+    match arm.experts {
+        HybridExperts::Majority => {
+            let (soft, _) = bit_accuracy(|x| majority.predict(x).1, test);
+            let fit = wiring.fit(train) as f64 / (train.inputs.len() * GATES) as f64;
+            let r = report(&majority, 1.0 - fit, soft, val, test)?;
+            Ok((majority, rounds, r))
+        }
+        HybridExperts::RelaxedAnf { lambda } => {
+            let mut model = Model::init(ExpertKind::Anf, seed);
+            let mut frozen = vec![false; PARAM_LEN];
+            load_hard(&mut model, &majority, &mut frozen, false);
+            let stage_c = TrainConfig {
+                epochs: P0B_EXPERT_EPOCHS,
+                ste_fraction: 0.0,
+                tau_start: 1.0,
+                tau_end: 1.0,
+                ..TrainConfig::preregistered(seed)
+            };
+            let expert_arm = Arm {
+                name: arm.name,
+                kind: ExpertKind::Anf,
+                lambda,
+                concrete: false,
+            };
+            let loss = optimize(&mut model, &expert_arm, &stage_c, train, &frozen);
+            let hard = model.harden();
+            let (soft, _) = bit_accuracy(|x| model.soft_predict(x, 1.0), test);
+            let r = report(&hard, loss, soft, val, test)?;
+            Ok((hard, rounds, r))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1282,93 +1695,37 @@ mod tests {
             assert!(report.final_loss.is_finite());
         }
     }
-}
 
-#[cfg(test)]
-mod diag {
-    use super::*;
-
-    /// Localization diagnostic: freeze some selectors at the teacher bits.
     #[test]
-    #[ignore]
-    fn diag_oracle_addresses() {
-        let teacher = Teacher::generate(TeacherFamily::Sparse, 0x6B99);
-        let train = Dataset::sample(&teacher, 16384, 1, 0.05);
-        let val = Dataset::sample(&teacher, 4096, 2, 0.05);
-        let freeze_router = std::env::var_os("FREEZE_ROUTER").is_some();
-        let freeze_banks = std::env::var_os("FREEZE_BANKS").is_some();
-        let epochs: usize = std::env::var("EPOCHS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(30);
-        for kind in [ExpertKind::Anf, ExpertKind::Lut] {
-            let mut model = Model::init(kind, 1);
-            let mut frozen = vec![false; PARAM_LEN];
-            for unit in 0..UNITS {
-                let is_router = unit == ROUTER_UNIT;
-                if (is_router && !freeze_router) || (!is_router && !freeze_banks) {
-                    continue;
-                }
-                let addr = if is_router {
-                    teacher.router_address
-                } else {
-                    teacher.bank_addresses[unit]
-                };
-                for slot in 0..ADDRESS_BITS {
-                    for i in 0..INPUT_BITS {
-                        let k = selector_index(unit, slot, i);
-                        model.params[k] = if i == addr[slot] { 30.0 } else { 0.0 };
-                        frozen[k] = true;
-                    }
-                }
-            }
-            let config = TrainConfig {
-                diversity: 0.5,
-                ..TrainConfig::preregistered(1)
-            };
-            let mut m1 = vec![0.0; PARAM_LEN];
-            let mut m2 = vec![0.0; PARAM_LEN];
-            let mut step = 0;
-            for epoch in 0..epochs {
-                let progress = epoch as f64 / (epochs - 1) as f64;
-                let sched = Schedule {
-                    tau: 0.05_f64.powf(progress),
-                    ste: false,
-                    concrete_temperature: None,
-                };
-                for chunk in (0..train.inputs.len()).collect::<Vec<_>>().chunks(256) {
-                    let xs: Vec<u32> = chunk.iter().map(|&i| train.inputs[i]).collect();
-                    let ys: Vec<u8> = chunk.iter().map(|&i| train.labels[i]).collect();
-                    let (l, grad) = model.batch_loss_grad(&xs, &ys, &sched, 0.1, 0.0, None, &[]);
-                    let (_, grad) = model.add_diversity(l, grad, sched.tau, config.diversity);
-                    step += 1;
-                    let c1 = 1.0 - 0.9_f64.powi(step);
-                    let c2 = 1.0 - 0.999_f64.powi(step);
-                    for k in 0..PARAM_LEN {
-                        if frozen[k] {
-                            continue;
-                        }
-                        let g = grad[k];
-                        m1[k] = 0.9 * m1[k] + 0.1 * g;
-                        m2[k] = 0.999 * m2[k] + 0.001 * g * g;
-                        model.params[k] -= 0.05 * (m1[k] / c1) / ((m2[k] / c2).sqrt() + 1.0e-8);
-                    }
-                }
-                if epoch % 5 == 4 {
-                    let hard = model.harden();
-                    let (h, _) = bit_accuracy(|x| hard.predict(x).1, &val);
-                    let (s, _) = bit_accuracy(|x| model.soft_predict(x, sched.tau), &val);
-                    let k: usize = hard.gates.iter().map(Vec::len).sum();
-                    eprintln!(
-                        "{kind:?} e{epoch} soft {s:.4} hard {h:.4} k {k} addr {:?}",
-                        hard.addresses
-                    );
-                }
-            }
+    fn hard_em_refinement_recovers_oracle_wiring_and_stays_exact() {
+        let teacher = Teacher::generate(TeacherFamily::Sparse, 31);
+        let train = Dataset::sample(&teacher, 8192, 32, 0.0);
+        let test = Dataset::sample(&teacher, 1024, 33, 0.0);
+        let mut cell_bank = [0; MONOMIALS];
+        for (cell, bank) in cell_bank.iter_mut().enumerate() {
+            *bank = teacher
+                .router_gates
+                .iter()
+                .enumerate()
+                .fold(0, |acc, (j, g)| acc | (usize::from(anf_eval(g, cell)) << j));
         }
-        eprintln!(
-            "teacher router {:?} banks {:?}",
-            teacher.router_address, teacher.bank_addresses
-        );
+        let mut oracle = Wiring {
+            router_address: teacher.router_address,
+            cell_bank,
+            bank_addresses: teacher.bank_addresses,
+        };
+        let fit = oracle.fit(&train);
+        assert_eq!(fit, (train.inputs.len() * GATES) as u64);
+        assert_eq!(oracle.refine(&train, 2), 0);
+        let hard = oracle.majority_model(&train);
+        for (x, y) in test.inputs.iter().zip(&test.labels) {
+            assert_eq!(hard.predict(*x).1, *y);
+        }
+        let (checks, mismatches) = pvp6_parity(&hard, &test).unwrap();
+        assert!(checks > 0);
+        assert_eq!(mismatches, 0);
+        let expected: usize = teacher.bank_gates.iter().flatten().map(Vec::len).sum();
+        let learned: usize = hard.gates[..BANKS * GATES].iter().map(Vec::len).sum();
+        assert_eq!(learned, expected);
     }
 }

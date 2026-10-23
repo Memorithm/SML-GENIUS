@@ -96,3 +96,36 @@ Aucune qualité de modèle de langage, aucune généralisation hors distribution
 - **P1 — corpus réel.** Prédiction du prochain octet (8 portes par banque = 8 bits de sortie) sur le corpus S5h, contre le témoin `--stream-50m-msb` (≈15 M paramètres, BPC 3,66 sur le DEV S5h), à budget de paramètres et de tokens égal, même DEV, TEST fermé. L'adresse d'une banque est tirée des bits des octets de contexte et d'un état récurrent ; protocole à préenregistrer séparément.
 - **P2 — mesure native.** Banques apprises compilées en `Pvp6Bank`, chronométrées sur Dell et Thor via RemoteOps selon le protocole GB-9 (moteur complet et noyau), contre la LUT résidente.
 - **Amendement de contrat possible** : accepter dans `Pvp6Bank` une densité déclarée comme borne supérieure, pour éviter le découpage en sous-banques. Ce serait une PR séparée avec ses propres tests de parité.
+
+---
+
+## Amendement P0b — gelé le 23 octobre 2026 après P0, avant toute exécution P0b
+
+### Pourquoi
+
+P0 a été exécuté tel que gelé (source `f86a7c7`, 60 entraînements, `research/results/gb11/P0-prereg.csv`). Résultat : **échec**. Sur T-sparse, tous les bras restent près du hasard (exactitude TEST dure par bit 0,50 à 0,53) avec des portes denses (k médian 30 à 33, sauf `anf_concrete` à 11) et une pureté de routage de 0,32 à 0,44. C1 est vrai (4 912 162 vérifications `Pvp6Bank`, 0 écart) ; C3 et C5 sont faux ; C2 est vrai seulement parce que tous les bras échouent ensemble.
+
+Diagnostics, tous sur le professeur de mise au point `0x6B99` (hors protocole, jamais sur T-sparse/T-dense) :
+- **La phase STE détruit les modèles.** Sans STE, `anf_xor` atteint 0,72 en VAL ; dès que la STE démarre, la perte passe de 0,38 à 2,7 et le nombre de monômes durs de 283 à 1 084.
+- **Les experts et le routeur s'apprennent quand le câblage est connu.** Adresses figées sur celles du professeur : la LUT atteint 0,949 en VAL, soit le plafond fixé par le bruit (0,95), avec exactement les 114 monômes du professeur ; l'ANF relaxée atteint 0,935.
+- **Le verrou est la sélection d'entrées et du routage.** Ni une pénalité de diversité entre créneaux, ni une init plus large, ni un pas plus petit, ni le bruit de Gumbel sur les logits d'adresse ne dépassent 0,73. Les créneaux se figent sur de mauvais bits. Un bit qui n'apparaît que dans un monôme XORé à un terme linéaire n'a aucune corrélation d'ordre 1 avec la cible.
+- **Une recherche discrète exacte réussit.** Une descente par coordonnées sur le câblage (adresse de chaque banque, adresse du routeur et table cellule → banque), où chaque essai réajuste les experts par vote majoritaire en forme close, retrouve le câblage exact dans 7 redémarrages aléatoires sur 16. Le meilleur ajustement TRAIN désigne toujours une solution au plafond de bruit.
+
+### Méthode P0b
+
+1. **Initialisation relaxée** (20 époques) : relaxation ANF sans STE, pénalité de diversité μ = 0,5 sur Σ_{j<l} ⟨w_j, w_l⟩, sinon comme P0.
+2. **Câblage par EM dur** : 16 redémarrages, le n° 0 à partir du câblage relaxé et les n° 1 à 15 aléatoires. Chaque redémarrage alterne une passe routeur puis une passe banques, jusqu'à ce qu'aucune amélioration stricte ne reste ou au plus 20 tours. La passe routeur essaie chaque créneau × 32 entrées ; la table cellule → banque y est l'argmax du score des experts majoritaires courants. La passe banques essaie chaque créneau × 32 entrées, avec experts réajustés. On garde le meilleur ajustement **TRAIN**, et à égalité le plus petit indice.
+3. **Experts** : soit le vote majoritaire converti en ANF par Möbius GF(2), soit une relaxation ANF initialisée à ±3 depuis cette ANF puis affinée 15 époques avec coût λ, sans STE, câblage et routeur figés. Le routeur compilé est la table cellule → banque convertie en 2 portes ANF.
+
+### Bras P0b (mêmes professeurs, données et graines 1 à 5 que P0)
+
+| Bras | Câblage | Experts |
+|---|---|---|
+| `relaxed_fixed` | relaxation seule (étape 1), λ = 10⁻³ | relaxés |
+| `hem_lut` | étapes 1 + 2 | vote majoritaire + Möbius |
+| `hem_anf_cost_m` | étapes 1 + 2 | relaxation ANF, λ = 10⁻³ |
+| `hem_anf_cost_l` | étapes 1 + 2 | relaxation ANF, λ = 3·10⁻³ |
+
+### Critères P0b (T-sparse, médiane sur 5 graines)
+
+Les critères reprennent C1 à C5, avec `hem_lut` comme référence de C2 et C3. Le bras ANF retenu est le plus grand λ dont l'exactitude **VAL** dure reste à 1 point de `hem_lut`. C2 : exactitude TEST de ce bras ≥ celle de `hem_lut` − 1 point. C3 : k médian ≤ 8, p95 ≤ 16, et pas plus de monômes que `hem_lut`. C4 et C5 sont inchangés. T-dense est rapporté sans critère. P0 reste publié comme un échec ; P0b ne le remplace pas.

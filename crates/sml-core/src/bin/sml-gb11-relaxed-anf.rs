@@ -1,12 +1,15 @@
 //! GB-11 P0: relaxed training of routed, shared-input sparse ANF banks.
 //! Modes: `smoke` (debug teacher 0x6B99, not preregistered data) and
 //! `prereg` (frozen matrix: 6 arms x 2 teachers x 5 seeds). Writes one CSV row
-//! per run to stdout. Synthetic data only; no timing, energy or LM claim.
+//! per run to stdout. `p0b` and `p0b-smoke` run the P0b amendment arms
+//! (relaxed init, random-restart hard-EM wiring refinement). Synthetic data only; no timing, energy or LM
+//! claim.
 
 use std::time::Instant;
 
 use sml_core::gb11_relaxed_anf::{
-    train_and_report, Arm, Dataset, RunReport, Teacher, TeacherFamily, TrainConfig, ARMS, GATES,
+    hybrid_train_and_report, train_and_report, Arm, Dataset, HybridArm, RunReport, Teacher,
+    TeacherFamily, TrainConfig, ARMS, GATES, HYBRID_ARMS,
 };
 
 const TRAIN: usize = 16_384;
@@ -19,9 +22,24 @@ const TEACHERS: [(&str, TeacherFamily, u64); 2] = [
     ("T-dense", TeacherFamily::Dense, 0x6B12),
 ];
 
+#[derive(Clone, Copy)]
+enum JobArm {
+    Relaxed(Arm),
+    Hybrid(HybridArm),
+}
+
+impl JobArm {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Relaxed(arm) => arm.name,
+            Self::Hybrid(arm) => arm.name,
+        }
+    }
+}
+
 struct Job {
     teacher: &'static str,
-    arm: Arm,
+    arm: JobArm,
     seed: u64,
     splits: usize,
 }
@@ -44,7 +62,7 @@ fn row(job: &Job, r: &RunReport, seconds: f64) -> String {
     format!(
         "{},{},{},{:.6},{:.5},{:.5},{:.5},{:.5},{:.5},{},{},{},{},{:.3},{},{},{},{},{:.4},{:.4},{},{},{},{},{:.1}",
         job.teacher,
-        job.arm.name,
+        job.arm.name(),
         job.seed,
         r.final_loss,
         r.val_bit_accuracy,
@@ -75,19 +93,30 @@ fn main() {
     let mode = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "smoke".to_owned());
-    let (teachers, arms, seeds): (Vec<(&str, TeacherFamily, u64)>, Vec<Arm>, Vec<u64>) =
+    let debug = vec![("T-debug", TeacherFamily::Sparse, 0x6B99)];
+    let relaxed = |arms: &[Arm]| {
+        arms.iter()
+            .copied()
+            .map(JobArm::Relaxed)
+            .collect::<Vec<_>>()
+    };
+    let hybrid: Vec<JobArm> = HYBRID_ARMS.iter().copied().map(JobArm::Hybrid).collect();
+    let (teachers, arms, seeds): (Vec<(&str, TeacherFamily, u64)>, Vec<JobArm>, Vec<u64>) =
         match mode.as_str() {
             "smoke" => (
-                vec![("T-debug", TeacherFamily::Sparse, 0x6B99)],
-                vec![ARMS[0], ARMS[1], ARMS[3], ARMS[5]],
+                debug,
+                relaxed(&[ARMS[0], ARMS[1], ARMS[3], ARMS[5]]),
                 vec![1],
             ),
-            "prereg" => (TEACHERS.to_vec(), ARMS.to_vec(), SEEDS.to_vec()),
+            "prereg" => (TEACHERS.to_vec(), relaxed(&ARMS), SEEDS.to_vec()),
+            "p0b-smoke" => (debug, hybrid, vec![1]),
+            "p0b" => (TEACHERS.to_vec(), hybrid, SEEDS.to_vec()),
             other => {
-                eprintln!("unknown mode {other}; use smoke or prereg");
+                eprintln!("unknown mode {other}; use smoke, prereg, p0b-smoke or p0b");
                 std::process::exit(2);
             }
         };
+    let hybrid_mode = mode.starts_with("p0b");
 
     let datasets: Vec<(Dataset, Dataset, Dataset)> = teachers
         .iter()
@@ -120,7 +149,12 @@ fn main() {
     println!(
         "teacher,arm,seed,final_loss,val_bit,test_bit,test_byte,soft_test_bit,soft_minus_hard,\
          k_median,k_p95,k_max,k_total,mean_degree,zero_gates,sub_banks,distinct_bits,router_k,\
-         purity,min_load,and_ops,xor_ops,parity_checks,parity_mismatches,seconds"
+         purity,min_load,and_ops,xor_ops,parity_checks,parity_mismatches,seconds{}",
+        if hybrid_mode {
+            ",best_restart,refine_rounds"
+        } else {
+            ""
+        }
     );
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
     let next = std::sync::atomic::AtomicUsize::new(0);
@@ -158,9 +192,22 @@ fn main() {
                         config.tau_end = v;
                     }
                 }
-                let (_, report) = train_and_report(&job.arm, &config, train, val, test)
-                    .expect("Pvp6Bank compilation of a learned bank");
-                let line = row(job, &report, start.elapsed().as_secs_f64());
+                let line = match job.arm {
+                    JobArm::Relaxed(arm) => {
+                        let (_, report) = train_and_report(&arm, &config, train, val, test)
+                            .expect("Pvp6Bank compilation of a learned bank");
+                        row(job, &report, start.elapsed().as_secs_f64())
+                    }
+                    JobArm::Hybrid(arm) => {
+                        let (_, (restart, rounds), report) =
+                            hybrid_train_and_report(&arm, job.seed, train, val, test)
+                                .expect("Pvp6Bank compilation of a learned bank");
+                        format!(
+                            "{},{restart},{rounds}",
+                            row(job, &report, start.elapsed().as_secs_f64())
+                        )
+                    }
+                };
                 eprintln!("{line}");
                 rows.lock().expect("rows")[index] = line;
             });
