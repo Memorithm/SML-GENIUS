@@ -123,6 +123,33 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         workload: Pvp6Workload,
         queries: &[usize],
     ) -> Result<Pvp6BatchResult, Pvp6ExecutionError> {
+        self.evaluate_checked(path, workload, queries, Pvp6DensityContract::Exact)
+    }
+
+    /// Opt-in bounded-density contract: `workload.density` is an upper bound,
+    /// and every gate must have between 1 and that many monomials.
+    ///
+    /// Learned banks mix densities, so the exact contract would split one
+    /// bank into several sub-banks, each with its own bit-slice transposition.
+    /// Outputs are identical to evaluating each gate alone. The policy label
+    /// is selected from the declared bound, so it describes coordinates rather
+    /// than the bank's actual density mix.
+    pub fn evaluate_bounded_on(
+        &self,
+        path: Pvp6ExecutionPath,
+        workload: Pvp6Workload,
+        queries: &[usize],
+    ) -> Result<Pvp6BatchResult, Pvp6ExecutionError> {
+        self.evaluate_checked(path, workload, queries, Pvp6DensityContract::AtMost)
+    }
+
+    fn evaluate_checked(
+        &self,
+        path: Pvp6ExecutionPath,
+        workload: Pvp6Workload,
+        queries: &[usize],
+        contract: Pvp6DensityContract,
+    ) -> Result<Pvp6BatchResult, Pvp6ExecutionError> {
         let selection = workload.select().map_err(Pvp6ExecutionError::Selection)?;
         let expected_queries =
             usize::try_from(workload.query_count).map_err(|_| Pvp6ExecutionError::Overflow)?;
@@ -139,12 +166,25 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         }
 
         for (gate_index, gate) in self.gates.iter().enumerate() {
-            if u32::try_from(gate.monomials.len()).ok() != Some(workload.density) {
-                return Err(Pvp6ExecutionError::DensityMismatch {
-                    gate_index,
-                    declared: workload.density,
-                    actual: gate.monomials.len(),
-                });
+            let actual = u32::try_from(gate.monomials.len()).ok();
+            match contract {
+                Pvp6DensityContract::Exact if actual != Some(workload.density) => {
+                    return Err(Pvp6ExecutionError::DensityMismatch {
+                        gate_index,
+                        declared: workload.density,
+                        actual: gate.monomials.len(),
+                    });
+                }
+                Pvp6DensityContract::AtMost
+                    if actual.is_none_or(|actual| actual > workload.density) =>
+                {
+                    return Err(Pvp6ExecutionError::DensityAboveBound {
+                        gate_index,
+                        bound: workload.density,
+                        actual: gate.monomials.len(),
+                    });
+                }
+                _ => {}
             }
         }
         let reuse = usize::try_from(workload.reuse).map_err(|_| Pvp6ExecutionError::Overflow)?;
@@ -387,6 +427,13 @@ fn submask_eval(coefficients: &[u64], query: usize) -> bool {
     value
 }
 
+/// How the declared workload density constrains each gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pvp6DensityContract {
+    Exact,
+    AtMost,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pvp6ExecutionError {
     InvalidWidth {
@@ -402,6 +449,11 @@ pub enum Pvp6ExecutionError {
     DensityMismatch {
         gate_index: usize,
         declared: u32,
+        actual: usize,
+    },
+    DensityAboveBound {
+        gate_index: usize,
+        bound: u32,
         actual: usize,
     },
     Selection(Pvp6SelectionError),
@@ -490,6 +542,76 @@ mod tests {
         assert_exact(Pvp6PopulationProfile::LowPopcount, 32);
         assert_exact(Pvp6PopulationProfile::HighPopcount, 32);
         assert_exact(Pvp6PopulationProfile::AffineUniform, 64);
+    }
+
+    #[test]
+    fn bounded_density_mixed_bank_matches_per_gate_evaluation_on_every_arm() {
+        let gate_sets: [&[u16]; 4] = [&[5], &[0, 1, 3, 7], &[2, 9], &[1, 6, 12, 33, 63]];
+        let gates: Vec<Pvp6Gate<BITS>> = gate_sets
+            .iter()
+            .map(|m| Pvp6Gate::from_monomials(m).expect("gate"))
+            .collect();
+        let mixed = Pvp6Bank::new(gates.clone()).expect("bank");
+        let qs: Vec<usize> = (0..65).map(|i| (i * 37 + 11) % BITS).collect();
+        let bound = Pvp6Workload::new(5, 65, 2, Pvp6PopulationProfile::AffineUniform);
+        let paths = [
+            Pvp6ExecutionPath::Selected,
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::PascalAnfMaterialize),
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
+            Pvp6ExecutionPath::Scalar(Pvp6Architecture::SubmaskCoefficientQuery),
+            Pvp6ExecutionPath::Bitsliced,
+        ];
+        for path in paths {
+            let result = mixed
+                .evaluate_bounded_on(path, bound, &qs)
+                .expect("bounded");
+            assert_eq!(result.selection(), bound.select().expect("policy"));
+            for (g, gate) in gates.iter().enumerate() {
+                let alone = Pvp6Bank::new(vec![gate.clone()]).expect("bank");
+                let exact = Pvp6Workload::new(
+                    gate.monomials().len() as u32,
+                    65,
+                    2,
+                    Pvp6PopulationProfile::AffineUniform,
+                );
+                let reference = alone.evaluate_on(path, exact, &qs).expect("exact");
+                for q in 0..130 {
+                    assert_eq!(
+                        result.value(g, q),
+                        reference.value(0, q),
+                        "{path:?} {g} {q}"
+                    );
+                    let literal = gate.monomials().iter().fold(false, |v, &m| {
+                        v ^ (usize::from(m) & qs[q % 65] == usize::from(m))
+                    });
+                    assert_eq!(result.value(g, q), Some(literal));
+                }
+            }
+        }
+        // The exact contract still rejects the same mixed bank.
+        assert!(matches!(
+            mixed.evaluate_on(Pvp6ExecutionPath::Bitsliced, bound, &qs),
+            Err(Pvp6ExecutionError::DensityMismatch { gate_index: 0, .. })
+        ));
+        // A gate above the bound fails closed on every arm.
+        let tight = Pvp6Workload::new(4, 65, 2, Pvp6PopulationProfile::AffineUniform);
+        for path in paths {
+            assert_eq!(
+                mixed.evaluate_bounded_on(path, tight, &qs),
+                Err(Pvp6ExecutionError::DensityAboveBound {
+                    gate_index: 3,
+                    bound: 4,
+                    actual: 5
+                })
+            );
+        }
+        let zero = Pvp6Workload::new(0, 65, 2, Pvp6PopulationProfile::AffineUniform);
+        assert_eq!(
+            mixed.evaluate_bounded_on(Pvp6ExecutionPath::Bitsliced, zero, &qs),
+            Err(Pvp6ExecutionError::Selection(
+                Pvp6SelectionError::ZeroDensity
+            ))
+        );
     }
 
     #[test]

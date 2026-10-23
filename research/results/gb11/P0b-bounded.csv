@@ -1,0 +1,11 @@
+teacher,seed,test_bit,k_total,exact_sub_banks,bounded_transpositions,bounded_checks,bounded_mismatches
+T-sparse,1,1.00000,150,15,4,81920,0
+T-sparse,2,1.00000,150,15,4,81920,0
+T-sparse,3,1.00000,150,15,4,81920,0
+T-sparse,4,1.00000,150,15,4,81920,0
+T-sparse,5,1.00000,150,15,4,81920,0
+T-dense,1,1.00000,1063,28,4,81920,0
+T-dense,2,1.00000,1063,28,4,81920,0
+T-dense,3,1.00000,1063,28,4,81920,0
+T-dense,4,1.00000,1063,28,4,81920,0
+T-dense,5,1.00000,1063,28,4,81920,0

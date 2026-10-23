@@ -7,7 +7,7 @@ Protocole : `docs/GB11-RELAXED-SPARSE-ANF-LEARNING-PREREGISTRATION.md`, gelé au
 - **La relaxation seule ne suffit pas à apprendre le câblage**, c'est-à-dire quels bits forment l'adresse d'une banque et quelle banque traite l'exemple. Le P0 préenregistré échoue : la STE fait s'effondrer les modèles. Le P0b `relaxed_fixed`, sans STE et avec pénalité de diversité, plafonne à 0,59 sur T-sparse.
 - **Une recherche discrète exacte du câblage, relancée plusieurs fois, réussit.** Les experts y sont réajustés en forme close par vote majoritaire. Sur T-sparse, les 5 graines retrouvent la fonction exacte : 100 % des bits et 100 % des octets sur TEST, pureté de routage 1,0, k médian 5, p95 6, max 8. Le modèle reste donc dans le régime k ≤ 8 où GB-9 mesure un gain moteur.
 - **L'exactitude d'exécution est totale.** Les banques apprises compilées en `Pvp6Bank<64>` donnent 0 écart sur 4 912 162 (P0) et 3 151 883 (P0b) vérifications, avec les bras `Selected` et `Bitsliced`.
-- **Le partage d'entrées est garanti par construction, mais le contrat actuel le fragmente.** `Pvp6Bank` exige une densité uniforme. Les 8 portes d'une banque se répartissent donc en 3 à 5 sous-banques sur T-sparse, soit autant de transpositions.
+- **Le partage d'entrées est garanti par construction.** Sous le contrat exact de `Pvp6Bank`, les 8 portes d'une banque se répartissaient en 3 à 5 sous-banques (autant de transpositions) ; avec le contrat à densité bornée ajouté ensuite, chaque banque n'a plus qu'une transposition (voir plus bas).
 - **Si la tâche exige des fonctions denses, on ne garde pas la parcimonie sans perdre en qualité.** Sur T-dense, `hem_lut` atteint 100 % avec k médian 33. Le coût λ = 3·10⁻³ ne retire que 16 % des monômes et coûte 2,9 points. C'est le domaine de la LUT.
 
 ## P0 (préenregistré) : échec
@@ -55,10 +55,19 @@ Critères P0b sur T-sparse. Le bras retenu est `hem_anf_cost_l`, le plus grand �
 ## Conséquences pour le matériel
 
 - GB-9 situe le premier R gagnant à 1 ou 2 portes par transposition quand k ≤ 8. Avec 8 portes réparties en 3,5 sous-banques en médiane, il reste environ 2,3 portes par transposition : on est dans le régime de gain, mais avec peu de marge.
-- **Amendement de contrat recommandé** (PR séparée) : que `Pvp6Bank` accepte une densité déclarée comme borne supérieure, pour qu'une banque apprise n'ait qu'une seule transposition.
+- **Amendement de contrat** : fait, voir la section suivante. Une banque apprise n'a plus qu'une seule transposition.
+
+## Contrat `Pvp6Bank` à densité bornée (ajouté le 23 octobre 2026, choix du propriétaire)
+
+`Pvp6Bank::evaluate_bounded_on` est une variante **optionnelle** de `evaluate_on`. La densité déclarée y devient une borne supérieure : chaque porte doit avoir entre 1 et `density` monômes. `evaluate` et `evaluate_on` gardent le contrat exact et le refus en cas d'écart ; aucun appelant existant ne change. Le libellé de politique est calculé sur la borne déclarée.
+
+- **Test d'exactitude** (`bounded_density_mixed_bank_matches_per_gate_evaluation_on_every_arm`) : une banque mixte k ∈ {1, 2, 4, 5}, 65 requêtes, réutilisation 2, testée sur les 5 bras (`Selected`, les trois scalaires forcés et `Bitsliced`). Chaque porte donne le même résultat que seule, sous contrat exact, et le même que l'oracle littéral. Une porte au-delà de la borne est refusée (`DensityAboveBound`), et le contrat exact refuse toujours la banque mixte.
+- **Recompilation des banques P0b** (`sml-gb11-relaxed-anf p0b-bounded`, `research/results/gb11/P0b-bounded.csv`) : on réentraîne `hem_lut`, de façon déterministe, et on retrouve les mêmes modèles (TEST 1,000, 150 monômes). Chaque banque compile alors en **une seule** `Pvp6Bank`, avec 0 écart sur 81 920 vérifications par graine (`Selected` et `Bitsliced`).
+- **Transpositions des 4 banques d'experts** : T-sparse passe de 15 à 4, T-dense de 28 à 4.
+
+Le cas des portes constantes nulles (0 monôme) n'est pas modifié : il n'y en a aucune en P0b, et elles restent hors de la banque.
 
 ## Suites (accord du propriétaire requis)
 
 1. **P1 — corpus réel** contre le témoin S5h (≈15 M paramètres, BPC 3,66), à budget égal. Il faut d'abord préenregistrer la présélection des candidats d'adresse et la minimisation « don't care ».
 2. **P2 — mesure native Dell/Thor** des banques apprises via RemoteOps, protocole GB-9.
-3. **Contrat `Pvp6Bank`** avec densité en borne supérieure, et parité exacte.

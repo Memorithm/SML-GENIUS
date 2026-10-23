@@ -2,14 +2,15 @@
 //! Modes: `smoke` (debug teacher 0x6B99, not preregistered data) and
 //! `prereg` (frozen matrix: 6 arms x 2 teachers x 5 seeds). Writes one CSV row
 //! per run to stdout. `p0b` and `p0b-smoke` run the P0b amendment arms
-//! (relaxed init, random-restart hard-EM wiring refinement). Synthetic data only; no timing, energy or LM
+//! (relaxed init, random-restart hard-EM wiring refinement); `p0b-bounded`
+//! recompiles the `hem_lut` banks under the bounded-density contract. Synthetic data only; no timing, energy or LM
 //! claim.
 
 use std::time::Instant;
 
 use sml_core::gb11_relaxed_anf::{
-    hybrid_train_and_report, train_and_report, Arm, Dataset, HybridArm, RunReport, Teacher,
-    TeacherFamily, TrainConfig, ARMS, GATES, HYBRID_ARMS,
+    hybrid_train_and_report, pvp6_bounded_parity, train_and_report, Arm, Dataset, HybridArm,
+    RunReport, Teacher, TeacherFamily, TrainConfig, ARMS, GATES, HYBRID_ARMS,
 };
 
 const TRAIN: usize = 16_384;
@@ -91,10 +92,42 @@ fn row(job: &Job, r: &RunReport, seconds: f64) -> String {
     )
 }
 
+/// Re-trains the P0b `hem_lut` arm (deterministic, same models as `p0b`) and
+/// recompiles each learned bank into one bounded-density `Pvp6Bank`.
+fn bounded_recompile() {
+    println!(
+        "teacher,seed,test_bit,k_total,exact_sub_banks,bounded_transpositions,\
+         bounded_checks,bounded_mismatches"
+    );
+    let arm = HYBRID_ARMS[1];
+    for &(name, family, seed) in &TEACHERS {
+        let teacher = Teacher::generate(family, seed);
+        let train = Dataset::sample(&teacher, TRAIN, seed * 1000 + 1, NOISE);
+        let val = Dataset::sample(&teacher, VAL, seed * 1000 + 2, NOISE);
+        let test = Dataset::sample(&teacher, TEST, seed * 1000 + 3, 0.0);
+        for &run in &SEEDS {
+            let (hard, _, report) = hybrid_train_and_report(&arm, run, &train, &val, &test)
+                .expect("Pvp6Bank compilation of a learned bank");
+            let (checks, mismatches, transpositions) =
+                pvp6_bounded_parity(&hard, &test).expect("bounded Pvp6Bank compilation");
+            println!(
+                "{name},{run},{:.5},{},{},{transpositions},{checks},{mismatches}",
+                report.test_bit_accuracy,
+                report.expert_k.iter().sum::<usize>(),
+                report.sub_banks.iter().sum::<usize>(),
+            );
+        }
+    }
+}
+
 fn main() {
     let mode = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "smoke".to_owned());
+    if mode == "p0b-bounded" {
+        bounded_recompile();
+        return;
+    }
     let debug = vec![("T-debug", TeacherFamily::Sparse, 0x6B99)];
     let relaxed = |arms: &[Arm]| {
         arms.iter()

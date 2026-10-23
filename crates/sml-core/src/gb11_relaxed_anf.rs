@@ -1118,6 +1118,65 @@ pub fn report(
     })
 }
 
+/// Bounded-density compilation: one `Pvp6Bank<64>` per unit holding every
+/// non-zero gate (one bit-slice transposition per unit), evaluated with
+/// [`Pvp6Bank::evaluate_bounded_on`] on `Selected` and `Bitsliced` against the
+/// hard model. Returns (checks, mismatches, expert-bank transpositions).
+pub fn pvp6_bounded_parity(
+    hard: &HardModel,
+    data: &Dataset,
+) -> Result<(u64, u64, usize), Pvp6ExecutionError> {
+    let mut checks = 0_u64;
+    let mut mismatches = 0_u64;
+    let mut transpositions = 0;
+    for unit in 0..UNITS {
+        let members: Vec<usize> = unit_gates(unit)
+            .filter(|&g| !hard.gates[g].is_empty())
+            .collect();
+        let Some(bound) = members.iter().map(|&g| hard.gates[g].len()).max() else {
+            continue;
+        };
+        if unit != ROUTER_UNIT {
+            transpositions += 1;
+        }
+        let bank = Pvp6Bank::<MONOMIALS>::new(
+            members
+                .iter()
+                .map(|&g| Pvp6Gate::from_monomials(&hard.gates[g]))
+                .collect::<Result<_, _>>()?,
+        )?;
+        let queries: Vec<usize> = data
+            .inputs
+            .iter()
+            .filter(|&&x| unit == ROUTER_UNIT || hard.route(x) == unit)
+            .map(|&x| address_of(x, &hard.addresses[unit]))
+            .collect();
+        for chunk in queries.chunks(64) {
+            let workload = Pvp6Workload::new(
+                bound as u32,
+                chunk.len() as u32,
+                1,
+                Pvp6PopulationProfile::AffineUniform,
+            );
+            let selected =
+                bank.evaluate_bounded_on(Pvp6ExecutionPath::Selected, workload, chunk)?;
+            let sliced = bank.evaluate_bounded_on(Pvp6ExecutionPath::Bitsliced, workload, chunk)?;
+            for (gi, &g) in members.iter().enumerate() {
+                for (qi, &q) in chunk.iter().enumerate() {
+                    let expected = anf_eval(&hard.gates[g], q);
+                    checks += 1;
+                    if selected.value(gi, qi) != Some(expected)
+                        || sliced.value(gi, qi) != Some(expected)
+                    {
+                        mismatches += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok((checks, mismatches, transpositions))
+}
+
 /// Trains one arm on `train`, then reports VAL/TEST, parsimony and parity.
 pub fn train_and_report(
     arm: &Arm,
@@ -1727,6 +1786,11 @@ mod tests {
         let (checks, mismatches) = pvp6_parity(&hard, &test).unwrap();
         assert!(checks > 0);
         assert_eq!(mismatches, 0);
+        let (bounded, bounded_mismatches, transpositions) =
+            pvp6_bounded_parity(&hard, &test).unwrap();
+        assert_eq!(bounded, checks);
+        assert_eq!(bounded_mismatches, 0);
+        assert_eq!(transpositions, BANKS);
         let expected: usize = teacher.bank_gates.iter().flatten().map(Vec::len).sum();
         let learned: usize = hard.gates[..BANKS * GATES].iter().map(Vec::len).sum();
         assert_eq!(learned, expected);
