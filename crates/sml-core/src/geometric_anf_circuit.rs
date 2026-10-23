@@ -461,7 +461,7 @@ mod tests {
     #[test]
     fn lane_and_width_errors_are_explicit() {
         assert_eq!(
-            pack_sectors(&vec![0; 65], 64),
+            pack_sectors(&[0; 65], 64),
             Err(Gb5Error::TooManyLanes { lanes: 65 })
         );
         assert_eq!(
