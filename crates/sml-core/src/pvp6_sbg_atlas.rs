@@ -3,7 +3,7 @@
 use crate::{
     mor::MorDecision,
     pvp6_executor::Pvp6ExecutionPath,
-    pvp6_sbg::{SbgAnfError, SbgCoordinate},
+    pvp6_sbg::{SbgAnfError, SbgCoordinate, SbgField},
     pvp6_sbg_experts::{SbgAnfExpert, SbgExpertError, SbgExpertEvidence},
     semantic::SemanticState,
     PageId,
@@ -78,19 +78,41 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
             return Err(SbgAtlasError::Limit);
         }
         let mut unique = BTreeSet::new();
-        let mut writes = BTreeSet::new();
         let mut selected = Vec::new();
+        selected
+            .try_reserve_exact(ids.len())
+            .map_err(|_| SbgAtlasError::Allocation)?;
         for &id in ids {
             if !unique.insert(id.0) {
                 return Err(SbgAtlasError::DuplicateSelection(id));
             }
-            let page = self.page(id)?;
-            for &dest in page.plan().destinations() {
-                if !writes.insert(dest) {
-                    return Err(SbgAtlasError::WriteConflict(dest));
+            selected.push(self.page(id)?);
+        }
+        // A plan already rejects duplicate destinations, so one page never
+        // conflicts with itself; only several pages need the occupancy check.
+        if selected.len() > 1 {
+            let words = S.div_ceil(64);
+            let mut written = Vec::new();
+            written
+                .try_reserve_exact(4 * words)
+                .map_err(|_| SbgAtlasError::Allocation)?;
+            written.resize(4 * words, 0_u64);
+            for page in &selected {
+                for &dest in page.plan().destinations() {
+                    let field = match dest.field {
+                        SbgField::Value => 0,
+                        SbgField::Meaning => 1,
+                        SbgField::Ambiguity => 2,
+                        SbgField::Routing => 3,
+                    };
+                    let word = &mut written[field * words + dest.bit / 64];
+                    let mask = 1_u64 << (dest.bit % 64);
+                    if *word & mask != 0 {
+                        return Err(SbgAtlasError::WriteConflict(dest));
+                    }
+                    *word |= mask;
                 }
             }
-            selected.push(page);
         }
         Ok(selected)
     }
@@ -111,7 +133,9 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
 
     /// Logical execution/retained query-output cost, validated before any body executes.
     pub fn work_for(&self, ids: &[PageId]) -> Result<SbgExpertWork, SbgAtlasError> {
-        let selected = self.selected(ids)?;
+        Self::work_of(&self.selected(ids)?)
+    }
+    fn work_of(selected: &[&SbgAnfExpert<S, D>]) -> Result<SbgExpertWork, SbgAtlasError> {
         let mut work = SbgExpertWork::default();
         for page in selected {
             let q = u64::try_from(page.plan().input_lanes().len())
@@ -148,23 +172,20 @@ impl<const S: usize, const D: usize> SbgExpertAtlas<S, D> {
         state: &SemanticState<S>,
         decision: &MorDecision,
     ) -> Result<SbgExpertBatch<S>, SbgAtlasError> {
-        let work = self.work_for(&decision.selected_experts)?;
         let selected = self.selected(&decision.selected_experts)?;
+        let work = Self::work_of(&selected)?;
         let mut next = state.clone();
         let mut evidence = Vec::new();
         evidence
             .try_reserve_exact(selected.len())
             .map_err(|_| SbgAtlasError::Allocation)?;
+        // Every page reads the same snapshot and writes disjoint coordinates
+        // straight into `next`, which is only returned once all pages succeed.
         for page in selected {
-            let result = page.execute_on(path, state).map_err(SbgAtlasError::Page)?;
-            for &dest in page.plan().destinations() {
-                let value = dest
-                    .read(&result.state)
-                    .map_err(SbgAtlasError::Projection)?;
-                dest.write(&mut next, value)
-                    .map_err(SbgAtlasError::Projection)?;
-            }
-            evidence.push(result.evidence);
+            evidence.push(
+                page.execute_into(path, state, &mut next)
+                    .map_err(SbgAtlasError::Page)?,
+            );
         }
         Ok(SbgExpertBatch {
             state: next,

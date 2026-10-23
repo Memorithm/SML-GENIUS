@@ -265,10 +265,16 @@ impl Pvp6BatchResult {
             .checked_mul(words_per_query)
             .ok_or(Pvp6ExecutionError::Overflow)?;
         let mut output = zero_words(len)?;
-        for (query_index, words) in output.chunks_exact_mut(words_per_query).enumerate() {
-            for gate_index in 0..self.gate_count {
-                if self.value(gate_index, query_index) == Some(true) {
-                    words[gate_index / 64] |= 1_u64 << (gate_index % 64);
+        for gate_index in 0..self.gate_count {
+            let row = &self.packed
+                [gate_index * self.words_per_gate..(gate_index + 1) * self.words_per_gate];
+            for (word_index, &word) in row.iter().enumerate() {
+                let mut bits = word;
+                while bits != 0 {
+                    let query_index = word_index * 64 + bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    output[query_index * words_per_query + gate_index / 64] |=
+                        1_u64 << (gate_index % 64);
                 }
             }
         }

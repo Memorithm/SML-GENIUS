@@ -134,6 +134,22 @@ impl<const S: usize, const D: usize> SbgAnfExpert<S, D> {
         path: Pvp6ExecutionPath,
         state: &SemanticState<S>,
     ) -> Result<SbgExpertResult<S>, SbgExpertError> {
+        let mut next = state.clone();
+        let evidence = self.execute_into(path, state, &mut next)?;
+        Ok(SbgExpertResult {
+            state: next,
+            evidence,
+        })
+    }
+
+    /// Reads `state`, writes this page's destinations into `next`.
+    /// On error `next` may hold a partial write and must be discarded.
+    pub(crate) fn execute_into(
+        &self,
+        path: Pvp6ExecutionPath,
+        state: &SemanticState<S>,
+        next: &mut SemanticState<S>,
+    ) -> Result<SbgExpertEvidence, SbgExpertError> {
         let queries = self
             .plan
             .queries(state)
@@ -143,23 +159,19 @@ impl<const S: usize, const D: usize> SbgAnfExpert<S, D> {
             .bank
             .evaluate_on(path, workload, &queries)
             .map_err(SbgExpertError::Execution)?;
-        let next = self
-            .plan
-            .apply(state, &batch)
+        self.plan
+            .apply_into(next, &batch)
             .map_err(SbgExpertError::Projection)?;
         let outputs = batch
             .to_query_major_words()
             .map_err(SbgExpertError::Execution)?;
-        Ok(SbgExpertResult {
-            state: next,
-            evidence: SbgExpertEvidence {
-                page: self.page,
-                revision: self.revision,
-                queries,
-                outputs,
-                gate_query_evaluations: self.gate_query_evaluations()?,
-                selection: batch.selection(),
-            },
+        Ok(SbgExpertEvidence {
+            page: self.page,
+            revision: self.revision,
+            queries,
+            outputs,
+            gate_query_evaluations: self.gate_query_evaluations()?,
+            selection: batch.selection(),
         })
     }
 }
