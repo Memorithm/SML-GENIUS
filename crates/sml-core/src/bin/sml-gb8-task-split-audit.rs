@@ -4,7 +4,7 @@
 //! partitions carry distinct input event streams before any training claim.
 //! Command: cargo run --locked --release -p sml-core --bin sml-gb8-task-split-audit
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 use sml_core::tasks::{
     copy_after_marker, delayed_bit_recall, distractor_rejection, keyed_fact_recall,
