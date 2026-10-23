@@ -608,6 +608,7 @@ impl Model {
     }
 
     /// Mean loss and gradient of one mini-batch.
+    #[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
     fn batch_loss_grad(
         &self,
         inputs: &[u32],
@@ -1149,6 +1150,7 @@ pub struct Wiring {
 }
 
 /// Majority truth table per gate and the matched-bit count, for one bank.
+#[allow(clippy::needless_range_loop)]
 fn majority_fit(
     samples: &[(u32, u8)],
     address: &[usize; ADDRESS_BITS],
@@ -1244,6 +1246,7 @@ impl Wiring {
 
     /// One coordinate pass over router slots with the cell map refit by argmax
     /// of each bank's fixed majority expert score; accepts strict improvements.
+    #[allow(clippy::needless_range_loop)]
     fn refine_router(&mut self, data: &Dataset) -> bool {
         let parts = self.partition(data);
         let tables: Vec<[[bool; MONOMIALS]; GATES]> = parts

@@ -17,7 +17,9 @@ const VAL: usize = 4_096;
 const TEST: usize = 8_192;
 const NOISE: f64 = 0.05;
 const SEEDS: [u64; 5] = [1, 2, 3, 4, 5];
-const TEACHERS: [(&str, TeacherFamily, u64); 2] = [
+type TeacherSpec = (&'static str, TeacherFamily, u64);
+
+const TEACHERS: [TeacherSpec; 2] = [
     ("T-sparse", TeacherFamily::Sparse, 0x6B11),
     ("T-dense", TeacherFamily::Dense, 0x6B12),
 ];
@@ -101,21 +103,20 @@ fn main() {
             .collect::<Vec<_>>()
     };
     let hybrid: Vec<JobArm> = HYBRID_ARMS.iter().copied().map(JobArm::Hybrid).collect();
-    let (teachers, arms, seeds): (Vec<(&str, TeacherFamily, u64)>, Vec<JobArm>, Vec<u64>) =
-        match mode.as_str() {
-            "smoke" => (
-                debug,
-                relaxed(&[ARMS[0], ARMS[1], ARMS[3], ARMS[5]]),
-                vec![1],
-            ),
-            "prereg" => (TEACHERS.to_vec(), relaxed(&ARMS), SEEDS.to_vec()),
-            "p0b-smoke" => (debug, hybrid, vec![1]),
-            "p0b" => (TEACHERS.to_vec(), hybrid, SEEDS.to_vec()),
-            other => {
-                eprintln!("unknown mode {other}; use smoke, prereg, p0b-smoke or p0b");
-                std::process::exit(2);
-            }
-        };
+    let (teachers, arms, seeds): (Vec<TeacherSpec>, Vec<JobArm>, Vec<u64>) = match mode.as_str() {
+        "smoke" => (
+            debug,
+            relaxed(&[ARMS[0], ARMS[1], ARMS[3], ARMS[5]]),
+            vec![1],
+        ),
+        "prereg" => (TEACHERS.to_vec(), relaxed(&ARMS), SEEDS.to_vec()),
+        "p0b-smoke" => (debug, hybrid, vec![1]),
+        "p0b" => (TEACHERS.to_vec(), hybrid, SEEDS.to_vec()),
+        other => {
+            eprintln!("unknown mode {other}; use smoke, prereg, p0b-smoke or p0b");
+            std::process::exit(2);
+        }
+    };
     let hybrid_mode = mode.starts_with("p0b");
 
     let datasets: Vec<(Dataset, Dataset, Dataset)> = teachers
