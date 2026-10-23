@@ -160,6 +160,7 @@ fn scalar_anf_64(circuit: AnfCircuit64, sectors: &[u8; 64]) -> u64 {
 
 /// All paths are checked pointwise / by exact LUT first; timed results
 /// are never treated as their own correctness oracle.
+#[allow(clippy::too_many_arguments)]
 fn validate(
     mask: FanMask,
     other: FanMask,
