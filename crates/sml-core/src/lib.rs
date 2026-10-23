@@ -98,6 +98,7 @@ pub mod geometric_fan_anf;
 pub mod gf2;
 pub mod gru_side;
 pub mod hyb_alt_ternary_sidecar;
+pub mod hyb_alt_train_only;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;
