@@ -145,6 +145,7 @@ pub mod spectral_dual_prior_gate;
 pub mod spectral_method_gate;
 pub mod task_loss;
 pub mod tasks;
+pub mod ternary_bitplane;
 pub mod toy_baselines;
 pub mod toy_tasks;
 pub mod trace;
