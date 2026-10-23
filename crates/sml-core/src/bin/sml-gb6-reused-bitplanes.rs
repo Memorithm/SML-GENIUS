@@ -71,6 +71,19 @@ fn sparse_mask(width: u8, gate: usize) -> u64 {
 
 fn generate_bank(fan: &RationalFan, family: &str, count: usize) -> Vec<FanMask> {
     let width = fan.sector_count() as u8;
+    if family == "pi" {
+        let mut unique = Vec::with_capacity(count);
+        for block in 0..(4096 / usize::from(width)) {
+            let mask = pi_fan_mask(fan, block * usize::from(width)).unwrap();
+            if !unique.contains(&mask) {
+                unique.push(mask);
+            }
+            if unique.len() == count {
+                return unique;
+            }
+        }
+        panic!("not enough distinct pi masks in fixed 4096-bit prefix");
+    }
     let domain = if width == 64 {
         u64::MAX
     } else {
@@ -82,7 +95,6 @@ fn generate_bank(fan: &RationalFan, family: &str, count: usize) -> Vec<FanMask> 
             "alternating" => {
                 FanMask::new(width, (0xaaaa_aaaa_aaaa_aaaa & domain) ^ gate as u64).unwrap()
             }
-            "pi" => pi_fan_mask(fan, gate * usize::from(width)).unwrap(),
             _ => unreachable!("frozen family"),
         })
         .collect()
