@@ -241,6 +241,18 @@ impl DiffLogicNetwork {
     /// In both modes the parameter gradient uses `sigmoid'(theta)`; in
     /// straight-through mode this is the estimator, not the true derivative.
     pub fn backward(&self, trace: &ForwardTrace, d_out: &[f64], mode: TrainMode, grad: &mut [f64]) {
+        let _ = self.backward_with_input_grad(trace, d_out, mode, grad);
+    }
+
+    /// Like [`Self::backward`], and also returns `d loss / d inputs`, which
+    /// lets callers chain the network inside a larger computation graph.
+    pub fn backward_with_input_grad(
+        &self,
+        trace: &ForwardTrace,
+        d_out: &[f64],
+        mode: TrainMode,
+        grad: &mut [f64],
+    ) -> Vec<f64> {
         debug_assert_eq!(grad.len(), self.theta.len());
         let mut delta = d_out.to_vec();
         let mut offset_end = self.theta.len();
@@ -264,6 +276,7 @@ impl DiffLogicNetwork {
             delta = d_prev;
             offset_end = offset_start;
         }
+        delta
     }
 
     /// Mean binary cross-entropy over a batch; writes the mean gradient.
