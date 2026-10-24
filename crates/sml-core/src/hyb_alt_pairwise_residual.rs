@@ -331,7 +331,9 @@ mod tests {
         let record = sample(u64::MAX, 0b1010_1100, 1);
         for depth in 0..DEPTHS {
             let raw = features(&record, depth, Basis::Pair);
-            let expected = u64::from(record.target >> (8 - depth)) & ((1 << depth) - 1);
+            let expected = (0..depth).fold(0_u64, |bits, i| {
+                bits | (u64::from((record.target >> (7 - i)) & 1) << i)
+            });
             assert_eq!((raw[1] >> 48) & ((1 << depth) - 1), expected);
         }
     }
