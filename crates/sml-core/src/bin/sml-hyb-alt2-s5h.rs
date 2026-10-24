@@ -311,7 +311,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Cursor, path::PathBuf};
 
     #[test]
     fn trace_auditor_rejects_split_and_digest_corruption() {
