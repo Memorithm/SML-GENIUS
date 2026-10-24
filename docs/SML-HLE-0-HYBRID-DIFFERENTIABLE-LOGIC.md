@@ -67,3 +67,34 @@ sigmoid derivative backward. `SteBits` provides clipped-STE bit weights.
 - Workspace and input are each limited to 64 bits; single-query execution
   uses one lane of the packed evaluator.
 - Not connected to existing MOR, SBG or atlas manifests beyond `PageId`.
+
+## HLE-1: relaxed end-to-end mode (`hybrid_logic_relaxed`)
+
+Status: executable reference contract; no performance or quality claim.
+
+- Workspace bits are probabilities; signature is relaxed XOR `x + w - 2xw`.
+- Page keys are logits; relaxed Hamming distance
+  `d = sum_j s_j + q_j - 2 s_j q_j` with `q = sigmoid(kappa)`.
+- Routing is straight-through top-k: forward is the hard top-k by `d`
+  (ties by `PageId`); backward uses the per-page surrogate
+  `sigmoid((tau - d)/T)` with `tau` the k/k+1 midpoint (constant). No
+  softmax, no cross-page normalisation, no Q/K/V, no KV cache.
+- Gated page outputs fold with relaxed XOR `a + b - 2ab` into the workspace.
+- A fixed number of cycles is unrolled; backprop through time trains all
+  page tables and all key logits jointly (`DiffLogicNetwork` gained
+  `backward_with_input_grad` for chaining).
+- `discretize()` yields a hard `HybridLogicEngine` with
+  `max_cycles = cycles`; a hard fixed point is absorbing, so early COMMIT
+  matches the unrolled result.
+
+| Test | Assertion |
+|---|---|
+| `bptt_matches_finite_differences_with_routing_held_fixed` | BPTT gradient over 3 cycles equals central differences (routing surrogate off, kinks skipped) |
+| `routing_surrogate_trains_key_logits` | key logits receive non-zero gradient |
+| `joint_bptt_learns_two_cycle_parity_and_hard_engine_agrees` | for some seed in a 64-seed search, 3-bit parity (unreachable in one cycle by one single-layer page) is learned; hard engine is exact, rounded relaxed equals hard on all 8 inputs, and distinct pages are routed across cycles |
+| `invalid_configurations_fail_closed` | validation |
+
+Limitations: toy task with a seed search; the routing gradient is a biased
+straight-through estimator; all pages are evaluated in relaxed training
+(cost linear in page count); widths stay limited to 64 bits; still not
+connected to MOR/SBG/atlas manifests beyond `PageId`.
