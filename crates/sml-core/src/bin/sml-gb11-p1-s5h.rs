@@ -178,7 +178,9 @@ fn load(doc: &Document) -> Result<Vec<u8>> {
 struct Arm {
     name: &'static str,
     masks: Vec<u128>,
-    table: usize,
+    /// Bytes per bank: `table / SEARCH_BANKS` for searched masks (the
+    /// allocation the search scored), `table / banks` otherwise.
+    bank_bytes: usize,
     rule: MixRule,
     update: UpdateRule,
     trace: bool,
@@ -220,7 +222,7 @@ fn file_sha(path: &Path) -> Result<String> {
 
 fn run_arm(roster: &Roster, arm: &Arm, out: &Path, manifest_sha: &str) -> Result<ArmResult> {
     let tables = Tables::new();
-    let mut model = Model::new(arm.masks.clone(), arm.rule, arm.update, arm.table);
+    let mut model = Model::with_bank_bytes(arm.masks.clone(), arm.rule, arm.update, arm.bank_bytes);
     let mut train_trace = if arm.trace {
         Some(trace_writer(out, "trace-train.bin")?)
     } else {
@@ -370,6 +372,15 @@ fn record(
     }
 }
 
+/// Searched arms keep the per-bank bytes `search_masks` scored.
+fn bank_bytes(arm: &str, table: usize, banks: usize) -> usize {
+    if arm.starts_with("search") {
+        table / SEARCH_BANKS
+    } else {
+        table / banks
+    }
+}
+
 type Documents = Vec<Vec<u8>>;
 
 fn prefix(roster: &Roster, plan: Plan) -> Result<(Documents, Documents)> {
@@ -465,7 +476,12 @@ fn cli(args: &[String]) -> Result<()> {
                 .map(|&(rule, update)| {
                     let (fit, holdout) = (&fit, &holdout);
                     scope.spawn(move || {
-                        let mut model = Model::new(masks.clone(), rule, update, plan.small_table);
+                        let mut model = Model::with_bank_bytes(
+                            masks.clone(),
+                            rule,
+                            update,
+                            bank_bytes(name, plan.small_table, masks.len()),
+                        );
                         holdout_cost(&mut model, fit, holdout)
                     })
                 })
@@ -496,7 +512,7 @@ fn cli(args: &[String]) -> Result<()> {
         .map(|((name, masks), &(rule, update))| Arm {
             name,
             masks: masks.clone(),
-            table: plan.small_table,
+            bank_bytes: bank_bytes(name, plan.small_table, masks.len()),
             rule,
             update,
             trace: *name == "search_q4",
@@ -504,8 +520,8 @@ fn cli(args: &[String]) -> Result<()> {
         .collect();
     arms.push(Arm {
         name: "search_f32",
+        bank_bytes: bank_bytes("search_f32", plan.large_table, searched.len()),
         masks: searched,
-        table: plan.large_table,
         rule: chosen[0].0,
         update: chosen[0].1,
         trace: false,

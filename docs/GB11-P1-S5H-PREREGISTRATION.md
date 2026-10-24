@@ -107,6 +107,12 @@ Le bras `search_q4` écrit deux fichiers d'enregistrements de 40 octets, little-
 - `gb11_p1_stream::read_trace` relit les traces et recalcule le BPC.
 - Chaque fichier fait environ 2,4 Go. Le workflow exige au moins 16 Go libres avant le run.
 
+## Amendement du 24 octobre 2026 (avant tout résultat)
+
+Une revue automatique a relevé un écart entre la recherche et le modèle final. La recherche note chaque banque avec `table / 6` octets. Or `Model::new` répartissait toute la table entre les banques effectivement retenues. Quand la recherche s'arrête avant 6 banques, les experts évalués différaient donc de ceux qui avaient été notés. Correction : les bras `search_*` gardent `table / 6` octets par banque (`Model::with_bank_bytes`), même avec moins de 6 banques. La table totale reste sous le budget. Un test vérifie que le modèle reconstruit reproduit exactement le score de la recherche.
+
+Le run Dell déjà lancé au commit `cd05f26` donne le même modèle si la recherche retient 6 banques, car les deux répartitions sont alors identiques ; dans ce cas, il fait foi. Sinon, ses bras `search_*` sont annulés et relancés au commit corrigé. Cette règle est fixée avant toute lecture de ses résultats.
+
 ## Exécution
 
 Le workflow RemoteOps `sml-gb11-p1-s5h-dell.yml` tourne sur le Dell T430 :
