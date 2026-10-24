@@ -55,7 +55,7 @@ pub fn features(record: &TraceRecord, depth: usize) -> [u64; 2] {
     [record.context, high]
 }
 
-fn feature_bit(words: &[u64; 2], index: usize) -> bool {
+pub(crate) fn feature_bit(words: &[u64; 2], index: usize) -> bool {
     (words[index / 64] >> (index % 64)) & 1 != 0
 }
 
@@ -122,6 +122,18 @@ impl Master {
             }
             self.bias[depth] -= step;
         }
+    }
+
+    /// f32 weights, `DEPTHS` rows of `INPUTS`.
+    #[must_use]
+    pub fn weights(&self) -> &[f32] {
+        &self.weights
+    }
+
+    /// f32 bias per depth, in head units (1/8 ln-odds).
+    #[must_use]
+    pub fn bias(&self) -> [f32; DEPTHS] {
+        self.bias
     }
 
     /// Ternary export: `±1` where `|w| >= tau`, bias rounded to `i32`.
