@@ -113,8 +113,15 @@ pub fn fit_associative_focus(
     }
     // The first experiment caps total input dimensions independently of u64
     // event/state representability, avoiding accidental quadratic growth.
-    if config.event_bits.checked_add(config.state_bits).unwrap_or(usize::MAX) > 16 {
-        return Err(FocusFitError::Policy("BAF-1 supports at most 16 total input bits"));
+    if config
+        .event_bits
+        .checked_add(config.state_bits)
+        .unwrap_or(usize::MAX)
+        > 16
+    {
+        return Err(FocusFitError::Policy(
+            "BAF-1 supports at most 16 total input bits",
+        ));
     }
     if train.is_empty() || validation.is_empty() {
         return Err(FocusFitError::EmptySplit);
@@ -123,8 +130,8 @@ pub fn fit_associative_focus(
         return Err(FocusFitError::TooManySamples);
     }
 
-    let baseline = BooleanAssociativeFocus::new(config, pages.to_vec())
-        .map_err(FocusFitError::Engine)?;
+    let baseline =
+        BooleanAssociativeFocus::new(config, pages.to_vec()).map_err(FocusFitError::Engine)?;
     let index = pages
         .iter()
         .position(|p| p.id == editable_id)
@@ -135,7 +142,9 @@ pub fn fit_associative_focus(
     validate_splits(config, train, validation)?;
     let basis = feature_bank(config, policy.max_degree);
     if basis.len() > policy.max_basis_terms {
-        return Err(FocusFitError::Policy("monomial bank exceeds declared budget"));
+        return Err(FocusFitError::Policy(
+            "monomial bank exceeds declared budget",
+        ));
     }
 
     let baseline_train = error_bits(&baseline, train)?;
@@ -486,7 +495,9 @@ mod tests {
                     ..FocusFitPolicy::default()
                 }
             ),
-            Err(FocusFitError::Policy("monomial bank exceeds declared budget"))
+            Err(FocusFitError::Policy(
+                "monomial bank exceeds declared budget"
+            ))
         );
     }
 }
