@@ -15,6 +15,8 @@ cargo test --locked -p sml-core --example baf_focus_compare
 
 CSV fields: `model,split,cases,error_bits,selected_pages,train_candidate_evaluations,admitted`. Each value is deterministic under a pinned source revision; no wall-clock claims. `selected_pages` is the aggregate selected count on that panel, not proof of lower inference cost.
 
+This benchmark is intentionally a **research fixture**. No results are known until the example has executed on the exact submitted commit. A passing compilation/test suite alone must not be reported as a measured benchmark win.
+
 Five methods:
 
 - **inactive**: no page gate is active.
