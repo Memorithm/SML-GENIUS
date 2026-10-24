@@ -13,7 +13,7 @@ C'est la porte go/no-go de l'option B. Si la réponse est non, H-2 (experts de p
 
 ## Données
 
-- Corpus S5h (RemoteOps `docs/SML_50M_S5H_PES2O_MIX_TRAIN_20261022.md`) : TRAIN et DEV S5h tels que matérialisés sur le Dell. 1 article sur 32 va au DEV, plafonné à 32 Mio. Les données ne quittent pas le Dell.
+- Corpus S5h (RemoteOps `docs/SML_50M_S5H_PES2O_MIX_TRAIN_20261022.md`) : TRAIN et DEV S5h tels que matérialisés sur le Dell, avec le manifeste du témoin (`966eb65f…`). Le DEV complet fait 60 256 970 octets (60 237 946 positions prédites). Il réunit les DEV S1b et S4e et la part peS2o du DEV, à raison d'un article sur 32 ; seule cette part peS2o est plafonnée à 32 Mio. Les données ne quittent pas le Dell.
 - TEST reste fermé. Aucun hyperparamètre n'est choisi sur le DEV.
 
 ## Traces du run P1 (format figé avec GB-11 le 24 octobre 2026)
