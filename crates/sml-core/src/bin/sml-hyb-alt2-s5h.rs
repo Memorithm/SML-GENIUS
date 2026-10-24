@@ -106,7 +106,9 @@ fn select(master: &Master, basis: Basis, hold: &[TraceRecord]) -> Result<Selecti
     let mut best = None;
     for tau in THRESHOLDS {
         for scale in SCALES {
-            let head = master.export(tau, scale)?;
+            let head = master
+                .export(tau, scale)
+                .map_err(|error| format!("invalid ternary export: {error:?}"))?;
             let bpc = hold.iter().map(|r| head.cost(r)).sum::<f64>() / hold.len() as f64;
             let candidate = Selection {
                 basis,
