@@ -254,8 +254,23 @@ impl Model {
     /// `table_bytes` is split evenly across banks, in whole blocks.
     #[must_use]
     pub fn new(masks: Vec<u128>, rule: MixRule, update: UpdateRule, table_bytes: usize) -> Self {
+        assert!(!masks.is_empty());
+        let bank_bytes = table_bytes / masks.len();
+        Self::with_bank_bytes(masks, rule, update, bank_bytes)
+    }
+
+    /// Every bank gets `bank_bytes`, in whole blocks. A searched architecture
+    /// keeps the allocation `search_masks` scored, even when the search
+    /// stopped before its requested bank count.
+    #[must_use]
+    pub fn with_bank_bytes(
+        masks: Vec<u128>,
+        rule: MixRule,
+        update: UpdateRule,
+        bank_bytes: usize,
+    ) -> Self {
         assert!(!masks.is_empty() && masks.len() <= MAX_BANKS);
-        let blocks = table_bytes / BLOCK_BYTES / masks.len();
+        let blocks = bank_bytes / BLOCK_BYTES;
         assert!(blocks > 0, "table too small for the bank count");
         let tables = vec![BankTable::new(blocks); masks.len()];
         Self {
@@ -822,6 +837,17 @@ mod tests {
         let order0 = steps[0].holdout_bpc;
         let last = steps.last().unwrap().holdout_bpc;
         assert!(last < order0 - 0.5, "{order0} -> {last}");
+        // The searched allocation reproduces the search score exactly, also
+        // when fewer banks than requested were kept.
+        let mut rebuilt = Model::with_bank_bytes(
+            masks.clone(),
+            MixRule::Average,
+            UpdateRule::Stationary,
+            (1 << 20) / 3,
+        );
+        let events = (holdout.len() - 2) as f64;
+        let rebuilt_bpc = holdout_cost(&mut rebuilt, &[&fit], &[&holdout]) / events;
+        assert!((rebuilt_bpc - last).abs() < 1e-9, "{rebuilt_bpc} vs {last}");
         let mut a = Model::new(
             masks.clone(),
             MixRule::Average,
