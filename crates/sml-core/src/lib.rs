@@ -102,6 +102,7 @@ pub mod gru_side;
 pub mod hyb_alt_pairwise_residual;
 pub mod hyb_alt_ternary_sidecar;
 pub mod hyb_alt_train_only;
+pub mod hyb_fused_head;
 pub mod hyb_h1_residual;
 pub mod hyb_h1b_calibrated;
 pub mod hyb_h1c_stable;
