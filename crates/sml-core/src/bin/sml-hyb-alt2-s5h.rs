@@ -5,9 +5,7 @@
 use sml_core::{
     elastic_ngram_paged_sha::{hex, Sha256},
     gb11_p1_stream::{read_trace, TraceRecord},
-    hyb_alt_pairwise_residual::{
-        Basis, Head, Master, SEEDS, SCALES, THRESHOLDS, HEAD_BYTES,
-    },
+    hyb_alt_pairwise_residual::{Basis, Head, Master, HEAD_BYTES, SCALES, SEEDS, THRESHOLDS},
     hyb_h1_residual::CountTable,
 };
 use std::{
@@ -64,7 +62,9 @@ fn audit(path: &Path, split: u8, json: &str, field: &str) -> Result<Profile> {
         }
         let index = (record.doc_index, record.position);
         if record.split != split || last.is_some_and(|previous| index <= previous) {
-            fault = Some(format!("unsorted, repeated or wrong split record at {index:?}"));
+            fault = Some(format!(
+                "unsorted, repeated or wrong split record at {index:?}"
+            ));
             return;
         }
         last = Some(index);
@@ -237,14 +237,19 @@ fn run(trace: &Path, output: &Path) -> Result<String> {
         observed += 1;
     })?;
     if observed != dev.rows || mismatches > 0 {
-        return Err(format!("DEV count or integer oracle failure: {observed}, {mismatches}").into());
+        return Err(
+            format!("DEV count or integer oracle failure: {observed}, {mismatches}").into(),
+        );
     }
     let a0_bpc = a0_sum / observed as f64;
     if (a0_bpc - dev.bpc).abs() > 1e-6 {
         return Err("DEV baseline changed while evaluating H-ALT-2".into());
     }
     let a0c_bpc = a0c_sum / observed as f64;
-    let a1_bpc: Vec<f64> = head_bits.iter().map(|&bits| bits / observed as f64).collect();
+    let a1_bpc: Vec<f64> = head_bits
+        .iter()
+        .map(|&bits| bits / observed as f64)
+        .collect();
     let spread = (a1_bpc[0] - a1_bpc[1]).abs();
     let reference = a0_bpc.min(a0c_bpc);
     let go = a1_bpc
@@ -330,12 +335,16 @@ mod tests {
         let path = root.join("train");
         fs::write(&path, sample.encode()).unwrap();
         let digest = hex(&sml_core::elastic_ngram_paged_sha::sha256(&sample.encode()));
-        let json = format!(
-            "  \"train_trace\": {{\"sha256\": \"{digest}\", \"bpc\": 8.000000000}}"
-        );
+        let json = format!("  \"train_trace\": {{\"sha256\": \"{digest}\", \"bpc\": 8.000000000}}");
         assert_eq!(audit(&path, 0, &json, "train_trace").unwrap().rows, 1);
         assert!(audit(&path, 1, &json, "train_trace").is_err());
-        assert!(audit(&path, 0, &json.replace(&digest, &"0".repeat(64)), "train_trace").is_err());
+        assert!(audit(
+            &path,
+            0,
+            &json.replace(&digest, &"0".repeat(64)),
+            "train_trace"
+        )
+        .is_err());
         let mut torn = sample.encode().to_vec();
         torn.pop();
         fs::write(&path, &torn).unwrap();
