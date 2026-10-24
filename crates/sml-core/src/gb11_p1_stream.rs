@@ -322,6 +322,24 @@ impl Model {
         Ok(())
     }
 
+    /// Restores bank tables written by `write_weights` into a model of the
+    /// same shape.
+    pub fn read_weights(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        if bytes.len() != self.table_bytes() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "weights do not match the model shape",
+            ));
+        }
+        let mut rest = bytes;
+        for table in &mut self.tables {
+            let (head, tail) = rest.split_at(table.data.len());
+            table.data.copy_from_slice(head);
+            rest = tail;
+        }
+        Ok(())
+    }
+
     /// Codes `target` after `ctx`, returning its cost in bits. When `learn`,
     /// counts are updated after each decision is predicted (prequential).
     pub fn code_byte(
@@ -785,6 +803,15 @@ mod tests {
         assert_eq!(model.weights_sha(), sha, "DEV must not change the weights");
         assert!(warm / (events as f64) < 2.5, "bpc {}", warm / events as f64);
         assert!(model.touched_slots() > 0);
+        // A model restored from its weights codes DEV identically.
+        let mut bytes = Vec::new();
+        model.write_weights(&mut bytes).unwrap();
+        let mut copy = Model::new(model.masks.clone(), model.rule, model.update, 1 << 20);
+        assert!(copy.read_weights(&bytes[1..]).is_err());
+        copy.read_weights(&bytes).unwrap();
+        assert_eq!(copy.weights_sha(), sha);
+        let (again, _) = copy.code_document(&tables, &dev, false, |_, _, _, _| {});
+        assert_eq!(again.to_bits(), warm.to_bits());
     }
 
     #[test]

@@ -27,12 +27,17 @@ Ce changement a été choisi **après** avoir vu les résultats H-1c sur EVAL2. 
 
 ## Run P1
 
-- **Mode.** `sml-gb11-p1-s5h run-h1d` :
-  - seul `bytes_q4` est entraîné, sans recherche ; sa configuration est choisie comme dans tous les runs P1 (préfixe TRAIN, CAL exclu) ;
-  - CAL (`doc_index % 16 == 7`) reste hors entraînement ;
-  - CAL (split 2) et EVAL3 (split 4) sont tracés avec le modèle gelé, après une passe EVAL3 sans trace qui mesure `eval3_us_per_position` ;
-  - chaque trace a un fichier compagnon `.banks.bin` (`BankPlane`, 72 o par enregistrement, même ordre) ;
-  - le DEV S5h n'est jamais ouvert (`dev_read false`).
+Le run P1 est coupé en deux étapes, pour qu'EVAL3 ne soit lu par aucun programme tant que la porte CAL-SEL n'est pas passée.
+
+- **Étape 1 : `sml-gb11-p1-s5h run-h1d`.**
+  - Seul `bytes_q4` est entraîné, sans recherche. Sa configuration est choisie comme dans tous les runs P1 (préfixe TRAIN, CAL exclu).
+  - CAL (`doc_index % 16 == 7`) reste hors entraînement. Il est tracé avec le modèle gelé (split 2).
+  - Les poids sont enregistrés (`weights.bin`).
+  - Le manifeste EVAL3 n'est pas passé au programme, et le DEV S5h n'est jamais ouvert.
+- **Étape 2 : `sml-gb11-p1-s5h trace-h1d-eval3`, seulement si la porte est passée.**
+  - Le modèle gelé est restauré depuis `weights.bin`. Son SHA-256 doit être celui de l'étape 1.
+  - Une passe EVAL3 sans trace mesure `eval3_us_per_position`. EVAL3 est ensuite tracé (split 4), et le programme écrit `eval3.json`.
+- Chaque trace a un fichier compagnon `.banks.bin` (`BankPlane`, 72 o par enregistrement, même ordre).
 - **Stretch par banque.** Pour chaque décision et chaque banque, le stretch de la cellule de la banque (le même que celui qui entre dans la moyenne), divisé par 16 en tronquant vers zéro et saturé à ±127.
 - **Contrôle de déterminisme.** Le SHA-256 des poids `bytes_q4` doit être celui des runs H-1b et H-1c (`7f4c233d…`). Sinon, le run s'arrête avant la tête.
 
@@ -59,9 +64,11 @@ A0c (table booléenne de même taille) est retiré : il a choisi λ = 0 dans H-1
 
 ## Critères (figés, sur `bytes_q4`)
 
-1. **Étape 1 : porte CAL-SEL, avant toute lecture d'EVAL3.**
+1. **Étape 1 : porte CAL-SEL, avant toute lecture d'EVAL3** (`sml-hyb-h1d-s5h gate`).
    - Pour chaque graine, gain CAL-SEL = BPC_CAL-SEL(A0) − BPC_CAL-SEL(A1d).
-   - Si ce gain est inférieur à 0,03 pour au moins une graine, le run s'arrête avec le verdict `NO_GO_CAL_GATE`. EVAL3 n'est pas ouvert et reste disponible.
+   - Si ce gain est inférieur à 0,03 pour au moins une graine, le run s'arrête avec le verdict `NO_GO_CAL_GATE`. EVAL3 n'est ni tracé ni lu, et reste disponible. Sinon, le verdict d'étape est `CAL_GATE_PASS`.
+   - Les poids P1 doivent être ceux des runs H-1b et H-1c (`7f4c233d…`). Le programme le vérifie lui-même.
+   - `sml-hyb-h1d-s5h run` refait cette étape (elle est déterministe), puis lit EVAL3 une seule fois.
    - Raison de la marge : en H-1c, le gain a baissé d'environ 0,004 entre CAL-SEL et EVAL2. Ouvrir EVAL3 pour un gain CAL-SEL de 0,02 à 0,03 gâcherait probablement l'échantillon.
 2. **Exactitude.**
    - Sur le Dell, le noyau popcount et l'oracle scalaire doivent donner 0 écart sur toutes les positions EVAL3, pour les deux graines.

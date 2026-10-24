@@ -1,19 +1,27 @@
 //! HYB H-1d: averaged ternary head that sees every P1 bank, judged on EVAL3.
 //! Protocol: docs/HYB-H1D-S5H-BANK-HEAD-PREREGISTRATION.md.
 //!
-//! `run P1_H1D_OUT NEW_OUTPUT_DIR` reads `bytes_q4/` written by
-//! `sml-gb11-p1-s5h run-h1d`: `trace-cal.bin` (split 2), `trace-eval3.bin`
-//! (split 4), their `.banks.bin` sidecars and `trace.json`, whose P1 BPC is
-//! recomputed first. Per seed, both heads train `EPOCHS` permuted epochs on
-//! CAL-FIT (`doc_index % 32 == 7`) and export their averaged master:
+//! Reads `bytes_q4/` written by `sml-gb11-p1-s5h`: `trace-cal.bin` (split
+//! 2), its `.banks.bin` sidecar and `trace.json` from `run-h1d`, whose P1
+//! BPC is recomputed first and whose weights must be the H-1b/H-1c
+//! `bytes_q4` weights (`P1_WEIGHTS_SHA256`, smoke runs exempt). Per seed,
+//! both heads train `EPOCHS` permuted epochs on CAL-FIT
+//! (`doc_index % 32 == 7`) and export their averaged master:
 //!
 //! * A1c, the H-1c head (124 inputs), as a control on this run's CAL;
 //! * A1d, the bank head (`hyb_h1d_bank_head`).
 //!
-//! (tau, lambda) are picked on CAL-SEL (`doc_index % 32 == 23`). Stage 1:
-//! when the CAL-SEL gain of A1d over P1 is below `CAL_GATE_BPC` for either
-//! seed, the run stops with `NO_GO_CAL_GATE` and EVAL3 is not opened.
-//! Stage 2: EVAL3 is read once. The S5h DEV is never opened. `replay
+//! (tau, lambda) are picked on CAL-SEL (`doc_index % 32 == 23`).
+//!
+//! * `gate P1_H1D_OUT NEW_OUTPUT_DIR` is stage 1: `CAL_GATE_PASS` when the
+//!   CAL-SEL gain of A1d over P1 reaches `CAL_GATE_BPC` for both seeds,
+//!   otherwise `NO_GO_CAL_GATE`. EVAL3 does not exist yet: P1 traces it
+//!   (`trace-h1d-eval3`) only after a pass.
+//! * `run P1_H1D_OUT NEW_OUTPUT_DIR` redoes stage 1 (deterministic) and,
+//!   if the gate passes, reads `trace-eval3.bin`, its sidecar and
+//!   `eval3.json` once.
+//!
+//! The S5h DEV is never opened. `replay
 //! HEAD.tsv` prints the i32 digest of an A1d head on synthetic records
 //! (cross-host check); `smoke` runs on generated traces and is labelled
 //! SMOKE, never a result. TEST is never read. NOT_PROMOTED.
@@ -47,6 +55,9 @@ const MAX_COST_RATIO: f64 = 1.5;
 const REPLAY_RECORDS: usize = 65_536;
 const CAL_FIT: u32 = 7;
 const CAL_SEL: u32 = 23;
+/// `bytes_q4` weights of the H-1b and H-1c runs: a preregistered run on
+/// other P1 weights is refused.
+const P1_WEIGHTS_SHA256: &str = "7f4c233d6c4d67e1d300068799f4653cfcaedda4158587478c99ec1d31c3c418";
 
 /// One document's contiguous records in a trace file.
 #[derive(Clone, Copy)]
@@ -129,6 +140,16 @@ fn reported(json: &str, key: &str, field: &str) -> Result<f64> {
         return Err(format!("trace.json {key} has no {field}").into());
     }
     Ok(rest[..end].parse()?)
+}
+
+/// The string value of `"key": "..."`.
+fn json_str<'a>(json: &'a str, key: &str) -> Result<&'a str> {
+    let pattern = format!("\"{key}\": \"");
+    let rest = &json[json
+        .find(&pattern)
+        .ok_or_else(|| format!("trace.json has no {key}"))?
+        + pattern.len()..];
+    Ok(&rest[..rest.find('"').ok_or("unterminated string")?])
 }
 
 fn check_reported(json: &str, key: &str, got: f64) -> Result<()> {
@@ -333,8 +354,12 @@ fn replay_digest(head: &BankHead, eighths: i32) -> Result<String> {
     Ok(hex(&sha256(&bytes)))
 }
 
-fn evaluate(dir: &Path, out: &Path) -> Result<String> {
+fn evaluate(dir: &Path, out: &Path, label: &str, open_eval3: bool) -> Result<String> {
     let json = fs::read_to_string(dir.join("trace.json"))?;
+    let weights = json_str(&json, "weights_sha256")?;
+    if label == "PREREGISTERED" && weights != P1_WEIGHTS_SHA256 {
+        return Err(format!("P1 weights {weights} are not the H-1b/H-1c bytes_q4 weights").into());
+    }
     let cal = scan(
         &dir.join("trace-cal.bin"),
         &dir.join("trace-cal.banks.bin"),
@@ -342,10 +367,6 @@ fn evaluate(dir: &Path, out: &Path) -> Result<String> {
     )?;
     let a0_cal = bpc(cal.bits, cal.records);
     check_reported(&json, "cal_trace", a0_cal)?;
-    let p1_us = reported(&json, "eval3_us_per_position", "eval3_us_per_position")?;
-    if p1_us.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        return Err("trace.json eval3_us_per_position must be positive".into());
-    }
     let (mut fit, mut sel) = (Vec::new(), Vec::new());
     for span in &cal.spans {
         match span.doc % 32 {
@@ -385,7 +406,8 @@ fn evaluate(dir: &Path, out: &Path) -> Result<String> {
         chosen.push(seed?);
     }
     let mut report = format!(
-        "{BASE}_cal_fit_records\t{fit_records}\n{BASE}_cal_sel_records\t{sel_records}\n\
+        "{BASE}_p1_weights_sha256\t{weights}\n\
+         {BASE}_cal_fit_records\t{fit_records}\n{BASE}_cal_sel_records\t{sel_records}\n\
          {BASE}_dev_read\tfalse\n{BASE}_a0_cal_bpc\t{a0_cal:.9}\n{BASE}_a0_sel_bpc\t{a0_sel:.9}\n\
          {BASE}_inputs\t{INPUTS}\n{BASE}_head_bytes\t{}\n{BASE}_epochs\t{EPOCHS}\n\
          {BASE}_burn_in_epochs\t{BURN_IN_EPOCHS}\n",
@@ -419,6 +441,10 @@ fn evaluate(dir: &Path, out: &Path) -> Result<String> {
         report += &format!("{BASE}_eval3_read\tfalse\nverdict\tNO_GO_CAL_GATE\n");
         return Ok(report);
     }
+    if !open_eval3 {
+        report += &format!("{BASE}_eval3_read\tfalse\nverdict\tCAL_GATE_PASS\n");
+        return Ok(report);
+    }
 
     // Stage 2: EVAL3, read once.
     let eval3 = scan(
@@ -430,8 +456,16 @@ fn evaluate(dir: &Path, out: &Path) -> Result<String> {
     if cal.spans.iter().any(|s| eval_docs.contains(&s.doc)) {
         return Err("a doc_index appears in both CAL and EVAL3".into());
     }
+    let eval_json = fs::read_to_string(dir.join("eval3.json"))?;
+    if json_str(&eval_json, "weights_sha256")? != weights {
+        return Err("eval3.json and trace.json name different P1 weights".into());
+    }
     let a0_eval = bpc(eval3.bits, eval3.records);
-    check_reported(&json, "eval3_trace", a0_eval)?;
+    check_reported(&eval_json, "eval3_trace", a0_eval)?;
+    let p1_us = reported(&eval_json, "eval3_us_per_position", "eval3_us_per_position")?;
+    if p1_us.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+        return Err("eval3.json eval3_us_per_position must be positive".into());
+    }
     let mut d_bits = [0.0; SEEDS.len()];
     let mut c_bits = [0.0; SEEDS.len()];
     let mut mismatches = 0u64;
@@ -492,9 +526,13 @@ fn evaluate(dir: &Path, out: &Path) -> Result<String> {
     Ok(report)
 }
 
-fn run(p1: &Path, out: &Path, label: &str) -> Result<()> {
+fn run(p1: &Path, out: &Path, label: &str, open_eval3: bool) -> Result<()> {
     fs::create_dir(out)?;
-    let report = format!("label\t{label}\n{}", evaluate(&p1.join(BASE), out)?);
+    let report = format!(
+        "label\t{label}\nstage\t{}\n{}",
+        if open_eval3 { "run" } else { "gate" },
+        evaluate(&p1.join(BASE), out, label, open_eval3)?
+    );
     fs::write(out.join("h1d.tsv"), &report)?;
     print!("{report}");
     Ok(())
@@ -562,7 +600,13 @@ fn write_trace_json(dir: &Path, cal_bpc: f64, eval3_bpc: f64) -> Result<()> {
     fs::write(
         dir.join("trace.json"),
         format!(
-            "{{\n  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"bpc\": {cal_bpc:.9}}},\n  \"eval3_trace\": {{\"file\": \"trace-eval3.bin\", \"bpc\": {eval3_bpc:.9}}},\n  \"eval3_us_per_position\": 1.000000\n}}\n"
+            "{{\n  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"bpc\": {cal_bpc:.9}}},\n  \"weights_sha256\": \"smoke\"\n}}\n"
+        ),
+    )?;
+    fs::write(
+        dir.join("eval3.json"),
+        format!(
+            "{{\n  \"eval3_trace\": {{\"file\": \"trace-eval3.bin\", \"bpc\": {eval3_bpc:.9}}},\n  \"eval3_us_per_position\": 1.000000,\n  \"weights_sha256\": \"smoke\"\n}}\n"
         ),
     )?;
     Ok(())
@@ -570,9 +614,12 @@ fn write_trace_json(dir: &Path, cal_bpc: f64, eval3_bpc: f64) -> Result<()> {
 
 fn cli(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
-        Some("run") if args.len() == 4 => {
-            run(Path::new(&args[2]), Path::new(&args[3]), "PREREGISTERED")
-        }
+        Some(mode @ ("gate" | "run")) if args.len() == 4 => run(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            "PREREGISTERED",
+            mode == "run",
+        ),
         Some("replay") if args.len() == 3 => {
             let (head, eighths) = parse_head(&fs::read_to_string(&args[2])?)?;
             println!("replay_sha256\t{}", replay_digest(&head, eighths)?);
@@ -581,9 +628,9 @@ fn cli(args: &[String]) -> Result<()> {
         Some("smoke") if args.len() == 3 => {
             let root = Path::new(&args[2]);
             write_smoke(&root.join("p1"), 14)?;
-            run(&root.join("p1"), &root.join("out"), "SMOKE")
+            run(&root.join("p1"), &root.join("out"), "SMOKE", true)
         }
-        _ => Err("usage: run P1_H1D_OUT NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
+        _ => Err("usage: (gate|run) P1_H1D_OUT NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
     }
 }
 
@@ -648,10 +695,54 @@ mod tests {
         write_smoke(&root.join("p1"), 8).unwrap();
         // Make EVAL3 unreadable: the gate must stop before it.
         fs::write(root.join("p1/bytes_q4/trace-eval3.bin"), b"torn").unwrap();
-        run(&root.join("p1"), &root.join("out"), "SMOKE").unwrap();
+        run(&root.join("p1"), &root.join("out"), "SMOKE", true).unwrap();
         let report = fs::read_to_string(root.join("out/h1d.tsv")).unwrap();
         assert_eq!(value(&report, "verdict"), "NO_GO_CAL_GATE");
         assert_eq!(value(&report, "bytes_q4_eval3_read"), "false");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_gate_stage_needs_no_eval3_and_matches_the_full_run() {
+        let root = temp("stage");
+        let _ = fs::remove_dir_all(&root);
+        write_smoke(&root.join("p1"), 14).unwrap();
+        let dir = root.join("p1").join(BASE);
+        let eval3: Vec<_> = ["trace-eval3.bin", "trace-eval3.banks.bin", "eval3.json"]
+            .iter()
+            .map(|n| (dir.join(n), fs::read(dir.join(n)).unwrap()))
+            .collect();
+        for (path, _) in &eval3 {
+            fs::remove_file(path).unwrap();
+        }
+        run(&root.join("p1"), &root.join("gate"), "SMOKE", false).unwrap();
+        let gate = fs::read_to_string(root.join("gate/h1d.tsv")).unwrap();
+        assert_eq!(value(&gate, "verdict"), "CAL_GATE_PASS");
+        assert_eq!(value(&gate, "bytes_q4_eval3_read"), "false");
+        // Without EVAL3, the full run cannot judge.
+        assert!(run(&root.join("p1"), &root.join("early"), "SMOKE", true).is_err());
+        for (path, bytes) in &eval3 {
+            fs::write(path, bytes).unwrap();
+        }
+        run(&root.join("p1"), &root.join("out"), "SMOKE", true).unwrap();
+        let full = fs::read_to_string(root.join("out/h1d.tsv")).unwrap();
+        for seed in SEEDS {
+            let key = format!("bytes_q4_a1d_seed{seed}_replay_sha256");
+            assert_eq!(value(&gate, &key), value(&full, &key));
+            let head = format!("head-a1d-seed{seed}.tsv");
+            assert_eq!(
+                fs::read(root.join("gate").join(&head)).unwrap(),
+                fs::read(root.join("out").join(&head)).unwrap()
+            );
+        }
+        // A preregistered run refuses P1 weights other than H-1b/H-1c's.
+        assert!(run(
+            &root.join("p1"),
+            &root.join("prereg"),
+            "PREREGISTERED",
+            false
+        )
+        .is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -663,7 +754,7 @@ mod tests {
         let dir = root.join(BASE);
         // trace.json reporting another CAL BPC.
         write_trace_json(&dir, 7.5, 8.0).unwrap();
-        assert!(run(&root, &root.join("out1"), "SMOKE").is_err());
+        assert!(run(&root, &root.join("out1"), "SMOKE", true).is_err());
         // A truncated sidecar.
         write_smoke(&root, 14).unwrap();
         let banks = fs::read(dir.join("trace-cal.banks.bin")).unwrap();
@@ -672,13 +763,13 @@ mod tests {
             &banks[..banks.len() - BANK_PLANE_BYTES],
         )
         .unwrap();
-        assert!(run(&root, &root.join("out2"), "SMOKE").is_err());
+        assert!(run(&root, &root.join("out2"), "SMOKE", true).is_err());
         // A misaligned sidecar of the right length.
         write_smoke(&root, 14).unwrap();
         let mut banks = fs::read(dir.join("trace-cal.banks.bin")).unwrap();
         banks[4] ^= 1;
         fs::write(dir.join("trace-cal.banks.bin"), &banks).unwrap();
-        assert!(run(&root, &root.join("out3"), "SMOKE").is_err());
+        assert!(run(&root, &root.join("out3"), "SMOKE", true).is_err());
         assert!(cli(&["bin".into(), "run".into(), "a".into()]).is_err());
         let bad = format!(
             "row\t{ROW}\ndepths\t{DEPTHS}\nbanks\t{MAX_BANKS}\nlambda_eighths\t3\nunit\t1,1,1,1,1,1,1,1\nbias\t0,0,0,0,0,0,0,0\nweights\t{}\n",
