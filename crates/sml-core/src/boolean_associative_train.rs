@@ -212,7 +212,7 @@ fn bit_mask(bits: usize) -> u64 {
     }
 }
 
-fn validate_splits(
+pub(crate) fn validate_splits(
     config: AssociativeFocusConfig,
     train: &[FocusTransition],
     validation: &[FocusTransition],
@@ -246,7 +246,7 @@ fn validate_splits(
     Ok(())
 }
 
-fn feature_bank(config: AssociativeFocusConfig, max_degree: usize) -> Vec<AnfMonomial> {
+pub(crate) fn feature_bank(config: AssociativeFocusConfig, max_degree: usize) -> Vec<AnfMonomial> {
     let total = config.event_bits + config.state_bits;
     let atom = |position: usize| -> AnfMonomial {
         if position < config.event_bits {
@@ -276,7 +276,7 @@ fn feature_bank(config: AssociativeFocusConfig, max_degree: usize) -> Vec<AnfMon
     basis
 }
 
-fn error_bits(
+pub(crate) fn error_bits(
     engine: &BooleanAssociativeFocus,
     samples: &[FocusTransition],
 ) -> Result<u64, FocusFitError> {
