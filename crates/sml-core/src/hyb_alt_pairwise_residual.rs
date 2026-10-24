@@ -151,9 +151,7 @@ impl Master {
             if row.iter().any(|weight| !weight.is_finite()) || !self.biases[depth].is_finite() {
                 return Err(HybridAltError::BiasCouldOverflow);
             }
-            let mut ranked: Vec<usize> = (0..FEATURES)
-                .filter(|&i| row[i].abs() >= tau)
-                .collect();
+            let mut ranked: Vec<usize> = (0..FEATURES).filter(|&i| row[i].abs() >= tau).collect();
             ranked.sort_by(|&a, &b| {
                 row[b]
                     .abs()
@@ -205,7 +203,11 @@ impl Head {
     pub fn active_weights(&self) -> usize {
         self.rows
             .iter()
-            .map(|row| (0..FEATURES).filter(|&i| row.weight_at(i) != Some(0)).count())
+            .map(|row| {
+                (0..FEATURES)
+                    .filter(|&i| row.weight_at(i) != Some(0))
+                    .count()
+            })
             .sum()
     }
 
