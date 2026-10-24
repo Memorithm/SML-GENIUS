@@ -37,6 +37,22 @@ impl BackoffBitCounts {
         }
     }
 
+    /// Leave-one-out probability of a 1: the observation `bit` (already
+    /// recorded under `keys`) is removed from every level first.
+    pub fn p_one_excluding(&self, keys: &[u64], bit: bool) -> f64 {
+        let mut p = 0.5;
+        for (table, &k) in self.levels.iter().zip(keys) {
+            let [mut n0, mut n1] = table.get(&k).copied().unwrap_or([0, 0]);
+            if bit {
+                n1 = n1.saturating_sub(1);
+            } else {
+                n0 = n0.saturating_sub(1);
+            }
+            p = (f64::from(n1) + self.beta * p) / (f64::from(n0 + n1) + self.beta);
+        }
+        p
+    }
+
     /// Probability of a 1.
     pub fn p_one(&self, keys: &[u64]) -> f64 {
         let mut p = 0.5;

@@ -82,7 +82,8 @@ pub fn features(ctx: &[u8], prefix: u8, j: usize, c: usize, out: &mut Vec<f64>) 
     }
 }
 
-fn page_keys(train: &[u8], cfg: &ByteLmConfig) -> Vec<(PageId, u64)> {
+/// Page keys (previous-byte keys) for the given route mode.
+pub fn page_keys(train: &[u8], cfg: &ByteLmConfig) -> Vec<(PageId, u64)> {
     let p = match cfg.route {
         RouteMode::Single => 1,
         _ => cfg.pages.clamp(1, 256),

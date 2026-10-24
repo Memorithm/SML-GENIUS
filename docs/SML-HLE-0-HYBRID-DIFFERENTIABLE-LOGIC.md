@@ -240,3 +240,49 @@ Bench (`hle3_route_bench`): keys are k-majority centres (2 iterations) over 64-b
 | uniform random | 65 536 | 384 644 | 338 396 | 65 536 | 67 942 (fallback) |
 
 Reading: with learned text keys the index is about 3.7x faster at 65 536 pages and examines about 7.6 % of the keys. At 4 096 pages it is about 1.7x **slower** than the scan, even though it examines fewer keys, because of probe and hash overhead. Uniform keys gain nothing. These are single runs on a noisy shared host.
+
+## HLE-4: long context (16 to 1024 bytes) with Boolean memory and circuits (research branch)
+
+Status: research only, stacked on HLE-3. `crates/sml-core/src/hle4.rs`, reproduce with `scripts/hle4-bench.sh`. Measured in a shared 8-CPU cloud container. Same proxy corpus and split (400 000 TRAIN / 60 000 DEV bytes of repository `docs/*.md`). These files are short and topically mixed, so long-range structure is limited. Results here say little about a real long-document corpus.
+
+HLE-3 rerun after the clippy cleanup: every BPC value is identical. Routing timings moved within noise; the one notable change is uniform keys at 65 536 pages, where the index went from 338 to 395 µs/q against a 385 µs/q scan (no gain either way).
+
+### Setup
+
+Everything is bit level (MSB-first tree), Boolean or low-bit, with bounded state; there is no attention, no softmax over tokens and no KV cache. Within a window of the last `L` bytes:
+- **cache**: unigram and bigram bit counts over the window;
+- **match memory**: a Boolean-addressed associative memory (hash of the last 4 or 8 bytes → most recent position within `L`). It predicts the byte that followed, in a copy/induction-like way, and its signal is used only while it agrees with the known high bits;
+- **sketch**: a 128-bit hashed-bigram occupancy summary of the window (bit set when the bucket count is at least average), fed to the circuits.
+
+A logistic mixer with one weight vector per bit depth combines: the stretched order-k backoff probability (leave-one-out on TRAIN), the cache probabilities, the match signals and, optionally, 16 output bits of a routed circuit. The circuit has 16 pages keyed on the previous byte, widths 128-128-16, 1 epoch, and sees 4 local bytes + the sketch + the match byte + the prefix. Circuits are trained through the mixer (relaxed). The mixer is then refitted on the hard circuit bits used at evaluation. Circuit arms use 3 seeds; spread = max−min. Cache and match arms are deterministic. The full run took 567 s.
+
+Plain backoff references (DEV BPC): order 2 **3.234**, order 3 **2.635**, order 4 **2.388**, order 5 **2.363**.
+
+| window L | order2 mix | +cache | +cache+match | +circuit trained | +circuit local-only (state reset) | order3 mix | order3 +cache+match |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 3.226 | 3.229 | 3.225 | 3.247 ± 0.013 | 3.248 ± 0.014 | 2.619 | 2.616 |
+| 64 | 3.226 | 3.208 | 3.176 | 3.195 ± 0.011 | 3.194 ± 0.014 | 2.619 | 2.587 |
+| 256 | 3.226 | 3.185 | 3.091 | 3.109 ± 0.013 | 3.110 ± 0.003 | 2.619 | 2.538 |
+| 1024 | 3.226 | 3.186 | **3.005** | 3.024 ± 0.007 | 3.028 ± 0.008 | 2.619 | **2.505** |
+
+Controls on top of order2 + cache + match (3 seeds):
+
+| L | trained | untrained gates | frozen random routing | random bits (no input) |
+|---:|---:|---:|---:|---:|
+| 16 | 3.247 ± 0.013 | 3.251 ± 0.006 | 3.245 ± 0.003 | 3.241 ± 0.006 |
+| 1024 | 3.024 ± 0.007 | 3.030 ± 0.003 | 3.025 ± 0.012 | 3.021 ± 0.007 |
+
+At L = 1024, order3 + cache + match + trained circuit: 2.530 ± 0.005, against 2.505 without the circuit.
+
+### Reading
+
+- **The circuits add no information.** At every window, adding the trained circuit's bits to order-k + cache + match makes DEV BPC slightly *worse* (+0.02), and it is indistinguishable from untrained gates, frozen routing, the local-only (state reset) control and input-free random bits. The sketch and the long-context inputs give the circuit nothing the mixer can use. The gap to "no circuit" is the cost of fitting 16 extra noisy weights.
+- **The long-context gain comes from the Boolean match memory and the cache, not from learned logic.** It grows with L: order 2 improves by 0.22 BPC at L = 1024 (3.226 → 3.005), order 3 by 0.11 (2.619 → 2.505).
+- **It does not reach the next order**: order2 + long context 3.005 vs order 3 at 2.635; order3 + long context 2.505 vs order 4 at 2.388 and order 5 at 2.363. On this corpus, more local context beats 1 KiB of Boolean memory.
+- Most of the match gain plausibly comes from repetition (markdown tables, repeated identifiers), which is exactly what a cache or copy model captures. No arm shows structure beyond that.
+
+### Limitations
+
+- Mechanism (a), a recurrent workspace carried across positions with truncated BPTT/STE, was **not implemented** in this step. The "local-only" arm is a state-reset control only for the sketch and match inputs.
+- One epoch, small circuits, a mixer refitted once (no online adaptation of counts on DEV), proxy corpus, shared-host timings. There is no comparison with GB-11 or S5h.
+- Possible next steps: a recurrent-workspace arm on a corpus with real long-range dependencies (long documents or code repositories), or having the circuits predict the mixer residual with gates trained on hard bits (STE).
