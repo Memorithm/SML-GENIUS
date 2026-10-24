@@ -133,6 +133,12 @@ impl FastHead {
         }
     }
 
+    /// `+1` and `-1` input planes of `depth`.
+    #[must_use]
+    pub fn planes(&self, depth: usize) -> ([u64; 2], [u64; 2]) {
+        (self.plus[depth], self.minus[depth])
+    }
+
     /// Ternary dot product of packed inputs `words` at `depth`.
     #[inline]
     #[must_use]
