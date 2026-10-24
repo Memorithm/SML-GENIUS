@@ -11,6 +11,12 @@
 //! with `doc_index % 16 == 7` (CAL) are kept out of the search and of
 //! training, and the `search_q4` and `bytes_q4` arms trace CAL and DEV with
 //! the frozen model into `NEW_OUTPUT_DIR/<arm>/`.
+//!
+//! `run-h1c` / `smoke-h1c` serve HYB H-1c
+//! (docs/HYB-H1C-S5H-STABLE-RESIDUAL-PREREGISTRATION.md): `run-h1b`, plus
+//! `EVAL2_MANIFEST.tsv` (EVAL2 rows only, never trained on) traced with the
+//! frozen model as split 3 into `<arm>/trace-eval2.bin`, after an untraced
+//! timing pass over EVAL2.
 
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, sha256},
@@ -62,6 +68,8 @@ struct Plan {
     large_table: usize,
     /// H-1b: hold CAL out of training and trace it with the frozen model.
     cal: bool,
+    /// H-1c: also trace the EVAL2 rows of a second manifest.
+    eval2: bool,
 }
 
 const RUN: Plan = Plan {
@@ -71,6 +79,7 @@ const RUN: Plan = Plan {
     small_table: Q4_EQUAL_BYTES,
     large_table: F32_EQUAL_BYTES,
     cal: false,
+    eval2: false,
 };
 
 const SMOKE: Plan = Plan {
@@ -80,6 +89,7 @@ const SMOKE: Plan = Plan {
     small_table: 1 << 20,
     large_table: 1 << 22,
     cal: false,
+    eval2: false,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -88,6 +98,8 @@ enum Role {
     Dev,
     /// H-1b calibration files: TRAIN rows kept out of training.
     Cal,
+    /// H-1c evaluation files, from the EVAL2 manifest.
+    Eval2,
 }
 
 struct Document {
@@ -101,6 +113,7 @@ struct Document {
 struct Roster {
     docs: Vec<Document>,
     manifest_sha: String,
+    eval2_sha: Option<String>,
 }
 
 fn checked_path(root: &Path, relative: &str) -> Result<PathBuf> {
@@ -115,26 +128,63 @@ fn checked_path(root: &Path, relative: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn load_roster(root: &Path, manifest: &Path) -> Result<Roster> {
-    if fs::symlink_metadata(root)?.file_type().is_symlink() || !root.is_dir() {
-        return Err("data root must be a directory, not a symlink".into());
-    }
-    let root = fs::canonicalize(root)?;
+fn manifest_text(manifest: &Path) -> Result<Vec<u8>> {
     let info = fs::symlink_metadata(manifest)?;
     if !info.is_file() || info.len() == 0 || info.len() > MAX_MANIFEST_BYTES {
         return Err("manifest must be a bounded regular file".into());
     }
     let contents = fs::read(manifest)?;
     let text = std::str::from_utf8(&contents)?;
-    let mut lines = text.lines();
-    if lines.next() != Some(HEADER) {
+    if text.lines().next() != Some(HEADER) {
         return Err("invalid document manifest header".into());
     }
+    Ok(contents)
+}
+
+/// Checks one manifest row and appends it to `docs`.
+fn push_document(
+    root: &Path,
+    f: &[&str],
+    role: Role,
+    docs: &mut Vec<Document>,
+    seen: &mut (HashSet<PathBuf>, HashSet<[u8; 32]>),
+) -> Result<()> {
+    if !RIGHTS.contains(&f[4]) {
+        return Err("document rights have not been declared reviewed".into());
+    }
+    let length: u64 = f[2].parse()?;
+    if !(MIN_DOCUMENT_BYTES..=MAX_DOCUMENT_BYTES).contains(&length) {
+        return Err("document length outside budget".into());
+    }
+    let digest = parse_hex(f[3]).ok_or("invalid SHA256 field")?;
+    if f[3] != hex(&digest) {
+        return Err("noncanonical SHA256 field".into());
+    }
+    let path = checked_path(root, f[1])?;
+    if !seen.1.insert(digest) || !seen.0.insert(path.clone()) {
+        return Err("duplicate document path or digest".into());
+    }
+    docs.push(Document {
+        index: docs.len(),
+        role,
+        path,
+        length,
+        digest,
+    });
+    Ok(())
+}
+
+fn load_roster(root: &Path, manifest: &Path, eval2: Option<&Path>) -> Result<Roster> {
+    if fs::symlink_metadata(root)?.file_type().is_symlink() || !root.is_dir() {
+        return Err("data root must be a directory, not a symlink".into());
+    }
+    let root = fs::canonicalize(root)?;
+    let contents = manifest_text(manifest)?;
+    let mut lines = std::str::from_utf8(&contents)?.lines().skip(1);
     let mut docs = Vec::new();
-    let mut seen_paths = HashSet::new();
-    let mut seen_digests = HashSet::new();
+    let mut seen = (HashSet::new(), HashSet::new());
     let mut dev_started = false;
-    for line in lines {
+    for line in lines.by_ref() {
         if docs.len() == MAX_FILES {
             return Err("too many documents".into());
         }
@@ -150,35 +200,38 @@ fn load_roster(root: &Path, manifest: &Path) -> Result<Roster> {
             }
             _ => return Err("invalid document role/order (TEST is never admitted)".into()),
         };
-        if !RIGHTS.contains(&f[4]) {
-            return Err("document rights have not been declared reviewed".into());
-        }
-        let length: u64 = f[2].parse()?;
-        if !(MIN_DOCUMENT_BYTES..=MAX_DOCUMENT_BYTES).contains(&length) {
-            return Err("document length outside budget".into());
-        }
-        let digest = parse_hex(f[3]).ok_or("invalid SHA256 field")?;
-        if f[3] != hex(&digest) {
-            return Err("noncanonical SHA256 field".into());
-        }
-        let path = checked_path(&root, f[1])?;
-        if !seen_digests.insert(digest) || !seen_paths.insert(path.clone()) {
-            return Err("duplicate document path or digest".into());
-        }
-        docs.push(Document {
-            index: docs.len(),
-            role,
-            path,
-            length,
-            digest,
-        });
+        push_document(&root, &f, role, &mut docs, &mut seen)?;
     }
     if !dev_started || docs.first().is_none_or(|d| d.role != Role::Train) {
         return Err("manifest needs TRAIN then DEV rows".into());
     }
+    // EVAL2 rows follow, with fresh indices; a path or digest already in
+    // the main manifest is refused.
+    let eval2_sha = match eval2 {
+        Some(path) => {
+            let contents = manifest_text(path)?;
+            let before = docs.len();
+            for line in std::str::from_utf8(&contents)?.lines().skip(1) {
+                if docs.len() == MAX_FILES {
+                    return Err("too many documents".into());
+                }
+                let f: Vec<&str> = line.split('\t').collect();
+                if f.len() != 5 || f[0] != "EVAL2" {
+                    return Err("EVAL2 manifest admits only EVAL2 rows".into());
+                }
+                push_document(&root, &f, Role::Eval2, &mut docs, &mut seen)?;
+            }
+            if docs.len() == before {
+                return Err("empty EVAL2 manifest".into());
+            }
+            Some(hex(&sha256(&contents)))
+        }
+        None => None,
+    };
     Ok(Roster {
         docs,
         manifest_sha: hex(&sha256(&contents)),
+        eval2_sha,
     })
 }
 
@@ -242,8 +295,9 @@ fn run_arm(
     arm: &Arm,
     out: &Path,
     manifest_sha: &str,
-    cal: bool,
+    plan: Plan,
 ) -> Result<ArmResult> {
+    let cal = plan.cal;
     let tables = Tables::new();
     let mut model = Model::with_bank_bytes(arm.masks.clone(), arm.rule, arm.update, arm.bank_bytes);
     let arm_dir = if cal && arm.trace {
@@ -360,6 +414,58 @@ fn run_arm(
             return Err("empty CAL trace".into());
         }
     }
+    // H-1c: untraced EVAL2 timing pass, then the frozen EVAL2 trace.
+    let mut eval2_json = String::new();
+    if plan.eval2 && arm.trace {
+        let eval2_docs = || roster.docs.iter().filter(|d| d.role == Role::Eval2);
+        let mut eval2_seconds = 0.0;
+        for doc in eval2_docs() {
+            let data = load(doc)?;
+            let t = Instant::now();
+            std::hint::black_box(model.code_document(&tables, &data, false, |_, _, _, _| {}));
+            eval2_seconds += t.elapsed().as_secs_f64();
+        }
+        eprintln!(
+            "GB11_P1_H1C_TIMING arm={} eval2_pass_s={eval2_seconds:.1}",
+            arm.name
+        );
+        let mut w = trace_writer(out, "trace-eval2.bin")?;
+        let mut summary = (0u64, 0.0f64);
+        for doc in eval2_docs() {
+            let data = load(doc)?;
+            let mut io_error = None;
+            model.code_document(&tables, &data, false, |pos, ctx, byte, code| {
+                let record = record(doc.index, pos, 3, byte, ctx, code);
+                summary.0 += 1;
+                summary.1 += record.cost_bits();
+                if let Err(e) = w.write_all(&record.encode()) {
+                    io_error.get_or_insert(e);
+                }
+            });
+            if let Some(e) = io_error {
+                return Err(e.into());
+            }
+        }
+        w.flush()?;
+        if model.weights_sha() != trained_sha {
+            return Err("EVAL2 changed the weights".into());
+        }
+        if summary.0 == 0 {
+            return Err("empty EVAL2 trace".into());
+        }
+        eval2_json = format!(
+            concat!(
+                "  \"eval2_trace\": {{\"file\": \"trace-eval2.bin\", \"rule\": \"EVAL2 manifest rows, never trained on, frozen model\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\"}},\n",
+                "  \"eval2_us_per_position\": {:.6},\n",
+                "  \"eval2_manifest_sha256\": \"{}\",\n"
+            ),
+            summary.0,
+            summary.1 / summary.0 as f64,
+            file_sha(&out.join("trace-eval2.bin"))?,
+            eval2_seconds * 1e6 / summary.0 as f64,
+            roster.eval2_sha.as_deref().unwrap_or("none"),
+        );
+    }
     if train_events == 0 || dev_events == 0 || !dev_bits.is_finite() {
         return Err("empty or nonfinite run".into());
     }
@@ -386,15 +492,21 @@ fn run_arm(
         let dev_sha = file_sha(&out.join("trace-dev.bin"))?;
         let summary = format!(
             concat!(
-                "{{\n  \"schema\": \"SML_GB11_P1_H1B_TRACE_V1\",\n  \"arm\": \"{}\",\n",
+                "{{\n  \"schema\": \"{}\",\n  \"arm\": \"{}\",\n",
                 "  \"record_bytes\": {},\n  \"endianness\": \"little\",\n",
-                "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split 2 = CAL frozen, 1 = DEV frozen\",\n",
+                "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split 2 = CAL frozen, 1 = DEV frozen, 3 = EVAL2 frozen\",\n",
                 "  \"logit_scale\": \"ln-odds of P(bit = 1) times {}\",\n",
                 "  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"rule\": \"TRAIN rows with doc_index % {} == {}, kept out of search and training, frozen model\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\"}},\n",
                 "  \"dev_trace\": {{\"file\": \"trace-dev.bin\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\"}},\n",
                 "  \"dev_us_per_position\": {:.6},\n",
+                "{}",
                 "  \"weights_sha256\": \"{}\",\n  \"manifest_sha256\": \"{}\",\n  \"source_commit\": \"{}\",\n  \"test\": \"UNOPENED\"\n}}\n"
             ),
+            if plan.eval2 {
+                "SML_GB11_P1_H1C_TRACE_V1"
+            } else {
+                "SML_GB11_P1_H1B_TRACE_V1"
+            },
             arm.name,
             TRACE_RECORD_BYTES,
             STRETCH_SCALE,
@@ -407,6 +519,7 @@ fn run_arm(
             dev_bpc,
             dev_sha,
             dev_seconds * 1e6 / dev_events as f64,
+            eval2_json,
             weights_sha,
             manifest_sha,
             std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
@@ -511,9 +624,18 @@ fn prefix(roster: &Roster, plan: Plan) -> Result<(Documents, Documents)> {
 }
 
 fn cli(args: &[String]) -> Result<()> {
-    let usage =
-        "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256]";
-    let (plan, root, manifest, out, expected) = match args {
+    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv";
+    let (plan, root, manifest, out, expected, eval2) = match args {
+        [_, mode, root, manifest, out, sha, eval2] if mode == "run-h1c" || mode == "smoke-h1c" => {
+            let base = if mode == "run-h1c" { RUN } else { SMOKE };
+            let plan = Plan {
+                cal: true,
+                eval2: true,
+                ..base
+            };
+            let expected = (sha != "-").then_some(sha);
+            (plan, root, manifest, out, expected, Some(Path::new(eval2)))
+        }
         [_, mode, root, manifest, out, rest @ ..] if rest.len() <= 1 => {
             let plan = match mode.as_str() {
                 "run" => RUN,
@@ -522,12 +644,12 @@ fn cli(args: &[String]) -> Result<()> {
                 "smoke-h1b" => Plan { cal: true, ..SMOKE },
                 _ => return Err(usage.into()),
             };
-            (plan, root, manifest, out, rest.first())
+            (plan, root, manifest, out, rest.first(), None)
         }
         _ => return Err(usage.into()),
     };
     let (root, out) = (Path::new(root), Path::new(out));
-    let mut roster = load_roster(root, Path::new(manifest))?;
+    let mut roster = load_roster(root, Path::new(manifest), eval2)?;
     if plan.cal {
         for doc in &mut roster.docs {
             if doc.role == Role::Train && doc.index % CAL_STRIDE == CAL_RESIDUE {
@@ -656,7 +778,7 @@ fn cli(args: &[String]) -> Result<()> {
             .iter()
             .map(|arm| {
                 let (roster, sha) = (&roster, roster.manifest_sha.as_str());
-                scope.spawn(move || run_arm(roster, arm, out, sha, plan.cal))
+                scope.spawn(move || run_arm(roster, arm, out, sha, plan))
             })
             .collect();
         handles
@@ -683,7 +805,11 @@ fn cli(args: &[String]) -> Result<()> {
     let done = format!(
         "SML_GB11_P1_DONE plan={}{} manifest={} search_s={search_seconds:.1} total_s={:.1} search_min_gain_bpc={SEARCH_MIN_GAIN_BPC} search_max_bits={SEARCH_MAX_BITS} test=UNOPENED model_promoted=false\n",
         plan.label,
-        if plan.cal { "_H1B" } else { "" },
+        match (plan.cal, plan.eval2) {
+            (_, true) => "_H1C",
+            (true, false) => "_H1B",
+            _ => "",
+        },
         roster.manifest_sha,
         start.elapsed().as_secs_f64(),
     );
@@ -778,6 +904,75 @@ mod tests {
                 .unwrap();
             assert!((bits / records as f64 - reported.parse::<f64>().unwrap()).abs() < 1e-6);
         }
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn smoke_h1c_traces_eval2_as_split_3() {
+        let home = std::env::temp_dir().join(format!("gb11-p1-h1c-{}", std::process::id()));
+        let (data, manifest_path) = smoke_corpus(&home);
+        let mut eval2 = format!("{HEADER}\n");
+        for i in 0..2 {
+            let text = format!("an unseen evaluation article {i} ").repeat(600);
+            let name = format!("e{i}.txt");
+            fs::write(data.join(&name), &text).unwrap();
+            eval2.push_str(&format!(
+                "EVAL2\t{name}\t{}\t{}\tOWNED_REVIEWED\n",
+                text.len(),
+                hex(&sha256(text.as_bytes()))
+            ));
+        }
+        let eval2_path = home.join("eval2.tsv");
+        fs::write(&eval2_path, &eval2).unwrap();
+        let args = |out: &str, eval2: &Path| -> Vec<String> {
+            ["bin", "smoke-h1c"]
+                .iter()
+                .map(|s| s.to_string())
+                .chain([&data, &manifest_path, &home.join(out)].map(|p| p.display().to_string()))
+                .chain(["-".to_string(), eval2.display().to_string()])
+                .collect()
+        };
+        cli(&args("out", &eval2_path)).unwrap();
+        let out = home.join("out");
+        assert!(fs::read_to_string(out.join("COMPLETE"))
+            .unwrap()
+            .contains("plan=SMOKE_H1C "));
+        for arm in H1B_ARMS {
+            let dir = out.join(arm);
+            let json = fs::read_to_string(dir.join("trace.json")).unwrap();
+            assert!(
+                json.contains("SML_GB11_P1_H1C_TRACE_V1") && json.contains("eval2_us_per_position")
+            );
+            let (records, bits) = sml_core::gb11_p1_stream::read_trace(
+                &mut File::open(dir.join("trace-eval2.bin")).unwrap(),
+                |r| assert!(r.split == 3 && (12..14).contains(&r.doc_index)),
+            )
+            .unwrap();
+            let expected: u64 = (0..2)
+                .map(|i| fs::metadata(data.join(format!("e{i}.txt"))).unwrap().len() - 2)
+                .sum();
+            assert_eq!(records, expected);
+            let reported = json
+                .lines()
+                .find(|l| l.contains("\"eval2_trace\""))
+                .and_then(|l| l.split("\"bpc\": ").nth(1))
+                .and_then(|r| r.split(',').next())
+                .unwrap();
+            assert!((bits / records as f64 - reported.parse::<f64>().unwrap()).abs() < 1e-6);
+        }
+        // An EVAL2 row that repeats a main-manifest document is refused, and
+        // so is any other role.
+        let dev_row = fs::read_to_string(&manifest_path)
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap()
+            .replacen("DEV", "EVAL2", 1);
+        let bad = home.join("bad.tsv");
+        fs::write(&bad, format!("{HEADER}\n{dev_row}\n")).unwrap();
+        assert!(cli(&args("out2", &bad)).is_err());
+        fs::write(&bad, eval2.replace("EVAL2\t", "DEV\t")).unwrap();
+        assert!(cli(&args("out3", &bad)).is_err());
         fs::remove_dir_all(&home).unwrap();
     }
 

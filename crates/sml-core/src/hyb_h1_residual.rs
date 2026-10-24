@@ -55,6 +55,17 @@ pub fn features(record: &TraceRecord, depth: usize) -> [u64; 2] {
     [record.context, high]
 }
 
+/// Calls `each` on every set input index, in ascending order.
+fn for_each_set_bit(words: &[u64; 2], mut each: impl FnMut(usize)) {
+    for (k, &word) in words.iter().enumerate() {
+        let mut rest = word;
+        while rest != 0 {
+            each(k * 64 + rest.trailing_zeros() as usize);
+            rest &= rest - 1;
+        }
+    }
+}
+
 pub(crate) fn feature_bit(words: &[u64; 2], index: usize) -> bool {
     (words[index / 64] >> (index % 64)) & 1 != 0
 }
@@ -103,25 +114,26 @@ impl Master {
         for depth in 0..DEPTHS {
             let words = features(record, depth);
             let row = &mut self.weights[depth * INPUTS..(depth + 1) * INPUTS];
+            // Set bits in ascending index order: the same f32 sum as a scan
+            // of every input.
             let mut score = self.bias[depth];
-            for (i, w) in row.iter().enumerate() {
-                if feature_bit(&words, i) {
-                    score += w;
-                }
-            }
+            for_each_set_bit(&words, |i| score += row[i]);
             let z = f64::from(record.logits[depth]) / STRETCH_SCALE
                 + f64::from(score) * f64::from(STEP_UNITS) / STRETCH_SCALE;
             let p = 1.0 / (1.0 + (-z).exp());
             let y = if target_bit(record, depth) { 1.0 } else { 0.0 };
             let grad = ((p - y) * f64::from(STEP_UNITS) / STRETCH_SCALE) as f32;
             let step = LEARNING_RATE * grad;
-            for (i, w) in row.iter_mut().enumerate() {
-                if feature_bit(&words, i) {
-                    *w -= step;
-                }
-            }
+            for_each_set_bit(&words, |i| row[i] -= step);
             self.bias[depth] -= step;
         }
+    }
+
+    /// Master from explicit parameters (e.g. averaged weights).
+    #[must_use]
+    pub fn from_parts(weights: Vec<f32>, bias: [f32; DEPTHS]) -> Self {
+        assert_eq!(weights.len(), DEPTHS * INPUTS);
+        Self { weights, bias }
     }
 
     /// f32 weights, `DEPTHS` rows of `INPUTS`.
@@ -444,6 +456,42 @@ mod tests {
         let a0: f64 = train.iter().map(a0_cost).sum();
         let a0c: f64 = train.iter().map(|r| table.cost(r, 1.0)).sum();
         assert!(a0c.is_finite() && a0c != a0);
+    }
+
+    #[test]
+    fn sparse_training_step_matches_a_full_scan() {
+        let mut fast = Master::new(11);
+        let mut reference = fast.clone();
+        for record in replay_records(3_000).iter().chain(&learnable(3_000, 9)) {
+            fast.train(record);
+            for depth in 0..DEPTHS {
+                let words = features(record, depth);
+                let row = &mut reference.weights[depth * INPUTS..(depth + 1) * INPUTS];
+                let mut score = reference.bias[depth];
+                for (i, w) in row.iter().enumerate() {
+                    if feature_bit(&words, i) {
+                        score += w;
+                    }
+                }
+                let z = f64::from(record.logits[depth]) / STRETCH_SCALE
+                    + f64::from(score) * f64::from(STEP_UNITS) / STRETCH_SCALE;
+                let p = 1.0 / (1.0 + (-z).exp());
+                let y = if target_bit(record, depth) { 1.0 } else { 0.0 };
+                let step = LEARNING_RATE * ((p - y) * f64::from(STEP_UNITS) / STRETCH_SCALE) as f32;
+                for (i, w) in row.iter_mut().enumerate() {
+                    if feature_bit(&words, i) {
+                        *w -= step;
+                    }
+                }
+                reference.bias[depth] -= step;
+            }
+        }
+        let bits = |m: &Master| m.weights.iter().map(|w| w.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(&fast), bits(&reference));
+        assert_eq!(
+            fast.bias.map(f32::to_bits),
+            reference.bias.map(f32::to_bits)
+        );
     }
 
     #[test]
