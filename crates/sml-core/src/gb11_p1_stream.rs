@@ -248,6 +248,9 @@ pub struct ByteCode {
     pub logits: [i16; 8],
     /// Per bank, `min(15, n0 + n1)` at the root decision (4 bits per bank).
     pub confidence: u32,
+    /// Stretch of each bank's own cell at each decision (HYB H-1d inputs);
+    /// unused banks 0.
+    pub banks: [[i16; MAX_BANKS]; 8],
 }
 
 impl Model {
@@ -358,6 +361,7 @@ impl Model {
                         None => (0, 0),
                     };
                     let st = i32::from(tables.stretch[n0 * 256 + n1]);
+                    code.banks[decision][b] = st as i16;
                     let w = tables.weight[n0 + n1];
                     sum += i64::from(w) * i64::from(st);
                     weight += i64::from(w);

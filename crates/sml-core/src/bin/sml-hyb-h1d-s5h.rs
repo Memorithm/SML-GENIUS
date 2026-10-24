@@ -1,0 +1,691 @@
+//! HYB H-1d: averaged ternary head that sees every P1 bank, judged on EVAL3.
+//! Protocol: docs/HYB-H1D-S5H-BANK-HEAD-PREREGISTRATION.md.
+//!
+//! `run P1_H1D_OUT NEW_OUTPUT_DIR` reads `bytes_q4/` written by
+//! `sml-gb11-p1-s5h run-h1d`: `trace-cal.bin` (split 2), `trace-eval3.bin`
+//! (split 4), their `.banks.bin` sidecars and `trace.json`, whose P1 BPC is
+//! recomputed first. Per seed, both heads train `EPOCHS` permuted epochs on
+//! CAL-FIT (`doc_index % 32 == 7`) and export their averaged master:
+//!
+//! * A1c, the H-1c head (124 inputs), as a control on this run's CAL;
+//! * A1d, the bank head (`hyb_h1d_bank_head`).
+//!
+//! (tau, lambda) are picked on CAL-SEL (`doc_index % 32 == 23`). Stage 1:
+//! when the CAL-SEL gain of A1d over P1 is below `CAL_GATE_BPC` for either
+//! seed, the run stops with `NO_GO_CAL_GATE` and EVAL3 is not opened.
+//! Stage 2: EVAL3 is read once. The S5h DEV is never opened. `replay
+//! HEAD.tsv` prints the i32 digest of an A1d head on synthetic records
+//! (cross-host check); `smoke` runs on generated traces and is labelled
+//! SMOKE, never a result. TEST is never read. NOT_PROMOTED.
+
+use sml_core::{
+    elastic_ngram_paged_sha::{hex, sha256},
+    gb11_p1_stream::{read_trace, TraceRecord, MAX_BANKS, TRACE_RECORD_BYTES},
+    hyb_h1_residual::{a0_cost, splitmix, DEPTHS},
+    hyb_h1b_calibrated::{ScaledHead, LAMBDA_EIGHTHS, TAUS},
+    hyb_h1c_stable::{self, FastHead, BURN_IN_EPOCHS, EPOCHS},
+    hyb_h1d_bank_head::{
+        replay_bank_records, train_averaged, BankHead, BankPlane, BankRecord, BANK_PLANE_BYTES,
+        INPUTS, ROW,
+    },
+};
+use std::{
+    error::Error,
+    fs::{self, File},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::Path,
+    time::Instant,
+};
+
+type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+const BASE: &str = "bytes_q4";
+const SEEDS: [u64; 2] = [11, 23];
+const GO_MARGIN_BPC: f64 = 0.02;
+/// Stage 1: smallest CAL-SEL gain of A1d over P1 that opens EVAL3.
+const CAL_GATE_BPC: f64 = 0.03;
+const MAX_COST_RATIO: f64 = 1.5;
+const REPLAY_RECORDS: usize = 65_536;
+const CAL_FIT: u32 = 7;
+const CAL_SEL: u32 = 23;
+
+/// One document's contiguous records in a trace file.
+#[derive(Clone, Copy)]
+struct Span {
+    doc: u32,
+    start: u64,
+    count: u64,
+}
+
+struct Scan {
+    spans: Vec<Span>,
+    records: u64,
+    bits: f64,
+}
+
+/// Checks split and order of a trace and that its sidecar has one plane
+/// per record.
+fn scan(path: &Path, banks: &Path, split: u8) -> Result<Scan> {
+    let mut spans: Vec<Span> = Vec::new();
+    let mut last: Option<(u32, u32)> = None;
+    let mut error = None;
+    let mut index = 0u64;
+    let (records, bits) = read_trace(&mut File::open(path)?, |r| {
+        let key = (r.doc_index, r.position);
+        if error.is_none() {
+            if r.split != split {
+                error = Some(format!("{}: split {} != {split}", path.display(), r.split));
+            } else if last.is_some_and(|prev| key <= prev) {
+                error = Some(format!("{}: duplicate or unsorted {key:?}", path.display()));
+            }
+        }
+        last = Some(key);
+        match spans.last_mut() {
+            Some(span) if span.doc == r.doc_index => span.count += 1,
+            _ => spans.push(Span {
+                doc: r.doc_index,
+                start: index,
+                count: 1,
+            }),
+        }
+        index += 1;
+    })?;
+    if let Some(error) = error {
+        return Err(error.into());
+    }
+    if records == 0 {
+        return Err(format!("{}: empty trace", path.display()).into());
+    }
+    if fs::metadata(banks)?.len() != records * BANK_PLANE_BYTES as u64 {
+        return Err(format!("{}: one bank plane per record expected", banks.display()).into());
+    }
+    Ok(Scan {
+        spans,
+        records,
+        bits,
+    })
+}
+
+fn bpc(bits: f64, records: u64) -> f64 {
+    bits / records as f64
+}
+
+/// The number after `"field": ` on the line of `key` in `trace.json`.
+fn reported(json: &str, key: &str, field: &str) -> Result<f64> {
+    let line = json
+        .lines()
+        .find(|l| l.trim_start().starts_with(&format!("\"{key}\"")))
+        .ok_or_else(|| format!("trace.json has no {key}"))?;
+    let rest = line
+        .split_once(&format!("\"{field}\": "))
+        .map_or(line, |(_, rest)| rest);
+    let rest = rest
+        .strip_prefix(&format!("\"{key}\": "))
+        .unwrap_or(rest)
+        .trim_start();
+    let end = rest
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(rest.len());
+    if end == 0 {
+        return Err(format!("trace.json {key} has no {field}").into());
+    }
+    Ok(rest[..end].parse()?)
+}
+
+fn check_reported(json: &str, key: &str, got: f64) -> Result<()> {
+    let want = reported(json, key, "bpc")?;
+    if (got - want).abs() > 1e-6 {
+        return Err(format!("{key} P1 BPC {got:.9} != trace.json {want:.9}").into());
+    }
+    Ok(())
+}
+
+/// A trace and its sidecar, opened together.
+struct Pair {
+    trace: File,
+    banks: File,
+}
+
+impl Pair {
+    fn open(dir: &Path, name: &str) -> Result<Self> {
+        Ok(Self {
+            trace: File::open(dir.join(format!("{name}.bin")))?,
+            banks: File::open(dir.join(format!("{name}.banks.bin")))?,
+        })
+    }
+
+    /// Calls `each` on the records of `span`; stops on a misaligned plane.
+    fn each(&mut self, span: Span, mut each: impl FnMut(&BankRecord)) -> Result<()> {
+        self.trace
+            .seek(SeekFrom::Start(span.start * TRACE_RECORD_BYTES as u64))?;
+        self.banks
+            .seek(SeekFrom::Start(span.start * BANK_PLANE_BYTES as u64))?;
+        let mut traces = BufReader::with_capacity(
+            1 << 20,
+            (&mut self.trace).take(span.count * TRACE_RECORD_BYTES as u64),
+        );
+        let mut planes = BufReader::with_capacity(
+            1 << 20,
+            (&mut self.banks).take(span.count * BANK_PLANE_BYTES as u64),
+        );
+        let mut raw = [0u8; TRACE_RECORD_BYTES];
+        let mut plane = [0u8; BANK_PLANE_BYTES];
+        for _ in 0..span.count {
+            traces.read_exact(&mut raw)?;
+            planes.read_exact(&mut plane)?;
+            let r = BankRecord::pair(TraceRecord::decode(&raw), BankPlane::decode(&plane))
+                .ok_or("trace and bank sidecar are misaligned")?;
+            each(&r);
+        }
+        Ok(())
+    }
+}
+
+type SelBits = [[f64; LAMBDA_EIGHTHS.len()]; TAUS.len()];
+
+/// (tau index, lambda index, bits) of the smallest CAL-SEL code length;
+/// ties keep the smaller tau, then the smaller lambda.
+fn pick(bits: &SelBits) -> (usize, usize, f64) {
+    let mut best = (0, 0, f64::INFINITY);
+    for (t, row) in bits.iter().enumerate() {
+        for (k, &b) in row.iter().enumerate() {
+            if b < best.2 {
+                best = (t, k, b);
+            }
+        }
+    }
+    best
+}
+
+struct ChosenD {
+    tau: f32,
+    eighths: i32,
+    head: BankHead,
+    sel_bpc: f64,
+    snapshots: u64,
+}
+
+struct ChosenC {
+    eighths: i32,
+    fast: FastHead,
+    sel_bpc: f64,
+}
+
+/// One seed: both averaged masters on CAL-FIT, exported at every tau and
+/// scored on CAL-SEL at every lambda.
+fn seed_heads(
+    dir: &Path,
+    seed: u64,
+    fit: &[Span],
+    sel: &[Span],
+    sel_records: u64,
+) -> Result<(ChosenD, ChosenC)> {
+    let mut pair = Pair::open(dir, "trace-cal")?;
+    let docs: Vec<(u32, Span)> = fit.iter().map(|s| (s.doc, *s)).collect();
+    let (master_d, snapshots) =
+        train_averaged(seed, &docs, |span, train| pair.each(span, |r| train(r)))?
+            .ok_or("no averaged snapshot")?;
+    let (master_c, _) = hyb_h1c_stable::train_averaged(seed, &docs, |span, train| {
+        pair.each(span, |r| train(&r.record))
+    })?
+    .ok_or("no averaged snapshot")?;
+    let heads_d: Vec<BankHead> = TAUS
+        .iter()
+        .map(|&t| BankHead::export(&master_d, t))
+        .collect();
+    let heads_c: Vec<ScaledHead> = TAUS
+        .iter()
+        .map(|&t| ScaledHead::export(&master_c, t))
+        .collect();
+    let fast_c: Vec<FastHead> = heads_c.iter().map(FastHead::new).collect();
+    let (mut bits_d, mut bits_c): (SelBits, SelBits) = Default::default();
+    for &span in sel {
+        pair.each(span, |r| {
+            for t in 0..TAUS.len() {
+                for (k, c) in heads_d[t].costs(r).iter().enumerate() {
+                    bits_d[t][k] += c;
+                }
+                for (k, c) in fast_c[t].costs(&r.record).iter().enumerate() {
+                    bits_c[t][k] += c;
+                }
+            }
+        })?;
+    }
+    let (td, kd, bd) = pick(&bits_d);
+    let (tc, kc, bc) = pick(&bits_c);
+    Ok((
+        ChosenD {
+            tau: TAUS[td],
+            eighths: LAMBDA_EIGHTHS[kd],
+            head: heads_d.into_iter().nth(td).expect("tau index"),
+            sel_bpc: bpc(bd, sel_records),
+            snapshots,
+        },
+        ChosenC {
+            eighths: LAMBDA_EIGHTHS[kc],
+            fast: fast_c.into_iter().nth(tc).expect("tau index"),
+            sel_bpc: bpc(bc, sel_records),
+        },
+    ))
+}
+
+fn head_tsv(c: &ChosenD) -> String {
+    let join = |v: &[i32]| v.iter().map(i32::to_string).collect::<Vec<_>>().join(",");
+    let weights: Vec<String> = c.head.weights().iter().map(i8::to_string).collect();
+    format!(
+        "row\t{ROW}\ndepths\t{DEPTHS}\nbanks\t{MAX_BANKS}\nlambda_eighths\t{}\nunit\t{}\nbias\t{}\nweights\t{}\n",
+        c.eighths,
+        join(&c.head.unit()),
+        join(&c.head.bias()),
+        weights.join(",")
+    )
+}
+
+fn parse_head(text: &str) -> Result<(BankHead, i32)> {
+    let field = |name: &str| -> Result<&str> {
+        text.lines()
+            .find_map(|l| l.strip_prefix(name)?.strip_prefix('\t'))
+            .ok_or_else(|| format!("missing {name}").into())
+    };
+    if field("row")?.parse::<usize>()? != ROW
+        || field("depths")?.parse::<usize>()? != DEPTHS
+        || field("banks")?.parse::<usize>()? != MAX_BANKS
+    {
+        return Err("head shape mismatch".into());
+    }
+    let ints = |name: &str| -> Result<[i32; DEPTHS]> {
+        let v: Vec<i32> = field(name)?
+            .split(',')
+            .map(str::parse)
+            .collect::<std::result::Result<_, _>>()?;
+        v.try_into()
+            .map_err(|_| format!("{name} needs {DEPTHS} values").into())
+    };
+    let weights: Vec<i8> = field("weights")?
+        .split(',')
+        .map(str::parse)
+        .collect::<std::result::Result<_, _>>()?;
+    if weights.len() != DEPTHS * ROW || weights.iter().any(|w| !(-1..=1).contains(w)) {
+        return Err("weights must be DEPTHS*ROW ternary values".into());
+    }
+    let eighths: i32 = field("lambda_eighths")?.parse()?;
+    if !LAMBDA_EIGHTHS.contains(&eighths) {
+        return Err("lambda outside the registered grid".into());
+    }
+    Ok((
+        BankHead::new(weights, ints("unit")?, ints("bias")?),
+        eighths,
+    ))
+}
+
+/// SHA-256 of every i32 correction on fixed synthetic records; stops if the
+/// kernel and the oracle disagree.
+fn replay_digest(head: &BankHead, eighths: i32) -> Result<String> {
+    let mut bytes = Vec::with_capacity(REPLAY_RECORDS * DEPTHS * 4);
+    for r in replay_bank_records(REPLAY_RECORDS) {
+        for d in 0..DEPTHS {
+            let raw = head.raw(&r, d);
+            if raw != head.oracle_raw(&r, d) {
+                return Err("replay: kernel/oracle mismatch".into());
+            }
+            bytes.extend_from_slice(&head.correction(raw, d, eighths).to_le_bytes());
+        }
+    }
+    Ok(hex(&sha256(&bytes)))
+}
+
+fn evaluate(dir: &Path, out: &Path) -> Result<String> {
+    let json = fs::read_to_string(dir.join("trace.json"))?;
+    let cal = scan(
+        &dir.join("trace-cal.bin"),
+        &dir.join("trace-cal.banks.bin"),
+        2,
+    )?;
+    let a0_cal = bpc(cal.bits, cal.records);
+    check_reported(&json, "cal_trace", a0_cal)?;
+    let p1_us = reported(&json, "eval3_us_per_position", "eval3_us_per_position")?;
+    if p1_us.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+        return Err("trace.json eval3_us_per_position must be positive".into());
+    }
+    let (mut fit, mut sel) = (Vec::new(), Vec::new());
+    for span in &cal.spans {
+        match span.doc % 32 {
+            CAL_FIT => fit.push(*span),
+            CAL_SEL => sel.push(*span),
+            _ => return Err(format!("CAL doc {} outside CAL-FIT/CAL-SEL", span.doc).into()),
+        }
+    }
+    if fit.is_empty() || sel.is_empty() {
+        return Err("CAL-FIT and CAL-SEL must both be non-empty".into());
+    }
+    let count = |spans: &[Span]| spans.iter().map(|s| s.count).sum::<u64>();
+    let (fit_records, sel_records) = (count(&fit), count(&sel));
+    let mut a0_sel = 0.0;
+    {
+        let mut pair = Pair::open(dir, "trace-cal")?;
+        for &span in &sel {
+            pair.each(span, |r| a0_sel += a0_cost(&r.record))?;
+        }
+    }
+    let a0_sel = bpc(a0_sel, sel_records);
+    let seeds: Vec<Result<(ChosenD, ChosenC)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = SEEDS
+            .iter()
+            .map(|&seed| {
+                let (fit, sel) = (&fit, &sel);
+                scope.spawn(move || seed_heads(dir, seed, fit, sel, sel_records))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("seed thread"))
+            .collect()
+    });
+    let mut chosen = Vec::new();
+    for seed in seeds {
+        chosen.push(seed?);
+    }
+    let mut report = format!(
+        "{BASE}_cal_fit_records\t{fit_records}\n{BASE}_cal_sel_records\t{sel_records}\n\
+         {BASE}_dev_read\tfalse\n{BASE}_a0_cal_bpc\t{a0_cal:.9}\n{BASE}_a0_sel_bpc\t{a0_sel:.9}\n\
+         {BASE}_inputs\t{INPUTS}\n{BASE}_head_bytes\t{}\n{BASE}_epochs\t{EPOCHS}\n\
+         {BASE}_burn_in_epochs\t{BURN_IN_EPOCHS}\n",
+        BankHead::resident_bytes(),
+    );
+    for (k, (d, c)) in chosen.iter().enumerate() {
+        let seed = SEEDS[k];
+        report += &format!(
+            "{BASE}_a1d_seed{seed}_sel_bpc\t{:.9}\n{BASE}_a1d_seed{seed}_sel_gain\t{:.9}\n\
+             {BASE}_a1d_seed{seed}_tau\t{}\n{BASE}_a1d_seed{seed}_lambda_eighths\t{}\n\
+             {BASE}_a1d_seed{seed}_unit\t{:?}\n{BASE}_a1d_seed{seed}_zero_fraction\t{:.6}\n\
+             {BASE}_a1d_seed{seed}_snapshots\t{}\n{BASE}_a1d_seed{seed}_replay_sha256\t{}\n\
+             {BASE}_a1c_seed{seed}_sel_bpc\t{:.9}\n",
+            d.sel_bpc,
+            a0_sel - d.sel_bpc,
+            d.tau,
+            d.eighths,
+            d.head.unit(),
+            d.head.zero_fraction(),
+            d.snapshots,
+            replay_digest(&d.head, d.eighths)?,
+            c.sel_bpc,
+        );
+        fs::write(out.join(format!("head-a1d-seed{seed}.tsv")), head_tsv(d))?;
+    }
+    let gate = chosen
+        .iter()
+        .all(|(d, _)| a0_sel - d.sel_bpc >= CAL_GATE_BPC);
+    report += &format!("{BASE}_cal_gate_bpc\t{CAL_GATE_BPC}\n{BASE}_cal_gate\t{gate}\n");
+    if !gate {
+        report += &format!("{BASE}_eval3_read\tfalse\nverdict\tNO_GO_CAL_GATE\n");
+        return Ok(report);
+    }
+
+    // Stage 2: EVAL3, read once.
+    let eval3 = scan(
+        &dir.join("trace-eval3.bin"),
+        &dir.join("trace-eval3.banks.bin"),
+        4,
+    )?;
+    let eval_docs: std::collections::BTreeSet<u32> = eval3.spans.iter().map(|s| s.doc).collect();
+    if cal.spans.iter().any(|s| eval_docs.contains(&s.doc)) {
+        return Err("a doc_index appears in both CAL and EVAL3".into());
+    }
+    let a0_eval = bpc(eval3.bits, eval3.records);
+    check_reported(&json, "eval3_trace", a0_eval)?;
+    let mut d_bits = [0.0; SEEDS.len()];
+    let mut c_bits = [0.0; SEEDS.len()];
+    let mut mismatches = 0u64;
+    let mut nanos = [0u128; 2];
+    let mut pair = Pair::open(dir, "trace-eval3")?;
+    for &span in &eval3.spans {
+        pair.each(span, |r| {
+            let t = Instant::now();
+            std::hint::black_box(a0_cost(&r.record));
+            nanos[0] += t.elapsed().as_nanos();
+            for (k, (d, c)) in chosen.iter().enumerate() {
+                let t = Instant::now();
+                d_bits[k] += d.head.cost(r, d.eighths);
+                if k == 0 {
+                    nanos[1] += t.elapsed().as_nanos();
+                }
+                c_bits[k] += c.fast.cost(&r.record, c.eighths);
+                for depth in 0..DEPTHS {
+                    if d.head.raw(r, depth) != d.head.oracle_raw(r, depth) {
+                        mismatches += 1;
+                    }
+                }
+            }
+        })?;
+    }
+    if mismatches != 0 {
+        return Err(format!("{mismatches} kernel/oracle mismatches").into());
+    }
+    let a1d: Vec<f64> = d_bits.iter().map(|&b| bpc(b, eval3.records)).collect();
+    let a1c: Vec<f64> = c_bits.iter().map(|&b| bpc(b, eval3.records)).collect();
+    let spread = (a1d[0] - a1d[1]).abs();
+    let go = a1d
+        .iter()
+        .all(|&b| b < a0_eval - GO_MARGIN_BPC && a0_eval - b > 2.0 * spread);
+    let per_pos = |n: u128| n as f64 / 1000.0 / eval3.records as f64;
+    let head_us = (per_pos(nanos[1]) - per_pos(nanos[0])).max(0.0);
+    let cost_ratio = (p1_us + head_us) / p1_us;
+    let verdict = match (go, cost_ratio <= MAX_COST_RATIO) {
+        (true, true) => "GO",
+        (true, false) => "GO_DIAGNOSTIC_COST",
+        (false, _) => "NO_GO",
+    };
+    report += &format!(
+        "{BASE}_eval3_read\ttrue\n{BASE}_eval3_records\t{}\n{BASE}_eval3_docs\t{}\n\
+         {BASE}_a0_eval3_bpc\t{a0_eval:.9}\n{BASE}_kernel_oracle_mismatches\t0\n\
+         {BASE}_us_per_position_p1\t{p1_us:.4}\n{BASE}_us_per_position_head\t{head_us:.4}\n\
+         {BASE}_cost_ratio\t{cost_ratio:.4}\n",
+        eval3.records,
+        eval_docs.len(),
+    );
+    for (k, seed) in SEEDS.iter().enumerate() {
+        report += &format!(
+            "{BASE}_a1d_seed{seed}_eval3_bpc\t{:.9}\n{BASE}_a1c_seed{seed}_eval3_bpc\t{:.9}\n",
+            a1d[k], a1c[k]
+        );
+    }
+    report += &format!("{BASE}_seed_spread_bpc\t{spread:.9}\nverdict\t{verdict}\n");
+    Ok(report)
+}
+
+fn run(p1: &Path, out: &Path, label: &str) -> Result<()> {
+    fs::create_dir(out)?;
+    let report = format!("label\t{label}\n{}", evaluate(&p1.join(BASE), out)?);
+    fs::write(out.join("h1d.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
+/// Writes CAL and EVAL3 traces and sidecars where the target MSB follows
+/// bank 2's stretch while the mixed logit is 0, and their `trace.json`.
+/// `signal` scales how often the bank is right.
+fn write_smoke(root: &Path, signal: u64) -> Result<()> {
+    let dir = root.join(BASE);
+    fs::create_dir_all(&dir)?;
+    let mut summary = [(0.0, 0u64); 2];
+    for (slot, name, split, docs) in [
+        (
+            0,
+            "cal",
+            2u8,
+            (0..40u32).map(|k| 7 + 16 * k).collect::<Vec<_>>(),
+        ),
+        (1, "eval3", 4, (5000..5020).collect()),
+    ] {
+        let mut trace =
+            std::io::BufWriter::new(File::create(dir.join(format!("trace-{name}.bin")))?);
+        let mut banks =
+            std::io::BufWriter::new(File::create(dir.join(format!("trace-{name}.banks.bin")))?);
+        for doc in docs {
+            for position in 0..200u32 {
+                let s = splitmix(u64::from(doc) << 32 | u64::from(position));
+                let q = ((s >> 8) % 120) as i8 - 60;
+                let right = (s >> 50) % 16 < signal;
+                let top = u8::from((q > 0) == right);
+                let record = TraceRecord {
+                    doc_index: doc,
+                    position,
+                    split,
+                    target: (top << 7) | splitmix(s) as u8 & 0x7f,
+                    word: (s >> 40) as u16,
+                    context: s >> 17,
+                    logits: [0; 8],
+                    confidence: 0,
+                };
+                let mut plane = BankPlane {
+                    doc_index: doc,
+                    position,
+                    ..BankPlane::default()
+                };
+                plane.stretch[0][2] = q;
+                summary[slot].0 += record.cost_bits();
+                summary[slot].1 += 1;
+                trace.write_all(&record.encode())?;
+                banks.write_all(&plane.encode())?;
+            }
+        }
+        trace.flush()?;
+        banks.flush()?;
+    }
+    write_trace_json(
+        &dir,
+        summary[0].0 / summary[0].1 as f64,
+        summary[1].0 / summary[1].1 as f64,
+    )
+}
+
+fn write_trace_json(dir: &Path, cal_bpc: f64, eval3_bpc: f64) -> Result<()> {
+    fs::write(
+        dir.join("trace.json"),
+        format!(
+            "{{\n  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"bpc\": {cal_bpc:.9}}},\n  \"eval3_trace\": {{\"file\": \"trace-eval3.bin\", \"bpc\": {eval3_bpc:.9}}},\n  \"eval3_us_per_position\": 1.000000\n}}\n"
+        ),
+    )?;
+    Ok(())
+}
+
+fn cli(args: &[String]) -> Result<()> {
+    match args.get(1).map(String::as_str) {
+        Some("run") if args.len() == 4 => {
+            run(Path::new(&args[2]), Path::new(&args[3]), "PREREGISTERED")
+        }
+        Some("replay") if args.len() == 3 => {
+            let (head, eighths) = parse_head(&fs::read_to_string(&args[2])?)?;
+            println!("replay_sha256\t{}", replay_digest(&head, eighths)?);
+            Ok(())
+        }
+        Some("smoke") if args.len() == 3 => {
+            let root = Path::new(&args[2]);
+            write_smoke(&root.join("p1"), 14)?;
+            run(&root.join("p1"), &root.join("out"), "SMOKE")
+        }
+        _ => Err("usage: run P1_H1D_OUT NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Err(error) = cli(&args) {
+        eprintln!("sml-hyb-h1d-s5h: {error}");
+        std::process::exit(2);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("hyb-h1d-{tag}-{}", std::process::id()))
+    }
+
+    fn value(report: &str, key: &str) -> String {
+        report
+            .lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('\t'))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .to_owned()
+    }
+
+    #[test]
+    fn smoke_pipeline_passes_the_gate_learns_and_replays() {
+        let root = temp("smoke");
+        let _ = fs::remove_dir_all(&root);
+        cli(&["bin".into(), "smoke".into(), root.display().to_string()]).unwrap();
+        let report = fs::read_to_string(root.join("out/h1d.tsv")).unwrap();
+        assert_eq!(value(&report, "bytes_q4_cal_gate"), "true");
+        assert_eq!(value(&report, "bytes_q4_eval3_read"), "true");
+        assert_eq!(value(&report, "bytes_q4_dev_read"), "false");
+        let a0: f64 = value(&report, "bytes_q4_a0_eval3_bpc").parse().unwrap();
+        assert!((a0 - 8.0).abs() < 1e-9);
+        for seed in SEEDS {
+            let d: f64 = value(&report, &format!("bytes_q4_a1d_seed{seed}_eval3_bpc"))
+                .parse()
+                .unwrap();
+            let c: f64 = value(&report, &format!("bytes_q4_a1c_seed{seed}_eval3_bpc"))
+                .parse()
+                .unwrap();
+            assert!(d < a0 - 0.2 && d < c - 0.2, "seed {seed}: {d} vs {c}");
+            let path = root.join(format!("out/head-a1d-seed{seed}.tsv"));
+            let (head, eighths) = parse_head(&fs::read_to_string(path).unwrap()).unwrap();
+            assert_eq!(
+                value(&report, &format!("bytes_q4_a1d_seed{seed}_replay_sha256")),
+                replay_digest(&head, eighths).unwrap()
+            );
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_weak_bank_signal_stops_at_the_gate_without_opening_eval3() {
+        let root = temp("gate");
+        let _ = fs::remove_dir_all(&root);
+        // The bank is right half the time: nothing to learn.
+        write_smoke(&root.join("p1"), 8).unwrap();
+        // Make EVAL3 unreadable: the gate must stop before it.
+        fs::write(root.join("p1/bytes_q4/trace-eval3.bin"), b"torn").unwrap();
+        run(&root.join("p1"), &root.join("out"), "SMOKE").unwrap();
+        let report = fs::read_to_string(root.join("out/h1d.tsv")).unwrap();
+        assert_eq!(value(&report, "verdict"), "NO_GO_CAL_GATE");
+        assert_eq!(value(&report, "bytes_q4_eval3_read"), "false");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn invalid_inputs_are_refused() {
+        let root = temp("invalid");
+        let _ = fs::remove_dir_all(&root);
+        write_smoke(&root, 14).unwrap();
+        let dir = root.join(BASE);
+        // trace.json reporting another CAL BPC.
+        write_trace_json(&dir, 7.5, 8.0).unwrap();
+        assert!(run(&root, &root.join("out1"), "SMOKE").is_err());
+        // A truncated sidecar.
+        write_smoke(&root, 14).unwrap();
+        let banks = fs::read(dir.join("trace-cal.banks.bin")).unwrap();
+        fs::write(
+            dir.join("trace-cal.banks.bin"),
+            &banks[..banks.len() - BANK_PLANE_BYTES],
+        )
+        .unwrap();
+        assert!(run(&root, &root.join("out2"), "SMOKE").is_err());
+        // A misaligned sidecar of the right length.
+        write_smoke(&root, 14).unwrap();
+        let mut banks = fs::read(dir.join("trace-cal.banks.bin")).unwrap();
+        banks[4] ^= 1;
+        fs::write(dir.join("trace-cal.banks.bin"), &banks).unwrap();
+        assert!(run(&root, &root.join("out3"), "SMOKE").is_err());
+        assert!(cli(&["bin".into(), "run".into(), "a".into()]).is_err());
+        let bad = format!(
+            "row\t{ROW}\ndepths\t{DEPTHS}\nbanks\t{MAX_BANKS}\nlambda_eighths\t3\nunit\t1,1,1,1,1,1,1,1\nbias\t0,0,0,0,0,0,0,0\nweights\t{}\n",
+            vec!["0"; DEPTHS * ROW].join(",")
+        );
+        assert!(parse_head(&bad).is_err());
+        assert!(parse_head(&bad.replace("lambda_eighths\t3", "lambda_eighths\t2")).is_ok());
+        fs::remove_dir_all(&root).unwrap();
+    }
+}

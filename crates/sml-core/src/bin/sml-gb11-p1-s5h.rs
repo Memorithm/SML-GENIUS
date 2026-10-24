@@ -17,7 +17,16 @@
 //! `EVAL2_MANIFEST.tsv` (EVAL2 rows only, never trained on) traced with the
 //! frozen model as split 3 into `<arm>/trace-eval2.bin`, after an untraced
 //! timing pass over EVAL2.
+//!
+//! `run-h1d` / `smoke-h1d` serve HYB H-1d
+//! (docs/HYB-H1D-S5H-BANK-HEAD-PREREGISTRATION.md): only `bytes_q4`
+//! (no search), CAL held out as in `run-h1b`, the S5h DEV never opened, and
+//! `EVAL3_MANIFEST.tsv` (EVAL3 rows only, never trained on). CAL (split 2)
+//! and EVAL3 (split 4) are traced with the frozen model, each with a
+//! `.banks.bin` sidecar of per-bank stretches (`BankPlane`), after an
+//! untraced timing pass over EVAL3.
 
+use sml_core::hyb_h1d_bank_head::BankPlane;
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, sha256},
     gb11_p1_stream::{
@@ -174,7 +183,9 @@ fn push_document(
     Ok(())
 }
 
-fn load_roster(root: &Path, manifest: &Path, eval2: Option<&Path>) -> Result<Roster> {
+/// `eval` is the held-out manifest and the only role its rows may carry
+/// (`EVAL2` for H-1c, `EVAL3` for H-1d).
+fn load_roster(root: &Path, manifest: &Path, eval: Option<(&Path, &str)>) -> Result<Roster> {
     if fs::symlink_metadata(root)?.file_type().is_symlink() || !root.is_dir() {
         return Err("data root must be a directory, not a symlink".into());
     }
@@ -207,8 +218,8 @@ fn load_roster(root: &Path, manifest: &Path, eval2: Option<&Path>) -> Result<Ros
     }
     // EVAL2 rows follow, with fresh indices; a path or digest already in
     // the main manifest is refused.
-    let eval2_sha = match eval2 {
-        Some(path) => {
+    let eval2_sha = match eval {
+        Some((path, label)) => {
             let contents = manifest_text(path)?;
             let before = docs.len();
             for line in std::str::from_utf8(&contents)?.lines().skip(1) {
@@ -216,13 +227,13 @@ fn load_roster(root: &Path, manifest: &Path, eval2: Option<&Path>) -> Result<Ros
                     return Err("too many documents".into());
                 }
                 let f: Vec<&str> = line.split('\t').collect();
-                if f.len() != 5 || f[0] != "EVAL2" {
-                    return Err("EVAL2 manifest admits only EVAL2 rows".into());
+                if f.len() != 5 || f[0] != label {
+                    return Err(format!("{label} manifest admits only {label} rows").into());
                 }
                 push_document(&root, &f, Role::Eval2, &mut docs, &mut seen)?;
             }
             if docs.len() == before {
-                return Err("empty EVAL2 manifest".into());
+                return Err(format!("empty {label} manifest").into());
             }
             Some(hex(&sha256(&contents)))
         }
@@ -623,8 +634,243 @@ fn prefix(roster: &Roster, plan: Plan) -> Result<(Documents, Documents)> {
     Ok((fit, holdout))
 }
 
+/// Traces `docs` with the frozen model as `split` into `<name>.bin` and its
+/// `<name>.banks.bin` sidecar; returns (records, bits).
+fn trace_with_banks<'a>(
+    model: &mut Model,
+    tables: &Tables,
+    docs: impl Iterator<Item = &'a Document>,
+    split: u8,
+    out: &Path,
+    name: &str,
+) -> Result<(u64, f64)> {
+    let mut trace = trace_writer(out, &format!("{name}.bin"))?;
+    let mut banks = trace_writer(out, &format!("{name}.banks.bin"))?;
+    let mut summary = (0u64, 0.0f64);
+    for doc in docs {
+        let data = load(doc)?;
+        let mut io_error = None;
+        model.code_document(tables, &data, false, |pos, ctx, byte, code| {
+            let record = record(doc.index, pos, split, byte, ctx, code);
+            summary.0 += 1;
+            summary.1 += record.cost_bits();
+            let plane = BankPlane::from_code(doc.index as u32, pos as u32, code);
+            if let Err(e) = trace
+                .write_all(&record.encode())
+                .and_then(|()| banks.write_all(&plane.encode()))
+            {
+                io_error.get_or_insert(e);
+            }
+        });
+        if let Some(e) = io_error {
+            return Err(e.into());
+        }
+    }
+    trace.flush()?;
+    banks.flush()?;
+    if summary.0 == 0 {
+        return Err(format!("empty {name} trace").into());
+    }
+    Ok(summary)
+}
+
+/// HYB H-1d: trains `bytes_q4` on TRAIN without CAL, then traces CAL and
+/// EVAL3 with bank sidecars. DEV is never opened.
+fn run_arm_h1d(roster: &Roster, arm: &Arm, out: &Path) -> Result<String> {
+    let tables = Tables::new();
+    let mut model = Model::with_bank_bytes(arm.masks.clone(), arm.rule, arm.update, arm.bank_bytes);
+    let dir = out.join(arm.name);
+    fs::create_dir(&dir)?;
+    let start = Instant::now();
+    let (mut train_bits, mut train_events, mut train_bytes) = (0.0, 0u64, 0u64);
+    for doc in roster.docs.iter().filter(|d| d.role == Role::Train) {
+        let data = load(doc)?;
+        let (bits, events) = model.code_document(&tables, &data, true, |_, _, _, _| {});
+        train_bits += bits;
+        train_events += events;
+        train_bytes += doc.length;
+    }
+    let train_seconds = start.elapsed().as_secs_f64();
+    let trained_sha = model.weights_sha();
+    let eval_docs = || roster.docs.iter().filter(|d| d.role == Role::Eval2);
+    let mut eval_seconds = 0.0;
+    for doc in eval_docs() {
+        let data = load(doc)?;
+        let t = Instant::now();
+        std::hint::black_box(model.code_document(&tables, &data, false, |_, _, _, _| {}));
+        eval_seconds += t.elapsed().as_secs_f64();
+    }
+    eprintln!(
+        "GB11_P1_H1D_TIMING arm={} eval3_pass_s={eval_seconds:.1}",
+        arm.name
+    );
+    let cal = trace_with_banks(
+        &mut model,
+        &tables,
+        roster.docs.iter().filter(|d| d.role == Role::Cal),
+        2,
+        &dir,
+        "trace-cal",
+    )?;
+    let eval = trace_with_banks(&mut model, &tables, eval_docs(), 4, &dir, "trace-eval3")?;
+    if model.weights_sha() != trained_sha {
+        return Err("CAL or EVAL3 changed the weights".into());
+    }
+    if train_events == 0 {
+        return Err("empty TRAIN".into());
+    }
+    let mut buffer = Vec::with_capacity(model.table_bytes());
+    model.write_weights(&mut buffer)?;
+    fs::write(dir.join("weights.bin"), &buffer)?;
+    let weights_sha = hex(&trained_sha);
+    let summary = format!(
+        concat!(
+            "{{\n  \"schema\": \"SML_GB11_P1_H1D_TRACE_V1\",\n  \"arm\": \"{}\",\n",
+            "  \"record_bytes\": {},\n  \"bank_plane_bytes\": {},\n  \"endianness\": \"little\",\n",
+            "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split 2 = CAL frozen, 4 = EVAL3 frozen; *.banks.bin = BankPlane per record, same order\",\n",
+            "  \"logit_scale\": \"ln-odds of P(bit = 1) times {}\",\n",
+            "  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"rule\": \"TRAIN rows with doc_index % {} == {}, kept out of training, frozen model\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\", \"banks_sha256\": \"{}\"}},\n",
+            "  \"eval3_trace\": {{\"file\": \"trace-eval3.bin\", \"rule\": \"EVAL3 manifest rows, never trained on, frozen model\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\", \"banks_sha256\": \"{}\"}},\n",
+            "  \"eval3_us_per_position\": {:.6},\n",
+            "  \"eval3_manifest_sha256\": \"{}\",\n",
+            "  \"dev_read\": false,\n",
+            "  \"weights_sha256\": \"{}\",\n  \"manifest_sha256\": \"{}\",\n  \"source_commit\": \"{}\",\n  \"test\": \"UNOPENED\"\n}}\n"
+        ),
+        arm.name,
+        TRACE_RECORD_BYTES,
+        sml_core::hyb_h1d_bank_head::BANK_PLANE_BYTES,
+        STRETCH_SCALE,
+        CAL_STRIDE,
+        CAL_RESIDUE,
+        cal.0,
+        cal.1 / cal.0 as f64,
+        file_sha(&dir.join("trace-cal.bin"))?,
+        file_sha(&dir.join("trace-cal.banks.bin"))?,
+        eval.0,
+        eval.1 / eval.0 as f64,
+        file_sha(&dir.join("trace-eval3.bin"))?,
+        file_sha(&dir.join("trace-eval3.banks.bin"))?,
+        eval_seconds * 1e6 / eval.0 as f64,
+        roster.eval2_sha.as_deref().unwrap_or("none"),
+        weights_sha,
+        roster.manifest_sha,
+        std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
+    );
+    fs::write(dir.join("trace.json"), summary)?;
+    Ok(format!(
+        "SML_GB11_P1_H1D_V1\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{train_bytes}\t{train_events}\t{:.9}\t{}\t{:.9}\t{train_seconds:.3}\t{weights_sha}\tUNOPENED\tNOT_PROMOTED",
+        roster.manifest_sha,
+        arm.name,
+        model.table_bytes(),
+        arm.masks.len(),
+        masks_text(&arm.masks),
+        arm.rule.name(),
+        arm.update.name(),
+        train_bits / train_events as f64,
+        eval.0,
+        eval.1 / eval.0 as f64,
+    ))
+}
+
+/// `run-h1d` / `smoke-h1d`: `bytes_q4` only, configuration picked as in
+/// every P1 run (TRAIN prefix, CAL excluded), then `run_arm_h1d`.
+fn cli_h1d(
+    plan: Plan,
+    root: &Path,
+    manifest: &Path,
+    out: &Path,
+    expected: Option<&str>,
+    eval3: &Path,
+) -> Result<()> {
+    let mut roster = load_roster(root, manifest, Some((eval3, "EVAL3")))?;
+    for doc in &mut roster.docs {
+        if doc.role == Role::Train && doc.index % CAL_STRIDE == CAL_RESIDUE {
+            doc.role = Role::Cal;
+        }
+    }
+    if expected.is_some_and(|e| e != roster.manifest_sha) {
+        return Err(format!(
+            "manifest SHA256 {} differs from expected",
+            roster.manifest_sha
+        )
+        .into());
+    }
+    let canonical_root = fs::canonicalize(root)?;
+    fs::create_dir(out)?;
+    if fs::canonicalize(out)?.starts_with(&canonical_root) {
+        return Err("output must not be inside the data root".into());
+    }
+    let start = Instant::now();
+    let (fit, holdout) = prefix(&roster, plan)?;
+    let fit: Vec<&[u8]> = fit.iter().map(Vec::as_slice).collect();
+    let holdout: Vec<&[u8]> = holdout.iter().map(Vec::as_slice).collect();
+    let masks = [0, 1, 2, 3, 4, 6].map(order_mask).to_vec();
+    let bank_bytes = bank_bytes("bytes_q4", plan.small_table, masks.len());
+    let costs: Vec<f64> = std::thread::scope(|scope| {
+        let handles: Vec<_> = CONFIGS
+            .iter()
+            .map(|&(rule, update)| {
+                let (fit, holdout, masks) = (&fit, &holdout, &masks);
+                scope.spawn(move || {
+                    let mut model = Model::with_bank_bytes(masks.clone(), rule, update, bank_bytes);
+                    holdout_cost(&mut model, fit, holdout)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("config"))
+            .collect()
+    });
+    let mut best = 0;
+    for (i, &cost) in costs.iter().enumerate() {
+        if cost < costs[best] {
+            best = i;
+        }
+    }
+    let (rule, update) = CONFIGS[best];
+    let arm = Arm {
+        name: "bytes_q4",
+        masks,
+        bank_bytes,
+        rule,
+        update,
+        trace: true,
+    };
+    let row = run_arm_h1d(&roster, &arm, out)?;
+    println!("{row}");
+    fs::write(
+        out.join("metrics.tsv"),
+        format!("schema\tmanifest_sha256\tarm\ttable_bytes\tbanks\tmasks_hex\trule\tupdate\ttrain_bytes\ttrain_events\ttrain_prequential_bpc\teval3_events\teval3_bpc\ttrain_elapsed_s\tweights_sha256\ttest\tpublication\n{row}\n"),
+    )?;
+    let done = format!(
+        "SML_GB11_P1_DONE plan={}_H1D manifest={} total_s={:.1} dev_read=false test=UNOPENED model_promoted=false\n",
+        plan.label,
+        roster.manifest_sha,
+        start.elapsed().as_secs_f64(),
+    );
+    print!("{done}");
+    fs::write(out.join("COMPLETE"), done)?;
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
-    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv";
+    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL3_MANIFEST.tsv";
+    if let [_, mode, root, manifest, out, sha, eval3] = args {
+        if mode == "run-h1d" || mode == "smoke-h1d" {
+            let base = if mode == "run-h1d" { RUN } else { SMOKE };
+            let plan = Plan { cal: true, ..base };
+            let expected = (sha != "-").then_some(sha.as_str());
+            return cli_h1d(
+                plan,
+                Path::new(root),
+                Path::new(manifest),
+                Path::new(out),
+                expected,
+                Path::new(eval3),
+            );
+        }
+    }
     let (plan, root, manifest, out, expected, eval2) = match args {
         [_, mode, root, manifest, out, sha, eval2] if mode == "run-h1c" || mode == "smoke-h1c" => {
             let base = if mode == "run-h1c" { RUN } else { SMOKE };
@@ -649,7 +895,7 @@ fn cli(args: &[String]) -> Result<()> {
         _ => return Err(usage.into()),
     };
     let (root, out) = (Path::new(root), Path::new(out));
-    let mut roster = load_roster(root, Path::new(manifest), eval2)?;
+    let mut roster = load_roster(root, Path::new(manifest), eval2.map(|p| (p, "EVAL2")))?;
     if plan.cal {
         for doc in &mut roster.docs {
             if doc.role == Role::Train && doc.index % CAL_STRIDE == CAL_RESIDUE {
@@ -973,6 +1219,73 @@ mod tests {
         assert!(cli(&args("out2", &bad)).is_err());
         fs::write(&bad, eval2.replace("EVAL2\t", "DEV\t")).unwrap();
         assert!(cli(&args("out3", &bad)).is_err());
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn smoke_h1d_traces_cal_and_eval3_with_bank_sidecars() {
+        use sml_core::hyb_h1d_bank_head::BANK_PLANE_BYTES;
+        let home = std::env::temp_dir().join(format!("gb11-p1-h1d-{}", std::process::id()));
+        let (data, manifest_path) = smoke_corpus(&home);
+        let mut eval3 = format!("{HEADER}\n");
+        for i in 0..2 {
+            let text = format!("a fresh evaluation article {i} ").repeat(500);
+            let name = format!("f{i}.txt");
+            fs::write(data.join(&name), &text).unwrap();
+            eval3.push_str(&format!(
+                "EVAL3\t{name}\t{}\t{}\tOWNED_REVIEWED\n",
+                text.len(),
+                hex(&sha256(text.as_bytes()))
+            ));
+        }
+        let eval3_path = home.join("eval3.tsv");
+        fs::write(&eval3_path, &eval3).unwrap();
+        let args = |mode: &str, out: &str, eval: Option<&Path>| -> Vec<String> {
+            let mut v: Vec<String> = ["bin", mode]
+                .iter()
+                .map(|s| s.to_string())
+                .chain([&data, &manifest_path, &home.join(out)].map(|p| p.display().to_string()))
+                .collect();
+            if let Some(eval) = eval {
+                v.push("-".into());
+                v.push(eval.display().to_string());
+            }
+            v
+        };
+        cli(&args("smoke-h1d", "out", Some(&eval3_path))).unwrap();
+        let dir = home.join("out/bytes_q4");
+        let json = fs::read_to_string(dir.join("trace.json")).unwrap();
+        assert!(json.contains("SML_GB11_P1_H1D_TRACE_V1") && json.contains("\"dev_read\": false"));
+        assert!(!dir.join("trace-dev.bin").exists());
+        for (name, split, docs) in [("trace-cal", 2u8, 7..8u32), ("trace-eval3", 4, 12..14)] {
+            let mut keys = Vec::new();
+            let (records, _) = sml_core::gb11_p1_stream::read_trace(
+                &mut File::open(dir.join(format!("{name}.bin"))).unwrap(),
+                |r| {
+                    assert!(r.split == split && docs.contains(&r.doc_index));
+                    keys.push((r.doc_index, r.position));
+                },
+            )
+            .unwrap();
+            let banks = fs::read(dir.join(format!("{name}.banks.bin"))).unwrap();
+            assert_eq!(banks.len() as u64, records * BANK_PLANE_BYTES as u64);
+            for (chunk, key) in banks.chunks_exact(BANK_PLANE_BYTES).zip(&keys) {
+                let plane = BankPlane::decode(chunk.try_into().unwrap());
+                assert_eq!((plane.doc_index, plane.position), *key);
+                // bytes_q4 has six banks: the last two stay empty.
+                assert!(plane.stretch.iter().all(|row| row[6] == 0 && row[7] == 0));
+            }
+        }
+        // The same bytes_q4 model as run-h1b (same CAL rule and config).
+        cli(&args("smoke-h1b", "h1b", None)).unwrap();
+        assert_eq!(
+            file_sha(&dir.join("weights.bin")).unwrap(),
+            file_sha(&home.join("h1b/bytes_q4/weights.bin")).unwrap()
+        );
+        // EVAL3 manifests admit only EVAL3 rows.
+        let bad = home.join("bad.tsv");
+        fs::write(&bad, eval3.replace("EVAL3\t", "EVAL2\t")).unwrap();
+        assert!(cli(&args("smoke-h1d", "out2", Some(&bad))).is_err());
         fs::remove_dir_all(&home).unwrap();
     }
 
