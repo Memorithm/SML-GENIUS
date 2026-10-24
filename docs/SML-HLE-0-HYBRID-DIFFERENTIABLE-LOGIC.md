@@ -68,33 +68,86 @@ sigmoid derivative backward. `SteBits` provides clipped-STE bit weights.
   uses one lane of the packed evaluator.
 - Not connected to existing MOR, SBG or atlas manifests beyond `PageId`.
 
-## HLE-1: relaxed end-to-end mode (`hybrid_logic_relaxed`)
+## HLE-1: end-to-end relaxed engine, learned wiring, learned router, 64 lanes
 
-Status: executable reference contract; no performance or quality claim.
+Status: executable reference contract. Only the measurements below are
+claimed; they are toy-task, single-host (agent sandbox, x86_64, 8 CPUs,
+Rust 1.89) numbers, **not** Dell/Thor evidence.
 
-- Workspace bits are probabilities; signature is relaxed XOR `x + w - 2xw`.
-- Page keys are logits; relaxed Hamming distance
-  `d = sum_j s_j + q_j - 2 s_j q_j` with `q = sigmoid(kappa)`.
-- Routing is straight-through top-k: forward is the hard top-k by `d`
-  (ties by `PageId`); backward uses the per-page surrogate
-  `sigmoid((tau - d)/T)` with `tau` the k/k+1 midpoint (constant). No
-  softmax, no cross-page normalisation, no Q/K/V, no KV cache.
-- Gated page outputs fold with relaxed XOR `a + b - 2ab` into the workspace.
-- A fixed number of cycles is unrolled; backprop through time trains all
-  page tables and all key logits jointly (`DiffLogicNetwork` gained
-  `backward_with_input_grad` for chaining).
-- `discretize()` yields a hard `HybridLogicEngine` with
-  `max_cycles = cycles`; a hard fixed point is absorbing, so early COMMIT
-  matches the unrolled result.
+### Mechanisms
+
+1. **Learned wiring** (`RelaxedHybridEngine::wiring_sweep`). GB-11 found the
+   relaxation alone does not learn input selection and an exact discrete
+   search does. HLE-1 therefore interleaves BPTT (Adam) with a greedy discrete
+   sweep: for every gate, every source pair of the previous layer and every
+   one of the 16 hard tables is tried; a move is kept only if it lowers
+   `(hard-circuit error, relaxed loss)` lexicographically.
+2. **Learned router, jointly.** Keys are logits; relaxed Hamming distance
+   `d = sum_j s_j + q_j - 2 s_j q_j` with `s = x + w - 2xw`, `q = sigmoid(kappa)`.
+   Straight-through top-k: hard top-k forward, per-page surrogate
+   `sigmoid((tau - d)/T)` backward (`tau` = k/k+1 midpoint, constant). No
+   softmax, no cross-page normalisation, no Q/K/V, no KV cache. Gated page
+   outputs fold with relaxed XOR; BPTT across all cycles trains tables and
+   keys together (`DiffLogicNetwork::backward_with_input_grad` chains pages).
+3. **64-lane batching** (`HybridLogicEngine::run_lanes`): up to 64 queries
+   bit-sliced per `u64`; each lane is routed independently; each selected
+   page is evaluated once per cycle on the packed wires and XOR-applied under
+   the mask of lanes that chose it; lanes halt at their own fixed point.
+4. **Routing cost / safety.** `select_nth_unstable` partial selection, then
+   only the `k` winners are sorted; pages are addressed by index (no
+   search-by-id). Keys with bits at or above `workspace_bits` are rejected
+   (`KeyOutOfRange`) instead of being masked.
+5. **Discretisation measured independently** (`evaluate`): hard accuracy is
+   computed by the discretised integer engine via `run_lanes`, separately
+   from relaxed loss/accuracy, plus disagreement and mean `|p - hard bit|`.
+
+### Controls (task: 4-bit parity into workspace bit 0, `I=4, W=2`, 4 single-layer pages, `k=1`, 3 cycles; 16 seeds; 4 epochs x 100 Adam steps, lr 0.1)
+
+| arm | seeds exact (hard) | mean hard acc | mean relaxed acc | mean relaxed loss | mean disagreement | mean abs gap |
+|---|---:|---:|---:|---:|---:|---:|
+| full (wiring+routing) | 3/16 | 0.914 | 0.906 | 0.157 | 0.055 | 0.117 |
+| wiring frozen | 0/16 | 0.543 | 0.582 | 0.585 | 0.258 | 0.440 |
+| routing frozen | 3/16 | 0.855 | 0.883 | 0.263 | 0.105 | 0.223 |
+| both frozen | 0/16 | 0.500 | 0.523 | 0.662 | 0.359 | 0.496 |
+
+Identical in debug and release (deterministic). Reading: on this toy, the
+wiring search accounts for most of the gain (as in GB-11); learned routing
+adds mean accuracy but not exact seeds. 3/16 exact is a low success rate.
+
+### Routing timing (sandbox host, release, `hle1_route_bench`, 8-bit signatures, k=4)
+
+| pages | Hamming top-k ns/query | key reads/query | `DirectRouteTable` ns/query | lookups/query |
+|---:|---:|---:|---:|---:|
+| 16 | 112.7 | 16 | 0.9 | 1 |
+| 256 | 1935.0 | 256 | 1.0 | 1 |
+| 4096 | 15674.9 | 4096 | 0.9 | 1 |
+
+The Hamming router is a linear key scan; the existing direct-address router
+is one lookup. The comparison is with `DirectRouteTable`, not with the full
+`MorPolicy` stack. An index (e.g. multi-index hashing) is not implemented.
+
+### Tests
 
 | Test | Assertion |
 |---|---|
-| `bptt_matches_finite_differences_with_routing_held_fixed` | BPTT gradient over 3 cycles equals central differences (routing surrogate off, kinks skipped) |
-| `routing_surrogate_trains_key_logits` | key logits receive non-zero gradient |
-| `joint_bptt_learns_two_cycle_parity_and_hard_engine_agrees` | for some seed in a 64-seed search, 3-bit parity (unreachable in one cycle by one single-layer page) is learned; hard engine is exact, rounded relaxed equals hard on all 8 inputs, and distinct pages are routed across cycles |
-| `invalid_configurations_fail_closed` | validation |
+| `bptt_matches_finite_differences_with_routing_held_fixed` | BPTT over 3 cycles equals central differences (surrogate off, routing kinks skipped) |
+| `routing_surrogate_trains_key_logits` | keys receive gradient |
+| `joint_bptt_learns_two_cycle_parity_and_hard_engine_agrees` | 3-bit parity (impossible in one cycle for one single-layer page) learned; hard exact; rounded relaxed == hard; distinct pages across cycles |
+| `learned_wiring_and_routing_solve_four_bit_parity_over_three_cycles` | full arm reaches an exact hard circuit for some seed in 0..16 with zero relaxed/hard disagreement |
+| `wiring_search_never_worsens_the_hard_objective` | sweep is monotone in the objective |
+| `lanes_match_single_query_runs_with_per_lane_routing` | 64 lanes with distinct routes equal 64 single `run` calls (workspace, cycles, halt, route trace) |
+| `partial_select_matches_full_sort_reference`, `keys_wider_than_workspace_fail_closed` | routing equivalence, key validation |
 
-Limitations: toy task with a seed search; the routing gradient is a biased
-straight-through estimator; all pages are evaluated in relaxed training
-(cost linear in page count); widths stay limited to 64 bits; still not
-connected to MOR/SBG/atlas manifests beyond `PageId`.
+### Reproduce / Dell–Thor
+
+`bash scripts/hle1-bench.sh` prints `HLE1_ENV`, the controls table and the
+routing timing. Dell/Thor numbers must be produced by running that script on
+those hosts through a RemoteOps workflow pinned to an exact SHA; SML-GENIUS
+self-hosted jobs only run integrated `main`, so this was not run here.
+
+### Limitations
+
+Toy tasks; seed-dependent success; ST routing gradient is biased; the wiring
+sweep is exhaustive over pairs (cost grows quadratically with layer width)
+and evaluates all pages; widths remain <= 64 bits; not connected to
+MOR/SBG/atlas manifests beyond `PageId`.

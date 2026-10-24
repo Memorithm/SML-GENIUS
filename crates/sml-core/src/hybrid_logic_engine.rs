@@ -70,6 +70,11 @@ pub enum HybridError {
         outputs: usize,
     },
     InputOutOfRange,
+    /// A page key has bits at or above `workspace_bits`; such bits could
+    /// never match a signature and are rejected instead of silently masked.
+    KeyOutOfRange(PageId),
+    /// `run_lanes` accepts 1..=64 queries with matching workspaces.
+    LaneCount,
 }
 
 impl fmt::Display for HybridError {
@@ -87,6 +92,8 @@ impl fmt::Display for HybridError {
                 page.0
             ),
             Self::InputOutOfRange => write!(f, "input has bits above input_bits"),
+            Self::KeyOutOfRange(id) => write!(f, "page {} key exceeds workspace_bits", id.0),
+            Self::LaneCount => write!(f, "lane batch must hold 1..=64 queries"),
         }
     }
 }
@@ -132,6 +139,9 @@ impl HybridLogicEngine {
             return Err(HybridError::DuplicatePage(PageId(w[0])));
         }
         for p in &pages {
+            if p.key & !mask(config.workspace_bits) != 0 {
+                return Err(HybridError::KeyOutOfRange(p.id));
+            }
             let (i, o) = (p.network.input_count(), p.network.output_count());
             if i != config.input_bits + config.workspace_bits || o != config.workspace_bits {
                 return Err(HybridError::PageShape {
@@ -144,28 +154,36 @@ impl HybridLogicEngine {
         Ok(Self { config, pages })
     }
 
-    /// Select the `pages_per_cycle` nearest pages by Hamming distance.
-    pub fn route(&self, signature: u64, counters: &mut ExecutionCounters) -> Vec<PageId> {
-        let mut ranked: Vec<(u32, PageId, usize)> = self
+    /// Indices of the `pages_per_cycle` nearest pages by Hamming distance,
+    /// ordered by `(distance, PageId)`. Uses partial selection
+    /// (`select_nth_unstable`) and only sorts the selected `k`.
+    fn route_indices(&self, signature: u64, counters: &mut ExecutionCounters) -> Vec<usize> {
+        let k = self.config.pages_per_cycle;
+        let mut ranked: Vec<(u32, u32, usize)> = self
             .pages
             .iter()
             .enumerate()
-            .map(|(i, p)| ((signature ^ p.key).count_ones(), p.id, i))
+            .map(|(i, p)| ((signature ^ p.key).count_ones(), p.id.0, i))
             .collect();
         counters.route_lookups += ranked.len() as u64;
-        ranked.sort_unstable_by_key(|&(d, id, _)| (d, id.0));
-        ranked
+        if k < ranked.len() {
+            ranked.select_nth_unstable(k - 1);
+            ranked.truncate(k);
+        }
+        ranked.sort_unstable();
+        ranked.into_iter().map(|(_, _, i)| i).collect()
+    }
+
+    /// Select the `pages_per_cycle` nearest pages by Hamming distance.
+    pub fn route(&self, signature: u64, counters: &mut ExecutionCounters) -> Vec<PageId> {
+        self.route_indices(signature, counters)
             .into_iter()
-            .take(self.config.pages_per_cycle)
-            .map(|(_, id, _)| id)
+            .map(|i| self.pages[i].id)
             .collect()
     }
 
-    fn page(&self, id: PageId) -> &HybridPage {
-        self.pages
-            .iter()
-            .find(|p| p.id == id)
-            .expect("routed id exists")
+    pub fn config(&self) -> HybridConfig {
+        self.config
     }
 
     /// Run 1..=max_cycles of route/execute/rewrite, then COMMIT.
@@ -188,13 +206,13 @@ impl HybridLogicEngine {
             *w = (input >> i) & 1;
         }
         for cycle in 1..=c.max_cycles {
-            let selected = self.route((input ^ ws) & wmask, counters);
+            let selected = self.route_indices((input ^ ws) & wmask, counters);
             for (j, w) in wires[c.input_bits..].iter_mut().enumerate() {
                 *w = (ws >> j) & 1;
             }
             let mut delta = 0u64;
-            for &id in &selected {
-                let page = self.page(id);
+            for &i in &selected {
+                let page = &self.pages[i];
                 let out = page
                     .network
                     .eval_packed(&wires)
@@ -204,7 +222,7 @@ impl HybridLogicEngine {
                     delta ^= (w & 1) << j;
                 }
             }
-            trace.push(selected);
+            trace.push(selected.iter().map(|&i| self.pages[i].id).collect());
             let next = ws ^ delta;
             let fixed = next == ws;
             ws = next;
@@ -219,6 +237,98 @@ impl HybridLogicEngine {
             halt,
             route_trace: trace,
         })
+    }
+
+    /// Run up to 64 independent queries in one pass, lane `l` holding
+    /// query `l`. Wires are bit-sliced (`wire[i]` bit `l` = lane `l`). Each
+    /// cycle routes every active lane independently; each selected page is
+    /// evaluated once on the packed wires and its output is XOR-applied
+    /// under the mask of lanes that selected it. A lane stops updating at
+    /// its own fixed point (after `min_cycles`). Results equal `run` per lane.
+    pub fn run_lanes(
+        &self,
+        inputs: &[u64],
+        initial_workspaces: &[u64],
+        counters: &mut ExecutionCounters,
+    ) -> Result<Vec<HybridCommit>, HybridError> {
+        let c = self.config;
+        let n = inputs.len();
+        if n == 0 || n > 64 || initial_workspaces.len() != n {
+            return Err(HybridError::LaneCount);
+        }
+        if inputs.iter().any(|&x| x & !mask(c.input_bits) != 0) {
+            return Err(HybridError::InputOutOfRange);
+        }
+        let wmask = mask(c.workspace_bits);
+        let mut ws: Vec<u64> = initial_workspaces.iter().map(|w| w & wmask).collect();
+        let mut wires = vec![0u64; c.input_bits + c.workspace_bits];
+        for (l, &x) in inputs.iter().enumerate() {
+            for (i, w) in wires.iter_mut().enumerate().take(c.input_bits) {
+                *w |= ((x >> i) & 1) << l;
+            }
+        }
+        let mut active: u64 = mask(n);
+        let mut traces = vec![Vec::new(); n];
+        let mut halts = vec![HaltReason::CycleBudget; n];
+        let mut lane_mask = vec![0u64; self.pages.len()];
+        for cycle in 1..=c.max_cycles {
+            if active == 0 {
+                break;
+            }
+            lane_mask.iter_mut().for_each(|m| *m = 0);
+            for l in 0..n {
+                if (active >> l) & 1 == 0 {
+                    continue;
+                }
+                let sel = self.route_indices((inputs[l] ^ ws[l]) & wmask, counters);
+                traces[l].push(sel.iter().map(|&i| self.pages[i].id).collect::<Vec<_>>());
+                for i in sel {
+                    lane_mask[i] |= 1 << l;
+                }
+            }
+            for (j, w) in wires[c.input_bits..].iter_mut().enumerate() {
+                *w = ws
+                    .iter()
+                    .enumerate()
+                    .fold(0, |acc, (l, &v)| acc | (((v >> j) & 1) << l));
+            }
+            let mut delta = vec![0u64; c.workspace_bits];
+            for (page, &m) in self.pages.iter().zip(&lane_mask) {
+                if m == 0 {
+                    continue;
+                }
+                let out = page
+                    .network
+                    .eval_packed(&wires)
+                    .expect("page shape validated at construction");
+                counters.boolean_ops += page.network.gate_count() as u64;
+                for (d, o) in delta.iter_mut().zip(out) {
+                    *d ^= o & m;
+                }
+            }
+            for l in 0..n {
+                if (active >> l) & 1 == 0 {
+                    continue;
+                }
+                let dl = delta
+                    .iter()
+                    .enumerate()
+                    .fold(0u64, |acc, (j, &d)| acc | (((d >> l) & 1) << j));
+                ws[l] ^= dl;
+                if dl == 0 && cycle >= c.min_cycles {
+                    halts[l] = HaltReason::FixedPoint;
+                    active &= !(1 << l);
+                }
+            }
+        }
+        Ok((0..n)
+            .map(|l| HybridCommit {
+                workspace: ws[l],
+                cycles: traces[l].len(),
+                halt: halts[l],
+                route_trace: std::mem::take(&mut traces[l]),
+            })
+            .collect())
     }
 }
 
@@ -324,6 +434,162 @@ mod tests {
         let engine = HybridLogicEngine::new(cfg(3, 5), vec![idle]).unwrap();
         let commit = engine.run(0, 0, &mut c).unwrap();
         assert_eq!((commit.cycles, commit.halt), (3, HaltReason::FixedPoint));
+    }
+
+    #[test]
+    fn lanes_match_single_query_runs_with_per_lane_routing() {
+        // 4 pages, 2-bit workspace, 3-bit input: lanes route differently.
+        let mk = |id: u32, key: u64, seed: u64| {
+            let mut net = DiffLogicNetwork::new(5, &[2], seed, 2.0).unwrap();
+            // Large random tables give non-trivial hard functions.
+            let p: Vec<f64> = net
+                .parameters()
+                .iter()
+                .enumerate()
+                .map(|(i, v)| if (i as u64 + seed) % 3 == 0 { -v } else { *v })
+                .collect();
+            net.parameters_mut().copy_from_slice(&p);
+            HybridPage {
+                id: PageId(id),
+                key,
+                network: net.discretize(),
+            }
+        };
+        let engine = HybridLogicEngine::new(
+            HybridConfig {
+                input_bits: 3,
+                workspace_bits: 2,
+                pages_per_cycle: 2,
+                min_cycles: 1,
+                max_cycles: 5,
+            },
+            vec![mk(10, 0, 1), mk(4, 1, 2), mk(7, 2, 3), mk(2, 3, 4)],
+        )
+        .unwrap();
+        let inputs: Vec<u64> = (0..64).map(|l| l % 8).collect();
+        let ws0: Vec<u64> = (0..64).map(|l| (l / 8) % 4).collect();
+        let mut c = ExecutionCounters::default();
+        let lanes = engine.run_lanes(&inputs, &ws0, &mut c).unwrap();
+        let mut distinct_routes = std::collections::BTreeSet::<Vec<u32>>::new();
+        for l in 0..64 {
+            let single = engine
+                .run(inputs[l], ws0[l], &mut ExecutionCounters::default())
+                .unwrap();
+            assert_eq!(lanes[l], single, "lane {l}");
+            distinct_routes.insert(single.route_trace[0].iter().map(|p| p.0).collect());
+        }
+        assert!(distinct_routes.len() > 1);
+        assert_eq!(
+            engine.run_lanes(&[0; 65], &[0; 65], &mut c),
+            Err(HybridError::LaneCount)
+        );
+    }
+
+    #[test]
+    fn keys_wider_than_workspace_fail_closed() {
+        let mut p = trained_page(1, 0, never);
+        p.key = 0b10;
+        assert_eq!(
+            HybridLogicEngine::new(cfg(1, 1), vec![p]),
+            Err(HybridError::KeyOutOfRange(PageId(1)))
+        );
+    }
+
+    #[test]
+    fn partial_select_matches_full_sort_reference() {
+        let pages: Vec<HybridPage> = (0..16u32)
+            .map(|i| trained_page(100 - i, u64::from(i * 7 % 16), never))
+            .collect();
+        let engine = HybridLogicEngine::new(
+            HybridConfig {
+                input_bits: 4,
+                workspace_bits: 4,
+                pages_per_cycle: 3,
+                min_cycles: 1,
+                max_cycles: 1,
+            },
+            pages
+                .into_iter()
+                .map(|mut p| {
+                    let mut n = DiffLogicNetwork::new(8, &[4], 1, 0.1).unwrap();
+                    n.parameters_mut().iter_mut().for_each(|v| *v = -1.0);
+                    p.network = n.discretize();
+                    p
+                })
+                .collect(),
+        )
+        .unwrap();
+        for sig in 0..16u64 {
+            let mut full: Vec<(u32, u32)> = engine
+                .pages
+                .iter()
+                .map(|p| ((sig ^ p.key).count_ones(), p.id.0))
+                .collect();
+            full.sort_unstable();
+            let want: Vec<PageId> = full.iter().take(3).map(|&(_, id)| PageId(id)).collect();
+            assert_eq!(engine.route(sig, &mut ExecutionCounters::default()), want);
+        }
+    }
+
+    /// Timing harness (ignored by default): Hamming top-k over `P` page keys
+    /// versus the existing `DirectRouteTable` (one indexed lookup). Run on
+    /// the target machine with
+    /// `cargo test --release -p sml-core --lib hle1_route_bench -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn hle1_route_bench() {
+        use crate::{BooleanWorkspace, DirectRouteTable};
+        use std::time::Instant;
+        for &p in &[16usize, 256, 4096] {
+            let mut n = DiffLogicNetwork::new(16, &[8], 1, 0.1).unwrap();
+            n.parameters_mut().iter_mut().for_each(|v| *v = -1.0);
+            let hard = n.discretize();
+            let pages = (0..p)
+                .map(|i| HybridPage {
+                    id: PageId(i as u32),
+                    key: (i as u64).wrapping_mul(0x9E37_79B9) & 0xFF,
+                    network: hard.clone(),
+                })
+                .collect();
+            let engine = HybridLogicEngine::new(
+                HybridConfig {
+                    input_bits: 8,
+                    workspace_bits: 8,
+                    pages_per_cycle: 4,
+                    min_cycles: 1,
+                    max_cycles: 1,
+                },
+                pages,
+            )
+            .unwrap();
+            let iters = 20_000u64;
+            let mut c = ExecutionCounters::default();
+            let t = Instant::now();
+            let mut sink = 0u32;
+            for q in 0..iters {
+                sink ^= engine.route(q & 0xFF, &mut c)[0].0;
+            }
+            let ham = t.elapsed().as_nanos() as f64 / iters as f64;
+            let table = DirectRouteTable::new(8, (0..256).map(PageId).collect()).unwrap();
+            let wss: Vec<BooleanWorkspace> = (0..256u64)
+                .map(|v| {
+                    BooleanWorkspace::from_bits(
+                        &(0..8).map(|j| (v >> j) & 1 == 1).collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
+            let mut c2 = ExecutionCounters::default();
+            let t = Instant::now();
+            for q in 0..iters {
+                sink ^= table.route(&wss[(q & 0xFF) as usize], &mut c2).unwrap().0;
+            }
+            let direct = t.elapsed().as_nanos() as f64 / iters as f64;
+            println!(
+                "pages={p} hamming_topk_ns={ham:.1} lookups/q={} direct_ns={direct:.1} lookups/q={} sink={sink}",
+                c.route_lookups / iters,
+                c2.route_lookups / iters
+            );
+        }
     }
 
     #[test]
