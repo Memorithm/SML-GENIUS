@@ -108,10 +108,14 @@ pub fn fit_joint_focus(
         || policy.max_editable_pages == 0
         || policy.max_candidate_evaluations == 0
     {
-        return Err(JointFocusError::InvalidPolicy("zero budget or unsupported ANF degree"));
+        return Err(JointFocusError::InvalidPolicy(
+            "zero budget or unsupported ANF degree",
+        ));
     }
     if config.event_bits.saturating_add(config.state_bits) > 16 {
-        return Err(JointFocusError::InvalidPolicy("at most 16 event+state input bits"));
+        return Err(JointFocusError::InvalidPolicy(
+            "at most 16 event+state input bits",
+        ));
     }
     if editable.is_empty() {
         return Err(JointFocusError::NoEditablePages);
@@ -126,8 +130,8 @@ pub fn fit_joint_focus(
         return Err(JointFocusError::Split(FocusFitError::TooManySamples));
     }
 
-    let baseline = BooleanAssociativeFocus::new(config, pages.to_vec())
-        .map_err(JointFocusError::Engine)?;
+    let baseline =
+        BooleanAssociativeFocus::new(config, pages.to_vec()).map_err(JointFocusError::Engine)?;
     validate_splits(config, train, validation).map_err(JointFocusError::Split)?;
 
     let mut ids = editable.to_vec();
@@ -155,7 +159,9 @@ pub fn fit_joint_focus(
 
     let basis = feature_bank(config, local.max_degree);
     if basis.len() > local.max_basis_terms {
-        return Err(JointFocusError::InvalidPolicy("basis exceeds declared bound"));
+        return Err(JointFocusError::InvalidPolicy(
+            "basis exceeds declared bound",
+        ));
     }
     let worst_case = (basis.len() as u64)
         .checked_add(1)
@@ -167,8 +173,7 @@ pub fn fit_joint_focus(
     }
 
     let baseline_train = error_bits(&baseline, train).map_err(JointFocusError::Split)?;
-    let baseline_validation =
-        error_bits(&baseline, validation).map_err(JointFocusError::Split)?;
+    let baseline_validation = error_bits(&baseline, validation).map_err(JointFocusError::Split)?;
     let mut candidate_pages = pages.to_vec();
     let mut train_error = baseline_train;
     let mut evaluated = 0u64;
@@ -198,8 +203,8 @@ pub fn fit_joint_focus(
                     }
                     Some(term)
                 };
-                let engine =
-                    BooleanAssociativeFocus::new(config, trial.clone()).map_err(JointFocusError::Engine)?;
+                let engine = BooleanAssociativeFocus::new(config, trial.clone())
+                    .map_err(JointFocusError::Engine)?;
                 let loss = error_bits(&engine, train).map_err(JointFocusError::Split)?;
                 evaluated += 1;
                 if loss < best_error {
@@ -222,10 +227,9 @@ pub fn fit_joint_focus(
         });
     }
 
-    let candidate =
-        BooleanAssociativeFocus::new(config, candidate_pages.clone()).map_err(JointFocusError::Engine)?;
-    let validation_error =
-        error_bits(&candidate, validation).map_err(JointFocusError::Split)?;
+    let candidate = BooleanAssociativeFocus::new(config, candidate_pages.clone())
+        .map_err(JointFocusError::Engine)?;
+    let validation_error = error_bits(&candidate, validation).map_err(JointFocusError::Split)?;
     let admitted = train_error < baseline_train && validation_error <= baseline_validation;
     let changed_pages = indices
         .iter()
@@ -372,14 +376,22 @@ mod tests {
         let pages = [page(20, 5, 8, 8), page(10, 5, 4, 4)];
         assert_eq!(
             fit_joint_focus(
-                cfg(), &pages, &[PageId(10), PageId(10)], &train, &val,
+                cfg(),
+                &pages,
+                &[PageId(10), PageId(10)],
+                &train,
+                &val,
                 JointFocusPolicy::default()
             ),
             Err(JointFocusError::DuplicateEditablePage(PageId(10)))
         );
         assert_eq!(
             fit_joint_focus(
-                cfg(), &pages, &[PageId(10), PageId(99)], &train, &val,
+                cfg(),
+                &pages,
+                &[PageId(10), PageId(99)],
+                &train,
+                &val,
                 JointFocusPolicy::default()
             ),
             Err(JointFocusError::MissingEditablePage(PageId(99)))
@@ -388,11 +400,16 @@ mod tests {
         val[0].state = train[0].state;
         assert_eq!(
             fit_joint_focus(
-                cfg(), &pages, &[PageId(10), PageId(20)], &train, &val,
+                cfg(),
+                &pages,
+                &[PageId(10), PageId(20)],
+                &train,
+                &val,
                 JointFocusPolicy::default()
             ),
             Err(JointFocusError::Split(FocusFitError::SplitInputOverlap {
-                event: train[0].event, state: train[0].state
+                event: train[0].event,
+                state: train[0].state
             }))
         );
     }
@@ -419,9 +436,13 @@ mod tests {
         for event in 0u64..4 {
             // Lower priority clears bit 1 only if event bit 1 is present
             // and no high-priority writer is active; high always wins ties.
-            let target = if event & 1 != 0 { 0b11 }
-                else if event & 2 != 0 { 0b01 }
-                else { 0b11 };
+            let target = if event & 1 != 0 {
+                0b11
+            } else if event & 2 != 0 {
+                0b01
+            } else {
+                0b11
+            };
             train.push(FocusTransition {
                 case_id: event,
                 event,
