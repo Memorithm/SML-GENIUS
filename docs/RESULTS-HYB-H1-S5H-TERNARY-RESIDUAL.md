@@ -51,6 +51,6 @@ A1 dégrade donc P1 de **0,32 BPC**. Le surcoût de 4,3× dépasse lui aussi la 
 ## Ce que H-1 établit
 
 - Le noyau ternaire bitplane est exact sur 60 M de positions réelles, et identique entre x86 et ARM.
-- Sur ce montage (P1 search_q4, tête de 288 o par profondeur, entraînée sur des logits préquentiels), le neuronal résiduel n'apporte pas de BPC au booléen : il en retire.
+- Sur ce montage (P1 search_q4, tête de 288 o au total (36 o par profondeur), entraînée sur des logits préquentiels), le neuronal résiduel n'apporte pas de BPC au booléen : il en retire.
 
 NOT_PROMOTED.
