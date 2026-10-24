@@ -24,8 +24,9 @@ pub const TAUS: [f32; 3] = [0.0625, 0.125, 0.25];
 pub const LAMBDAS: [f64; 4] = [0.0, 0.25, 0.5, 1.0];
 /// Fixed SGD step for the f32 masters (one epoch, record order).
 pub const LEARNING_RATE: f32 = 1.0 / 128.0;
-/// |stretch| thermometer edges; the last marks saturation.
-const MAGNITUDE_EDGES: [i32; 4] = [128, 512, 1024, STRETCH_LIMIT];
+/// |stretch| thermometer over the four registered buckets (< 128, < 512,
+/// < 1024, >= 1024): bit 0 is always on, bit k is on from `MAGNITUDE_EDGES[k]`.
+const MAGNITUDE_EDGES: [i32; 4] = [0, 128, 512, 1024];
 
 /// Bit `7 - depth` of the target, the decision taken at `depth`.
 #[must_use]
@@ -361,7 +362,16 @@ mod tests {
         let deep = features(&record, 7);
         assert_eq!(deep[1] >> 48 & 0x7f, 0b0000101, "prefix bits 1,0,1,0,0,0,0");
         assert_eq!(deep[1] >> 55 & 1, 0);
-        assert_eq!(deep[1] >> 56, 0b0001);
+        assert_eq!(deep[1] >> 56, 0b0011, "300 is in the 128..512 bucket");
+        let at = |logit: i16| {
+            let mut r = record;
+            r.logits[0] = logit;
+            features(&r, 0)[1] >> 56
+        };
+        assert_eq!(at(0), 0b0001);
+        assert_eq!(at(127), 0b0001);
+        assert_eq!(at(-512), 0b0111);
+        assert_eq!(at(1024), at(2047), "saturation is not a fifth bucket");
         assert_eq!(words[1] >> (INPUTS - 64), 0, "no bit past INPUTS");
     }
 

@@ -1,8 +1,9 @@
 //! HYB H-1: ternary residual head on GB-11 P1 S5h traces.
 //! Protocol: docs/HYB-H1-S5H-TERNARY-RESIDUAL-PREREGISTRATION.md.
 //!
-//! `run TRACE_DIR NEW_OUTPUT_DIR [EXPECTED_TRAIN_BPC EXPECTED_DEV_BPC]` runs
-//! the frozen arms on `trace-train.bin` / `trace-dev.bin`; `replay HEAD.tsv`
+//! `run TRACE_DIR NEW_OUTPUT_DIR` runs the frozen arms on `trace-train.bin` /
+//! `trace-dev.bin`, after recomputing the P1 BPC that `trace.json` reports for
+//! both traces (the run stops on any mismatch); `replay HEAD.tsv`
 //! prints the i32 score digest of an exported head on synthetic records
 //! (cross-host check); `smoke` runs the pipeline on generated traces and is
 //! labelled SMOKE, never a result. TEST is never read. NOT_PROMOTED.
@@ -69,12 +70,27 @@ fn bpc(bits: f64, records: u64) -> f64 {
     bits / records as f64
 }
 
-fn check_expected(name: &str, got: f64, expected: Option<&String>) -> Result<()> {
-    if let Some(text) = expected {
-        let want: f64 = text.parse()?;
-        if (got - want).abs() > 1e-6 {
-            return Err(format!("{name} P1 BPC {got:.9} != trace.json {want:.9}").into());
-        }
+/// The `"bpc"` that `trace.json` reports on the line of `key` (the P1
+/// producer writes one line per trace).
+fn reported_bpc(json: &str, key: &str) -> Result<f64> {
+    let line = json
+        .lines()
+        .find(|l| l.trim_start().starts_with(&format!("\"{key}\"")))
+        .ok_or_else(|| format!("trace.json has no {key}"))?;
+    let rest = line
+        .split_once("\"bpc\": ")
+        .ok_or_else(|| format!("trace.json {key} has no bpc"))?
+        .1;
+    let end = rest
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(rest.len());
+    Ok(rest[..end].parse()?)
+}
+
+fn check_reported(json: &str, key: &str, got: f64) -> Result<()> {
+    let want = reported_bpc(json, key)?;
+    if (got - want).abs() > 1e-6 {
+        return Err(format!("{key} P1 BPC {got:.9} != trace.json {want:.9}").into());
     }
     Ok(())
 }
@@ -128,7 +144,8 @@ fn replay_digest(head: &Head) -> String {
     hex(&sha256(&bytes))
 }
 
-fn run(dir: &Path, out: &Path, label: &str, expected: &[String]) -> Result<()> {
+fn run(dir: &Path, out: &Path, label: &str) -> Result<()> {
+    let json = fs::read_to_string(dir.join("trace.json"))?;
     fs::create_dir(out)?;
     let train_path = dir.join("trace-train.bin");
     let dev_path = dir.join("trace-dev.bin");
@@ -139,8 +156,8 @@ fn run(dir: &Path, out: &Path, label: &str, expected: &[String]) -> Result<()> {
     }
     let a0_train = bpc(train.bits, train.records);
     let a0_dev = bpc(dev.bits, dev.records);
-    check_expected("TRAIN", a0_train, expected.first())?;
-    check_expected("DEV", a0_dev, expected.get(1))?;
+    check_reported(&json, "train_trace", a0_train)?;
+    check_reported(&json, "dev_trace", a0_dev)?;
     // TRAIN-HOLD: the last 1/16 of traced TRAIN files, by doc_index.
     let hold_count = train.docs.len().div_ceil(16);
     let hold_from = *train
@@ -257,8 +274,10 @@ fn run(dir: &Path, out: &Path, label: &str, expected: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Writes a small synthetic TRAIN/DEV trace pair with a learnable residual.
+/// Writes a small synthetic TRAIN/DEV trace pair with a learnable residual,
+/// and a `trace.json` reporting their P1 BPC (zero logits: 8 bits).
 fn write_smoke_traces(dir: &Path) -> Result<()> {
+    write_trace_json(dir, 8.0)?;
     fs::create_dir_all(dir)?;
     for (name, split, docs, base) in [("train", 0u8, 160u32, 0u32), ("dev", 1, 20, 1000)] {
         let mut file =
@@ -284,14 +303,22 @@ fn write_smoke_traces(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+fn write_trace_json(dir: &Path, bpc: f64) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    fs::write(
+        dir.join("trace.json"),
+        format!(
+            "{{\n  \"train_trace\": {{\"file\": \"trace-train.bin\", \"bpc\": {bpc:.9}}},\n  \"dev_trace\": {{\"file\": \"trace-dev.bin\", \"bpc\": {bpc:.9}}}\n}}\n"
+        ),
+    )?;
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
-        Some("run") if args.len() == 4 || args.len() == 6 => run(
-            Path::new(&args[2]),
-            Path::new(&args[3]),
-            "PREREGISTERED",
-            &args[4..],
-        ),
+        Some("run") if args.len() == 4 => {
+            run(Path::new(&args[2]), Path::new(&args[3]), "PREREGISTERED")
+        }
         Some("replay") if args.len() == 3 => {
             let head = parse_head(&fs::read_to_string(&args[2])?)?;
             println!("replay_sha256\t{}", replay_digest(&head));
@@ -300,12 +327,9 @@ fn cli(args: &[String]) -> Result<()> {
         Some("smoke") if args.len() == 3 => {
             let root = Path::new(&args[2]);
             write_smoke_traces(&root.join("traces"))?;
-            run(&root.join("traces"), &root.join("out"), "SMOKE", &[])
+            run(&root.join("traces"), &root.join("out"), "SMOKE")
         }
-        _ => Err(
-            "usage: run TRACE_DIR NEW_OUT [TRAIN_BPC DEV_BPC] | replay HEAD.tsv | smoke NEW_DIR"
-                .into(),
-        ),
+        _ => Err("usage: run TRACE_DIR NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
     }
 }
 
@@ -366,7 +390,7 @@ mod tests {
         };
         dev.write_all(&record.encode()).unwrap();
         drop(dev);
-        assert!(run(&root, &root.join("out1"), "SMOKE", &[]).is_err());
+        assert!(run(&root, &root.join("out1"), "SMOKE").is_err());
         // Out-of-order records.
         let mut dev = File::create(root.join("trace-dev.bin")).unwrap();
         for position in [5u32, 4] {
@@ -379,15 +403,21 @@ mod tests {
             dev.write_all(&r.encode()).unwrap();
         }
         drop(dev);
-        assert!(run(&root, &root.join("out2"), "SMOKE", &[]).is_err());
-        // Wrong expected BPC.
+        assert!(run(&root, &root.join("out2"), "SMOKE").is_err());
+        // trace.json reporting another P1 BPC, or missing.
         write_smoke_traces(&root).unwrap();
-        assert!(run(
-            &root,
-            &root.join("out3"),
-            "SMOKE",
-            &["1.0".into(), "8.0".into()]
-        )
+        write_trace_json(&root, 7.5).unwrap();
+        assert!(run(&root, &root.join("out3"), "SMOKE").is_err());
+        fs::remove_file(root.join("trace.json")).unwrap();
+        assert!(run(&root, &root.join("out4"), "SMOKE").is_err());
+        assert!(cli(&[
+            "bin".into(),
+            "run".into(),
+            "a".into(),
+            "b".into(),
+            "1".into(),
+            "2".into()
+        ])
         .is_err());
         fs::remove_dir_all(&root).unwrap();
     }
