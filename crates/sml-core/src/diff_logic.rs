@@ -180,6 +180,41 @@ impl DiffLogicNetwork {
         self.theta.len()
     }
 
+    /// Number of gates per layer.
+    pub fn layer_widths(&self) -> Vec<usize> {
+        self.layers.iter().map(Vec::len).collect()
+    }
+
+    /// Source wires `(a, b)` of gate `gate` in layer `layer`.
+    pub fn gate_inputs(&self, layer: usize, gate: usize) -> (usize, usize) {
+        let g = self.layers[layer][gate];
+        (g.a, g.b)
+    }
+
+    /// Rewire one gate (used by discrete wiring search). Sources must lie
+    /// in the previous layer (inputs for layer 0).
+    pub fn set_gate_inputs(
+        &mut self,
+        layer: usize,
+        gate: usize,
+        a: usize,
+        b: usize,
+    ) -> Result<(), DiffLogicError> {
+        let prev = if layer == 0 {
+            self.input_count
+        } else {
+            self.layers[layer - 1].len()
+        };
+        if a >= prev || b >= prev {
+            return Err(DiffLogicError::InputWidth {
+                expected: prev,
+                actual: a.max(b) + 1,
+            });
+        }
+        self.layers[layer][gate] = Gate { a, b };
+        Ok(())
+    }
+
     pub fn parameters(&self) -> &[f64] {
         &self.theta
     }

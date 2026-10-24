@@ -432,6 +432,182 @@ impl RelaxedHybridEngine {
     }
 }
 
+/// Training schedule and control switches.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TrainConfig {
+    pub epochs: usize,
+    pub adam_steps_per_epoch: usize,
+    pub learning_rate: f64,
+    /// Discrete wiring search after each epoch (control: `false` freezes
+    /// the initial random wiring).
+    pub learn_wiring: bool,
+    /// Train key logits through the straight-through router (control:
+    /// `false` freezes keys and disables the routing surrogate).
+    pub learn_routing: bool,
+}
+
+/// Independent measurements of the relaxed model and of its hard circuit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EvalReport {
+    /// Mean masked BCE of the relaxed engine.
+    pub relaxed_loss: f64,
+    /// Fraction of masked target bits the relaxed engine gets right after
+    /// rounding at 0.5.
+    pub relaxed_accuracy: f64,
+    /// Fraction of masked target bits the discretised hard engine
+    /// (`run_lanes`) gets right; no floating point involved.
+    pub hard_accuracy: f64,
+    /// Fraction of masked bits where rounded relaxed and hard disagree.
+    pub disagreement: f64,
+    /// Mean `|p_relaxed - bit_hard|` over masked bits.
+    pub mean_abs_gap: f64,
+}
+
+impl RelaxedHybridEngine {
+    /// Evaluate relaxed and hard (discretised) engines on `batch`.
+    pub fn evaluate(&self, batch: &[RelaxedExample]) -> Result<EvalReport, RelaxedError> {
+        let mut scratch = vec![0.0; self.parameter_count()];
+        let relaxed_loss = self.loss_and_grad(batch, &mut scratch)?;
+        let hard = self.discretize()?;
+        let (mut bits_n, mut r_ok, mut h_ok, mut dis, mut gap) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for chunk in batch.chunks(64) {
+            let xs: Vec<u64> = chunk.iter().map(|e| e.input).collect();
+            let ws: Vec<u64> = chunk.iter().map(|e| e.initial_workspace).collect();
+            let commits = hard
+                .run_lanes(&xs, &ws, &mut crate::ExecutionCounters::default())
+                .map_err(RelaxedError::Hard)?;
+            for (ex, cm) in chunk.iter().zip(commits) {
+                let r = self.run_relaxed(ex.input, ex.initial_workspace);
+                for (j, &rj) in r.iter().enumerate() {
+                    if (ex.target_mask >> j) & 1 == 0 {
+                        continue;
+                    }
+                    let t = (ex.target >> j) & 1 == 1;
+                    let h = (cm.workspace >> j) & 1 == 1;
+                    let rr = rj > 0.5;
+                    bits_n += 1.0;
+                    r_ok += f64::from(u8::from(rr == t));
+                    h_ok += f64::from(u8::from(h == t));
+                    dis += f64::from(u8::from(rr != h));
+                    gap += (rj - f64::from(u8::from(h))).abs();
+                }
+            }
+        }
+        let d = if bits_n > 0.0 { bits_n } else { 1.0 };
+        Ok(EvalReport {
+            relaxed_loss,
+            relaxed_accuracy: r_ok / d,
+            hard_accuracy: h_ok / d,
+            disagreement: dis / d,
+            mean_abs_gap: gap / d,
+        })
+    }
+
+    fn objective(&self, batch: &[RelaxedExample]) -> (u64, f64) {
+        let r = self.evaluate(batch).expect("validated batch");
+        (
+            ((1.0 - r.hard_accuracy) * 1e6).round() as u64,
+            r.relaxed_loss,
+        )
+    }
+
+    /// One greedy sweep of discrete wiring search: for every gate, try every
+    /// source pair of the previous layer and each of the 16 hard tables
+    /// (logits +-2), keeping a change only if it lowers
+    /// `(hard error, relaxed loss)` lexicographically. Returns accepted moves.
+    pub fn wiring_sweep(&mut self, batch: &[RelaxedExample]) -> usize {
+        let mut best = self.objective(batch);
+        let mut accepted = 0;
+        for p in 0..self.pages.len() {
+            let widths = self.pages[p].network.layer_widths();
+            let mut off = 0;
+            for (l, &w) in widths.iter().enumerate() {
+                let prev = if l == 0 {
+                    self.pages[p].network.input_count()
+                } else {
+                    widths[l - 1]
+                };
+                for g in 0..w {
+                    let po = off + 4 * g;
+                    let mut keep = (
+                        self.pages[p].network.gate_inputs(l, g),
+                        self.pages[p].network.parameters()[po..po + 4].to_vec(),
+                    );
+                    for a in 0..prev {
+                        for b in (a + 1)..prev {
+                            for table in 0..16u8 {
+                                let theta: Vec<f64> = (0..4)
+                                    .map(|k| if table >> k & 1 == 1 { 2.0 } else { -2.0 })
+                                    .collect();
+                                let net = &mut self.pages[p].network;
+                                net.set_gate_inputs(l, g, a, b).expect("in range");
+                                net.parameters_mut()[po..po + 4].copy_from_slice(&theta);
+                                let o = self.objective(batch);
+                                if o.0 < best.0 || (o.0 == best.0 && o.1 < best.1 - 1e-9) {
+                                    best = o;
+                                    keep = ((a, b), theta);
+                                    accepted += 1;
+                                }
+                            }
+                        }
+                    }
+                    let net = &mut self.pages[p].network;
+                    net.set_gate_inputs(l, g, keep.0 .0, keep.0 .1)
+                        .expect("in range");
+                    net.parameters_mut()[po..po + 4].copy_from_slice(&keep.1);
+                }
+                off += 4 * w;
+            }
+        }
+        accepted
+    }
+
+    /// Joint training: Adam on all page tables (+ keys if `learn_routing`)
+    /// by BPTT, interleaved with discrete wiring sweeps if `learn_wiring`.
+    pub fn train(
+        &mut self,
+        batch: &[RelaxedExample],
+        tc: TrainConfig,
+    ) -> Result<EvalReport, RelaxedError> {
+        let saved_scale = self.config.route_grad_scale;
+        if !tc.learn_routing {
+            self.config.route_grad_scale = 0.0;
+        }
+        let key_mask: Vec<bool> = self
+            .pages
+            .iter()
+            .flat_map(|p| {
+                std::iter::repeat_n(false, p.network.parameter_count())
+                    .chain(std::iter::repeat_n(true, p.key_logits.len()))
+            })
+            .collect();
+        let mut g = vec![0.0; self.parameter_count()];
+        let mut opt = crate::diff_logic::Adam::new(g.len(), tc.learning_rate);
+        let result = (|| {
+            for _ in 0..tc.epochs {
+                let mut p = self.parameters();
+                for _ in 0..tc.adam_steps_per_epoch {
+                    self.loss_and_grad(batch, &mut g)?;
+                    if !tc.learn_routing {
+                        g.iter_mut()
+                            .zip(&key_mask)
+                            .filter(|(_, &k)| k)
+                            .for_each(|(v, _)| *v = 0.0);
+                    }
+                    opt.step(&mut p, &g);
+                    self.set_parameters(&p);
+                }
+                if tc.learn_wiring {
+                    self.wiring_sweep(batch);
+                }
+            }
+            self.evaluate(batch)
+        })();
+        self.config.route_grad_scale = saved_scale;
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,5 +812,95 @@ mod tests {
             good.loss_and_grad(&[oob], &mut g),
             Err(RelaxedError::BadBatch)
         );
+    }
+
+    fn parity4() -> Vec<RelaxedExample> {
+        (0..16u64)
+            .map(|x| RelaxedExample {
+                input: x,
+                initial_workspace: 0,
+                target: u64::from(x.count_ones() % 2),
+                target_mask: 1,
+            })
+            .collect()
+    }
+
+    fn cfg4() -> RelaxedConfig {
+        RelaxedConfig {
+            input_bits: 4,
+            workspace_bits: 2,
+            pages_per_cycle: 1,
+            cycles: 3,
+            route_temperature: 0.5,
+            route_grad_scale: 1.0,
+        }
+    }
+
+    fn arm(seed: u64, wiring: bool, routing: bool) -> EvalReport {
+        let mut e = engine(seed, 4, cfg4(), &[2]);
+        e.train(
+            &parity4(),
+            TrainConfig {
+                epochs: 4,
+                adam_steps_per_epoch: 100,
+                learning_rate: 0.1,
+                learn_wiring: wiring,
+                learn_routing: routing,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn wiring_search_never_worsens_the_hard_objective() {
+        let mut e = engine(11, 4, cfg4(), &[2]);
+        let batch = parity4();
+        let before = e.objective(&batch);
+        e.wiring_sweep(&batch);
+        let after = e.objective(&batch);
+        assert!(after.0 < before.0 || (after.0 == before.0 && after.1 <= before.1));
+        // Evaluation reports hard accuracy independently of the relaxed loss.
+        let r = e.evaluate(&batch).unwrap();
+        assert!((0.0..=1.0).contains(&r.hard_accuracy));
+        assert!((r.disagreement - (r.relaxed_accuracy - r.hard_accuracy).abs()) >= -1e-12);
+    }
+
+    #[test]
+    fn learned_wiring_and_routing_solve_four_bit_parity_over_three_cycles() {
+        let hit = (0..16u64).find_map(|s| {
+            let r = arm(s, true, true);
+            (r.hard_accuracy == 1.0).then_some((s, r))
+        });
+        let (seed, r) = hit.expect("some seed reaches an exact hard circuit");
+        eprintln!("seed {seed}: {r:?}");
+        assert_eq!(r.hard_accuracy, 1.0);
+        assert_eq!(r.disagreement, 0.0);
+    }
+
+    /// HLE-1 controls table (ignored; run with `--ignored --nocapture`).
+    #[test]
+    #[ignore]
+    fn hle1_controls_table() {
+        println!("| arm | seeds exact (hard) | mean hard acc | mean relaxed acc | mean relaxed loss | mean disagreement | mean abs gap |");
+        println!("|---|---:|---:|---:|---:|---:|---:|");
+        for (name, w, r) in [
+            ("full (wiring+routing)", true, true),
+            ("wiring frozen", false, true),
+            ("routing frozen", true, false),
+            ("both frozen", false, false),
+        ] {
+            let seeds = 16u64;
+            let rs: Vec<EvalReport> = (0..seeds).map(|s| arm(s, w, r)).collect();
+            let m = |f: fn(&EvalReport) -> f64| rs.iter().map(f).sum::<f64>() / seeds as f64;
+            println!(
+                "| {name} | {}/{seeds} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} |",
+                rs.iter().filter(|r| r.hard_accuracy == 1.0).count(),
+                m(|r| r.hard_accuracy),
+                m(|r| r.relaxed_accuracy),
+                m(|r| r.relaxed_loss),
+                m(|r| r.disagreement),
+                m(|r| r.mean_abs_gap),
+            );
+        }
     }
 }
