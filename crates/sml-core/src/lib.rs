@@ -106,6 +106,7 @@ pub mod hyb_fused_head;
 pub mod hyb_h1_residual;
 pub mod hyb_h1b_calibrated;
 pub mod hyb_h1c_stable;
+pub mod hyb_h1d_bank_head;
 pub mod hybrid_logic_engine;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
