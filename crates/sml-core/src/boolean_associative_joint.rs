@@ -138,8 +138,8 @@ pub fn fit_joint_focus(
     let mut indices = Vec::with_capacity(ids.len());
     let mut present = BTreeSet::new();
     for (index, page) in pages.iter().enumerate() {
-        present.insert(page.id);
-        if ids.binary_search(&page.id).is_ok() {
+        present.insert(page.id.0);
+        if ids.binary_search_by_key(&page.id.0, |id| id.0).is_ok() {
             if !page.activation.terms.is_empty() {
                 return Err(JointFocusError::NonemptyInitialPredicate(page.id));
             }
@@ -147,7 +147,7 @@ pub fn fit_joint_focus(
         }
     }
     for id in &ids {
-        if !present.contains(id) {
+        if !present.contains(&id.0) {
             return Err(JointFocusError::MissingEditablePage(*id));
         }
     }
