@@ -106,12 +106,11 @@ fn evaluate<F: Fn(u64, u64) -> (u64, usize)>(
     (errors, selected)
 }
 
-fn eval_baf(
-    model: &BooleanAssociativeFocus,
-    rows: &[FocusTransition],
-) -> (u64, u64) {
+fn eval_baf(model: &BooleanAssociativeFocus, rows: &[FocusTransition]) -> (u64, u64) {
     evaluate(rows, |e, s| {
-        let out = model.step(e, s).expect("generated input within declared width");
+        let out = model
+            .step(e, s)
+            .expect("generated input within declared width");
         (out.next_state, out.selected.len())
     })
 }
@@ -129,13 +128,7 @@ fn route_hamming(
     let mut ranking: Vec<_> = pages
         .iter()
         .enumerate()
-        .map(|(index, page)| {
-            (
-                (signature ^ keys[index]).count_ones(),
-                page.id.0,
-                index,
-            )
-        })
+        .map(|(index, page)| ((signature ^ keys[index]).count_ones(), page.id.0, index))
         .collect();
     ranking.sort_unstable_by_key(|&(distance, id, _)| (distance, id));
     let mut selected: Vec<_> = ranking
@@ -143,9 +136,7 @@ fn route_hamming(
         .take(cfg().max_selected_pages)
         .map(|&(_, _, index)| index)
         .collect();
-    selected.sort_unstable_by_key(|&index| {
-        (u32::MAX - pages[index].priority, pages[index].id.0)
-    });
+    selected.sort_unstable_by_key(|&index| (u32::MAX - pages[index].priority, pages[index].id.0));
     let mut next = state;
     let mut claimed = 0u64;
     for index in selected {
@@ -263,8 +254,8 @@ fn main() {
     let validation = &data[1].1;
     let atlas = pages();
 
-    let baseline = BooleanAssociativeFocus::new(cfg(), atlas.clone())
-        .expect("hard-coded BAF-0 config valid");
+    let baseline =
+        BooleanAssociativeFocus::new(cfg(), atlas.clone()).expect("hard-coded BAF-0 config valid");
     let mut unconditional_pages = atlas.clone();
     for page in &mut unconditional_pages {
         page.activation.bias = true;
@@ -275,9 +266,7 @@ fn main() {
     let (degree2, two_eval, two_admitted) = fit_anf(&atlas, train, validation, 2);
     let hamming = fit_hamming(&atlas, train, validation);
 
-    println!(
-        "model,split,cases,error_bits,selected_pages,train_candidate_evaluations,admitted"
-    );
+    println!("model,split,cases,error_bits,selected_pages,train_candidate_evaluations,admitted");
     for (split, rows) in &data {
         csv_row("inactive", split, rows, eval_baf(&baseline, rows), 0, false);
         csv_row(
