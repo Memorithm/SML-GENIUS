@@ -15,29 +15,60 @@ C'est la porte go/no-go de l'option B. Si la réponse est non, H-2 (experts de p
 
 - Corpus S5h (RemoteOps `docs/SML_50M_S5H_PES2O_MIX_TRAIN_20261022.md`) : TRAIN et DEV S5h tels que matérialisés sur le Dell. 1 article sur 32 va au DEV, plafonné à 32 Mio. Les données ne quittent pas le Dell.
 - TEST reste fermé. Aucun hyperparamètre n'est choisi sur le DEV.
-- Partition de réglage : les derniers 1/16 des articles TRAIN, dans l'ordre du manifeste, forment `TRAIN-HOLD`. Ils servent uniquement aux choix ci-dessous et ne sont jamais vus par la descente de gradient.
 
-## Traces attendues du run P1 (contrat minimal)
+## Traces du run P1 (format figé avec GB-11 le 24 octobre 2026)
 
-Pour chaque position prédite de TRAIN et de DEV, le run P1 exporte, dans l'ordre du manifeste :
-- `split`, `document_id`, `position` ;
-- l'octet cible ;
-- l'état SBG lu par les banques, en bits empaquetés `u64` à largeur fixe `S` déclarée ;
-- les 8 bits prédits par les banques P1 ;
-- l'identité des poids P1 (SHA-256) et la source SML épinglée.
+Le binaire `sml-gb11-p1-s5h` est lancé par le workflow RemoteOps `sml-gb11-p1-s5h-dell.yml`. Le manifeste doit être identique à celui du témoin (`966eb65f…`) : 60 237 946 positions DEV, et les positions prédites sont les mêmes (octets 2..len de chaque fichier).
 
-Le format exact est figé avec le fil GB-11 avant tout code de lecture. Un doublon `document_id + position`, ou un même `document_id` présent dans deux splits, rend le run invalide.
+Le run écrit ses traces dans `~/sml-artifacts/sml-gb11-p1-s5h-<sha>/` :
+- `trace-dev.bin` contient toutes les positions DEV, calculées avec le modèle P1 gelé.
+- `trace-train.bin` contient les fichiers TRAIN d'index % 20 == 0, avec des logits **préquentiels** (calculés avant la mise à jour).
+
+Chaque enregistrement fait 40 octets, en little-endian :
+
+| Champ | Type |
+| --- | --- |
+| doc_index | u32 |
+| position | u32 |
+| split | u8 |
+| cible | u8 |
+| registre W avant la cible | u16 |
+| contexte c1..c8 | u64 |
+| logits P1 des 8 décisions MSB du chemin vrai, en ln-odds × 256 | 8 × i16 |
+| confiance, 4 bits par banque | u32 |
+
+`trace.json` donne les SHA-256 (poids, manifeste, traces), le commit source, l'échelle et la règle de saturation des logits.
+
+Avant tout bras, H-1 recalcule depuis les traces le BPC P1 rapporté par `trace.json`, à 1e-6 près. Le run est invalide si :
+- ce recalcul échoue ;
+- un couple `doc_index + position` apparaît en double ;
+- un `doc_index` apparaît dans les deux splits.
+
+`TRAIN-HOLD` désigne le dernier 1/16 des fichiers de `trace-train.bin`, dans l'ordre de `doc_index`.
 
 ## Bras (mêmes positions DEV)
 
-- **A0 — booléen seul.** Bits P1 convertis en distribution sur 256 octets par une table de confusion par bit, apprise sur TRAIN avec lissage de Laplace (α = 1). Sans cette calibration, des bits durs donneraient un BPC infini.
-- **A0c — table booléenne de même taille.** Ce bras reprend A0, avec en plus une table de comptes sur TRAIN. Elle est indexée par un hachage fixe de l'état SBG et des bits P1, et sa taille en octets est égale à celle de la tête A1. Elle fusionne avec A0 par interpolation, avec un poids choisi sur TRAIN-HOLD. C'est le contrôle de mémoire égale, sans neuronal.
-- **A1 — hybride option B.** Ce bras reprend A0, avec en plus une tête `TernaryLayer` (`ternary_bitplane`) qui lit l'état SBG et les 8 bits P1 (activations sur 1 bit) et produit 256 corrections de logits en `i32`, à l'échelle fixe 1/8.
-  - Les poids maîtres sont en f32, uniquement à l'entraînement : entropie croisée, une époque sur TRAIN, ordre déterministe.
+Les logits P1 ne couvrent que le chemin MSB de la cible. Tous les bras factorisent donc la probabilité de l'octet en 8 décisions binaires, et le BPC vaut la somme sur d de −log2 σ(±ℓ_d).
+
+- **A0 — booléen seul.** Les logits P1 tels quels, c'est-à-dire le BPC P1.
+- **A0c — table booléenne de même taille.**
+  - Ce bras reprend A0 et y ajoute une correction de logit par décision, lue dans une table de comptes TRAIN.
+  - La table est indexée par un hachage fixe des entrées de A1, défini ci-dessous.
+  - Sa taille en octets est égale à celle de la tête A1.
+  - Le poids de la correction est choisi sur TRAIN-HOLD.
+  - C'est le contrôle à mémoire égale, sans neuronal.
+- **A1 — hybride option B.**
+  - Pour chaque profondeur d ∈ 0..7, une `TernaryLayer` (`ternary_bitplane`) produit une correction `i32` δ_d, ajoutée à ℓ_d à l'échelle fixe 1/8 (en unités ln-odds × 256).
+  - Ses entrées sont en activations 1 bit :
+    - les 112 bits de c1..c8, W et confiance ;
+    - les d bits de préfixe de la cible ;
+    - le signe de ℓ_d ;
+    - |ℓ_d| sur 4 seaux fixes (< 128, < 512, < 1024, ≥ 1024), en codage thermomètre.
+  - Les poids maîtres sont en f32, uniquement à l'entraînement : perte logistique, une époque sur TRAIN hors TRAIN-HOLD, ordre déterministe.
   - L'export ternaire se fait au seuil τ ∈ {0,0625 ; 0,125 ; 0,25}, choisi sur TRAIN-HOLD.
   - L'inférence est entièrement entière.
-- **W — témoin S5h** `--stream-50m-msb` : BPC 3,66, rapporté tel quel. Il sert de repère, pas de critère.
-- **H-ALT (facultatif)** : si le fil H-ALT (#676/#679) branche sa tête lecture seule sur les mêmes traces, elle est rapportée à côté, sans changer les critères.
+- **W — témoin S5h** `--stream-50m-msb` : BPC f32 3,655 (q4 3,785), rapporté comme repère, pas comme critère.
+- **H-ALT (facultatif)** : rapportée à côté si elle est branchée sur les mêmes traces, sans changer les critères.
 
 Graines de la tête : 11 et 23. A0 et A0c sont déterministes.
 
