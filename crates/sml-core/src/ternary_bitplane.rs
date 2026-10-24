@@ -154,6 +154,45 @@ impl TernaryLayer {
         self.outputs
     }
 
+    /// Compute a one-bit SBG input against every ternary output row without
+    /// allocating or copying the caller's packed input.
+    ///
+    /// The input is one little-endian u64 bitplane of exactly
+    /// `ceil(inputs / 64)` words. Padding is ignored: constructed weight
+    /// planes always have zero bits beyond the logical input width.
+    /// Validation occurs before writing any output.
+    ///
+    /// This is a portable u64 reference/adapter, not a measured speedup.
+    pub fn forward_binary_into(
+        &self,
+        input_words: &[u64],
+        output: &mut [i32],
+    ) -> Result<(), TernaryBitplaneError> {
+        let words = words_for(self.inputs);
+        if input_words.len() != words {
+            return Err(TernaryBitplaneError::LengthMismatch {
+                expected: words,
+                actual: input_words.len(),
+            });
+        }
+        if output.len() != self.outputs {
+            return Err(TernaryBitplaneError::LengthMismatch {
+                expected: self.outputs,
+                actual: output.len(),
+            });
+        }
+        for (row, slot) in output.iter_mut().enumerate() {
+            let offset = row * words;
+            let mut sum = 0_i32;
+            for (index, &input) in input_words.iter().enumerate() {
+                sum += (input & self.plus[offset + index]).count_ones() as i32
+                    - (input & self.minus[offset + index]).count_ones() as i32;
+            }
+            *slot = sum;
+        }
+        Ok(())
+    }
+
     /// Exact integer pre-activations, one per output row.
     pub fn forward(
         &self,
@@ -307,6 +346,58 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn borrowed_binary_plane_matches_independent_oracle_with_dirty_padding() {
+        let mut seed = 101;
+        for inputs in [1, 2, 63, 64, 65, 124, 127, 128, 130, 1024, 1030] {
+            for outputs in [1, 3, 17, 64, 65] {
+                seed += 1;
+                let (weights, values) = random_case(seed, inputs, outputs, 1);
+                let layer = TernaryLayer::from_weights(&weights, inputs, outputs).unwrap();
+                let packed = BitplaneActivation::from_values(&values, 1).unwrap();
+                let mut raw = packed.planes().to_vec();
+                let last = raw.len() - 1;
+                raw[last] |= !tail_mask(inputs);
+                let mut actual = vec![i32::MIN; outputs];
+                layer.forward_binary_into(&raw, &mut actual).unwrap();
+                assert_eq!(
+                    actual,
+                    ternary_forward_oracle(&weights, &values, outputs),
+                    "inputs={inputs} outputs={outputs}"
+                );
+                assert_eq!(
+                    actual,
+                    layer.forward(&packed).unwrap(),
+                    "packed reference inputs={inputs} outputs={outputs}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn borrowed_binary_plane_invalid_shapes_leave_output_unchanged() {
+        let layer = TernaryLayer::from_weights(&[1, -1, 0, 1], 2, 2).unwrap();
+        let mut out = [77_i32; 2];
+        assert_eq!(
+            layer.forward_binary_into(&[], &mut out),
+            Err(TernaryBitplaneError::LengthMismatch {
+                expected: 1,
+                actual: 0
+            })
+        );
+        assert_eq!(out, [77, 77]);
+        assert_eq!(
+            layer.forward_binary_into(&[3], &mut out[..1]),
+            Err(TernaryBitplaneError::LengthMismatch {
+                expected: 2,
+                actual: 1
+            })
+        );
+        assert_eq!(out, [77, 77]);
+        layer.forward_binary_into(&[3], &mut out).unwrap();
+        assert_eq!(out, [0, 1]);
     }
 
     #[test]
