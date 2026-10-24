@@ -95,7 +95,7 @@ pub fn full_scan_top_k(
 }
 
 /// Multi-index-hashing exact Hamming top-k index.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiIndexHamming {
     width: u32,
     /// `(shift, bits)` per substring.
@@ -248,6 +248,59 @@ impl MultiIndexHamming {
 /// Relative cost of one bucket probe versus one full-scan key comparison,
 /// used only to decide when the exact full-scan fallback is cheaper.
 const PROBE_WEIGHT: u64 = 8;
+
+/// Hamming k-majority clustering (k-means analogue in Hamming space):
+/// centres start at evenly spaced data points, each point is assigned to its
+/// exact nearest centre (ties by centre index, via [`MultiIndexHamming`]) and
+/// each centre becomes the bitwise majority of its members. Empty clusters
+/// keep their centre. Duplicate centres are perturbed deterministically so
+/// keys stay distinct where possible. Deterministic.
+pub fn hamming_k_majority(width: u32, data: &[u64], k: usize, iterations: usize) -> Vec<u64> {
+    let mask = width_mask(width.clamp(1, 64));
+    if data.is_empty() || k == 0 {
+        return Vec::new();
+    }
+    let mut centres: Vec<u64> = (0..k).map(|i| data[i * data.len() / k] & mask).collect();
+    for _ in 0..iterations {
+        let entries: Vec<(PageId, u64)> = centres
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| (PageId(i as u32), c))
+            .collect();
+        let index = MultiIndexHamming::new(width, entries).expect("masked centres");
+        let mut ones = vec![[0u32; 64]; k];
+        let mut sizes = vec![0u32; k];
+        let mut st = IndexStats::default();
+        for &x in data {
+            let c = index.top_k(x & mask, 1, &mut st).expect("in range")[0].1 .0 as usize;
+            sizes[c] += 1;
+            for (b, slot) in ones[c].iter_mut().enumerate().take(width as usize) {
+                *slot += ((x >> b) & 1) as u32;
+            }
+        }
+        for c in 0..k {
+            if sizes[c] == 0 {
+                continue;
+            }
+            let mut v = 0u64;
+            for b in 0..width.min(64) as usize {
+                if 2 * ones[c][b] > sizes[c] {
+                    v |= 1u64 << b;
+                }
+            }
+            centres[c] = v;
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut salt = 0u64;
+    for c in centres.iter_mut() {
+        while !seen.insert(*c) {
+            salt += 1;
+            *c ^= (1u64 << (salt % u64::from(width))) & mask;
+        }
+    }
+    centres
+}
 
 fn to_pages(v: Vec<(u32, u32)>) -> Vec<(u32, PageId)> {
     v.into_iter().map(|(d, id)| (d, PageId(id))).collect()

@@ -22,6 +22,7 @@
 
 use core::fmt;
 
+use crate::hamming_index::{IndexStats, MultiIndexHamming};
 use crate::{diff_logic::HardLogicNetwork, ExecutionCounters, PageId};
 
 /// One atlas page: a routing key plus a hard logic network.
@@ -105,6 +106,8 @@ impl std::error::Error for HybridError {}
 pub struct HybridLogicEngine {
     config: HybridConfig,
     pages: Vec<HybridPage>,
+    /// Optional exact routing index (HLE-3); `None` keeps the scan path.
+    route_index: Option<(MultiIndexHamming, std::collections::BTreeMap<u32, usize>)>,
 }
 
 fn mask(bits: usize) -> u64 {
@@ -151,13 +154,28 @@ impl HybridLogicEngine {
                 });
             }
         }
-        Ok(Self { config, pages })
+        Ok(Self {
+            config,
+            pages,
+            route_index: None,
+        })
     }
 
     /// Indices of the `pages_per_cycle` nearest pages by Hamming distance,
     /// ordered by `(distance, PageId)`. Uses partial selection
     /// (`select_nth_unstable`) and only sorts the selected `k`.
     fn route_indices(&self, signature: u64, counters: &mut ExecutionCounters) -> Vec<usize> {
+        if let Some((index, pos)) = &self.route_index {
+            // Keys have no bits above `workspace_bits`, so masking the
+            // signature shifts every distance equally and keeps the order.
+            let mut st = IndexStats::default();
+            let q = signature & mask(self.config.workspace_bits);
+            let top = index
+                .top_k(q, self.config.pages_per_cycle, &mut st)
+                .expect("validated keys and masked query");
+            counters.route_lookups += st.candidates;
+            return top.into_iter().map(|(_, id)| pos[&id.0]).collect();
+        }
         let k = self.config.pages_per_cycle;
         let mut ranked: Vec<(u32, u32, usize)> = self
             .pages
@@ -172,6 +190,30 @@ impl HybridLogicEngine {
         }
         ranked.sort_unstable();
         ranked.into_iter().map(|(_, _, i)| i).collect()
+    }
+
+    /// Enable (or disable) the exact multi-index Hamming routing index.
+    /// Default is disabled (full scan). Results are identical either way;
+    /// only `route_lookups` changes (it counts examined candidates).
+    pub fn with_route_index(mut self, enabled: bool) -> Self {
+        self.route_index = enabled.then(|| {
+            let entries = self.pages.iter().map(|p| (p.id, p.key)).collect();
+            let index = MultiIndexHamming::new(self.config.workspace_bits as u32, entries)
+                .expect("keys validated in new()");
+            let pos = self
+                .pages
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (p.id.0, i))
+                .collect();
+            (index, pos)
+        });
+        self
+    }
+
+    /// True when the routing index is enabled.
+    pub fn route_index_enabled(&self) -> bool {
+        self.route_index.is_some()
     }
 
     /// Select the `pages_per_cycle` nearest pages by Hamming distance.
@@ -635,5 +677,81 @@ mod tests {
             engine.run(2, 0, &mut ExecutionCounters::default()),
             Err(HybridError::InputOutOfRange)
         );
+    }
+
+    fn random_engine(
+        pages: usize,
+        ws: usize,
+        k: usize,
+        seed: u64,
+        clustered: bool,
+    ) -> HybridLogicEngine {
+        let mut st = seed;
+        let mut next = || {
+            st = st.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = st;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z ^ (z >> 31)
+        };
+        let m = mask(ws);
+        let centres: Vec<u64> = (0..4).map(|_| next() & m).collect();
+        let pages = (0..pages)
+            .map(|i| {
+                let net = DiffLogicNetwork::new(4 + ws, &[ws], seed + i as u64, 2.0).unwrap();
+                let key = if clustered {
+                    (centres[i % 4] ^ (1u64 << (next() % ws as u64))) & m
+                } else {
+                    next() & m
+                };
+                HybridPage {
+                    // Ids deliberately not in position order.
+                    id: PageId((pages - i) as u32 * 3),
+                    key,
+                    network: net.discretize(),
+                }
+            })
+            .collect();
+        HybridLogicEngine::new(
+            HybridConfig {
+                input_bits: 4,
+                workspace_bits: ws,
+                pages_per_cycle: k,
+                min_cycles: 1,
+                max_cycles: 3,
+            },
+            pages,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn route_index_is_exactly_equivalent_to_scan() {
+        for (pages, ws, k, clustered) in [
+            (5, 6, 1, false),
+            (64, 12, 3, true),
+            (200, 30, 4, false),
+            (300, 64, 5, true),
+        ] {
+            let scan = random_engine(pages, ws, k, pages as u64, clustered);
+            assert!(!scan.route_index_enabled());
+            let indexed = scan.clone().with_route_index(true);
+            assert!(indexed.route_index_enabled());
+            for q in 0..200u64 {
+                let sig = q.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (q << 7);
+                let (mut a, mut b) = (ExecutionCounters::default(), ExecutionCounters::default());
+                assert_eq!(
+                    scan.route(sig, &mut a),
+                    indexed.route(sig, &mut b),
+                    "route {pages} {ws} {q}"
+                );
+                let ws0 = sig & mask(ws);
+                assert_eq!(
+                    scan.run(q & 0xF, ws0, &mut a),
+                    indexed.run(q & 0xF, ws0, &mut b),
+                    "run {pages} {ws} {q}"
+                );
+            }
+            assert_eq!(indexed.clone().with_route_index(false), scan);
+        }
     }
 }

@@ -55,7 +55,8 @@ pub struct ByteLmReport {
 
 const EPS: f64 = 1e-3;
 
-fn features(ctx: &[u8], prefix: u8, j: usize, c: usize, out: &mut Vec<f64>) {
+/// Input features for decision `j` (see module docs).
+pub fn features(ctx: &[u8], prefix: u8, j: usize, c: usize, out: &mut Vec<f64>) {
     out.clear();
     for i in 0..c {
         let b = if ctx.len() > i {
@@ -115,8 +116,27 @@ fn page_keys(train: &[u8], cfg: &ByteLmConfig) -> Vec<(PageId, u64)> {
         .collect()
 }
 
-/// Train on `train` and report held-out BPC on `dev`.
-pub fn train_and_evaluate(train: &[u8], dev: &[u8], cfg: &ByteLmConfig) -> ByteLmReport {
+/// Trained (or, with `train_gates = false`, untrained) circuits and router.
+#[derive(Debug, Clone)]
+pub struct TrainedCircuits {
+    pub index: MultiIndexHamming,
+    pub nets: Vec<DiffLogicNetwork>,
+}
+
+impl TrainedCircuits {
+    /// Page selected for previous byte `prev` (exact Hamming top-1).
+    pub fn route(&self, prev: u8) -> usize {
+        let mut st = IndexStats::default();
+        self.index
+            .top_k(u64::from(prev), 1, &mut st)
+            .expect("in range")[0]
+            .1
+             .0 as usize
+    }
+}
+
+/// Train the routed circuits with the relaxed mean head.
+pub fn train_circuits(train: &[u8], cfg: &ByteLmConfig) -> TrainedCircuits {
     let c = cfg.context_bytes;
     let n_in = 8 * c + 16;
     let index = MultiIndexHamming::new(8, page_keys(train, cfg)).expect("validated 8-bit keys");
@@ -171,6 +191,17 @@ pub fn train_and_evaluate(train: &[u8], dev: &[u8], cfg: &ByteLmConfig) -> ByteL
             }
         }
     }
+    TrainedCircuits { index, nets }
+}
+
+/// Train on `train` and report held-out BPC on `dev`.
+pub fn train_and_evaluate(train: &[u8], dev: &[u8], cfg: &ByteLmConfig) -> ByteLmReport {
+    let c = cfg.context_bytes;
+    let n_in = 8 * c + 16;
+    let tc = train_circuits(train, cfg);
+    let nets = &tc.nets;
+    let route = |prev: u8| tc.route(prev);
+    let mut x = Vec::with_capacity(n_in);
     let hard: Vec<_> = nets.iter().map(DiffLogicNetwork::discretize).collect();
     let (mut soft_bits, mut hard_bits) = (0.0, 0.0);
     for pos in 1..dev.len() {
