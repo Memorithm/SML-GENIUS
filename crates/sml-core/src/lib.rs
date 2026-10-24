@@ -100,6 +100,7 @@ pub mod gf2;
 pub mod gru_side;
 pub mod hamming_index;
 pub mod hle2_byte_lm;
+pub mod hle3;
 pub mod hyb_alt_ternary_sidecar;
 pub mod hyb_alt_train_only;
 pub mod hybrid_logic_engine;

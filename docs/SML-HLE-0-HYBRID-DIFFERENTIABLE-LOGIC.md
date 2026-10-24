@@ -201,3 +201,42 @@ Reading: the circuits learn something (about 2 bits/byte below the frozen contro
 ### What GB-11 P1 would still need
 
 The S5h corpus and its frozen DEV/TEST split on the host (or a pinned fetch approved by the owner); a preregistered P1 protocol with matched parameter and token budget against the 15M witness; and a stronger output head (for example a per-page count table addressed by the hard circuit bits) before any comparison is meaningful.
+
+## HLE-3: count-table head and learned routing keys (research branch)
+
+Status: research only, stacked on HLE-2. Measured in a shared 4-core cloud container, not on Dell or Thor (`scripts/hle3-bench.sh` reproduces). Same proxy corpus and split as HLE-2 (repository `docs/*.md`, 400 000 TRAIN / 60 000 DEV bytes). This is not S5h, so there is no GB-11 or witness comparison.
+
+### 1. Count-table output head (`hle3`)
+
+The circuits are trained as in HLE-2 (one epoch, relaxed mean head). Then, in one alternation, a count table is fitted. It is addressed by the circuit's **hard** output bits for each bit decision (tree node = bit position plus known high target bits). Smoothing is interpolated additive (Dirichlet) backoff, β = 2, coarse to fine; it is not Kneser-Ney. Byte-context rows use the same backoff with the previous bytes as context.
+
+| head | trained, learned routing | trained, frozen random routing | trained, single page | untrained gates (random circuit bits) |
+|---|---:|---:|---:|---:|
+| node → page → 12 circuit bits | 4.003 | 4.169 | 4.693 | 4.150 |
+| node → page → 8 circuit bits | 4.172 | 4.291 | 4.715 | 4.319 |
+| order-1 bytes + 6 circuit bits | 3.955 | 3.971 | 3.989 | 3.929 |
+| order-2 bytes + 6 circuit bits | 3.269 | 3.269 | 3.269 | 3.269 |
+
+Byte-context baselines (same backoff): order 0 5.128, order 1 4.022, order 2 3.234, order 3 2.635 DEV BPC.
+
+Reading:
+- The count head moves the circuit model from about 6.0 (HLE-2 mean head) to 4.00 BPC. With learned routing it is about 0.15 BPC better than random circuit bits and better than frozen routing (4.17) or one page (4.69). That is the measured contribution of training and routing.
+- It is still **worse than order-2 byte counts (3.234)**, which use exactly the same information (the circuit only sees the previous 2 bytes). The circuit acts as a lossy compression of that context.
+- Adding circuit bits to order-2 counts cannot add information, because the code is a deterministic function of the order-2 context. Every arm gives the same 3.269, slightly worse than 3.234 because of the extra smoothing level.
+- With order-1 counts, 6 circuit bits help a little (4.022 → 3.955), but **untrained random bits help slightly more (3.929)**. The trained circuit bits are not better features than random projections here.
+- Limits: a single alternation (no joint training), one epoch, one seed, a proxy corpus. Circuits that see more context than the count baseline would be the next meaningful test.
+
+### 2. Learned routing keys and the index in the engine
+
+`hamming_index::hamming_k_majority` is deterministic k-means in Hamming space (bitwise-majority centres, exact assignment through `MultiIndexHamming`, duplicate centres perturbed). `HybridLogicEngine::with_route_index(true)` routes through `MultiIndexHamming`; the default is unchanged (scan). Routing results and full `run` commits are tested to be identical to the scan path on random and clustered engines (widths 6, 12, 30 and 64; ids not in position order). With the index on, `route_lookups` counts examined candidates.
+
+Bench (`hle3_route_bench`): keys are k-majority centres (2 iterations) over 64-bit signatures of the previous 8 bytes of TRAIN text; queries are 2 000 DEV signatures; k = 4. Results are asserted equal to the scan.
+
+| keys | pages | scan ns/q | index ns/q | scan lookups/q | index candidates/q |
+|---|---:|---:|---:|---:|---:|
+| k-majority on text | 4 096 | 22 826 | 39 240 | 4 096 | 1 692 |
+| uniform random | 4 096 | 19 690 | 28 308 | 4 096 | 4 976 (fallback) |
+| k-majority on text | 65 536 | 391 474 | 104 476 | 65 536 | 5 008 |
+| uniform random | 65 536 | 384 644 | 338 396 | 65 536 | 67 942 (fallback) |
+
+Reading: with learned text keys the index is about 3.7x faster at 65 536 pages and examines about 7.6 % of the keys. At 4 096 pages it is about 1.7x **slower** than the scan, even though it examines fewer keys, because of probe and hash overhead. Uniform keys gain nothing. These are single runs on a noisy shared host.
