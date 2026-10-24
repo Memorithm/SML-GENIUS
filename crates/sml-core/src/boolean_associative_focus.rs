@@ -211,7 +211,13 @@ impl BooleanAssociativeFocus {
 mod tests {
     use super::*;
 
-    fn page(id: u32, priority: u32, terms: &[(u64, u64)], write_mask: u64, write_value: u64) -> AssociativeFocusPage {
+    fn page(
+        id: u32,
+        priority: u32,
+        terms: &[(u64, u64)],
+        write_mask: u64,
+        write_value: u64,
+    ) -> AssociativeFocusPage {
         AssociativeFocusPage {
             id: PageId(id),
             priority,
@@ -219,7 +225,10 @@ mod tests {
                 bias: false,
                 terms: terms
                     .iter()
-                    .map(|&(event_mask, state_mask)| AnfMonomial { event_mask, state_mask })
+                    .map(|&(event_mask, state_mask)| AnfMonomial {
+                        event_mask,
+                        state_mask,
+                    })
                     .collect(),
             },
             write_mask,
@@ -228,7 +237,11 @@ mod tests {
     }
 
     fn config(max_selected_pages: usize) -> AssociativeFocusConfig {
-        AssociativeFocusConfig { event_bits: 4, state_bits: 4, max_selected_pages }
+        AssociativeFocusConfig {
+            event_bits: 4,
+            state_bits: 4,
+            max_selected_pages,
+        }
     }
 
     #[test]
@@ -236,8 +249,14 @@ mod tests {
         let predicate = AnfActivation {
             bias: true,
             terms: vec![
-                AnfMonomial { event_mask: 0b0011, state_mask: 0b0001 },
-                AnfMonomial { event_mask: 0b0010, state_mask: 0 },
+                AnfMonomial {
+                    event_mask: 0b0011,
+                    state_mask: 0b0001,
+                },
+                AnfMonomial {
+                    event_mask: 0b0010,
+                    state_mask: 0,
+                },
             ],
         };
         // bias=true, both monomials true => true XOR true XOR true
@@ -251,12 +270,30 @@ mod tests {
     #[test]
     fn independent_truth_table_exhaustive_for_four_bit_inputs() {
         let rules = vec![
-            AnfActivation { bias: false, terms: vec![AnfMonomial { event_mask: 0, state_mask: 0 }] },
-            AnfActivation { bias: true, terms: vec![
-                AnfMonomial { event_mask: 0b1010, state_mask: 0b0101 },
-                AnfMonomial { event_mask: 0b0010, state_mask: 0 },
-                AnfMonomial { event_mask: 0, state_mask: 0b1000 },
-            ] },
+            AnfActivation {
+                bias: false,
+                terms: vec![AnfMonomial {
+                    event_mask: 0,
+                    state_mask: 0,
+                }],
+            },
+            AnfActivation {
+                bias: true,
+                terms: vec![
+                    AnfMonomial {
+                        event_mask: 0b1010,
+                        state_mask: 0b0101,
+                    },
+                    AnfMonomial {
+                        event_mask: 0b0010,
+                        state_mask: 0,
+                    },
+                    AnfMonomial {
+                        event_mask: 0,
+                        state_mask: 0b1000,
+                    },
+                ],
+            },
         ];
         for event in 0u64..16 {
             for state in 0u64..16 {
@@ -281,10 +318,14 @@ mod tests {
 
     #[test]
     fn priority_merges_disjoint_bits_and_resolves_conflicts() {
-        let focus = BooleanAssociativeFocus::new(config(2), vec![
-            page(9, 1, &[(0, 0)], 0b1100, 0b1000),
-            page(2, 2, &[(0b0010, 0b0001)], 0b0100, 0b0100),
-        ]).unwrap();
+        let focus = BooleanAssociativeFocus::new(
+            config(2),
+            vec![
+                page(9, 1, &[(0, 0)], 0b1100, 0b1000),
+                page(2, 2, &[(0b0010, 0b0001)], 0b0100, 0b0100),
+            ],
+        )
+        .unwrap();
         let out = focus.step(0b0011, 0b0001).unwrap();
         assert_eq!(out.selected, vec![PageId(2), PageId(9)]);
         assert_eq!(out.next_state, 0b1101);
@@ -293,11 +334,15 @@ mod tests {
 
     #[test]
     fn deterministic_priority_and_capacity_are_explicit() {
-        let focus = BooleanAssociativeFocus::new(config(1), vec![
-            page(3, 4, &[(0, 0)], 0b0010, 0b0010),
-            page(1, 4, &[(0, 0)], 0b0100, 0b0100),
-            page(5, 5, &[(0b1000, 0)], 0b1000, 0b1000),
-        ]).unwrap();
+        let focus = BooleanAssociativeFocus::new(
+            config(1),
+            vec![
+                page(3, 4, &[(0, 0)], 0b0010, 0b0010),
+                page(1, 4, &[(0, 0)], 0b0100, 0b0100),
+                page(5, 5, &[(0b1000, 0)], 0b1000, 0b1000),
+            ],
+        )
+        .unwrap();
         let out = focus.step(0b0000, 0).unwrap();
         assert_eq!(out.selected, vec![PageId(1)]);
         assert_eq!(out.next_state, 0b0100);
@@ -309,7 +354,8 @@ mod tests {
         let focus = BooleanAssociativeFocus::new(
             config(1),
             vec![page(1, 1, &[(0b0100, 0b0010)], 0b1111, 0)],
-        ).unwrap();
+        )
+        .unwrap();
         let out = focus.step(0, 0b0011).unwrap();
         assert!(out.selected.is_empty());
         assert_eq!(out.next_state, 0b0011);
@@ -323,7 +369,10 @@ mod tests {
             Err(AssociativeFocusError::InvalidConfig(_))
         ));
         assert!(matches!(
-            BooleanAssociativeFocus::new(config(2), vec![page(1, 0, &[], 1, 1), page(1, 1, &[], 1, 1)]),
+            BooleanAssociativeFocus::new(
+                config(2),
+                vec![page(1, 0, &[], 1, 1), page(1, 1, &[], 1, 1)]
+            ),
             Err(AssociativeFocusError::DuplicatePage(PageId(1)))
         ));
         assert!(matches!(
@@ -338,8 +387,15 @@ mod tests {
             BooleanAssociativeFocus::new(config(1), vec![page(1, 0, &[], 0b0001, 0b0010)]),
             Err(AssociativeFocusError::WriteValueOutsideMask(PageId(1)))
         ));
-        let focus = BooleanAssociativeFocus::new(config(1), vec![page(1, 0, &[(0, 0)], 1, 1)]).unwrap();
-        assert_eq!(focus.step(16, 0), Err(AssociativeFocusError::EventOutsideWidth));
-        assert_eq!(focus.step(0, 16), Err(AssociativeFocusError::StateOutsideWidth));
+        let focus =
+            BooleanAssociativeFocus::new(config(1), vec![page(1, 0, &[(0, 0)], 1, 1)]).unwrap();
+        assert_eq!(
+            focus.step(16, 0),
+            Err(AssociativeFocusError::EventOutsideWidth)
+        );
+        assert_eq!(
+            focus.step(0, 16),
+            Err(AssociativeFocusError::StateOutsideWidth)
+        );
     }
 }
