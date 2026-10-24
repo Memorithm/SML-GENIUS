@@ -151,3 +151,53 @@ Toy tasks; seed-dependent success; ST routing gradient is biased; the wiring
 sweep is exhaustive over pairs (cost grows quadratically with layer width)
 and evaluates all pages; widths remain <= 64 bits; not connected to
 MOR/SBG/atlas manifests beyond `PageId`.
+
+## HLE-2: exact routing index and a byte-level BPC proxy (research branch)
+
+Status: research only, stacked on HLE-1 (`feat/hybrid-difflogic-e2e`), not on main. Nothing below is integrated into MOR/SBG production routing. Measurements were taken in a shared 4-core cloud container, not on Dell or Thor; `scripts/hle2-bench.sh` reproduces them on a target host.
+
+### 1. `hamming_index::MultiIndexHamming`
+
+Exact Hamming top-k over keys of a validated width (1..=64). The key is split into `m` substrings with exact-match buckets; substring radius grows until `k` examined keys lie within the pigeonhole bound `m*(s+1)-1`, so the result equals the full scan ordered by `(distance, PageId)`, ties included. When probing would cost more than about a full scan, an exact full-scan fallback is used and counted. There is no approximate mode. Width, key range, query range, duplicate `PageId` and `k = 0` all fail closed. Tests compare it with `full_scan_top_k` on random keys (widths 1, 7, 16, 33, 64; m in {1,2,3,4,8}; k up to beyond n) and adversarial keys (all equal, single-bit, complements, 0 and all-ones). The index is a standalone module; `HybridLogicEngine` still uses its own scan.
+
+Bench (`hle2_index_bench`, k = 4, 2000 queries, `m` automatic; recall checked against full scan):
+
+| keys | width | pages | m | index ns/q | scan ns/q | candidates/q | fallback rate | recall |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| uniform | 64 | 16 | 16 | 346 | 328 | 16 | 1.00 | 1.0 |
+| uniform | 64 | 256 | 8 | 2 443 | 1 984 | 264 | 1.00 | 1.0 |
+| uniform | 64 | 4 096 | 6 | 44 211 | 27 139 | 4 985 | 1.00 | 1.0 |
+| uniform | 64 | 65 536 | 4 | 696 546 | 477 126 | 67 755 | 0.99 | 1.0 |
+| clustered | 64 | 16 | 16 | 259 | 227 | 16 | 1.00 | 1.0 |
+| clustered | 64 | 256 | 8 | 815 | 754 | 23 | 0.03 | 1.0 |
+| clustered | 64 | 4 096 | 6 | 3 455 | 10 986 | 142 | 0.00 | 1.0 |
+| clustered | 64 | 65 536 | 4 | 29 351 | 232 665 | 1 312 | 0.00 | 1.0 |
+| uniform | 16 | 16 | 4 | 222 | 205 | 16 | 1.00 | 1.0 |
+| uniform | 16 | 256 | 2 | 1 600 | 1 030 | 203 | 0.73 | 1.0 |
+| uniform | 16 | 4 096 | 2 | 6 588 | 12 317 | 278 | 0.00 | 1.0 |
+| uniform | 16 | 65 536 | 1 | 1 334 | 233 052 | 17 | 0.00 | 1.0 |
+
+Reading: exact MIH is sub-linear only when keys are dense in a small width or clustered around queries (clustered = 32 centres with 3-bit noise). On uniform 64-bit keys the nearest neighbour is far, MIH degenerates to the fallback and is **slower** than a plain scan (up to about 1.6x, because of the probes wasted before falling back). Timings are single runs on a noisy shared host.
+
+### 2. Byte-level BPC proxy (`hle2_byte_lm`) — partial harness, not GB-11 P1
+
+GB-11 has no real-text BPC yet: its results are on synthetic teachers, and P1 (S5h corpus against the ~15M-parameter `--stream-50m-msb` witness at BPC 3.66 on S5h DEV) is only sketched and needs owner approval and preregistration. The S5h corpus is not in the repository, so no comparison against GB-11 banks or the S5h witness is made here.
+
+The harness predicts each byte MSB-first as 8 binary decisions. Inputs: bits of the previous 2 bytes, known high target bits, one-hot of the bit position. The page is chosen by exact Hamming top-1 over the previous byte with `MultiIndexHamming`. Each page is a relaxed logic network [256, 256, 64]; p(1) is the smoothed mean of its 64 outputs. Hard BPC uses the discretized network with p = (ones + 0.5)/65. Proxy corpus: the repository's own `docs/*.md`, files sorted, every 10th file is DEV; first 400 000 TRAIN bytes and 60 000 DEV bytes, 1 epoch.
+
+| arm | parameters | relaxed DEV BPC | hard DEV BPC |
+|---|---:|---:|---:|
+| order-0 byte counts | counts | 5.128 | — |
+| order-1 byte counts | counts | 4.028 | — |
+| order-2 byte counts | counts | 3.350 | — |
+| order-3 byte counts | counts | 3.119 | — |
+| HLE, learned routing (16 pages = 16 most frequent previous bytes) | 36 864 | 6.001 | 6.018 |
+| HLE, frozen random routing keys | 36 864 | 6.109 | 6.125 |
+| HLE, single page (no routing) | 2 304 | 6.209 | 6.226 |
+| HLE, frozen gates (untrained) | 36 864 | 7.999 | 8.171 |
+
+Reading: the circuits learn something (about 2 bits/byte below the frozen control), and learned routing helps a little over random routing and one page. But the model is **worse than an order-0 unigram** and far behind short n-grams on this proxy. Its output head (mean of hard gates) is coarse, and training is one short epoch. These numbers do not show a BPC gain on real text.
+
+### What GB-11 P1 would still need
+
+The S5h corpus and its frozen DEV/TEST split on the host (or a pinned fetch approved by the owner); a preregistered P1 protocol with matched parameter and token budget against the 15M witness; and a stronger output head (for example a per-page count table addressed by the hard circuit bits) before any comparison is meaningful.
