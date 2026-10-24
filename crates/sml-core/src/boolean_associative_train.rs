@@ -113,8 +113,7 @@ pub fn fit_associative_focus(
     }
     // The first experiment caps total input dimensions independently of u64
     // event/state representability, avoiding accidental quadratic growth.
-    if config.event_bits.saturating_add(config.state_bits) > 16
-    {
+    if config.event_bits.saturating_add(config.state_bits) > 16 {
         return Err(FocusFitError::Policy(
             "BAF-1 supports at most 16 total input bits",
         ));
