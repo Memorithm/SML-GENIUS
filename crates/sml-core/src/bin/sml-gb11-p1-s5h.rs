@@ -5,6 +5,12 @@
 //! the frozen protocol; `smoke` takes the same arguments with tiny search and
 //! table budgets (labelled SMOKE, never a result). TEST is never read: the
 //! manifest admits only TRAIN then DEV rows. Research only, NOT_PROMOTED.
+//!
+//! `run-h1b` / `smoke-h1b` serve HYB H-1b
+//! (docs/HYB-H1B-S5H-CALIBRATED-RESIDUAL-PREREGISTRATION.md): TRAIN files
+//! with `doc_index % 16 == 7` (CAL) are kept out of the search and of
+//! training, and the `search_q4` and `bytes_q4` arms trace CAL and DEV with
+//! the frozen model into `NEW_OUTPUT_DIR/<arm>/`.
 
 use sml_core::{
     elastic_ngram_paged_sha::{hex, parse_hex, sha256},
@@ -31,6 +37,11 @@ const MIN_DOCUMENT_BYTES: u64 = 128;
 const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
 const SEARCH_BANKS: usize = 6;
 const TRAIN_TRACE_STRIDE: usize = 20;
+/// H-1b calibration split: TRAIN files with `doc_index % CAL_STRIDE == CAL_RESIDUE`.
+const CAL_STRIDE: usize = 16;
+const CAL_RESIDUE: usize = 7;
+/// Arms traced for H-1b.
+const H1B_ARMS: [&str; 2] = ["search_q4", "bytes_q4"];
 const RIGHTS: [&str; 7] = [
     "OWNED_REVIEWED",
     "PUBLIC_DOMAIN_REVIEWED",
@@ -49,6 +60,8 @@ struct Plan {
     holdout_bytes: usize,
     small_table: usize,
     large_table: usize,
+    /// H-1b: hold CAL out of training and trace it with the frozen model.
+    cal: bool,
 }
 
 const RUN: Plan = Plan {
@@ -57,6 +70,7 @@ const RUN: Plan = Plan {
     holdout_bytes: 2 * 1024 * 1024,
     small_table: Q4_EQUAL_BYTES,
     large_table: F32_EQUAL_BYTES,
+    cal: false,
 };
 
 const SMOKE: Plan = Plan {
@@ -65,12 +79,15 @@ const SMOKE: Plan = Plan {
     holdout_bytes: 16 * 1024,
     small_table: 1 << 20,
     large_table: 1 << 22,
+    cal: false,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Role {
     Train,
     Dev,
+    /// H-1b calibration files: TRAIN rows kept out of training.
+    Cal,
 }
 
 struct Document {
@@ -220,10 +237,24 @@ fn file_sha(path: &Path) -> Result<String> {
     }
 }
 
-fn run_arm(roster: &Roster, arm: &Arm, out: &Path, manifest_sha: &str) -> Result<ArmResult> {
+fn run_arm(
+    roster: &Roster,
+    arm: &Arm,
+    out: &Path,
+    manifest_sha: &str,
+    cal: bool,
+) -> Result<ArmResult> {
     let tables = Tables::new();
     let mut model = Model::with_bank_bytes(arm.masks.clone(), arm.rule, arm.update, arm.bank_bytes);
-    let mut train_trace = if arm.trace {
+    let arm_dir = if cal && arm.trace {
+        let dir = out.join(arm.name);
+        fs::create_dir(&dir)?;
+        dir
+    } else {
+        out.to_path_buf()
+    };
+    let out = arm_dir.as_path();
+    let mut train_trace = if arm.trace && !cal {
         Some(trace_writer(out, "trace-train.bin")?)
     } else {
         None
@@ -257,6 +288,22 @@ fn run_arm(roster: &Roster, arm: &Arm, out: &Path, manifest_sha: &str) -> Result
         w.flush()?;
     }
     let trained_sha = model.weights_sha();
+    // H-1b cost baseline: one untraced frozen DEV pass.
+    let mut dev_seconds = 0.0;
+    if cal && arm.trace {
+        let start = Instant::now();
+        for doc in roster.docs.iter().filter(|d| d.role == Role::Dev) {
+            let data = load(doc)?;
+            let t = Instant::now();
+            std::hint::black_box(model.code_document(&tables, &data, false, |_, _, _, _| {}));
+            dev_seconds += t.elapsed().as_secs_f64();
+        }
+        eprintln!(
+            "GB11_P1_H1B_TIMING arm={} dev_pass_s={:.1}",
+            arm.name,
+            start.elapsed().as_secs_f64()
+        );
+    }
     let mut dev_trace = if arm.trace {
         Some(trace_writer(out, "trace-dev.bin")?)
     } else {
@@ -287,6 +334,32 @@ fn run_arm(roster: &Roster, arm: &Arm, out: &Path, manifest_sha: &str) -> Result
     if let Some(mut w) = dev_trace.take() {
         w.flush()?;
     }
+    let mut cal_summary = (0u64, 0.0f64);
+    if cal && arm.trace {
+        let mut w = trace_writer(out, "trace-cal.bin")?;
+        for doc in roster.docs.iter().filter(|d| d.role == Role::Cal) {
+            let data = load(doc)?;
+            let mut io_error = None;
+            model.code_document(&tables, &data, false, |pos, ctx, byte, code| {
+                let record = record(doc.index, pos, 2, byte, ctx, code);
+                cal_summary.0 += 1;
+                cal_summary.1 += record.cost_bits();
+                if let Err(e) = w.write_all(&record.encode()) {
+                    io_error.get_or_insert(e);
+                }
+            });
+            if let Some(e) = io_error {
+                return Err(e.into());
+            }
+        }
+        w.flush()?;
+        if model.weights_sha() != trained_sha {
+            return Err("CAL changed the weights".into());
+        }
+        if cal_summary.0 == 0 {
+            return Err("empty CAL trace".into());
+        }
+    }
     if train_events == 0 || dev_events == 0 || !dev_bits.is_finite() {
         return Err("empty or nonfinite run".into());
     }
@@ -305,7 +378,41 @@ fn run_arm(roster: &Roster, arm: &Arm, out: &Path, manifest_sha: &str) -> Result
     );
     let mut weights = None;
     let mut trace_summary = None;
-    if arm.trace {
+    if cal && arm.trace {
+        let mut buffer = Vec::with_capacity(model.table_bytes());
+        model.write_weights(&mut buffer)?;
+        fs::write(out.join("weights.bin"), &buffer)?;
+        let cal_sha = file_sha(&out.join("trace-cal.bin"))?;
+        let dev_sha = file_sha(&out.join("trace-dev.bin"))?;
+        let summary = format!(
+            concat!(
+                "{{\n  \"schema\": \"SML_GB11_P1_H1B_TRACE_V1\",\n  \"arm\": \"{}\",\n",
+                "  \"record_bytes\": {},\n  \"endianness\": \"little\",\n",
+                "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split 2 = CAL frozen, 1 = DEV frozen\",\n",
+                "  \"logit_scale\": \"ln-odds of P(bit = 1) times {}\",\n",
+                "  \"cal_trace\": {{\"file\": \"trace-cal.bin\", \"rule\": \"TRAIN rows with doc_index % {} == {}, kept out of search and training, frozen model\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\"}},\n",
+                "  \"dev_trace\": {{\"file\": \"trace-dev.bin\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\"}},\n",
+                "  \"dev_us_per_position\": {:.6},\n",
+                "  \"weights_sha256\": \"{}\",\n  \"manifest_sha256\": \"{}\",\n  \"source_commit\": \"{}\",\n  \"test\": \"UNOPENED\"\n}}\n"
+            ),
+            arm.name,
+            TRACE_RECORD_BYTES,
+            STRETCH_SCALE,
+            CAL_STRIDE,
+            CAL_RESIDUE,
+            cal_summary.0,
+            cal_summary.1 / cal_summary.0 as f64,
+            cal_sha,
+            dev_events,
+            dev_bpc,
+            dev_sha,
+            dev_seconds * 1e6 / dev_events as f64,
+            weights_sha,
+            manifest_sha,
+            std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
+        );
+        fs::write(out.join("trace.json"), summary)?;
+    } else if arm.trace {
         let mut buffer = Vec::with_capacity(model.table_bytes());
         model.write_weights(&mut buffer)?;
         weights = Some(buffer);
@@ -405,12 +512,14 @@ fn prefix(roster: &Roster, plan: Plan) -> Result<(Documents, Documents)> {
 
 fn cli(args: &[String]) -> Result<()> {
     let usage =
-        "usage: sml-gb11-p1-s5h (run|smoke) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256]";
+        "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256]";
     let (plan, root, manifest, out, expected) = match args {
         [_, mode, root, manifest, out, rest @ ..] if rest.len() <= 1 => {
             let plan = match mode.as_str() {
                 "run" => RUN,
                 "smoke" => SMOKE,
+                "run-h1b" => Plan { cal: true, ..RUN },
+                "smoke-h1b" => Plan { cal: true, ..SMOKE },
                 _ => return Err(usage.into()),
             };
             (plan, root, manifest, out, rest.first())
@@ -418,7 +527,14 @@ fn cli(args: &[String]) -> Result<()> {
         _ => return Err(usage.into()),
     };
     let (root, out) = (Path::new(root), Path::new(out));
-    let roster = load_roster(root, Path::new(manifest))?;
+    let mut roster = load_roster(root, Path::new(manifest))?;
+    if plan.cal {
+        for doc in &mut roster.docs {
+            if doc.role == Role::Train && doc.index % CAL_STRIDE == CAL_RESIDUE {
+                doc.role = Role::Cal;
+            }
+        }
+    }
     if expected.is_some_and(|e| *e != roster.manifest_sha) {
         return Err(format!(
             "manifest SHA256 {} differs from expected",
@@ -515,24 +631,32 @@ fn cli(args: &[String]) -> Result<()> {
             bank_bytes: bank_bytes(name, plan.small_table, masks.len()),
             rule,
             update,
-            trace: *name == "search_q4",
+            trace: if plan.cal {
+                H1B_ARMS.contains(name)
+            } else {
+                *name == "search_q4"
+            },
         })
         .collect();
-    arms.push(Arm {
-        name: "search_f32",
-        bank_bytes: bank_bytes("search_f32", plan.large_table, searched.len()),
-        masks: searched,
-        rule: chosen[0].0,
-        update: chosen[0].1,
-        trace: false,
-    });
+    if plan.cal {
+        arms.retain(|arm| arm.trace);
+    } else {
+        arms.push(Arm {
+            name: "search_f32",
+            bank_bytes: bank_bytes("search_f32", plan.large_table, searched.len()),
+            masks: searched,
+            rule: chosen[0].0,
+            update: chosen[0].1,
+            trace: false,
+        });
+    }
 
     let results: Vec<Result<ArmResult>> = std::thread::scope(|scope| {
         let handles: Vec<_> = arms
             .iter()
             .map(|arm| {
                 let (roster, sha) = (&roster, roster.manifest_sha.as_str());
-                scope.spawn(move || run_arm(roster, arm, out, sha))
+                scope.spawn(move || run_arm(roster, arm, out, sha, plan.cal))
             })
             .collect();
         handles
@@ -557,8 +681,9 @@ fn cli(args: &[String]) -> Result<()> {
     }
     fs::write(out.join("metrics.tsv"), &metrics)?;
     let done = format!(
-        "SML_GB11_P1_DONE plan={} manifest={} search_s={search_seconds:.1} total_s={:.1} search_min_gain_bpc={SEARCH_MIN_GAIN_BPC} search_max_bits={SEARCH_MAX_BITS} test=UNOPENED model_promoted=false\n",
+        "SML_GB11_P1_DONE plan={}{} manifest={} search_s={search_seconds:.1} total_s={:.1} search_min_gain_bpc={SEARCH_MIN_GAIN_BPC} search_max_bits={SEARCH_MAX_BITS} test=UNOPENED model_promoted=false\n",
         plan.label,
+        if plan.cal { "_H1B" } else { "" },
         roster.manifest_sha,
         start.elapsed().as_secs_f64(),
     );
@@ -579,10 +704,9 @@ fn main() {
 mod tests {
     use super::*;
 
-    #[test]
-    fn smoke_run_writes_metrics_and_reproducible_traces() {
-        let home = std::env::temp_dir().join(format!("gb11-p1-smoke-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&home);
+    /// Twelve generated documents (ten TRAIN, two DEV) and their manifest.
+    fn smoke_corpus(home: &Path) -> (PathBuf, PathBuf) {
+        let _ = fs::remove_dir_all(home);
         let data = home.join("data");
         fs::create_dir_all(&data).unwrap();
         let mut manifest = format!("{HEADER}\n");
@@ -608,6 +732,59 @@ mod tests {
         }
         let manifest_path = home.join("manifest.tsv");
         fs::write(&manifest_path, &manifest).unwrap();
+        (data, manifest_path)
+    }
+
+    #[test]
+    fn smoke_h1b_holds_cal_out_and_traces_it_frozen() {
+        let home = std::env::temp_dir().join(format!("gb11-p1-h1b-{}", std::process::id()));
+        let (data, manifest_path) = smoke_corpus(&home);
+        let out = home.join("out");
+        let args: Vec<String> = ["bin", "smoke-h1b"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([&data, &manifest_path, &out].map(|p| p.display().to_string()))
+            .collect();
+        cli(&args).unwrap();
+        let metrics = fs::read_to_string(out.join("metrics.tsv")).unwrap();
+        assert_eq!(metrics.lines().count(), 3, "header + search_q4 + bytes_q4");
+        for arm in H1B_ARMS {
+            let dir = out.join(arm);
+            let json = fs::read_to_string(dir.join("trace.json")).unwrap();
+            assert!(json.contains("\"cal_trace\"") && json.contains("dev_us_per_position"));
+            assert!(!dir.join("trace-train.bin").exists());
+            let row = metrics
+                .lines()
+                .find(|l| l.contains(&format!("\t{arm}\t")))
+                .unwrap();
+            // Nine TRAIN files are trained on: doc 7 is CAL.
+            let train_bytes: u64 = row.split('\t').nth(9).unwrap().parse().unwrap();
+            let all_train: u64 = (0..10)
+                .map(|i| fs::metadata(data.join(format!("d{i}.txt"))).unwrap().len())
+                .sum();
+            let doc7 = fs::metadata(data.join("d7.txt")).unwrap().len();
+            assert_eq!(train_bytes, all_train - doc7);
+            let (records, bits) = sml_core::gb11_p1_stream::read_trace(
+                &mut File::open(dir.join("trace-cal.bin")).unwrap(),
+                |r| assert_eq!((r.split, r.doc_index), (2, 7)),
+            )
+            .unwrap();
+            assert_eq!(records, doc7 - 2);
+            let reported = json
+                .lines()
+                .find(|l| l.contains("\"cal_trace\""))
+                .and_then(|l| l.split("\"bpc\": ").nth(1))
+                .and_then(|r| r.split(',').next())
+                .unwrap();
+            assert!((bits / records as f64 - reported.parse::<f64>().unwrap()).abs() < 1e-6);
+        }
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn smoke_run_writes_metrics_and_reproducible_traces() {
+        let home = std::env::temp_dir().join(format!("gb11-p1-smoke-{}", std::process::id()));
+        let (data, manifest_path) = smoke_corpus(&home);
         let out = home.join("out");
         let args: Vec<String> = ["bin", "smoke"]
             .iter()
