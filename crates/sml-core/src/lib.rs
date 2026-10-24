@@ -101,6 +101,7 @@ pub mod gf2;
 pub mod gru_side;
 pub mod hyb_alt_ternary_sidecar;
 pub mod hyb_alt_train_only;
+pub mod hyb_alt_pairwise_residual;
 pub mod hyb_h1_residual;
 pub mod hybrid_logic_engine;
 pub mod large_anf_delta_kv;
