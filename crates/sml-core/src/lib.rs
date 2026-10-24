@@ -60,6 +60,7 @@ pub mod boolean_hierarchical;
 pub mod boolean_integral;
 pub mod boolean_learning;
 pub mod boolean_overlapping;
+pub mod boolean_associative_focus;
 pub mod boolean_page;
 pub mod boolean_search_bench;
 pub mod byte_factorization;
