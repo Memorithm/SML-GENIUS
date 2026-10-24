@@ -173,7 +173,6 @@ pub fn fit_joint_focus(
     }
 
     let baseline_train = error_bits(&baseline, train).map_err(JointFocusError::Split)?;
-    let baseline_validation = error_bits(&baseline, validation).map_err(JointFocusError::Split)?;
     let mut candidate_pages = pages.to_vec();
     let mut train_error = baseline_train;
     let mut evaluated = 0u64;
@@ -229,6 +228,8 @@ pub fn fit_joint_focus(
 
     let candidate = BooleanAssociativeFocus::new(config, candidate_pages.clone())
         .map_err(JointFocusError::Engine)?;
+    // Consult validation targets only after the entire TRAIN search is frozen.
+    let baseline_validation = error_bits(&baseline, validation).map_err(JointFocusError::Split)?;
     let validation_error = error_bits(&candidate, validation).map_err(JointFocusError::Split)?;
     let admitted = train_error < baseline_train && validation_error <= baseline_validation;
     let changed_pages = indices
