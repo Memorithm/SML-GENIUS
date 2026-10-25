@@ -35,7 +35,9 @@
 //! * `copy P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is the H-2c copy-expert
 //!   feasibility diagnostic (docs/HYB-H2C-COPY-FEASIBILITY.md): CAL only,
 //!   a per-document match model mixed after each A1d head
-//!   (`hyb_h2c_copy`) with a random null control and a timing control; it writes
+//!   (`hyb_h2c_copy`) with null, timing, donor and lag controls, a
+//!   FIT/SEL swap, a document bootstrap, a poisoned-future causality check
+//!   and COPY-1 for comparison; it writes
 //!   `h2c.tsv` and never opens EVAL4.
 //!
 //! The S5h DEV, EVAL2 and EVAL3 are never opened. `replay EXPERTS.tsv`
@@ -45,7 +47,9 @@
 
 use sml_core::{
     elastic_ngram_paged_sha::{hex, sha256},
-    gb11_p1_stream::{read_trace, TraceRecord, MAX_BANKS, TRACE_RECORD_BYTES},
+    gb11_p1_stream::{
+        read_trace, squash_value, TraceRecord, MAX_BANKS, STRETCH_LIMIT, TRACE_RECORD_BYTES,
+    },
     hyb_h1_residual::{a0_cost, decision_cost, splitmix, target_bit, DEPTHS},
     hyb_h1b_calibrated::{LAMBDA_EIGHTHS, TAUS},
     hyb_h1c_stable::{BURN_IN_EPOCHS, EPOCHS},
@@ -53,11 +57,12 @@ use sml_core::{
         replay_bank_records, BankHead, BankMaster, BankPlane, BankRecord, FusedBankHead,
         BANK_PLANE_BYTES, ROW,
     },
+    hyb_h1d_copy::{mix_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
     hyb_h2_mor_experts::{
         best_expert, hash_route, initial_group, quartile_edges, route_bits, router_bytes,
         train_routed, Majority, Router, EXPERTS, ROUNDS, ROUTE_WORDS,
     },
-    hyb_h2c_copy::{copy_bucket, expected_bit, CopyFit, CopyMixer, COPY_BUCKETS},
+    hyb_h2c_copy::{copy_bucket, expected_bit, CopyFit, CopyMixer, DonorModel, COPY_BUCKETS},
     hyb_h2t_templates::{
         agreement, cluster, length_bucket, nearest, MatchModel, Shape, ShapeState,
     },
@@ -1368,7 +1373,8 @@ fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
 
 // H-2c: a per-document copy expert mixed after the A1d head
 // (`HYB-H2C-COPY-FEASIBILITY.md`). CAL only: shifts are fitted on
-// CAL-FIT, the context length is chosen and the gain measured on CAL-SEL.
+// CAL-FIT, the context length is chosen and the gain measured on CAL-SEL,
+// then the roles are swapped once as a check.
 
 /// Context lengths hashed by the copy expert; one is chosen on CAL-SEL.
 const COPY_MINS: [usize; 3] = [6, 8, 12];
@@ -1378,55 +1384,284 @@ const COPY_TABLE_BITS: u32 = 18;
 const COPY_GAIN_BPC: f64 = CAL_GATE_BPC;
 /// The null control must stay within this.
 const COPY_NULL_BPC: f64 = 0.002;
-/// The variants: each context length; `timing`, which keeps the timing
-/// and lengths of the longest-context expert but predicts a random byte
-/// (reported only: it knows where the text repeats); and `null`, a random
-/// byte with a random length at every position, which knows nothing.
-const COPY_VARIANTS: usize = COPY_MINS.len() + 2;
+/// The donor and lag controls must stay under this share of the gain.
+const COPY_CONTROL_SHARE: f64 = 0.1;
+/// With CAL-FIT and CAL-SEL swapped, the gain must keep this share.
+const COPY_SWAP_SHARE: f64 = 0.5;
+/// The lag control uses the prediction made this many bytes earlier.
+const COPY_LAG: usize = 4096;
+/// Document bootstrap resamples; the 2.5 % quantile must reach the gate.
+const COPY_BOOTSTRAP: usize = 1000;
+/// One CAL-SEL document in this many gets the poisoned-future check.
+const COPY_POISON_STRIDE: usize = 16;
+/// COPY-1 (SML #725) weight in tenths: its preregistered 20 % recopy.
+const COPY1_TENTHS: u8 = DEFAULT_COPY_WEIGHT_TENTHS;
+/// The variants: each context length, then five controls.
+/// * `timing`: the longest-context expert's positions and lengths with a
+///   random byte (reported only: it knows where the text repeats);
+/// * `null`: a random byte and a random length at every position;
+/// * `donor`: context 6 looked up in another document of the same split;
+/// * `lag`: context 6's prediction made `COPY_LAG` bytes earlier.
 const COPY_TIMING: usize = COPY_MINS.len();
 const COPY_NULL: usize = COPY_MINS.len() + 1;
+const COPY_DONOR: usize = COPY_MINS.len() + 2;
+const COPY_LAGGED: usize = COPY_MINS.len() + 3;
+const COPY_VARIANTS: usize = COPY_MINS.len() + 4;
+
+type Prediction = Option<(u8, usize)>;
+/// One CAL-SEL document: bytes, then bits per base and per base and variant.
+type DocBits = (u64, Vec<f64>, Vec<[f64; COPY_VARIANTS]>);
 
 fn copy_name(v: usize) -> String {
     match v {
         COPY_TIMING => "timing".to_string(),
         COPY_NULL => "null".to_string(),
+        COPY_DONOR => "donor".to_string(),
+        COPY_LAGGED => "lag".to_string(),
         _ => format!("min{}", COPY_MINS[v]),
     }
 }
 
-/// Stretches of the eight decisions after one A1d head.
-fn head_stretches(head: &BankHead, eighths: i32, r: &BankRecord) -> [i32; DEPTHS] {
+/// Stretches of the eight decisions after one A1d head, or of P1 alone.
+fn base_stretches(head: Option<&(BankHead, i32)>, r: &BankRecord) -> [i32; DEPTHS] {
     std::array::from_fn(|d| {
-        i32::from(r.record.logits[d]).saturating_add(head.correction(head.raw(r, d), d, eighths))
+        let p1 = i32::from(r.record.logits[d]);
+        head.map_or(p1, |(h, eighths)| {
+            p1.saturating_add(h.correction(h.raw(r, d), d, *eighths))
+        })
     })
 }
 
-/// Calls `each` with every CAL record of `spans` and the predictions of
-/// each variant, from models that restart with every document.
-fn copy_pass(
+/// The bytes of each document, in order.
+fn span_bytes(pair: &mut Pair, spans: &[Span]) -> Result<Vec<Vec<u8>>> {
+    spans
+        .iter()
+        .map(|&span| {
+            let mut bytes = Vec::with_capacity(span.count as usize);
+            pair.each(span, |r| bytes.push(r.record.target))?;
+            Ok(bytes)
+        })
+        .collect()
+}
+
+/// Every variant's prediction before each byte of `bytes`, computed from
+/// the bytes before it only (and, for the donor, from `donor`).
+fn span_predictions(doc: u32, bytes: &[u8], donor: &[u8]) -> Vec<[Prediction; COPY_VARIANTS]> {
+    let mut models = COPY_MINS.map(|m| MatchModel::with_min(COPY_TABLE_BITS, m));
+    let mut other = DonorModel::new(donor.to_vec(), COPY_TABLE_BITS, COPY_MINS[0]);
+    let mut out: Vec<[Prediction; COPY_VARIANTS]> = Vec::with_capacity(bytes.len());
+    for (i, &b) in bytes.iter().enumerate() {
+        let mut p = [None; COPY_VARIANTS];
+        for (v, model) in models.iter().enumerate() {
+            p[v] = model.predict();
+        }
+        let noise = splitmix((u64::from(doc) << 32) | i as u64);
+        p[COPY_TIMING] = p[COPY_MINS.len() - 1].map(|(_, n)| (noise as u8, n));
+        p[COPY_NULL] = Some(((noise >> 8) as u8, (noise >> 16) as usize % 512));
+        p[COPY_DONOR] = other.predict();
+        p[COPY_LAGGED] = i.checked_sub(COPY_LAG).and_then(|j| out[j][0]);
+        out.push(p);
+        for model in &mut models {
+            model.push(b);
+        }
+        other.push(b);
+    }
+    out
+}
+
+/// Code lengths of one measurement: fit on `fit`, measured on `sel`.
+struct CopyMeasure {
+    fits: Vec<Vec<CopyFit>>,
+    mixers: Vec<Vec<CopyMixer>>,
+    singles: Vec<Vec<CopyMixer>>,
+    /// Per base: no copy, each variant, single shift per context length,
+    /// COPY-1; then per document the same, for the bootstrap.
+    base: Vec<f64>,
+    mixed: Vec<[f64; COPY_VARIANTS]>,
+    single: Vec<[f64; COPY_MINS.len()]>,
+    copy1: Vec<f64>,
+    copy1_active: u64,
+    docs: Vec<DocBits>,
+    covered: [u64; COPY_VARIANTS],
+    hits: [u64; COPY_VARIANTS],
+    records: u64,
+}
+
+/// Bases: each A1d head, then P1 alone.
+fn copy_measure(
     pair: &mut Pair,
-    spans: &[Span],
-    mut each: impl FnMut(&BankRecord, &[Option<(u8, usize)>; COPY_VARIANTS]),
-) -> Result<()> {
-    for &span in spans {
-        let mut models = COPY_MINS.map(|m| MatchModel::with_min(COPY_TABLE_BITS, m));
+    heads: &[(BankHead, i32)],
+    (fit, fit_bytes): (&[Span], &[Vec<u8>]),
+    (sel, sel_bytes): (&[Span], &[Vec<u8>]),
+    with_copy1: bool,
+) -> Result<CopyMeasure> {
+    let bases = heads.len() + 1;
+    let head = |b: usize| heads.get(b);
+    let mut fits: Vec<Vec<CopyFit>> = (0..bases)
+        .map(|_| (0..COPY_VARIANTS).map(|_| CopyFit::new()).collect())
+        .collect();
+    for (i, &span) in fit.iter().enumerate() {
+        let donor = &fit_bytes[(i + 1) % fit.len()];
+        let predictions = span_predictions(span.doc, &fit_bytes[i], donor);
+        let mut at = 0;
         pair.each(span, |r| {
-            let mut predictions = [None; COPY_VARIANTS];
-            for (v, model) in models.iter().enumerate() {
-                predictions[v] = model.predict();
-            }
-            let noise =
-                splitmix((u64::from(r.record.doc_index) << 32) | u64::from(r.record.position));
-            predictions[COPY_TIMING] =
-                predictions[COPY_MINS.len() - 1].map(|(_, n)| (noise as u8, n));
-            predictions[COPY_NULL] = Some(((noise >> 8) as u8, (noise >> 16) as usize % 512));
-            each(r, &predictions);
-            for model in &mut models {
-                model.push(r.record.target);
+            let p = &predictions[at];
+            at += 1;
+            for (b, f) in fits.iter_mut().enumerate() {
+                let s = base_stretches(head(b), r);
+                for (v, fv) in f.iter_mut().enumerate() {
+                    let Some((q, n)) = p[v] else { continue };
+                    for (d, &stretch) in s.iter().enumerate() {
+                        if let Some(e) = expected_bit(q, r.record.target, d) {
+                            fv.add(stretch, e, target_bit(&r.record, d), copy_bucket(n), d);
+                        }
+                    }
+                }
             }
         })?;
     }
-    Ok(())
+    let mixers: Vec<Vec<CopyMixer>> = fits
+        .iter()
+        .map(|f| f.iter().map(CopyFit::fit).collect())
+        .collect();
+    let singles: Vec<Vec<CopyMixer>> = fits
+        .iter()
+        .map(|f| {
+            f[..COPY_MINS.len()]
+                .iter()
+                .map(CopyFit::fit_single)
+                .collect()
+        })
+        .collect();
+    let mut m = CopyMeasure {
+        fits,
+        mixers,
+        singles,
+        base: vec![0.0; bases],
+        mixed: vec![[0.0; COPY_VARIANTS]; bases],
+        single: vec![[0.0; COPY_MINS.len()]; bases],
+        copy1: vec![0.0; bases],
+        copy1_active: 0,
+        docs: Vec::with_capacity(sel.len()),
+        covered: [0; COPY_VARIANTS],
+        hits: [0; COPY_VARIANTS],
+        records: 0,
+    };
+    for (i, &span) in sel.iter().enumerate() {
+        let donor = &sel_bytes[(i + 1) % sel.len()];
+        let predictions = span_predictions(span.doc, &sel_bytes[i], donor);
+        let mut doc_base = vec![0.0; bases];
+        let mut doc_mixed = vec![[0.0; COPY_VARIANTS]; bases];
+        let mut expert = CopyExpert::default();
+        let mut at = 0;
+        pair.each(span, |r| {
+            let p = &predictions[at];
+            at += 1;
+            m.records += 1;
+            for (v, pv) in p.iter().enumerate() {
+                if let Some((q, _)) = *pv {
+                    m.covered[v] += 1;
+                    m.hits[v] += u64::from(q == r.record.target);
+                }
+            }
+            if with_copy1 {
+                expert.prepare_byte();
+            }
+            for b in 0..bases {
+                let s = base_stretches(head(b), r);
+                for (d, &stretch) in s.iter().enumerate() {
+                    let bit = target_bit(&r.record, d);
+                    let plain = decision_cost(stretch, bit);
+                    m.base[b] += plain;
+                    doc_base[b] += plain;
+                    for (v, pv) in p.iter().enumerate() {
+                        let bits = match *pv {
+                            Some((q, n)) => {
+                                expected_bit(q, r.record.target, d).map_or(plain, |e| {
+                                    let w = m.mixers[b][v].stretch(stretch, e, copy_bucket(n), d);
+                                    decision_cost(w, bit)
+                                })
+                            }
+                            None => plain,
+                        };
+                        m.mixed[b][v] += bits;
+                        doc_mixed[b][v] += bits;
+                        if v < COPY_MINS.len() {
+                            m.single[b][v] += match *pv {
+                                Some((q, n)) => {
+                                    expected_bit(q, r.record.target, d).map_or(plain, |e| {
+                                        let w =
+                                            m.singles[b][v].stretch(stretch, e, copy_bucket(n), d);
+                                        decision_cost(w, bit)
+                                    })
+                                }
+                                None => plain,
+                            };
+                        }
+                    }
+                    if with_copy1 {
+                        let copy = expert.probability(d, r.record.target);
+                        if b == 0 {
+                            m.copy1_active += u64::from(copy.is_some());
+                        }
+                        // The H-1d probability in Q32, from the 16-bit squash.
+                        let neural =
+                            squash_value(stretch.clamp(-STRETCH_LIMIT, STRETCH_LIMIT)) << 16;
+                        let q = f64::from(mix_probability(neural, copy, COPY1_TENTHS))
+                            / 4_294_967_296.0;
+                        m.copy1[b] -= if bit { q.log2() } else { (1.0 - q).log2() };
+                    }
+                }
+            }
+            if with_copy1 {
+                expert.push_decoded(r.record.target);
+            }
+        })?;
+        m.docs.push((span.count, doc_base, doc_mixed));
+    }
+    Ok(m)
+}
+
+/// Poisoned-future check: the predictions before the middle of a document
+/// (and the one for the middle byte itself) must not change when every
+/// byte from the middle on is replaced by noise. Returns (checked, mismatches).
+fn copy_poison(sel: &[Span], sel_bytes: &[Vec<u8>]) -> (u64, u64) {
+    let (mut checked, mut mismatches) = (0u64, 0u64);
+    for i in (0..sel.len()).step_by(COPY_POISON_STRIDE) {
+        let bytes = &sel_bytes[i];
+        let donor = &sel_bytes[(i + 1) % sel.len()];
+        let mid = bytes.len() / 2;
+        let mut poisoned = bytes.clone();
+        for (j, b) in poisoned.iter_mut().enumerate().skip(mid) {
+            *b = splitmix(0x9e37 ^ j as u64) as u8;
+        }
+        let a = span_predictions(sel[i].doc, bytes, donor);
+        let b = span_predictions(sel[i].doc, &poisoned, donor);
+        let (mut ea, mut eb) = (CopyExpert::default(), CopyExpert::default());
+        for j in 0..=mid.min(bytes.len().saturating_sub(1)) {
+            checked += 1;
+            mismatches += u64::from(a[j] != b[j]);
+            ea.prepare_byte();
+            eb.prepare_byte();
+            for d in 0..DEPTHS {
+                mismatches += u64::from(ea.probability(d, bytes[j]) != eb.probability(d, bytes[j]));
+            }
+            ea.push_decoded(bytes[j]);
+            eb.push_decoded(poisoned[j]);
+        }
+    }
+    (checked, mismatches)
+}
+
+/// Gain of `mixed` over `base` in bits per byte for the documents `pick`.
+fn doc_gain(docs: &[DocBits], k: usize, v: usize, pick: impl Iterator<Item = usize>) -> f64 {
+    let (mut n, mut gain) = (0u64, 0.0);
+    for i in pick {
+        let (count, base, mixed) = &docs[i];
+        n += count;
+        gain += base[k] - mixed[k][v];
+    }
+    gain / n.max(1) as f64
 }
 
 fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
@@ -1434,71 +1669,40 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     let cal = load_cal(p1, h1d, label)?;
     let mut pair = Pair::open(&cal.dir, "trace-cal")?;
     let seeds = cal.heads.len();
-    let mut fits: Vec<Vec<CopyFit>> = (0..seeds)
-        .map(|_| (0..COPY_VARIANTS).map(|_| CopyFit::new()).collect())
-        .collect();
-    copy_pass(&mut pair, &cal.fit, |r, predictions| {
-        for (k, (head, eighths)) in cal.heads.iter().enumerate() {
-            let s = head_stretches(head, *eighths, r);
-            for (v, p) in predictions.iter().enumerate() {
-                let Some((q, n)) = *p else { continue };
-                for (d, &stretch) in s.iter().enumerate() {
-                    if let Some(e) = expected_bit(q, r.record.target, d) {
-                        fits[k][v].add(stretch, e, target_bit(&r.record, d), copy_bucket(n), d);
-                    }
-                }
-            }
-        }
-    })?;
-    let mixers: Vec<Vec<CopyMixer>> = fits
-        .iter()
-        .map(|f| f.iter().map(CopyFit::fit).collect())
-        .collect();
-    let (mut a0, mut a1d) = (0.0, vec![0.0; seeds]);
-    let mut mixed = vec![[0.0; COPY_VARIANTS]; seeds];
-    let (mut covered, mut hits) = ([0u64; COPY_VARIANTS], [0u64; COPY_VARIANTS]);
-    copy_pass(&mut pair, &cal.sel, |r, predictions| {
-        a0 += a0_cost(&r.record);
-        for (v, p) in predictions.iter().enumerate() {
-            if let Some((q, _)) = *p {
-                covered[v] += 1;
-                hits[v] += u64::from(q == r.record.target);
-            }
-        }
-        for (k, (head, eighths)) in cal.heads.iter().enumerate() {
-            let s = head_stretches(head, *eighths, r);
-            for (d, &stretch) in s.iter().enumerate() {
-                let bit = target_bit(&r.record, d);
-                let base = decision_cost(stretch, bit);
-                a1d[k] += base;
-                for (v, p) in predictions.iter().enumerate() {
-                    mixed[k][v] += match *p {
-                        Some((q, n)) => expected_bit(q, r.record.target, d).map_or(base, |e| {
-                            decision_cost(mixers[k][v].stretch(stretch, e, copy_bucket(n), d), bit)
-                        }),
-                        None => base,
-                    };
-                }
-            }
-        }
-    })?;
-    let n = cal.sel_records;
-    let a1d: Vec<f64> = a1d.iter().map(|&b| bpc(b, n)).collect();
-    let gain = |k: usize, v: usize| a1d[k] - bpc(mixed[k][v], n);
+    let fit_bytes = span_bytes(&mut pair, &cal.fit)?;
+    let sel_bytes = span_bytes(&mut pair, &cal.sel)?;
+    let m = copy_measure(
+        &mut pair,
+        &cal.heads,
+        (&cal.fit, &fit_bytes),
+        (&cal.sel, &sel_bytes),
+        true,
+    )?;
+    let swapped = copy_measure(
+        &mut pair,
+        &cal.heads,
+        (&cal.sel, &sel_bytes),
+        (&cal.fit, &fit_bytes),
+        false,
+    )?;
+    let (poison_checked, poison_mismatches) = copy_poison(&cal.sel, &sel_bytes);
+    let n = m.records;
+    let p1_base = seeds;
+    let gain = |k: usize, v: usize| bpc(m.base[k] - m.mixed[k][v], n);
     let mut report = format!(
-        "label\t{label}\nstage\tcopy\nschema\tSML_HYB_H2C_COPY_V1\n\
+        "label\t{label}\nstage\tcopy\nschema\tSML_HYB_H2C_COPY_V2\n\
          {BASE}_p1_weights_sha256\t{}\n{BASE}_dev_read\tfalse\n{BASE}_eval4_read\tfalse\n\
          {BASE}_cal_sel_records\t{n}\n{BASE}_a0_sel_bpc\t{:.9}\n\
          {BASE}_copy_table_bits\t{COPY_TABLE_BITS}\n",
         cal.weights,
-        bpc(a0, n),
+        bpc(m.base[p1_base], n),
     );
     for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
-        report += &format!("{BASE}_a1d_seed{seed}_sel_bpc\t{:.9}\n", a1d[k]);
+        report += &format!("{BASE}_a1d_seed{seed}_sel_bpc\t{:.9}\n", bpc(m.base[k], n));
     }
     for v in 0..COPY_VARIANTS {
         let name = copy_name(v);
-        let seen = &fits[0][v].seen;
+        let seen = &m.fits[0][v].seen;
         let rates: Vec<String> = (0..COPY_BUCKETS)
             .map(|b| format!("{:.4}", seen[b][1] as f64 / seen[b][0].max(1) as f64))
             .collect();
@@ -1509,31 +1713,117 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
              {BASE}_copy_{name}_sel_coverage\t{:.6}\n{BASE}_copy_{name}_sel_hit_rate\t{:.6}\n",
             counts.join(","),
             rates.join(","),
-            covered[v] as f64 / n.max(1) as f64,
-            hits[v] as f64 / covered[v].max(1) as f64,
+            m.covered[v] as f64 / n.max(1) as f64,
+            m.hits[v] as f64 / m.covered[v].max(1) as f64,
         );
         for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
             report += &format!(
                 "{BASE}_copy_{name}_seed{seed}_sel_bpc\t{:.9}\n\
                  {BASE}_copy_{name}_seed{seed}_sel_gain_over_a1d\t{:.9}\n\
                  {BASE}_copy_{name}_seed{seed}_shifts\t{}\n",
-                bpc(mixed[k][v], n),
+                bpc(m.mixed[k][v], n),
                 gain(k, v),
-                mixers[k][v].text(),
+                m.mixers[k][v].text(),
+            );
+        }
+        report += &format!(
+            "{BASE}_copy_{name}_p1_sel_gain_over_p1\t{:.9}\n",
+            gain(p1_base, v)
+        );
+    }
+    for (j, min) in COPY_MINS.iter().enumerate() {
+        for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+            report += &format!(
+                "{BASE}_copy_min{min}_single_seed{seed}_shift\t{}\n\
+                 {BASE}_copy_min{min}_single_seed{seed}_sel_gain_over_a1d\t{:.9}\n",
+                m.singles[k][j].shifts[0],
+                bpc(m.base[k] - m.single[k][j], n),
             );
         }
     }
-    let mean = |v: usize| (0..seeds).map(|k| bpc(mixed[k][v], n)).sum::<f64>() / seeds as f64;
+    let decisions = n * DEPTHS as u64;
+    report += &format!(
+        "{BASE}_copy1_weight_tenths\t{COPY1_TENTHS}\n{BASE}_copy1_active_decisions\t{:.6}\n",
+        m.copy1_active as f64 / decisions.max(1) as f64
+    );
+    for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+        report += &format!(
+            "{BASE}_copy1_seed{seed}_sel_gain_over_a1d\t{:.9}\n",
+            bpc(m.base[k] - m.copy1[k], n)
+        );
+    }
+    report += &format!(
+        "{BASE}_copy1_p1_sel_gain_over_p1\t{:.9}\n",
+        bpc(m.base[p1_base] - m.copy1[p1_base], n)
+    );
+    let mean = |v: usize| (0..seeds).map(|k| bpc(m.mixed[k][v], n)).sum::<f64>() / seeds as f64;
     let chosen = (0..COPY_MINS.len())
         .min_by(|&a, &b| mean(a).total_cmp(&mean(b)))
         .unwrap_or(0);
-    let feasible = (0..seeds).all(|k| gain(k, chosen) >= COPY_GAIN_BPC)
-        && (0..seeds).all(|k| gain(k, COPY_NULL).abs() < COPY_NULL_BPC);
+    let mut gate = true;
+    let mut null = true;
+    let mut donor = true;
+    let mut lag = true;
+    let mut bootstrap = true;
+    let mut swap = true;
+    let sn = swapped.records;
+    for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+        let g = gain(k, chosen);
+        gate &= g >= COPY_GAIN_BPC;
+        null &= gain(k, COPY_NULL).abs() < COPY_NULL_BPC;
+        donor &= gain(k, COPY_DONOR) < COPY_CONTROL_SHARE * g;
+        lag &= gain(k, COPY_LAGGED) < COPY_CONTROL_SHARE * g;
+        // Document bootstrap of the chosen context's gain.
+        let docs = &m.docs;
+        let mut state = 0x5eed_0000 ^ *seed;
+        let mut draws: Vec<f64> = (0..COPY_BOOTSTRAP)
+            .map(|_| {
+                let pick: Vec<usize> = (0..docs.len())
+                    .map(|_| {
+                        state = splitmix(state);
+                        (state % docs.len() as u64) as usize
+                    })
+                    .collect();
+                doc_gain(docs, k, chosen, pick.into_iter())
+            })
+            .collect();
+        draws.sort_by(f64::total_cmp);
+        let low = draws[COPY_BOOTSTRAP / 40];
+        let high = draws[COPY_BOOTSTRAP - 1 - COPY_BOOTSTRAP / 40];
+        bootstrap &= low >= COPY_GAIN_BPC;
+        let mut per_doc: Vec<f64> = (0..docs.len())
+            .map(|i| doc_gain(docs, k, chosen, std::iter::once(i)))
+            .collect();
+        per_doc.sort_by(f64::total_cmp);
+        let positive =
+            per_doc.iter().filter(|&&g| g > 0.0).count() as f64 / per_doc.len().max(1) as f64;
+        let swap_gain = bpc(swapped.base[k] - swapped.mixed[k][chosen], sn);
+        let swap_null = bpc(swapped.base[k] - swapped.mixed[k][COPY_NULL], sn);
+        swap &= swap_gain >= COPY_SWAP_SHARE * g && swap_null.abs() < COPY_NULL_BPC;
+        report += &format!(
+            "{BASE}_copy_seed{seed}_bootstrap_low\t{low:.9}\n{BASE}_copy_seed{seed}_bootstrap_high\t{high:.9}\n\
+             {BASE}_copy_seed{seed}_docs\t{}\n{BASE}_copy_seed{seed}_docs_gaining\t{positive:.6}\n\
+             {BASE}_copy_seed{seed}_doc_gain_p10\t{:.9}\n{BASE}_copy_seed{seed}_doc_gain_median\t{:.9}\n\
+             {BASE}_copy_seed{seed}_swap_gain_over_a1d\t{swap_gain:.9}\n\
+             {BASE}_copy_seed{seed}_swap_null_gain_over_a1d\t{swap_null:.9}\n",
+            per_doc.len(),
+            per_doc[per_doc.len() / 10],
+            per_doc[per_doc.len() / 2],
+        );
+    }
+    let causal = poison_mismatches == 0;
     report += &format!(
-        "{BASE}_copy_chosen_min\t{}\n{BASE}_copy_gain_bpc\t{COPY_GAIN_BPC}\n\
-         {BASE}_copy_null_bpc\t{COPY_NULL_BPC}\nverdict\t{}\n",
+        "{BASE}_copy_poison_positions\t{poison_checked}\n{BASE}_copy_poison_mismatches\t{poison_mismatches}\n\
+         {BASE}_copy_chosen_min\t{}\n{BASE}_copy_gain_bpc\t{COPY_GAIN_BPC}\n\
+         {BASE}_copy_null_bpc\t{COPY_NULL_BPC}\n{BASE}_copy_control_share\t{COPY_CONTROL_SHARE}\n\
+         {BASE}_copy_swap_share\t{COPY_SWAP_SHARE}\n\
+         {BASE}_copy_pass_gate\t{gate}\n{BASE}_copy_pass_null\t{null}\n{BASE}_copy_pass_donor\t{donor}\n\
+         {BASE}_copy_pass_lag\t{lag}\n{BASE}_copy_pass_bootstrap\t{bootstrap}\n\
+         {BASE}_copy_pass_swap\t{swap}\n{BASE}_copy_pass_causality\t{causal}\nverdict\t{}\n",
         COPY_MINS[chosen],
-        if feasible {
+        if !causal {
+            "COPY_CAUSALITY_FAIL"
+        } else if gate && null && donor && lag && bootstrap && swap {
             "COPY_FEASIBLE"
         } else {
             "COPY_NOT_FEASIBLE"
@@ -1724,6 +2014,20 @@ mod tests {
             }
         }
         assert!(COPY_MINS.contains(&(num(&report, "bytes_q4_copy_chosen_min") as usize)));
+        assert_eq!(num(&report, "bytes_q4_copy_poison_mismatches"), 0.0);
+        assert!(num(&report, "bytes_q4_copy_poison_positions") > 0.0);
+        assert_eq!(value(&report, "bytes_q4_copy_pass_causality"), "true");
+        for seed in SEEDS {
+            for key in ["bootstrap_low", "doc_gain_median", "swap_gain_over_a1d"] {
+                let g = num(&report, &format!("bytes_q4_copy_seed{seed}_{key}"));
+                assert!(g.abs() < 1e-9, "{key}");
+            }
+            let c1 = num(
+                &report,
+                &format!("bytes_q4_copy1_seed{seed}_sel_gain_over_a1d"),
+            );
+            assert!(c1.is_finite());
+        }
         assert_eq!(value(&report, "verdict"), "COPY_NOT_FEASIBLE");
         // Deterministic, never overwrites, and refuses smoke weights when
         // preregistered.

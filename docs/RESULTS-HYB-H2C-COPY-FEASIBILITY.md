@@ -20,6 +20,6 @@ Sur CAL-FIT, avec un contexte de 6, le bit attendu est juste dans 90 % des déci
 
 **Pourquoi le contrôle nul gagne.** Il ne prédisait qu'aux positions où l'expert de contexte 12 trouvait une correspondance, et avec ses longueurs. Il savait donc où le texte se répète. Ses décalages appris sont opposés deux à deux selon que la tête penche ou non vers le bit tiré au hasard (par exemple +320 et −320) : ils ne font que changer la confiance de la tête à ces positions. Ce n'est pas une fuite du futur, et ce gain est cent fois plus petit que celui de la recopie. Mais la règle était figée.
 
-Sur décision du propriétaire, l'étude est refaite sur la calibration avec un contrôle nul entièrement aléatoire (voir la révision dans `HYB-H2C-COPY-FEASIBILITY.md`). Le préenregistrement pour EVAL4 viendra seulement si elle passe.
+Sur décision du propriétaire, l'étude est refaite sur la calibration avec un nul entièrement aléatoire et six autres contrôles (voir la révision dans `HYB-H2C-COPY-FEASIBILITY.md`). Le préenregistrement pour EVAL4 viendra seulement si elle passe.
 
 Research only. DEV non lu. EVAL4 non lu. TEST fermé. NOT_PROMOTED.
