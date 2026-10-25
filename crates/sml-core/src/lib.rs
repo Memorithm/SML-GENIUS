@@ -113,6 +113,7 @@ pub mod hyb_h1b_calibrated;
 pub mod hyb_h1c_stable;
 pub mod hyb_h1d_bank_head;
 pub mod hyb_h2_mor_experts;
+pub mod hyb_h2c_copy;
 pub mod hyb_h2t_templates;
 pub mod hyb_h3_engine;
 pub mod hybrid_logic_engine;
