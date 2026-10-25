@@ -126,69 +126,12 @@ pub fn fit_joint_focus(
     policy: JointFocusPolicy,
 ) -> Result<JointFocusResult, JointFocusError> {
     let local = policy.local;
-    if !(1..=3).contains(&local.max_degree)
-        || local.max_rounds == 0
-        || local.max_terms == 0
-        || local.max_basis_terms == 0
-        || local.max_samples == 0
-        || policy.max_editable_pages == 0
-        || policy.max_candidate_evaluations == 0
-    {
-        return Err(JointFocusError::InvalidPolicy(
-            "zero budget or unsupported ANF degree",
-        ));
-    }
-    if config.event_bits.saturating_add(config.state_bits) > 16 {
-        return Err(JointFocusError::InvalidPolicy(
-            "at most 16 event+state input bits",
-        ));
-    }
-    if editable.is_empty() {
-        return Err(JointFocusError::NoEditablePages);
-    }
-    if editable.len() > policy.max_editable_pages {
-        return Err(JointFocusError::EditablePageBudget);
-    }
-    if train.is_empty() || validation.is_empty() {
-        return Err(JointFocusError::Split(FocusFitError::EmptySplit));
-    }
-    if train.len().saturating_add(validation.len()) > local.max_samples {
-        return Err(JointFocusError::Split(FocusFitError::TooManySamples));
-    }
-
-    let baseline =
-        BooleanAssociativeFocus::new(config, pages.to_vec()).map_err(JointFocusError::Engine)?;
-    validate_splits(config, train, validation).map_err(JointFocusError::Split)?;
-
-    let mut ids = editable.to_vec();
-    ids.sort_unstable_by_key(|p| p.0);
-    if let Some(duplicate) = ids.windows(2).find(|w| w[0] == w[1]) {
-        return Err(JointFocusError::DuplicateEditablePage(duplicate[0]));
-    }
-    let mut indices = Vec::with_capacity(ids.len());
-    let mut present = BTreeSet::new();
-    for (index, page) in pages.iter().enumerate() {
-        present.insert(page.id.0);
-        if ids.binary_search_by_key(&page.id.0, |id| id.0).is_ok() {
-            if !page.activation.terms.is_empty() {
-                return Err(JointFocusError::NonemptyInitialPredicate(page.id));
-            }
-            indices.push((page.id, index));
-        }
-    }
-    for id in &ids {
-        if !present.contains(&id.0) {
-            return Err(JointFocusError::MissingEditablePage(*id));
-        }
-    }
-    indices.sort_unstable_by_key(|(id, _)| id.0);
-
-    let basis = feature_bank(config, local.max_degree);
-    if basis.len() > local.max_basis_terms {
-        return Err(JointFocusError::InvalidPolicy(
-            "basis exceeds declared bound",
-        ));
-    }
+    let Prepared {
+        baseline,
+        ids,
+        indices,
+        basis,
+    } = prepare(config, pages, editable, train, validation, policy)?;
     let worst_case = (basis.len() as u64)
         .checked_add(1)
         .and_then(|features| features.checked_mul(ids.len() as u64))
@@ -333,6 +276,138 @@ pub fn fit_joint_focus(
         }
     }
 
+    finish(
+        config,
+        pages,
+        &indices,
+        baseline,
+        candidate_pages,
+        validation,
+        Search {
+            baseline_train,
+            train_error,
+            evaluated,
+            accepted,
+        },
+    )
+}
+
+/// Train-side search outcome handed to [`finish`].
+pub(crate) struct Search {
+    pub baseline_train: u64,
+    pub train_error: u64,
+    pub evaluated: u64,
+    pub accepted: Vec<JointFocusAcceptedFlip>,
+}
+
+/// Validated fitting context shared by every search strategy.
+pub(crate) struct Prepared {
+    pub baseline: BooleanAssociativeFocus,
+    pub ids: Vec<PageId>,
+    /// (page id, index into `pages`), page IDs ascending.
+    pub indices: Vec<(PageId, usize)>,
+    pub basis: Vec<AnfMonomial>,
+}
+
+/// Policy, split and atlas validation common to all joint search strategies
+/// (identical checks and error order to the original `fit_joint_focus`).
+pub(crate) fn prepare(
+    config: AssociativeFocusConfig,
+    pages: &[AssociativeFocusPage],
+    editable: &[PageId],
+    train: &[FocusTransition],
+    validation: &[FocusTransition],
+    policy: JointFocusPolicy,
+) -> Result<Prepared, JointFocusError> {
+    let local = policy.local;
+    if !(1..=3).contains(&local.max_degree)
+        || local.max_rounds == 0
+        || local.max_terms == 0
+        || local.max_basis_terms == 0
+        || local.max_samples == 0
+        || policy.max_editable_pages == 0
+        || policy.max_candidate_evaluations == 0
+    {
+        return Err(JointFocusError::InvalidPolicy(
+            "zero budget or unsupported ANF degree",
+        ));
+    }
+    if config.event_bits.saturating_add(config.state_bits) > 16 {
+        return Err(JointFocusError::InvalidPolicy(
+            "at most 16 event+state input bits",
+        ));
+    }
+    if editable.is_empty() {
+        return Err(JointFocusError::NoEditablePages);
+    }
+    if editable.len() > policy.max_editable_pages {
+        return Err(JointFocusError::EditablePageBudget);
+    }
+    if train.is_empty() || validation.is_empty() {
+        return Err(JointFocusError::Split(FocusFitError::EmptySplit));
+    }
+    if train.len().saturating_add(validation.len()) > local.max_samples {
+        return Err(JointFocusError::Split(FocusFitError::TooManySamples));
+    }
+
+    let baseline =
+        BooleanAssociativeFocus::new(config, pages.to_vec()).map_err(JointFocusError::Engine)?;
+    validate_splits(config, train, validation).map_err(JointFocusError::Split)?;
+
+    let mut ids = editable.to_vec();
+    ids.sort_unstable_by_key(|p| p.0);
+    if let Some(duplicate) = ids.windows(2).find(|w| w[0] == w[1]) {
+        return Err(JointFocusError::DuplicateEditablePage(duplicate[0]));
+    }
+    let mut indices = Vec::with_capacity(ids.len());
+    let mut present = BTreeSet::new();
+    for (index, page) in pages.iter().enumerate() {
+        present.insert(page.id.0);
+        if ids.binary_search_by_key(&page.id.0, |id| id.0).is_ok() {
+            if !page.activation.terms.is_empty() {
+                return Err(JointFocusError::NonemptyInitialPredicate(page.id));
+            }
+            indices.push((page.id, index));
+        }
+    }
+    for id in &ids {
+        if !present.contains(&id.0) {
+            return Err(JointFocusError::MissingEditablePage(*id));
+        }
+    }
+    indices.sort_unstable_by_key(|(id, _)| id.0);
+
+    let basis = feature_bank(config, local.max_degree);
+    if basis.len() > local.max_basis_terms {
+        return Err(JointFocusError::InvalidPolicy(
+            "basis exceeds declared bound",
+        ));
+    }
+    Ok(Prepared {
+        baseline,
+        ids,
+        indices,
+        basis,
+    })
+}
+
+/// Freeze the TRAIN winner, then consult VALIDATION exactly once and apply the
+/// admission rule (strict TRAIN improvement, no VALIDATION regression).
+pub(crate) fn finish(
+    config: AssociativeFocusConfig,
+    pages: &[AssociativeFocusPage],
+    indices: &[(PageId, usize)],
+    baseline: BooleanAssociativeFocus,
+    candidate_pages: Vec<AssociativeFocusPage>,
+    validation: &[FocusTransition],
+    search: Search,
+) -> Result<JointFocusResult, JointFocusError> {
+    let Search {
+        baseline_train,
+        train_error,
+        evaluated,
+        accepted,
+    } = search;
     let candidate = BooleanAssociativeFocus::new(config, candidate_pages.clone())
         .map_err(JointFocusError::Engine)?;
     // Consult validation targets only after the entire TRAIN search is frozen.
@@ -358,7 +433,7 @@ pub fn fit_joint_focus(
     })
 }
 
-fn binomial(n: u64, k: u64) -> Option<u64> {
+pub(crate) fn binomial(n: u64, k: u64) -> Option<u64> {
     if k > n {
         return Some(0);
     }
