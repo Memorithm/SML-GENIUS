@@ -1,6 +1,6 @@
 # Moteur hybride booléen + ternaire (option B) : bilan de H-0 à H-3
 
-**État au 25 octobre 2026 : le moteur hybride est démontré de bout en bout (H-3 GO).** Une tête ternaire entière, posée sur le modèle booléen à compteurs P1 et branchée sur un codeur arithmétique binaire, comprime mieux que P1 seul. Elle le fait sur trois échantillons jamais lus, avec un coût de 1,2× à 1,3× et des sorties identiques sur Dell et Thor.
+**État au 25 octobre 2026 : le moteur hybride est démontré de bout en bout (H-3 GO).** Une tête ternaire entière, posée sur le modèle booléen à compteurs P1 et branchée sur un codeur arithmétique binaire, comprime mieux que P1 seul. Elle le fait sur deux échantillons jamais lus : EVAL3, jugé sur traces, et EVAL5, jugé en compression réelle. Le coût est de 1,2× à 1,3×, et les sorties sont identiques sur Dell et Thor.
 
 Le routage par experts (H-2) n'apporte rien de plus. Il n'entre donc pas dans le moteur démontré.
 
@@ -33,7 +33,7 @@ Documents de résultats : `RESULTS-HYB-H1-S5H-TERNARY-RESIDUAL.md`, `RESULTS-HYB
 
 Les critères de promotion fixés en H-0 ont été appliqués, avec trois écarts déclarés dans les préenregistrements suivants :
 
-1. **Qualité.** H-0 visait le DEV. Pour ne jamais régler sur le DEV, la qualité a été jugée sur des échantillons neufs (EVAL2 à EVAL5), lus une seule fois chacun. Ce critère est plus strict.
+1. **Qualité.** H-0 visait le DEV. Pour ne jamais régler sur le DEV, la qualité a été jugée sur des échantillons neufs (EVAL2 pour H-1c, EVAL3 et EVAL5 pour la tête H-1d), lus une seule fois chacun. EVAL4 n'a pas été lu. Ce critère est plus strict.
 2. **Coût.** H-0 visait le moteur Pvp6Bank de GB-9. Celui-ci n'est pas un modèle de texte et ne peut pas compresser EVAL5. Le coût est donc mesuré contre P1 dans le même codeur.
 3. **Routage.** Le contrôle nul est fait (0 expert admis). Les « tâches ANF exactes » n'ont pas été rejouées en H-2. Le routage étant NO_GO, aucune page neuronale n'est admise dans le moteur.
 

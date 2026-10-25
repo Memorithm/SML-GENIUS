@@ -41,7 +41,7 @@ EVAL5 contient 40 documents et 33 609 917 octets : les articles du seau DEV de p
 
 - **Coût du codeur.** L'écart entre bits de conteneur et bits de modèle est d'environ 0,0001 BPC : le codeur est pratiquement transparent.
 - **Gain par rapport à P1.** Le conteneur hybride est 6,2 % plus petit que celui de P1 seul (graine 11).
-- **Reproductibilité du gain.** Le gain est le même que sur EVAL3 (0,159 et 0,152) : il se reproduit sur un troisième échantillon neuf.
+- **Reproductibilité du gain.** Les mêmes têtes H-1d avaient gagné 0,159 et 0,152 sur EVAL3, jugées sur traces. Elles gagnent 0,160 et 0,152 sur EVAL5, en compression réelle. C'est le deuxième échantillon neuf pour ces têtes. EVAL2 jugeait une autre tête, celle de H-1c, et EVAL4 n'a pas été lu.
 - **Temps sur Thor.** Ils sont publiés sans critère : 0,196 µs/octet pour P1 seul, 0,378 pour P1 + tête simple, 0,397 pour P1 + têtes routées, sur le P1 synthétique.
 
 ## Lecture
