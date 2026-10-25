@@ -748,6 +748,63 @@ mod tests {
     }
 
     #[test]
+    fn copy_expert_and_frozen_h1d_blend_are_causal_and_losslessly_decodable() {
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let base = HybridHead::single(head(1), 8);
+        let disabled = HybridHead::single_with_copy(head(1), 8, 0).unwrap();
+        let mixed = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
+        let copy_heavy = HybridHead::single_with_copy(head(1), 8, 8).unwrap();
+        let inputs = [
+            Vec::new(),
+            vec![7],
+            vec![7, 8],
+            vec![7, 8, 9],
+            vec![0u8; 2048],
+            b"abcabc".repeat(500),
+            text(71, 3000),
+            (0..4096).map(|i| (i * 29) as u8).collect::<Vec<_>>(),
+        ];
+        for data in inputs {
+            assert_eq!(
+                compress(&m, &tables, &base, &data),
+                compress(&m, &tables, &disabled, &data),
+                "weight 0 must preserve legacy H-1d stream"
+            );
+            for h in [&mixed, &copy_heavy] {
+                let fast = engine_p1s(&m, &tables, h, &data);
+                let oracle = oracle_p1s(&mut m, &tables, h, &data);
+                assert_eq!(fast, oracle, "independent causal oracle mismatch");
+                let container = compress(&m, &tables, h, &data);
+                assert_eq!(decompress(&m, &tables, h, &container).unwrap(), data);
+            }
+        }
+        let repeated = b"abcabc".repeat(50);
+        assert_ne!(
+            engine_p1s(&m, &tables, &base, &repeated),
+            engine_p1s(&m, &tables, &mixed, &repeated),
+            "repeated context should actually activate the copy expert"
+        );
+    }
+
+    #[test]
+    fn copy_expert_rejects_invalid_weight_and_does_not_look_at_future_bits() {
+        let tables = Tables::new();
+        let m = model(&tables);
+        let h = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
+        assert!(HybridHead::single_with_copy(head(1), 8, 9).is_err());
+        let history = b"abcabcabcabc";
+        let a = [history.as_slice(), b"aX"].concat();
+        let b = [history.as_slice(), b"zY"].concat();
+        let pa = engine_p1s(&m, &tables, &h, &a);
+        let pb = engine_p1s(&m, &tables, &h, &b);
+        let current = history.len() * 8;
+        assert_eq!(pa[..=current], pb[..=current]);
+        // A new document must reset the copy history: same data, same output.
+        assert_eq!(compress(&m, &tables, &h, &a), compress(&m, &tables, &h, &a));
+    }
+
+    #[test]
     fn the_engine_matches_the_trace_way_on_every_decision() {
         let tables = Tables::new();
         let mut m = model(&tables);
