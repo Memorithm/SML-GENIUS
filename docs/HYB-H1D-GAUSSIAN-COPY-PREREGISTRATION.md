@@ -39,3 +39,16 @@ F20 retains its original integer-tenths mixing implementation, not a rewritten a
 - Record total container bytes, BPC, mean copy mixture by active bit, counts per matched length, copy applicability rate, encoder/decoder wall times, peak RSS, source/asset SHA, complete traces' SHA, CPU ISA and compiler. Synthetic smoke does **not** qualify as TEST or prove superior generalization.
 - No production default/promotion and no changes to FLAT-ATTENTION or SciRust are authorized by this experiment.
 
+
+## Reproduction (synthetic only, no new holdout opened)
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked -p sml-core hyb_h1d_gaussian_copy
+cargo test --locked -p sml-core gaussian_copy_competes_with_fixed_twenty_eighty_in_full_lossless_coder
+cargo run --locked --release -p sml-core --example hyb_copy_gaussian_compare
+```
+
+The example prints `neural`, `fixed20` and `gaussian` for matching synthetic documents and synthetic model heads; these BPC and microsecond timings are **diagnostic only**. Real CAL-SEL, SHA-pinned H-1d heads and a new independent TEST require an explicitly separate admitted research run. The CI of this PR must be green on the exact head before merge. Its base is `main` solely to exercise the repository's required `pull_request: main` workflow; source changes are still stacked on COPY-1 PR #725 and must not be integrated before #725.
+
