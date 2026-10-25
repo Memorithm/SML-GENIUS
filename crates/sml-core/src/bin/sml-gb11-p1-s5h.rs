@@ -32,6 +32,9 @@
 //!   restores the frozen model from `weights.bin`, times an untraced pass
 //!   over EVAL3 (EVAL3 rows only, never trained on), then traces it as
 //!   split 4 with its sidecar and writes `eval3.json`.
+//! * `trace-h2-eval4` (same arguments, `EVAL4_MANIFEST.tsv`) does the same
+//!   for HYB H-2 (docs/HYB-H2-S5H-MOR-EXPERTS-PREREGISTRATION.md) on EVAL4,
+//!   as split 5 into `trace-eval4.bin` and `eval4.json`.
 
 use sml_core::hyb_h1d_bank_head::BankPlane;
 use sml_core::{
@@ -767,9 +770,9 @@ fn h1d_roster(
     root: &Path,
     manifest: &Path,
     expected: Option<&str>,
-    eval3: Option<&Path>,
+    eval: Option<(&Path, &str)>,
 ) -> Result<Roster> {
-    let mut roster = load_roster(root, manifest, eval3.map(|p| (p, "EVAL3")))?;
+    let mut roster = load_roster(root, manifest, eval)?;
     for doc in &mut roster.docs {
         if doc.role == Role::Train && doc.index % CAL_STRIDE == CAL_RESIDUE {
             doc.role = Role::Cal;
@@ -868,19 +871,48 @@ fn json_str<'a>(json: &'a str, key: &str) -> Result<&'a str> {
     Ok(&rest[..rest.find('"').ok_or("unterminated string")?])
 }
 
-/// `trace-h1d-eval3` / `smoke-h1d-eval3`: HYB H-1d stage 2, run only after
-/// the CAL-SEL gate passed. Restores the frozen `bytes_q4` model of
-/// `run-h1d`, times an untraced EVAL3 pass, traces EVAL3 as split 4 with
-/// bank sidecars and writes `eval3.json` next to `trace.json`.
-fn cli_h1d_eval3(
+/// A held-out sample traced by a frozen `run-h1d` model: EVAL3 for H-1d,
+/// EVAL4 for H-2. `slug` names the files (`trace-{slug}.bin`,
+/// `{slug}.json`), `role` the only manifest role admitted.
+#[derive(Clone, Copy)]
+struct Held {
+    slug: &'static str,
+    role: &'static str,
+    schema: &'static str,
+    done: &'static str,
+    split: u8,
+}
+
+const EVAL3: Held = Held {
+    slug: "eval3",
+    role: "EVAL3",
+    schema: "SML_GB11_P1_H1D_EVAL3_V1",
+    done: "SML_GB11_P1_H1D_EVAL3_DONE",
+    split: 4,
+};
+const EVAL4: Held = Held {
+    slug: "eval4",
+    role: "EVAL4",
+    schema: "SML_GB11_P1_H2_EVAL4_V1",
+    done: "SML_GB11_P1_H2_EVAL4_DONE",
+    split: 5,
+};
+
+/// `trace-h1d-eval3` / `trace-h2-eval4` (and their smoke modes): run only
+/// after the CAL-SEL gate of the experiment passed. Restores the frozen
+/// `bytes_q4` model of `run-h1d`, times an untraced pass over the held-out
+/// rows, traces them (split `held.split`) with bank sidecars and writes
+/// `{slug}.json` next to `trace.json`.
+fn cli_h1d_eval(
     plan: Plan,
     root: &Path,
     manifest: &Path,
     p1: &Path,
     expected: Option<&str>,
-    eval3: &Path,
+    eval: &Path,
+    held: Held,
 ) -> Result<()> {
-    let roster = h1d_roster(root, manifest, expected, Some(eval3))?;
+    let roster = h1d_roster(root, manifest, expected, Some((eval, held.role)))?;
     let dir = p1.join("bytes_q4");
     let json = fs::read_to_string(dir.join("trace.json"))?;
     if json_str(&json, "schema")? != "SML_GB11_P1_H1D_TRACE_V1"
@@ -912,35 +944,46 @@ fn cli_h1d_eval3(
         std::hint::black_box(model.code_document(&tables, &data, false, |_, _, _, _| {}));
         eval_seconds += t.elapsed().as_secs_f64();
     }
-    let eval = trace_with_banks(&mut model, &tables, eval_docs(), 4, &dir, "trace-eval3")?;
+    let name = format!("trace-{}", held.slug);
+    let eval = trace_with_banks(&mut model, &tables, eval_docs(), held.split, &dir, &name)?;
     if hex(&model.weights_sha()) != weights_sha {
-        return Err("EVAL3 changed the weights".into());
+        return Err(format!("{} changed the weights", held.role).into());
     }
     let us_per_position = eval_seconds * 1e6 / eval.0 as f64;
+    let (slug, role) = (held.slug, held.role);
     let summary = format!(
         concat!(
-            "{{\n  \"schema\": \"SML_GB11_P1_H1D_EVAL3_V1\",\n",
-            "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split 4 = EVAL3 frozen; *.banks.bin = BankPlane per record, same order\",\n",
-            "  \"eval3_trace\": {{\"file\": \"trace-eval3.bin\", \"rule\": \"EVAL3 manifest rows, never trained on, frozen model restored from weights.bin\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\", \"banks_sha256\": \"{}\"}},\n",
-            "  \"eval3_us_per_position\": {:.6},\n",
-            "  \"eval3_manifest_sha256\": \"{}\",\n",
+            "{{\n  \"schema\": \"{}\",\n",
+            "  \"layout\": \"as SML_GB11_P1_TRACE_V1; split {} = {} frozen; *.banks.bin = BankPlane per record, same order\",\n",
+            "  \"{}_trace\": {{\"file\": \"{}.bin\", \"rule\": \"{} manifest rows, never trained on, frozen model restored from weights.bin\", \"records\": {}, \"bpc\": {:.9}, \"sha256\": \"{}\", \"banks_sha256\": \"{}\"}},\n",
+            "  \"{}_us_per_position\": {:.6},\n",
+            "  \"{}_manifest_sha256\": \"{}\",\n",
             "  \"dev_read\": false,\n",
             "  \"weights_sha256\": \"{}\",\n  \"manifest_sha256\": \"{}\",\n  \"source_commit\": \"{}\",\n  \"test\": \"UNOPENED\"\n}}\n"
         ),
+        held.schema,
+        held.split,
+        role,
+        slug,
+        name,
+        role,
         eval.0,
         eval.1 / eval.0 as f64,
-        file_sha(&dir.join("trace-eval3.bin"))?,
-        file_sha(&dir.join("trace-eval3.banks.bin"))?,
+        file_sha(&dir.join(format!("{name}.bin")))?,
+        file_sha(&dir.join(format!("{name}.banks.bin")))?,
+        slug,
         us_per_position,
+        slug,
         roster.eval2_sha.as_deref().unwrap_or("none"),
         weights_sha,
         roster.manifest_sha,
         std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
     );
-    let mut file = File::create_new(dir.join("eval3.json"))?;
+    let mut file = File::create_new(dir.join(format!("{slug}.json")))?;
     file.write_all(summary.as_bytes())?;
     println!(
-        "SML_GB11_P1_H1D_EVAL3_DONE plan={} records={} bpc={:.9} us_per_position={us_per_position:.4} weights={weights_sha} dev_read=false",
+        "{} plan={} records={} bpc={:.9} us_per_position={us_per_position:.4} weights={weights_sha} dev_read=false",
+        held.done,
         plan.label,
         eval.0,
         eval.1 / eval.0 as f64,
@@ -949,7 +992,7 @@ fn cli_h1d_eval3(
 }
 
 fn cli(args: &[String]) -> Result<()> {
-    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL3_MANIFEST.tsv";
+    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3|trace-h2-eval4|smoke-h2-eval4) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL_MANIFEST.tsv";
     match args {
         [_, mode, root, manifest, out, sha] if mode == "run-h1d" || mode == "smoke-h1d" => {
             let base = if mode == "run-h1d" { RUN } else { SMOKE };
@@ -963,23 +1006,32 @@ fn cli(args: &[String]) -> Result<()> {
                 expected,
             );
         }
-        [_, mode, root, manifest, p1, sha, eval3]
-            if mode == "trace-h1d-eval3" || mode == "smoke-h1d-eval3" =>
+        [_, mode, root, manifest, p1, sha, eval]
+            if matches!(
+                mode.as_str(),
+                "trace-h1d-eval3" | "smoke-h1d-eval3" | "trace-h2-eval4" | "smoke-h2-eval4"
+            ) =>
         {
-            let base = if mode == "trace-h1d-eval3" {
+            let base = if mode.starts_with("trace-") {
                 RUN
             } else {
                 SMOKE
             };
+            let held = if mode.ends_with("eval3") {
+                EVAL3
+            } else {
+                EVAL4
+            };
             let plan = Plan { cal: true, ..base };
             let expected = (sha != "-").then_some(sha.as_str());
-            return cli_h1d_eval3(
+            return cli_h1d_eval(
                 plan,
                 Path::new(root),
                 Path::new(manifest),
                 Path::new(p1),
                 expected,
-                Path::new(eval3),
+                Path::new(eval),
+                held,
             );
         }
         _ => {}
@@ -1359,7 +1411,7 @@ mod tests {
                 .map(|s| s.to_string())
                 .chain([&data, &manifest_path, &home.join(out)].map(|p| p.display().to_string()))
                 .collect();
-            if mode.contains("h1d") {
+            if mode.contains("h1d") || mode.contains("h2") {
                 v.push("-".into());
             }
             v.extend(tail.iter().map(|p| p.display().to_string()));
@@ -1413,6 +1465,38 @@ mod tests {
                 assert!(plane.stretch.iter().all(|row| row[6] == 0 && row[7] == 0));
             }
         }
+        // H-2: EVAL4 is traced the same way, as split 5, and admits only
+        // EVAL4 rows.
+        let mut eval4 = format!("{HEADER}\n");
+        for i in 0..2 {
+            let text = format!("another unseen evaluation paper {i} ").repeat(400);
+            let name = format!("g{i}.txt");
+            fs::write(data.join(&name), &text).unwrap();
+            eval4.push_str(&format!(
+                "EVAL4\t{name}\t{}\t{}\tOWNED_REVIEWED\n",
+                text.len(),
+                hex(&sha256(text.as_bytes()))
+            ));
+        }
+        let eval4_path = home.join("eval4.tsv");
+        fs::write(&eval4_path, &eval4).unwrap();
+        assert!(cli(&args("smoke-h2-eval4", "out", &[&eval3_path])).is_err());
+        cli(&args("smoke-h2-eval4", "out", &[&eval4_path])).unwrap();
+        let eval4_json = fs::read_to_string(dir.join("eval4.json")).unwrap();
+        assert!(eval4_json.contains("SML_GB11_P1_H2_EVAL4_V1"));
+        assert!(eval4_json.contains("\"eval4_us_per_position\": "));
+        assert!(eval4_json.contains("\"eval4_trace\": "));
+        let (records, _) = sml_core::gb11_p1_stream::read_trace(
+            &mut File::open(dir.join("trace-eval4.bin")).unwrap(),
+            |r| assert!(r.split == 5 && (12..14).contains(&r.doc_index)),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::metadata(dir.join("trace-eval4.banks.bin"))
+                .unwrap()
+                .len(),
+            records * BANK_PLANE_BYTES as u64
+        );
         // Tampered weights are refused.
         let mut weights = fs::read(dir.join("weights.bin")).unwrap();
         weights[0] ^= 1;
