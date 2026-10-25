@@ -122,7 +122,10 @@ impl HybridHead {
     /// Expert that corrects this byte, from what is known at decision 0.
     #[inline]
     fn select(&self, r: &BankRecord) -> Option<usize> {
-        if self.hash_gate_threshold.is_some_and(|threshold| !hash_gate_is_active(r, threshold)) {
+        if self
+            .hash_gate_threshold
+            .is_some_and(|threshold| !hash_gate_is_active(r, threshold))
+        {
             return None;
         }
         if self.baf_gate.as_ref().is_some_and(|gate| {
@@ -140,7 +143,10 @@ impl HybridHead {
     }
 
     fn oracle_select(&self, r: &BankRecord) -> Option<usize> {
-        if self.hash_gate_threshold.is_some_and(|threshold| !hash_gate_is_active(r, threshold)) {
+        if self
+            .hash_gate_threshold
+            .is_some_and(|threshold| !hash_gate_is_active(r, threshold))
+        {
             return None;
         }
         if self.baf_gate.as_ref().is_some_and(|gate| {
