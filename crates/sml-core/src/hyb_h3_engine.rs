@@ -17,6 +17,8 @@
 //! on every decision. Research only, NOT_PROMOTED.
 
 use crate::{
+    boolean_associative_focus::AnfActivation,
+    hyb_baf_neural_gate::{causal_features, oracle_causal_features},
     bool_coder::{BinaryDecoder, BinaryEncoder, BitPredictor, CoderError},
     gb11_p1_stream::{ByteCode, Context, Model, PhaseBlocks, Tables, TraceRecord, MAX_BANKS},
     hyb_h1_residual::DEPTHS,
@@ -34,6 +36,7 @@ const HALF: u32 = 1 << 31;
 /// H-1d head, or the H-2 router with its experts and admission mask.
 #[derive(Debug, Clone)]
 pub struct HybridHead {
+    baf_gate: Option<AnfActivation>,
     router: Option<Router>,
     heads: Vec<BankHead>,
     fused: Vec<FusedBankHead>,
@@ -47,6 +50,7 @@ impl HybridHead {
     pub fn none() -> Self {
         Self {
             router: None,
+            baf_gate: None,
             heads: Vec::new(),
             fused: Vec::new(),
             admitted: Vec::new(),
@@ -59,11 +63,23 @@ impl HybridHead {
     pub fn single(head: BankHead, eighths: i32) -> Self {
         Self {
             router: None,
+            baf_gate: None,
             fused: vec![FusedBankHead::new(&head)],
             heads: vec![head],
             admitted: vec![true],
             eighths,
         }
+    }
+
+    /// Native BAF ANF activation for one frozen H-1d neural head.
+    /// Only the declared four context and four depth-zero bank bits are legal.
+    pub fn single_baf(head: BankHead, eighths: i32, gate: AnfActivation) -> Result<Self, &'static str> {
+        if gate.terms.iter().any(|t| t.event_mask & !15 != 0 || t.state_mask & !15 != 0) {
+            return Err("BAF gate has out-of-range event/state feature mask");
+        }
+        let mut result = Self::single(head, eighths);
+        result.baf_gate = Some(gate);
+        Ok(result)
     }
 
     /// The H-2 router; bytes routed to an expert that is not admitted are
@@ -72,6 +88,7 @@ impl HybridHead {
     pub fn routed(exported: Exported) -> Self {
         Self {
             router: Some(exported.router),
+            baf_gate: None,
             fused: exported.heads.iter().map(FusedBankHead::new).collect(),
             heads: exported.heads,
             admitted: exported.admitted.to_vec(),
@@ -82,6 +99,12 @@ impl HybridHead {
     /// Expert that corrects this byte, from what is known at decision 0.
     #[inline]
     fn select(&self, r: &BankRecord) -> Option<usize> {
+        if self.baf_gate.as_ref().is_some_and(|gate| {
+            let (event, state) = causal_features(r);
+            !gate.is_active(u64::from(event), u64::from(state))
+        }) {
+            return None;
+        }
         let k = match &self.router {
             Some(router) => router.route_bits(&route_bits(r)),
             None if self.heads.is_empty() => return None,
@@ -91,6 +114,12 @@ impl HybridHead {
     }
 
     fn oracle_select(&self, r: &BankRecord) -> Option<usize> {
+        if self.baf_gate.as_ref().is_some_and(|gate| {
+            let (event, state) = oracle_causal_features(r);
+            !gate.is_active(u64::from(event), u64::from(state))
+        }) {
+            return None;
+        }
         let k = match &self.router {
             Some(router) => router.oracle_route(r),
             None if self.heads.is_empty() => return None,
@@ -583,6 +612,51 @@ mod tests {
             .into_iter()
             .map(|(_, h)| h)
             .collect()
+    }
+
+    #[test]
+    fn native_boolean_gate_preserves_coder_and_independent_oracle() {
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let gate = AnfActivation {
+            bias: true,
+            terms: vec![crate::boolean_associative_focus::AnfMonomial {
+                event_mask: 1,
+                state_mask: 1,
+            }],
+        };
+        let h = HybridHead::single_baf(head(1), 8, gate).unwrap();
+        let never = HybridHead::single_baf(
+            head(1),
+            8,
+            AnfActivation {
+                bias: false,
+                terms: vec![],
+            },
+        )
+        .unwrap();
+        let p1 = HybridHead::none();
+        let data = text(77, 3000);
+        assert_eq!(engine_p1s(&m, &tables, &h, &data),
+                   oracle_p1s(&mut m, &tables, &h, &data));
+        let compressed = compress(&m, &tables, &h, &data);
+        assert_eq!(decompress(&m, &tables, &h, &compressed).unwrap(), data);
+        assert_eq!(engine_p1s(&m, &tables, &never, &data),
+                   engine_p1s(&m, &tables, &p1, &data));
+        assert_eq!(compress(&m, &tables, &never, &data),
+                   compress(&m, &tables, &p1, &data));
+    }
+
+    #[test]
+    fn native_baf_gate_rejects_unknown_feature_bits() {
+        let invalid = AnfActivation {
+            bias: true,
+            terms: vec![crate::boolean_associative_focus::AnfMonomial {
+                event_mask: 16,
+                state_mask: 0,
+            }],
+        };
+        assert!(HybridHead::single_baf(head(1), 8, invalid).is_err());
     }
 
     #[test]
