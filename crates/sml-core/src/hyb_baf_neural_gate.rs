@@ -189,6 +189,59 @@ impl HeadGateEvidence {
     }
 }
 
+/// Non-learned activity-matched control: fixed, predeclared hash of the
+/// same eight causal inputs. Only the threshold is matched to TRAIN gate
+/// activity; never fit this control on CAL-SEL or on target labels.
+#[must_use]
+pub fn hash_gate_is_active(record: &BankRecord, threshold: u16) -> bool {
+    let (event, state) = causal_features(record);
+    hash_signature(event, state) < threshold
+}
+
+fn hash_signature(event: u8, state: u8) -> u16 {
+    let mut x = u64::from(event) | (u64::from(state) << 4);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xbf58476d1ce4e5b9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94d049bb133111eb);
+    ((x ^ (x >> 31)) & 255) as u16
+}
+
+impl HeadGateEvidence {
+    #[must_use]
+    pub fn hashed_microbits_and_selected(&self, threshold: u16) -> (i128, u64) {
+        let mut cost = self.neural_microbits;
+        let mut selected = 0u64;
+        for event in 0..16 {
+            for state in 0..16 {
+                let index = event | (state << 4);
+                if hash_signature(event as u8, state as u8) < threshold {
+                    selected += self.count[index];
+                } else {
+                    cost += self.delta[index];
+                }
+            }
+        }
+        (cost, selected)
+    }
+
+    /// Choose hash activity closest to BAF's TRAIN-only selected count.
+    #[must_use]
+    pub fn match_hash_activity(&self, desired: u64) -> u16 {
+        let mut best = 0u16;
+        let mut min_delta = u64::MAX;
+        for threshold in 0..=256 {
+            let selected = self.hashed_microbits_and_selected(threshold).1;
+            let delta = selected.abs_diff(desired);
+            if delta < min_delta {
+                min_delta = delta;
+                best = threshold;
+            }
+        }
+        best
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadGatePolicy {
     pub max_rounds: usize,
