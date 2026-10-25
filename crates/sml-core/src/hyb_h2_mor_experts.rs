@@ -305,9 +305,7 @@ mod tests {
     #[test]
     fn quartiles_split_a_histogram_in_four() {
         let mut histogram = vec![0u64; 2048];
-        for m in 0..1000 {
-            histogram[m] += 1;
-        }
+        histogram[..1000].fill(1);
         let edges = quartile_edges(&histogram);
         assert_eq!(edges, [250, 500, 750]);
         let records = replay_bank_records(2048);
