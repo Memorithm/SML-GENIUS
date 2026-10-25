@@ -36,6 +36,17 @@ const P1_HASH: &str = "7f4c233d6c4d67e1d300068799f4653cfcaedda4158587478c99ec1d3
 const NULL_BPC_MARGIN: f64 = 0.005;
 const NEURAL_BPC_MARGIN: f64 = 0.010;
 
+// Seeded independent target-label scramble: the null task is never used
+// for fitting real weights or adjusting search configuration.
+fn null_mask(doc: u32, position: u32) -> u8 {
+    let mut z = u64::from(doc) ^ (u64::from(position) << 32) ^ 0xd74c_76cb_6ad2_56f3;
+    z ^= z >> 30;
+    z = z.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z ^= z >> 27;
+    z = z.wrapping_mul(0x94d0_49bb_1331_11eb);
+    ((z ^ (z >> 31)) & 255) as u8
+}
+
 fn digest_file(path: &Path) -> Result<String> {
     let mut file = BufReader::with_capacity(1 << 20, File::open(path)?);
     let mut sha = Sha256::default();
@@ -98,6 +109,8 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
     let mut raw_bank = [0u8; BANK_PLANE_BYTES];
     let mut train = [HeadGateEvidence::default(), HeadGateEvidence::default()];
     let mut validation = [HeadGateEvidence::default(), HeadGateEvidence::default()];
+    let mut null_train = [HeadGateEvidence::default(), HeadGateEvidence::default()];
+    let mut null_validation = [HeadGateEvidence::default(), HeadGateEvidence::default()];
     let mut previous = None;
 
     for _ in 0..(tr_size / TRACE_RECORD_BYTES as u64) {
@@ -121,23 +134,29 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
             23 => false,
             _ => return Err("CAL contains document outside pre-registered split".into()),
         };
+        let mut null_record = record;
+        null_record.record.target ^= null_mask(record.record.doc_index, record.record.position);
         for (i, (head, eighths)) in loaded.iter().enumerate() {
             let evidence = HeadGateObservation::from_record(&record, head, *eighths)?;
+            let null_evidence = HeadGateObservation::from_record(&null_record, head, *eighths)?;
             if is_train {
                 train[i].observe(evidence)?;
+                null_train[i].observe(null_evidence)?;
             } else {
                 validation[i].observe(evidence)?;
+                null_validation[i].observe(null_evidence)?;
             }
         }
     }
 
     let mut report = format!(
-        "seed,train_bytes,cal_sel_bytes,train_p1_bpc,train_neural_bpc,train_baf_bpc,cal_p1_bpc,cal_neural_bpc,cal_baf_bpc,cal_hash_bpc,cal_neural_minus_baf_bpc,cal_hash_minus_baf_bpc,train_baf_selected,cal_baf_selected,hash_threshold,candidate_evals,admitted\n"
+        "seed,train_bytes,cal_sel_bytes,train_p1_bpc,train_neural_bpc,train_baf_bpc,cal_p1_bpc,cal_neural_bpc,cal_baf_bpc,cal_hash_bpc,cal_neural_minus_baf_bpc,cal_hash_minus_baf_bpc,train_baf_selected,cal_baf_selected,hash_threshold,candidate_evals,null_admitted,admitted\n"
     );
     let mut gates = String::new();
     let mut all_pass = true;
     for (i, &seed) in HEAD_SEEDS.iter().enumerate() {
         let fit = fit_head_gate(&train[i], &validation[i], HeadGatePolicy::default())?;
+        let null_fit = fit_head_gate(&null_train[i], &null_validation[i], HeadGatePolicy::default())?;
         let hash_threshold = train[i].match_hash_activity(fit.train_selected);
         let (cal_hash, _) = validation[i].hashed_microbits_and_selected(hash_threshold);
         let train_baf = train[i].routed_microbits(&fit.gate);
@@ -147,12 +166,15 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
             validation[i].samples,
         );
         let hash_gain = bpc(cal_hash - cal_baf, validation[i].samples);
-        let pass = fit.admitted && neural_gain >= NEURAL_BPC_MARGIN && hash_gain >= NULL_BPC_MARGIN;
+        let pass = fit.admitted
+            && neural_gain >= NEURAL_BPC_MARGIN
+            && hash_gain >= NULL_BPC_MARGIN
+            && !null_fit.admitted;
         all_pass &= pass;
         use std::fmt::Write as _;
         writeln!(
             report,
-            "{seed},{},{},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{},{},{},{},{}",
+            "{seed},{},{},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{},{},{},{},{},{}",
             train[i].samples,
             validation[i].samples,
             bpc(train[i].p1_microbits, train[i].samples),
@@ -168,11 +190,12 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
             fit.validation_selected,
             hash_threshold,
             fit.evaluations,
+            null_fit.admitted,
             pass
         )?;
         writeln!(
             gates,
-            "seed\t{seed}\nhead_sha256\t{}\nbias\t{}\nterms\t{}\nhash_threshold\t{}\nadmitted\t{}\n",
+            "seed\t{seed}\nhead_sha256\t{}\nbias\t{}\nterms\t{}\nhash_threshold\t{}\nnull_admitted\t{}\nadmitted\t{}\n",
             head_digests[i],
             u8::from(fit.gate.bias),
             fit.gate.terms
@@ -181,6 +204,7 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
                 .collect::<Vec<_>>()
                 .join(","),
             hash_threshold,
+            null_fit.admitted,
             pass
         )?;
     }
