@@ -17,10 +17,10 @@
 //! on every decision. Research only, NOT_PROMOTED.
 
 use crate::{
-    boolean_associative_focus::AnfActivation,
-    hyb_baf_neural_gate::{causal_features, oracle_causal_features},
     bool_coder::{BinaryDecoder, BinaryEncoder, BitPredictor, CoderError},
+    boolean_associative_focus::AnfActivation,
     gb11_p1_stream::{ByteCode, Context, Model, PhaseBlocks, Tables, TraceRecord, MAX_BANKS},
+    hyb_baf_neural_gate::{causal_features, oracle_causal_features},
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
@@ -73,8 +73,16 @@ impl HybridHead {
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
     /// Only the declared four context and four depth-zero bank bits are legal.
-    pub fn single_baf(head: BankHead, eighths: i32, gate: AnfActivation) -> Result<Self, &'static str> {
-        if gate.terms.iter().any(|t| t.event_mask & !15 != 0 || t.state_mask & !15 != 0) {
+    pub fn single_baf(
+        head: BankHead,
+        eighths: i32,
+        gate: AnfActivation,
+    ) -> Result<Self, &'static str> {
+        if gate
+            .terms
+            .iter()
+            .any(|t| t.event_mask & !15 != 0 || t.state_mask & !15 != 0)
+        {
             return Err("BAF gate has out-of-range event/state feature mask");
         }
         let mut result = Self::single(head, eighths);
@@ -637,14 +645,20 @@ mod tests {
         .unwrap();
         let p1 = HybridHead::none();
         let data = text(77, 3000);
-        assert_eq!(engine_p1s(&m, &tables, &h, &data),
-                   oracle_p1s(&mut m, &tables, &h, &data));
+        assert_eq!(
+            engine_p1s(&m, &tables, &h, &data),
+            oracle_p1s(&mut m, &tables, &h, &data)
+        );
         let compressed = compress(&m, &tables, &h, &data);
         assert_eq!(decompress(&m, &tables, &h, &compressed).unwrap(), data);
-        assert_eq!(engine_p1s(&m, &tables, &never, &data),
-                   engine_p1s(&m, &tables, &p1, &data));
-        assert_eq!(compress(&m, &tables, &never, &data),
-                   compress(&m, &tables, &p1, &data));
+        assert_eq!(
+            engine_p1s(&m, &tables, &never, &data),
+            engine_p1s(&m, &tables, &p1, &data)
+        );
+        assert_eq!(
+            compress(&m, &tables, &never, &data),
+            compress(&m, &tables, &p1, &data)
+        );
     }
 
     #[test]
