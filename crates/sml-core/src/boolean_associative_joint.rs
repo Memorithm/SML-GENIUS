@@ -17,7 +17,8 @@ use crate::{
         BooleanAssociativeFocus,
     },
     boolean_associative_train::{
-        error_bits, feature_bank, validate_splits, FocusFitError, FocusFitPolicy, FocusTransition,
+        error_bits, feature_bank, next_combination, validate_splits, FocusFitError, FocusFitPolicy,
+        FocusTransition,
     },
     PageId,
 };
@@ -45,6 +46,12 @@ pub struct JointFocusPolicy {
     /// must fit or the fit fails closed (CandidateBudget). 0 disables.
     /// Triple evaluations count against `max_candidate_evaluations`.
     pub max_triple_flips: u64,
+    /// Bounded quadruple-flip escape (BAF-SCALE parity4). Same semantics as
+    /// triples with C(n,4)*pages per round. OPT-IN: default 0 (disabled),
+    /// because C(n,4) grows fast (n=7: 35, n=10: 210, n=16: 1820 per page).
+    /// Over budget fails closed (CandidateBudget). Counts against
+    /// `max_candidate_evaluations`.
+    pub max_quad_flips: u64,
 }
 
 impl Default for JointFocusPolicy {
@@ -55,6 +62,7 @@ impl Default for JointFocusPolicy {
             max_candidate_evaluations: 5_000,
             max_pair_flips: 256,
             max_triple_flips: 128,
+            max_quad_flips: 0,
         }
     }
 }
@@ -118,7 +126,7 @@ pub fn fit_joint_focus(
     policy: JointFocusPolicy,
 ) -> Result<JointFocusResult, JointFocusError> {
     let local = policy.local;
-    if !(1..=2).contains(&local.max_degree)
+    if !(1..=3).contains(&local.max_degree)
         || local.max_rounds == 0
         || local.max_terms == 0
         || local.max_basis_terms == 0
@@ -191,33 +199,33 @@ pub fn fit_joint_focus(
         .copied()
         .filter(|m| m.event_mask.count_ones() + m.state_mask.count_ones() == 1)
         .collect();
-    let pairs_per_round = if policy.max_pair_flips == 0 {
-        0
-    } else {
-        let n = atoms.len() as u64;
-        let pairs = (n * n.saturating_sub(1) / 2)
-            .checked_mul(ids.len() as u64)
+    // k-flip escape budgets for k = 2, 3, 4 (pairs, triples, quads).
+    let escape_caps = [
+        (2usize, policy.max_pair_flips),
+        (3, policy.max_triple_flips),
+        (4, policy.max_quad_flips),
+    ];
+    let mut escapes: Vec<usize> = Vec::new();
+    let mut escape_per_round = 0u64;
+    for (k, cap) in escape_caps {
+        if cap == 0 {
+            continue;
+        }
+        let count = binomial(atoms.len() as u64, k as u64)
+            .and_then(|c| c.checked_mul(ids.len() as u64))
             .ok_or(JointFocusError::CandidateBudget)?;
-        if pairs > policy.max_pair_flips {
+        if count > cap {
             return Err(JointFocusError::CandidateBudget);
         }
-        pairs
-    };
-    let triples_per_round = if policy.max_triple_flips == 0 {
-        0
-    } else {
-        let n = atoms.len() as u64;
-        let triples = (n * n.saturating_sub(1) * n.saturating_sub(2) / 6)
-            .checked_mul(ids.len() as u64)
+        escape_per_round = escape_per_round
+            .checked_add(count)
             .ok_or(JointFocusError::CandidateBudget)?;
-        if triples > policy.max_triple_flips {
-            return Err(JointFocusError::CandidateBudget);
+        if count > 0 {
+            escapes.push(k);
         }
-        triples
-    };
-    let worst_case = pairs_per_round
-        .checked_add(triples_per_round)
-        .and_then(|p| p.checked_mul(local.max_rounds as u64))
+    }
+    let worst_case = escape_per_round
+        .checked_mul(local.max_rounds as u64)
         .and_then(|p| p.checked_add(worst_case))
         .ok_or(JointFocusError::CandidateBudget)?;
     if worst_case > policy.max_candidate_evaluations {
@@ -265,76 +273,39 @@ pub fn fit_joint_focus(
                 }
             }
         }
-        let mut best_pair = None;
-        if pairs_per_round > 0 {
-            // Escape: same-page degree-1 pairs (i < j), page IDs ascending; must
-            // strictly beat the best single flip (ties keep the single).
+        let mut best_multi: Option<(PageId, Vec<AnfMonomial>)> = None;
+        // Escapes: same-page degree-1 k-flips (i < j < ..), k ascending, page
+        // IDs ascending; must STRICTLY beat every smaller move (ties keep it).
+        for &k in &escapes {
             for (id, index) in indices.iter().copied() {
-                for i in 0..atoms.len() {
-                    for j in (i + 1)..atoms.len() {
-                        let mut trial = candidate_pages.clone();
-                        let activation = &mut trial[index].activation;
-                        let mut ok = true;
-                        for term in [atoms[i], atoms[j]] {
-                            if let Some(pos) = activation.terms.iter().position(|x| *x == term) {
-                                activation.terms.remove(pos);
-                            } else if activation.terms.len() >= local.max_terms {
-                                ok = false;
-                            } else {
-                                activation.terms.push(term);
-                            }
+                let mut idx: Vec<usize> = (0..k).collect();
+                loop {
+                    let mut trial = candidate_pages.clone();
+                    let activation = &mut trial[index].activation;
+                    let mut ok = true;
+                    for &i in &idx {
+                        let term = atoms[i];
+                        if let Some(pos) = activation.terms.iter().position(|x| *x == term) {
+                            activation.terms.remove(pos);
+                        } else if activation.terms.len() >= local.max_terms {
+                            ok = false;
+                        } else {
+                            activation.terms.push(term);
                         }
-                        if !ok {
-                            continue;
-                        }
+                    }
+                    if ok {
                         let engine = BooleanAssociativeFocus::new(config, trial.clone())
                             .map_err(JointFocusError::Engine)?;
                         let loss = error_bits(&engine, train).map_err(JointFocusError::Split)?;
                         evaluated += 1;
                         if loss < best_error {
                             best_error = loss;
-                            best_pair = Some((id, atoms[i], atoms[j]));
+                            best_multi = Some((id, idx.iter().map(|&i| atoms[i]).collect()));
                             best_pages = Some(trial);
                         }
                     }
-                }
-            }
-        }
-        let mut best_triple = None;
-        if triples_per_round > 0 {
-            // Escape: same-page degree-1 triples (i < j < k); must strictly
-            // beat the best single/pair (ties keep the smaller move).
-            for (id, index) in indices.iter().copied() {
-                for i in 0..atoms.len() {
-                    for j in (i + 1)..atoms.len() {
-                        for k in (j + 1)..atoms.len() {
-                            let mut trial = candidate_pages.clone();
-                            let activation = &mut trial[index].activation;
-                            let mut ok = true;
-                            for term in [atoms[i], atoms[j], atoms[k]] {
-                                if let Some(pos) = activation.terms.iter().position(|x| *x == term)
-                                {
-                                    activation.terms.remove(pos);
-                                } else if activation.terms.len() >= local.max_terms {
-                                    ok = false;
-                                } else {
-                                    activation.terms.push(term);
-                                }
-                            }
-                            if !ok {
-                                continue;
-                            }
-                            let engine = BooleanAssociativeFocus::new(config, trial.clone())
-                                .map_err(JointFocusError::Engine)?;
-                            let loss =
-                                error_bits(&engine, train).map_err(JointFocusError::Split)?;
-                            evaluated += 1;
-                            if loss < best_error {
-                                best_error = loss;
-                                best_triple = Some((id, [atoms[i], atoms[j], atoms[k]]));
-                                best_pages = Some(trial);
-                            }
-                        }
+                    if !next_combination(&mut idx, atoms.len()) {
+                        break;
                     }
                 }
             }
@@ -344,16 +315,8 @@ pub fn fit_joint_focus(
         };
         candidate_pages = winner;
         train_error = best_error;
-        if let Some((id, terms)) = best_triple {
+        if let Some((id, terms)) = best_multi {
             for term in terms {
-                accepted.push(JointFocusAcceptedFlip {
-                    page: id,
-                    term: Some(term),
-                    train_errors_after: best_error,
-                });
-            }
-        } else if let Some((id, a, b)) = best_pair {
-            for term in [a, b] {
                 accepted.push(JointFocusAcceptedFlip {
                     page: id,
                     term: Some(term),
@@ -393,6 +356,17 @@ pub fn fit_joint_focus(
             admitted,
         },
     })
+}
+
+fn binomial(n: u64, k: u64) -> Option<u64> {
+    if k > n {
+        return Some(0);
+    }
+    let mut r = 1u64;
+    for i in 0..k {
+        r = r.checked_mul(n - i)? / (i + 1);
+    }
+    Some(r)
 }
 
 #[cfg(test)]
@@ -513,6 +487,46 @@ mod tests {
             },
         );
         assert_eq!(result, Err(JointFocusError::CandidateBudget));
+    }
+
+    #[test]
+    fn degree3_bank_and_k_flip_budgets_are_exact_and_fail_closed() {
+        // 7 atoms: 7 + C(7,2) + C(7,3) = 63 unique monomials, degree-ordered.
+        let bank = feature_bank(cfg(), 3);
+        assert_eq!(bank.len(), 63);
+        let unique: BTreeSet<_> = bank.iter().map(|m| (m.event_mask, m.state_mask)).collect();
+        assert_eq!(unique.len(), 63);
+        let degrees: Vec<u32> = bank
+            .iter()
+            .map(|m| m.event_mask.count_ones() + m.state_mask.count_ones())
+            .collect();
+        assert!(degrees.windows(2).all(|w| w[0] <= w[1]));
+        assert_eq!(feature_bank(cfg(), 2).len(), 28);
+        assert_eq!(binomial(7, 4), Some(35));
+        assert_eq!(binomial(3, 4), Some(0));
+
+        let (train, val) = splits();
+        let pages = [page(20, 5, 8, 8), page(10, 5, 4, 4)];
+        let run = |policy| {
+            fit_joint_focus(
+                cfg(),
+                &pages,
+                &[PageId(20), PageId(10)],
+                &train,
+                &val,
+                policy,
+            )
+        };
+        let mut deg4 = JointFocusPolicy::default();
+        deg4.local.max_degree = 4;
+        assert!(matches!(run(deg4), Err(JointFocusError::InvalidPolicy(_))));
+        // C(7,4) * 2 pages = 70 quads per round: 69 refuses, 70 runs.
+        let quad = |cap| JointFocusPolicy {
+            max_quad_flips: cap,
+            ..JointFocusPolicy::default()
+        };
+        assert_eq!(run(quad(69)), Err(JointFocusError::CandidateBudget));
+        assert!(run(quad(70)).is_ok());
     }
 
     #[test]
