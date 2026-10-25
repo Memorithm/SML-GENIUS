@@ -15,9 +15,7 @@
 use sml_core::{
     elastic_ngram_paged_sha::{hex, Sha256},
     gb11_p1_stream::{TraceRecord, TRACE_RECORD_BYTES},
-    hyb_baf_neural_gate::{
-        fit_head_gate, HeadGateEvidence, HeadGateObservation, HeadGatePolicy,
-    },
+    hyb_baf_neural_gate::{fit_head_gate, HeadGateEvidence, HeadGateObservation, HeadGatePolicy},
     hyb_h1d_bank_head::{BankPlane, BankRecord, BANK_PLANE_BYTES},
     hyb_h3_engine::parse_h1d_head,
 };
@@ -58,7 +56,11 @@ fn bpc(microbits: i128, rows: u64) -> f64 {
 
 fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
     if out.exists() {
-        return Err(format!("output already exists (refuse overwrite): {}", out.display()).into());
+        return Err(format!(
+            "output already exists (refuse overwrite): {}",
+            out.display()
+        )
+        .into());
     }
     let p1 = p1_dir.join("bytes_q4");
     let weights = p1.join("weights.bin");
@@ -140,12 +142,12 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
         let (cal_hash, _) = validation[i].hashed_microbits_and_selected(hash_threshold);
         let train_baf = train[i].routed_microbits(&fit.gate);
         let cal_baf = validation[i].routed_microbits(&fit.gate);
-        let neural_gain =
-            bpc(validation[i].neural_microbits - cal_baf, validation[i].samples);
+        let neural_gain = bpc(
+            validation[i].neural_microbits - cal_baf,
+            validation[i].samples,
+        );
         let hash_gain = bpc(cal_hash - cal_baf, validation[i].samples);
-        let pass = fit.admitted
-            && neural_gain >= NEURAL_BPC_MARGIN
-            && hash_gain >= NULL_BPC_MARGIN;
+        let pass = fit.admitted && neural_gain >= NEURAL_BPC_MARGIN && hash_gain >= NULL_BPC_MARGIN;
         all_pass &= pass;
         use std::fmt::Write as _;
         writeln!(
@@ -188,14 +190,22 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
     File::create(out.join("h4-verdict.txt"))?.write_all(
         format!(
             "source_p1_sha256\t{p1_hash}\nverdict\t{}\nsealed_eval_opened\tfalse\n",
-            if all_pass { "CAL_GATE_PASS" } else { "NO_GO_CAL_GATE" }
+            if all_pass {
+                "CAL_GATE_PASS"
+            } else {
+                "NO_GO_CAL_GATE"
+            }
         )
         .as_bytes(),
     )?;
     print!("{report}");
     println!(
         "verdict,{}",
-        if all_pass { "CAL_GATE_PASS" } else { "NO_GO_CAL_GATE" }
+        if all_pass {
+            "CAL_GATE_PASS"
+        } else {
+            "NO_GO_CAL_GATE"
+        }
     );
     Ok(())
 }
