@@ -29,11 +29,11 @@ Run : [RemoteOps #861](https://github.com/Memorithm/RemoteOps/pull/861), SML `28
 | Critère | Mesure (graine 11 / 23) | Seuil | Résultat |
 |---|---|---|---|
 | Porte de gain (contexte 6 retenu) | 0,5427 / 0,5633 | ≥ 0,01 | passe |
-| Nul aléatoire à toutes les positions | 0,0044 / 0,0056 | ≤ 0,002 | **échoue** |
-| Donneur (recopie depuis un autre document) | 0,173 / 0,192 | ≤ 10 % du gain | **échoue** |
-| Décalage de 4096 octets | 0,0075 / 0,0121 | ≤ 10 % du gain | passe |
+| Nul aléatoire à toutes les positions | 0,0044 / 0,0056 | < 0,002 | **échoue** |
+| Donneur (recopie depuis un autre document) | 0,173 / 0,192 | < 10 % du gain | **échoue** |
+| Retard de 4 096 octets | 0,0075 / 0,0121 | < 10 % du gain | passe |
 | Bootstrap par document (IC 95 %) | [0,518 ; 0,573] / [0,542 ; 0,593] | borne basse ≥ 0,01 | passe |
-| Rôles échangés (FIT ↔ SEL) : gain / nul | 0,580 / 0,598 ; nul 0,0050 / 0,0052 | nul ≤ 0,002 | **échoue** |
+| Échange (appris sur SEL, mesuré sur FIT) | gain 0,580 / 0,598 ; nul 0,0050 / 0,0052 | gain ≥ moitié, nul < 0,002 | **échoue** (nul) |
 | Causalité (octets futurs empoisonnés) | 0 écart sur 1 129 099 positions | 0 | passe |
 
 Mesures rapportées sans critère :
@@ -50,7 +50,7 @@ Mesures rapportées sans critère :
 
 - **Les nuls (0,004 à 0,006) ne lisent aucun signal de recopie.** Leurs décalages sont opposés deux à deux selon que la tête penche ou non vers le bit tiré au hasard. Le mélangeur recalibre donc seulement la confiance de la tête A1d. Ce gain existe sans aucun expert, et il est cent fois plus petit que celui de la recopie. Il vient de la séparation des cellules selon l'accord avec la tête, pas d'une fuite.
 - **Le donneur gagne 0,17 à 0,19.** Une part de la recopie (environ un tiers) est du vocabulaire partagé entre articles scientifiques. Le reste, environ 0,37, vient de répétitions internes au document.
-- **Le gain est causal et robuste.** Rien ne vient du futur, il tient sur tous les documents, avec l'échange des rôles et le décalage.
+- **Le gain est causal et robuste.** Rien ne vient du futur, il tient sur tous les documents, avec l'échange des rôles et le retard.
 - **COPY-1 nuit.** Un mélange linéaire fixe, sans tenir compte de la longueur de la correspondance, coûte plus qu'il ne rapporte.
 
 Research only. DEV non lu. EVAL4 non lu. TEST fermé. NOT_PROMOTED.
