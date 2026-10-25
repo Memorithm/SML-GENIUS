@@ -130,20 +130,21 @@ impl CopyExpert {
 
 /// Blend already-corrected H-1d probability and a causal copy probability.
 /// A missing or mismatched-prefix copy leaves H-1d completely unchanged.
-/// Weight is in eighths (0..=8), with nearest-integer Q32 rounding.
+/// Weight is in tenths (0..=10), with nearest-integer Q32 rounding.
+/// w=2 implements exactly 20% recopy / 80% H-1d.
 #[must_use]
-pub fn mix_probability(neural: u32, copy: Option<u32>, weight_eighths: u8) -> u32 {
-    assert!(weight_eighths <= 8);
-    if weight_eighths == 0 {
+pub fn mix_probability(neural: u32, copy: Option<u32>, weight_tenths: u8) -> u32 {
+    assert!(weight_tenths <= 10);
+    if weight_tenths == 0 {
         return neural;
     }
     let Some(copy) = copy else {
         return neural;
     };
-    let value = (u64::from(neural) * u64::from(8 - weight_eighths)
-        + u64::from(copy) * u64::from(weight_eighths)
-        + 4)
-        / 8;
+    let value = (u64::from(neural) * u64::from(10 - weight_tenths)
+        + u64::from(copy) * u64::from(weight_tenths)
+        + 5)
+        / 10;
     value.clamp(1, u64::from(u32::MAX) - 1) as u32
 }
 
@@ -277,8 +278,9 @@ mod tests {
     #[test]
     fn mix_extremes_and_bounds() {
         assert_eq!(mix_probability(100, Some(300), 0), 100);
-        assert_eq!(mix_probability(100, Some(300), 4), 200);
-        assert_eq!(mix_probability(100, Some(300), 8), 300);
-        assert_eq!(mix_probability(1, Some(u32::MAX - 1), 4), 1 << 31);
+        assert_eq!(mix_probability(100, Some(300), 2), 140);
+        assert_eq!(mix_probability(100, Some(300), 5), 200);
+        assert_eq!(mix_probability(100, Some(300), 10), 300);
+        assert_eq!(mix_probability(1, Some(u32::MAX - 1), 5), 1 << 31);
     }
 }
