@@ -1667,6 +1667,10 @@ fn doc_gain(docs: &[DocBits], k: usize, v: usize, pick: impl Iterator<Item = usi
 fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     fs::create_dir(out)?;
     let cal = load_cal(p1, h1d, label)?;
+    // The donor control needs another document than the one being coded.
+    if cal.fit.len() < 2 || cal.sel.len() < 2 {
+        return Err("the donor control needs two documents in CAL-FIT and in CAL-SEL".into());
+    }
     let mut pair = Pair::open(&cal.dir, "trace-cal")?;
     let seeds = cal.heads.len();
     let fit_bytes = span_bytes(&mut pair, &cal.fit)?;
