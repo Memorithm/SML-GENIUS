@@ -21,6 +21,10 @@
 //!                        TooManySamples = status 2)
 //!   --search S           kflip (default) | beam | gf2 (BAF-SEARCH-COMPARE)
 //!   --beam-width N       beam width for --search beam (default 4)
+//!   --label-noise P      flip each TRAIN writer bit with prob. P (0..=0.5,
+//!                        default 0; VAL/TEST/OOD stay clean; BAF-NOISE-PAGES)
+//!   --editable-pages N   2 (default) or 4 (pages 30/40 become redundant
+//!                        writers of bits 2/3; BAF-NOISE-PAGES)
 //!   --json PATH          write a JSON summary (means, admits, fit stats)
 //! Over-budget fits FAIL CLOSED (inactive atlas, not admitted, status=budget). The full `hybrid_logic_engine` is NOT
 //! an arm here (it executes learned HardLogicNetwork XOR payloads, which would
@@ -62,6 +66,8 @@ struct Opts {
     json: Option<String>,
     search: SearchKind,
     beam_width: usize,
+    label_noise: f64,
+    editable_pages: usize,
 }
 
 /// BAF-SEARCH-COMPARE: TRAIN-side search strategy for the anf_degree* arms.
@@ -96,6 +102,8 @@ impl Default for Opts {
             json: None,
             search: SearchKind::KFlip,
             beam_width: 4,
+            label_noise: 0.0,
+            editable_pages: 2,
         }
     }
 }
@@ -136,6 +144,10 @@ fn parse_opts() -> Result<Opts, String> {
                 }
             }
             "--beam-width" => o.beam_width = num()? as usize,
+            "--label-noise" => {
+                o.label_noise = value.parse::<f64>().map_err(|e| format!("{flag}: {e}"))?
+            }
+            "--editable-pages" => o.editable_pages = num()? as usize,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -144,6 +156,12 @@ fn parse_opts() -> Result<Opts, String> {
     }
     if !(2..=3).contains(&o.max_degree) {
         return Err("--max-degree must be 2 or 3".into());
+    }
+    if !(0.0..=0.5).contains(&o.label_noise) {
+        return Err("--label-noise must be in 0..=0.5".into());
+    }
+    if o.editable_pages != 2 && o.editable_pages != 4 {
+        return Err("--editable-pages must be 2 or 4".into());
     }
     if o.seeds == 0 {
         return Err("--seeds must be > 0".into());
@@ -215,25 +233,31 @@ fn cfg() -> AssociativeFocusConfig {
     AssociativeFocusConfig {
         event_bits: event_bits(),
         state_bits: 4,
-        max_selected_pages: 2,
+        max_selected_pages: opts().editable_pages,
     }
 }
 
 /// Identical atlas for every arm: two writers (bit 2, bit 3), two inert pages.
 fn pages() -> Vec<AssociativeFocusPage> {
-    [(10, 4), (20, 8), (30, 0), (40, 0)]
-        .into_iter()
-        .map(|(id, mask)| AssociativeFocusPage {
-            id: PageId(id),
-            priority: 100 - id,
-            activation: AnfActivation {
-                bias: false,
-                terms: vec![],
-            },
-            write_mask: mask,
-            write_value: mask,
-        })
-        .collect()
+    let redundant = opts().editable_pages == 4;
+    [
+        (10, 4),
+        (20, 8),
+        (30, if redundant { 4 } else { 0 }),
+        (40, if redundant { 8 } else { 0 }),
+    ]
+    .into_iter()
+    .map(|(id, mask)| AssociativeFocusPage {
+        id: PageId(id),
+        priority: 100 - id,
+        activation: AnfActivation {
+            bias: false,
+            terms: vec![],
+        },
+        write_mask: mask,
+        write_value: mask,
+    })
+    .collect()
 }
 
 struct Rng(u64);
@@ -479,19 +503,20 @@ fn fit_anf_stats(
         ..base
     };
     let start = Instant::now();
-    let editable = [PageId(10), PageId(20)];
+    let all = [PageId(10), PageId(20), PageId(30), PageId(40)];
+    let editable = &all[..opts().editable_pages];
     let fitted = match opts().search {
-        SearchKind::KFlip => fit_joint_focus(cfg(), pages, &editable, train, validation, policy),
+        SearchKind::KFlip => fit_joint_focus(cfg(), pages, editable, train, validation, policy),
         SearchKind::Beam => fit_joint_focus_beam(
             cfg(),
             pages,
-            &editable,
+            editable,
             train,
             validation,
             policy,
             opts().beam_width,
         ),
-        SearchKind::Gf2 => fit_joint_focus_gf2(cfg(), pages, &editable, train, validation, policy),
+        SearchKind::Gf2 => fit_joint_focus_gf2(cfg(), pages, editable, train, validation, policy),
     };
     let micros = start.elapsed().as_micros();
     match fitted {
@@ -544,9 +569,27 @@ fn run_one(family: Family, seed: u64) -> ([[u64; 4]; 5], [bool; 5], [usize; 4]) 
     (errs, adm, r.sizes)
 }
 
+/// BAF-NOISE-PAGES: flip each TRAIN writer bit (state bits 2, 3) with
+/// probability `p`, from a stream independent of targets and splits.
+fn add_label_noise(train: &mut [FocusTransition], family: Family, seed: u64, p: f64) {
+    if p == 0.0 {
+        return;
+    }
+    let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9) ^ (family as u64) ^ 0x401_5E00);
+    let mut coin = || ((rng.next() >> 11) as f64) / ((1u64 << 53) as f64) < p;
+    for row in train {
+        for bit in [4u64, 8] {
+            if coin() {
+                row.expected_next_state ^= bit;
+            }
+        }
+    }
+}
+
 fn run_full(family: Family, seed: u64) -> RunOut {
     let target = Target::new(family, seed);
-    let data = panels(&target, seed);
+    let mut data = panels(&target, seed);
+    add_label_noise(&mut data[0], family, seed, opts().label_noise);
     let atlas = pages();
     let inactive = BooleanAssociativeFocus::new(cfg(), atlas.clone()).expect("valid");
     let mut up = atlas.clone();
@@ -660,6 +703,12 @@ fn main() {
         }
     }
     println!();
+    if o.label_noise != 0.0 || o.editable_pages != 2 {
+        println!(
+            "# label_noise: {} (TRAIN only; train column is vs noisy labels), editable_pages: {}",
+            o.label_noise, o.editable_pages
+        );
+    }
     if o.search != SearchKind::KFlip {
         println!(
             "# search: {} (beam_width={})",
@@ -697,6 +746,14 @@ fn main() {
                 o.beam_width
             )
         };
+        let search = if o.label_noise != 0.0 || o.editable_pages != 2 {
+            format!(
+                "{search}\"label_noise\":{},\"editable_pages\":{},",
+                o.label_noise, o.editable_pages
+            )
+        } else {
+            search
+        };
         let json = format!(
             "{{{search}\"width\":{},\"seeds\":{seeds},\"max_degree\":{},\"parity4\":{},\"policy\":{{\"max_pair_flips\":{},\"max_triple_flips\":{},\"max_quad_flips\":{},\"max_candidate_evaluations\":{},\"max_basis_terms\":{}}},\"summary\":[{}],\"fits\":[{}]}}\n",
             o.width,
@@ -717,6 +774,30 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn label_noise_is_deterministic_and_bounded() {
+        let target = Target::new(Family::Xor2, 3);
+        let clean = panels(&target, 3)[0].clone();
+        let mut zero = clean.clone();
+        add_label_noise(&mut zero, Family::Xor2, 3, 0.0);
+        assert_eq!(zero, clean);
+        let mut a = clean.clone();
+        let mut b = clean.clone();
+        add_label_noise(&mut a, Family::Xor2, 3, 0.2);
+        add_label_noise(&mut b, Family::Xor2, 3, 0.2);
+        assert_eq!(a, b);
+        let flips: u32 = a
+            .iter()
+            .zip(&clean)
+            .map(|(x, y)| (x.expected_next_state ^ y.expected_next_state).count_ones())
+            .sum();
+        assert!(flips > 0, "p=0.2 over 112 bits must flip something");
+        assert!(a
+            .iter()
+            .zip(&clean)
+            .all(|(x, y)| (x.expected_next_state ^ y.expected_next_state) & !12 == 0));
+    }
 
     #[test]
     fn splits_are_disjoint_and_cover_all_inputs() {
