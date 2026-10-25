@@ -22,6 +22,7 @@ bit-identical (width 7, seeds 0..8, degrees 1..2, five families, default
 | `--max-quad-flips N` | 0 | per-round quadruple escape ceiling (parity4 fits only) |
 | `--max-evals N` | 5000 | `max_candidate_evaluations` per fit |
 | `--max-basis N` | 136 | `max_basis_terms` per fit |
+| `--max-samples N` | 8192 | train+validation sample capacity per fit (width 16 needs ≥ 40960) |
 | `--json PATH` | none | JSON summary (means, admits, per-fit stats) |
 
 `fit_joint_focus` now accepts ANF degree 3 and a `max_quad_flips` budget
@@ -101,5 +102,17 @@ cargo run --locked -p sml-core --release --example baf_hardened_compare -- \
 cargo run --locked -p sml-core --release --example baf_hardened_compare -- \
   --width 16 --seeds 64 --max-degree 3 --parity4 \
   --max-triple-flips 1200 --max-quad-flips 4000 --max-evals 100000 \
-  --max-basis 800 --json baf-scale-w16.json > baf-scale-w16.csv
+  --max-basis 800 --max-samples 65536 --json baf-scale-w16.json > baf-scale-w16.csv
 ```
+
+## Amendment 2026-10-25: width-16 sample capacity
+
+On Thor, the first width-16 smoke failed every fit with status 2 (error), not status 1 (budget). The cause was `Split(TooManySamples)`.
+
+At width 16 there are 65536 inputs. OOD takes a quarter, leaving 49152; train (7/12) plus validation (1/4) of those is 40960 samples. That is above the default `FocusFitPolicy::max_samples` of 8192. Widths up to 12 stay under the default (w12 uses 2560 samples).
+
+The fix is the new `--max-samples` flag. It only raises input capacity and leaves the search budgets, splits and metrics as pre-registered. Width 16 runs with `--max-samples 65536`.
+
+Fits that error now print their error kind to stderr; stdout is unchanged. This amendment was made before any width-16 TRAIN, VAL, TEST or OOD result existed.
+
+A local one-seed width-16 check (degree 3, parity4, the budgets above) finished with all 18 fits at status 0. The largest was `random` at degree 3 with 21372 evaluations, and the whole run took about 2 minutes on one core.
