@@ -21,6 +21,13 @@
 //!   if the gate passes, reads `trace-eval3.bin`, its sidecar and
 //!   `eval3.json` once.
 //!
+//! * `cost P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is HYB H-1d-cost
+//!   (docs/HYB-H1D-COST-PREREGISTRATION.md): it re-times the two A1d heads
+//!   of a finished H-1d run (`H1D_OUT`) with `FusedBankHead`. EVAL3 is read
+//!   again only to check that every correction and both EVAL3 BPC are
+//!   those of H-1d bit for bit; nothing is selected or judged on it. The
+//!   old kernel is timed in the same loop as a control.
+//!
 //! The S5h DEV is never opened. `replay
 //! HEAD.tsv` prints the i32 digest of an A1d head on synthetic records
 //! (cross-host check); `smoke` runs on generated traces and is labelled
@@ -33,8 +40,8 @@ use sml_core::{
     hyb_h1b_calibrated::{ScaledHead, LAMBDA_EIGHTHS, TAUS},
     hyb_h1c_stable::{self, FastHead, BURN_IN_EPOCHS, EPOCHS},
     hyb_h1d_bank_head::{
-        replay_bank_records, train_averaged, BankHead, BankPlane, BankRecord, BANK_PLANE_BYTES,
-        INPUTS, ROW,
+        replay_bank_records, train_averaged, BankHead, BankPlane, BankRecord, FusedBankHead,
+        BANK_PLANE_BYTES, INPUTS, ROW,
     },
 };
 use std::{
@@ -58,6 +65,12 @@ const CAL_SEL: u32 = 23;
 /// `bytes_q4` weights of the H-1b and H-1c runs: a preregistered run on
 /// other P1 weights is refused.
 const P1_WEIGHTS_SHA256: &str = "7f4c233d6c4d67e1d300068799f4653cfcaedda4158587478c99ec1d31c3c418";
+/// SHA-256 of `head-a1d-seed11.tsv` and `head-a1d-seed23.tsv` of the H-1d
+/// run (RemoteOps run 40126579964): H-1d-cost re-times exactly these.
+const H1D_HEAD_SHA256: [&str; 2] = [
+    "b77e3f1301c414ff21246b3c5ad600b07e2adf44633a671ecd90fd1160e5e46e",
+    "3c6192e8a248fb47680d941866e6cf22d6483636f539fa2aa4564430127c990f",
+];
 
 /// One document's contiguous records in a trace file.
 #[derive(Clone, Copy)]
@@ -526,6 +539,121 @@ fn evaluate(dir: &Path, out: &Path, label: &str, open_eval3: bool) -> Result<Str
     Ok(report)
 }
 
+/// HYB H-1d-cost: re-times the A1d heads of `h1d` with `FusedBankHead`
+/// on EVAL3, after checking that both kernels give the same corrections
+/// on every record and the published EVAL3 BPC.
+fn cost(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
+    let report = fs::read_to_string(h1d.join("h1d.tsv"))?;
+    let field = |key: &str| -> Result<&str> {
+        report
+            .lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('\t'))
+            .ok_or_else(|| format!("h1d.tsv has no {key}").into())
+    };
+    if field("label")? != label
+        || field("stage")? != "run"
+        || field(&format!("{BASE}_eval3_read"))? != "true"
+    {
+        return Err("h1d.tsv is not a finished H-1d run with this label".into());
+    }
+    let mut heads = Vec::new();
+    for (k, seed) in SEEDS.iter().enumerate() {
+        let path = h1d.join(format!("head-a1d-seed{seed}.tsv"));
+        let text = fs::read_to_string(&path)?;
+        let sha = hex(&sha256(text.as_bytes()));
+        if label == "PREREGISTERED" && sha != H1D_HEAD_SHA256[k] {
+            return Err(format!("{} is not the H-1d head ({sha})", path.display()).into());
+        }
+        let (head, eighths) = parse_head(&text)?;
+        let fused = FusedBankHead::new(&head);
+        heads.push((head, fused, eighths, sha));
+    }
+    let dir = p1.join(BASE);
+    let eval_json = fs::read_to_string(dir.join("eval3.json"))?;
+    let p1_us = reported(&eval_json, "eval3_us_per_position", "eval3_us_per_position")?;
+    if p1_us.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+        return Err("eval3.json eval3_us_per_position must be positive".into());
+    }
+    let eval3 = scan(
+        &dir.join("trace-eval3.bin"),
+        &dir.join("trace-eval3.banks.bin"),
+        4,
+    )?;
+    let a0_eval = bpc(eval3.bits, eval3.records);
+    check_reported(&eval_json, "eval3_trace", a0_eval)?;
+    fs::create_dir(out)?;
+    let mut bits = [0.0; SEEDS.len()];
+    let mut mismatches = 0u64;
+    // a0, fused head, bank head (control).
+    let mut nanos = [0u128; 3];
+    let mut pair = Pair::open(&dir, "trace-eval3")?;
+    let mut index = 0u64;
+    for &span in &eval3.spans {
+        pair.each(span, |r| {
+            let t = Instant::now();
+            std::hint::black_box(a0_cost(&r.record));
+            nanos[0] += t.elapsed().as_nanos();
+            // Alternate which kernel runs first.
+            let order = if index % 2 == 0 { [1, 2] } else { [2, 1] };
+            index += 1;
+            let (head, fused, eighths, _) = &heads[0];
+            for which in order {
+                let t = Instant::now();
+                if which == 1 {
+                    bits[0] += std::hint::black_box(fused.cost(r, *eighths));
+                } else {
+                    std::hint::black_box(head.cost(r, *eighths));
+                }
+                nanos[which] += t.elapsed().as_nanos();
+            }
+            let (_, fused, eighths, _) = &heads[1];
+            bits[1] += fused.cost(r, *eighths);
+            for (head, fused, eighths, _) in &heads {
+                let got = fused.corrections(r, *eighths);
+                for (d, &g) in got.iter().enumerate() {
+                    if g != head.correction(head.raw(r, d), d, *eighths) {
+                        mismatches += 1;
+                    }
+                }
+            }
+        })?;
+    }
+    if mismatches != 0 {
+        return Err(format!("{mismatches} fused/bank head mismatches").into());
+    }
+    let mut lines = format!(
+        "label\t{label}\n{BASE}_eval3_records\t{}\n{BASE}_a0_eval3_bpc\t{a0_eval:.9}\n\
+         {BASE}_fused_mismatches\t0\n",
+        eval3.records
+    );
+    for (k, seed) in SEEDS.iter().enumerate() {
+        let got = format!("{:.9}", bpc(bits[k], eval3.records));
+        let key = format!("{BASE}_a1d_seed{seed}_eval3_bpc");
+        if got != field(&key)? {
+            return Err(format!("{key} {got} differs from H-1d {}", field(&key)?).into());
+        }
+        lines += &format!(
+            "{key}\t{got}\n{BASE}_a1d_seed{seed}_head_sha256\t{}\n",
+            heads[k].3
+        );
+    }
+    let per_pos = |n: u128| n as f64 / 1000.0 / eval3.records as f64;
+    let fused_us = (per_pos(nanos[1]) - per_pos(nanos[0])).max(0.0);
+    let bank_us = (per_pos(nanos[2]) - per_pos(nanos[0])).max(0.0);
+    let ratio = (p1_us + fused_us) / p1_us;
+    let pass = ratio <= MAX_COST_RATIO;
+    lines += &format!(
+        "{BASE}_us_per_position_p1\t{p1_us:.4}\n{BASE}_us_per_position_head_fused\t{fused_us:.4}\n\
+         {BASE}_us_per_position_head_bank_control\t{bank_us:.4}\n{BASE}_cost_ratio\t{ratio:.4}\n\
+         cost_verdict\t{}\nh1d_verdict\t{}\n",
+        if pass { "COST_PASS" } else { "COST_FAIL" },
+        if pass { "GO" } else { "GO_DIAGNOSTIC_COST" },
+    );
+    fs::write(out.join("cost.tsv"), &lines)?;
+    print!("{lines}");
+    Ok(())
+}
+
 fn run(p1: &Path, out: &Path, label: &str, open_eval3: bool) -> Result<()> {
     fs::create_dir(out)?;
     let report = format!(
@@ -620,6 +748,12 @@ fn cli(args: &[String]) -> Result<()> {
             "PREREGISTERED",
             mode == "run",
         ),
+        Some("cost") if args.len() == 5 => cost(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+            "PREREGISTERED",
+        ),
         Some("replay") if args.len() == 3 => {
             let (head, eighths) = parse_head(&fs::read_to_string(&args[2])?)?;
             println!("replay_sha256\t{}", replay_digest(&head, eighths)?);
@@ -630,7 +764,7 @@ fn cli(args: &[String]) -> Result<()> {
             write_smoke(&root.join("p1"), 14)?;
             run(&root.join("p1"), &root.join("out"), "SMOKE", true)
         }
-        _ => Err("usage: (gate|run) P1_H1D_OUT NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
+        _ => Err("usage: (gate|run) P1_H1D_OUT NEW_OUT | cost P1_H1D_OUT H1D_OUT NEW_OUT | replay HEAD.tsv | smoke NEW_DIR".into()),
     }
 }
 
@@ -684,6 +818,39 @@ mod tests {
                 replay_digest(&head, eighths).unwrap()
             );
         }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn cost_retimes_the_same_heads_and_checks_identity() {
+        let root = temp("cost");
+        let _ = fs::remove_dir_all(&root);
+        cli(&["bin".into(), "smoke".into(), root.display().to_string()]).unwrap();
+        let (p1, h1d) = (root.join("p1"), root.join("out"));
+        cost(&p1, &h1d, &root.join("cost"), "SMOKE").unwrap();
+        let report = fs::read_to_string(root.join("cost/cost.tsv")).unwrap();
+        let full = fs::read_to_string(h1d.join("h1d.tsv")).unwrap();
+        for seed in SEEDS {
+            let key = format!("bytes_q4_a1d_seed{seed}_eval3_bpc");
+            assert_eq!(value(&report, &key), value(&full, &key));
+        }
+        assert_eq!(value(&report, "bytes_q4_fused_mismatches"), "0");
+        assert!(["COST_PASS", "COST_FAIL"].contains(&value(&report, "cost_verdict").as_str()));
+        // The preregistered label needs the published H-1d heads.
+        assert!(cost(&p1, &h1d, &root.join("cost2"), "PREREGISTERED").is_err());
+        // A head changed after the run no longer matches the H-1d BPC.
+        let path = h1d.join("head-a1d-seed11.tsv");
+        let text = fs::read_to_string(&path).unwrap();
+        let (head, _) = parse_head(&text).unwrap();
+        let join = |v: Vec<String>| v.join(",");
+        let old = join(head.unit().iter().map(i32::to_string).collect());
+        let new = join(head.unit().iter().map(|u| (u + 7).to_string()).collect());
+        fs::write(
+            &path,
+            text.replace(&format!("unit\t{old}"), &format!("unit\t{new}")),
+        )
+        .unwrap();
+        assert!(cost(&p1, &h1d, &root.join("cost3"), "SMOKE").is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 

@@ -439,6 +439,110 @@ pub fn replay_bank_records(count: usize) -> Vec<BankRecord> {
         .collect()
 }
 
+/// Signed thermometer of one quantized bank stretch, indexed by `q as u8`:
+/// bit `k` is `q >= BANK_EDGES[k]`, bit `3 + k` is `q <= -BANK_EDGES[k]`.
+const THERMOMETER: [u8; 256] = {
+    let mut table = [0u8; 256];
+    let mut i = 0;
+    while i < 256 {
+        let q = i as u8 as i8;
+        let mut bits = 0u8;
+        let mut k = 0;
+        while k < 3 {
+            if q >= BANK_EDGES[k] {
+                bits |= 1 << k;
+            }
+            if q <= -BANK_EDGES[k] {
+                bits |= 1 << (3 + k);
+            }
+            k += 1;
+        }
+        table[i] = bits;
+        i += 1;
+    }
+    table
+};
+
+/// `bank_word` through `THERMOMETER`: one load per bank.
+#[inline(always)]
+fn bank_word_fast(banks: &[i8; MAX_BANKS]) -> u64 {
+    let mut word = 0u64;
+    for (b, &q) in banks.iter().enumerate() {
+        word |= u64::from(THERMOMETER[q as u8 as usize]) << (6 * b);
+    }
+    word
+}
+
+/// Inference path of a `BankHead` that builds the activation of a byte
+/// once: the record-wide part of the high word (word register, root
+/// confidence) and the reversed target prefix are computed once, the bank
+/// thermometers come from a 256-entry table, the floor division by 8 is
+/// an arithmetic shift. Its corrections are those of `BankHead` bit for bit
+/// (HYB H-1d-cost, docs/HYB-H1D-COST-PREREGISTRATION.md).
+#[derive(Debug, Clone)]
+pub struct FusedBankHead {
+    plus: [[u64; WORDS]; DEPTHS],
+    minus: [[u64; WORDS]; DEPTHS],
+    unit: [i64; DEPTHS],
+    bias: [i64; DEPTHS],
+}
+
+impl FusedBankHead {
+    #[must_use]
+    pub fn new(head: &BankHead) -> Self {
+        Self {
+            plus: head.plus,
+            minus: head.minus,
+            unit: head.unit.map(i64::from),
+            bias: head.bias.map(i64::from),
+        }
+    }
+
+    /// Stretch corrections of the eight decisions at `eighths / 8`.
+    #[inline]
+    #[must_use]
+    pub fn corrections(&self, r: &BankRecord, eighths: i32) -> [i32; DEPTHS] {
+        let record = &r.record;
+        let base = u64::from(record.word) | (u64::from(record.confidence) << 16);
+        let prefix = u64::from(record.target.reverse_bits());
+        let eighths = i64::from(eighths);
+        let mut out = [0i32; DEPTHS];
+        for (d, slot) in out.iter_mut().enumerate() {
+            let stretch = i32::from(record.logits[d]);
+            let magnitude = stretch.unsigned_abs();
+            let mut high = base | ((prefix & ((1 << d.min(7)) - 1)) << 48);
+            high |= u64::from(stretch < 0) << 55;
+            high |= 1 << 56;
+            high |= u64::from(magnitude >= 128) << 57;
+            high |= u64::from(magnitude >= 512) << 58;
+            high |= u64::from(magnitude >= 1024) << 59;
+            let words = [record.context, high, bank_word_fast(&r.banks.stretch[d])];
+            let (p, m) = (&self.plus[d], &self.minus[d]);
+            let mut raw = 0i64;
+            for k in 0..WORDS {
+                raw += i64::from((words[k] & p[k]).count_ones())
+                    - i64::from((words[k] & m[k]).count_ones());
+            }
+            *slot = (((raw * self.unit[d] + self.bias[d]) * eighths) >> 3)
+                .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+        }
+        out
+    }
+
+    /// Code length of `r` under P1 plus this head at `eighths / 8`; equal
+    /// to `BankHead::cost` bit for bit.
+    #[must_use]
+    pub fn cost(&self, r: &BankRecord, eighths: i32) -> f64 {
+        let shifts = self.corrections(r, eighths);
+        (0..DEPTHS)
+            .map(|d| {
+                let stretch = i32::from(r.record.logits[d]).saturating_add(shifts[d]);
+                decision_cost(stretch, target_bit(&r.record, d))
+            })
+            .sum()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,6 +678,80 @@ mod tests {
             }
         }
         assert_eq!(BankHead::resident_bytes(), 448);
+    }
+
+    #[test]
+    fn fused_head_matches_the_bank_head_bit_for_bit() {
+        for q in i8::MIN..=i8::MAX {
+            let mut banks = [0i8; MAX_BANKS];
+            banks[3] = q;
+            assert_eq!(bank_word_fast(&banks), bank_word(&banks), "q {q}");
+        }
+        let mut records = replay_bank_records(4_000);
+        // Extreme logits and stretches.
+        for (i, r) in records.iter_mut().enumerate().take(64) {
+            r.record.logits = [i16::MIN, i16::MAX, -1024, 1024, -512, 511, 0, -128];
+            r.banks.stretch[i % DEPTHS] = [i8::MIN, i8::MAX, -48, 48, -16, 16, -4, 4];
+        }
+        let (master, _) = train(23, &bank_docs(100, 5));
+        let mut unit = [0; DEPTHS];
+        unit[0] = i32::MAX;
+        let heads = TAUS
+            .iter()
+            .map(|&tau| BankHead::export(&master, tau))
+            .chain([BankHead::new(
+                vec![1; DEPTHS * ROW],
+                unit,
+                [i32::MIN; DEPTHS],
+            )]);
+        for head in heads {
+            let fused = FusedBankHead::new(&head);
+            for r in &records {
+                for &e in &LAMBDA_EIGHTHS {
+                    let want: Vec<i32> = (0..DEPTHS)
+                        .map(|d| head.correction(head.raw(r, d), d, e))
+                        .collect();
+                    assert_eq!(fused.corrections(r, e).to_vec(), want);
+                    assert_eq!(fused.cost(r, e).to_bits(), head.cost(r, e).to_bits());
+                }
+            }
+        }
+    }
+
+    /// Timing sketch of the H-1d evaluation loop (not a result).
+    #[test]
+    #[ignore]
+    fn timing_sketch() {
+        use std::time::Instant;
+        let records = replay_bank_records(400_000);
+        let (master, _) = train(11, &bank_docs(100, 3));
+        let head = BankHead::export(&master, 1.0);
+        let fused = FusedBankHead::new(&head);
+        let mut nanos = [0u128; 4];
+        let mut sink = 0.0;
+        let mut isink = 0i64;
+        for r in &records {
+            let t = Instant::now();
+            sink += a0_cost(&r.record);
+            nanos[0] += t.elapsed().as_nanos();
+            let t = Instant::now();
+            sink += head.cost(r, 4);
+            nanos[1] += t.elapsed().as_nanos();
+            let t = Instant::now();
+            sink += fused.cost(r, 4);
+            nanos[2] += t.elapsed().as_nanos();
+            let t = Instant::now();
+            isink += i64::from(fused.corrections(r, 4)[3]);
+            nanos[3] += t.elapsed().as_nanos();
+        }
+        let n = records.len() as f64;
+        println!(
+            "a0 {:.1} ns, bank head {:.1} ns, fused {:.1} ns, corrections only {:.1} ns ({sink} {isink})",
+            nanos[0] as f64 / n,
+            nanos[1] as f64 / n,
+            nanos[2] as f64 / n,
+            nanos[3] as f64 / n
+        );
     }
 
     #[test]
