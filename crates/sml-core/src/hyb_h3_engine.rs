@@ -24,7 +24,7 @@ use crate::{
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
-    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert},
+    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
 
@@ -92,6 +92,14 @@ impl HybridHead {
         let mut result = Self::single(head, eighths);
         result.copy_weight_tenths = copy_weight_tenths;
         Ok(result)
+    }
+
+    /// Activate the owner-selected initial 20% causal copy / 80% H-1d mixture.
+    /// This is opt-in: existing single() retains exactly the prior behavior.
+    #[must_use]
+    pub fn single_with_default_copy(head: BankHead, eighths: i32) -> Self {
+        Self::single_with_copy(head, eighths, DEFAULT_COPY_WEIGHT_TENTHS)
+            .expect("fixed 20/80 copy mixture is in the validated range")
     }
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
@@ -751,6 +759,7 @@ mod tests {
         let base = HybridHead::single(head(1), 8);
         let disabled = HybridHead::single_with_copy(head(1), 8, 0).unwrap();
         let mixed = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
+        let default_mixed = HybridHead::single_with_default_copy(head(1), 8);
         let copy_heavy = HybridHead::single_with_copy(head(1), 8, 10).unwrap();
         let inputs = [
             Vec::new(),
@@ -763,6 +772,11 @@ mod tests {
             (0..4096).map(|i| (i * 29) as u8).collect::<Vec<_>>(),
         ];
         for data in inputs {
+            assert_eq!(
+                compress(&m, &tables, &mixed, &data),
+                compress(&m, &tables, &default_mixed, &data),
+                "default opt-in copy must use 20/80"
+            );
             assert_eq!(
                 compress(&m, &tables, &base, &data),
                 compress(&m, &tables, &disabled, &data),
