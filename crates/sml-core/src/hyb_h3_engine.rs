@@ -786,6 +786,56 @@ mod tests {
     }
 
     #[test]
+    fn gaussian_copy_competes_with_fixed_twenty_eighty_in_full_lossless_coder() {
+        use crate::hyb_h1d_gaussian_copy::{
+            CopyActivityHistogram, GaussianCopyProfile, GAUSSIAN_KERNEL_Q1024,
+        };
+        let mut histogram = CopyActivityHistogram::default();
+        histogram
+            .observe_train_document(&b"abababab".repeat(1024))
+            .unwrap();
+        let gaussian = GaussianCopyProfile::fit_train_only(&histogram).unwrap();
+        assert_eq!(GAUSSIAN_KERNEL_Q1024, [0, 139, 421, 820, 1024]);
+
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let neural = HybridHead::single(head(1), 8);
+        let fixed = HybridHead::single_with_default_copy(head(1), 8);
+        let gaussian_head = HybridHead::single_with_gaussian_copy(head(1), 8, gaussian);
+        let documents = [
+            Vec::new(),
+            vec![7],
+            vec![7, 8],
+            vec![7, 8, 9],
+            b"abababcabababc".repeat(200),
+            b"abcabcabc___abcabcabc___".repeat(200),
+            text(137, 2048),
+            (0..1024).map(|i| (i as u8).wrapping_mul(41)).collect(),
+        ];
+        for data in documents {
+            for variant in [&neural, &fixed, &gaussian_head] {
+                assert_eq!(
+                    engine_p1s(&m, &tables, variant, &data),
+                    oracle_p1s(&mut m, &tables, variant, &data),
+                    "independent oracle must agree for all competitor arms"
+                );
+                let packed = compress(&m, &tables, variant, &data);
+                assert_eq!(
+                    decompress(&m, &tables, variant, &packed).unwrap(),
+                    data,
+                    "each competitor must be losslessly decoded"
+                );
+            }
+        }
+        let data = b"abababababa".repeat(200);
+        assert_ne!(
+            engine_p1s(&m, &tables, &neural, &data),
+            engine_p1s(&m, &tables, &gaussian_head, &data),
+            "Gaussian mixture must be active, not merely a configuration flag"
+        );
+    }
+
+    #[test]
     fn copy_expert_and_frozen_h1d_blend_are_causal_and_losslessly_decodable() {
         let tables = Tables::new();
         let mut m = model(&tables);
