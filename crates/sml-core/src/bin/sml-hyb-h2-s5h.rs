@@ -838,10 +838,14 @@ fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -
             if k != a.a2.routing.oracle_route(r) || j != a.a2r.routing.oracle_route(r) {
                 mismatches += 1;
             }
-            for depth in 0..DEPTHS {
-                let head = &a.a2.heads[k];
-                if head.raw(r, depth) != head.oracle_raw(r, depth) {
-                    mismatches += 1;
+            // The fused kernel that scores EVAL4 against the scalar oracle.
+            for (arm, fused, e) in [(&a.a2, &fused[s].0[k], k), (&a.a2r, &fused[s].1[j], j)] {
+                let got = fused.corrections(r, arm.eighths);
+                let head = &arm.heads[e];
+                for (depth, &c) in got.iter().enumerate() {
+                    if c != head.correction(head.oracle_raw(r, depth), depth, arm.eighths) {
+                        mismatches += 1;
+                    }
                 }
             }
         }
