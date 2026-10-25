@@ -23,8 +23,8 @@ use crate::{
     hyb_baf_neural_gate::{causal_features, hash_gate_is_active, oracle_causal_features},
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
-    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert},
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
+    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
 
@@ -394,10 +394,7 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 let h = &head.heads[k];
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
-            let neural = coder_p1(
-                tables,
-                i32::from(code.logits[d]).saturating_add(shift),
-            );
+            let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
             let copy = if head.copy_weight_eighths == 0 {
                 None
             } else {
