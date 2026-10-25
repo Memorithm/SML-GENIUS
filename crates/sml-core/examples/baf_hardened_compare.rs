@@ -16,6 +16,9 @@
 //!   --max-pair-flips N / --max-triple-flips N / --max-quad-flips N
 //!   --max-evals N        max_candidate_evaluations per fit
 //!   --max-basis N        max_basis_terms per fit
+//!   --max-samples N      max train+validation samples per fit (default 8192;
+//!                        width 16 needs >= 40960, else every fit errors with
+//!                        TooManySamples = status 2)
 //!   --json PATH          write a JSON summary (means, admits, fit stats)
 //! Over-budget fits FAIL CLOSED (inactive atlas, not admitted, status=budget). The full `hybrid_logic_engine` is NOT
 //! an arm here (it executes learned HardLogicNetwork XOR payloads, which would
@@ -94,6 +97,7 @@ fn parse_opts() -> Result<Opts, String> {
             "--max-quad-flips" => o.policy.max_quad_flips = num()?,
             "--max-evals" => o.policy.max_candidate_evaluations = num()?,
             "--max-basis" => o.policy.local.max_basis_terms = num()? as usize,
+            "--max-samples" => o.policy.local.max_samples = num()? as usize,
             "--json" => o.json = Some(value),
             _ => return Err(format!("unknown flag {flag}")),
         }
@@ -458,7 +462,12 @@ fn fit_anf_stats(
             },
         ),
         Err(e) => (
-            BooleanAssociativeFocus::new(cfg(), pages.to_vec()).expect("valid atlas"),
+            {
+                if e != JointFocusError::CandidateBudget {
+                    eprintln!("baf_hardened_compare: fit error (status 2): {e:?}");
+                }
+                BooleanAssociativeFocus::new(cfg(), pages.to_vec()).expect("valid atlas")
+            },
             false,
             FitStats {
                 evaluations: 0,
