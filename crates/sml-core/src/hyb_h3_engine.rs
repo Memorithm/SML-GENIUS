@@ -25,6 +25,7 @@ use crate::{
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
     hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
+    hyb_h1d_gaussian_copy::{mix_gaussian_probability, oracle_longest_match, GaussianCopyProfile},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
 
@@ -45,6 +46,7 @@ pub struct HybridHead {
     admitted: Vec<bool>,
     eighths: i32,
     copy_weight_tenths: u8,
+    gaussian_copy: Option<GaussianCopyProfile>,
 }
 
 impl HybridHead {
@@ -60,6 +62,7 @@ impl HybridHead {
             admitted: Vec::new(),
             eighths: 0,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -75,6 +78,7 @@ impl HybridHead {
             admitted: vec![true],
             eighths,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -100,6 +104,20 @@ impl HybridHead {
     pub fn single_with_default_copy(head: BankHead, eighths: i32) -> Self {
         Self::single_with_copy(head, eighths, DEFAULT_COPY_WEIGHT_TENTHS)
             .expect("fixed 20/80 copy mixture is in the validated range")
+    }
+
+    /// Gaussian competitor: identical frozen neural H-1d and copy history.
+    /// The profile is frozen by label-free TRAIN-only exposure calibration;
+    /// weights depend on the longest decoder-visible matching suffix.
+    #[must_use]
+    pub fn single_with_gaussian_copy(
+        head: BankHead,
+        eighths: i32,
+        gaussian_copy: GaussianCopyProfile,
+    ) -> Self {
+        let mut result = Self::single(head, eighths);
+        result.gaussian_copy = Some(gaussian_copy);
+        result
     }
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
@@ -145,6 +163,7 @@ impl HybridHead {
             admitted: exported.admitted.to_vec(),
             eighths: exported.eighths,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -238,7 +257,8 @@ impl<'a> HybridPredictor<'a> {
             code: ByteCode::default(),
             record: BankRecord::default(),
             expert: None,
-            copy: (head.copy_weight_tenths > 0).then(CopyExpert::default),
+            copy: (head.copy_weight_tenths > 0 || head.gaussian_copy.is_some())
+                .then(CopyExpert::default),
             p1: HALF,
         };
         predictor.prepare();
@@ -285,11 +305,16 @@ impl<'a> HybridPredictor<'a> {
         });
         let neural = coder_p1(self.tables, st.saturating_add(shift));
         self.p1 = self.copy.as_ref().map_or(neural, |copy| {
-            mix_probability(
-                neural,
-                copy.probability(d, r.record.target),
-                self.head.copy_weight_tenths,
-            )
+            let proposal = copy.probability(d, r.record.target);
+            if let Some(gaussian) = self.head.gaussian_copy {
+                mix_gaussian_probability(
+                    neural,
+                    proposal,
+                    gaussian.weight_for_match(copy.longest_match()),
+                )
+            } else {
+                mix_probability(neural, proposal, self.head.copy_weight_tenths)
+            }
         });
     }
 }
@@ -403,7 +428,7 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
             let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
-            let copy = if head.copy_weight_tenths == 0 {
+            let copy = if head.copy_weight_tenths == 0 && head.gaussian_copy.is_none() {
                 None
             } else {
                 let known = if d == 0 {
@@ -413,7 +438,15 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 };
                 oracle_probability(&data[..position], d, known)
             };
-            out.push(mix_probability(neural, copy, head.copy_weight_tenths));
+            if let Some(profile) = head.gaussian_copy {
+                out.push(mix_gaussian_probability(
+                    neural,
+                    copy,
+                    profile.weight_for_match(oracle_longest_match(&data[..position])),
+                ));
+            } else {
+                out.push(mix_probability(neural, copy, head.copy_weight_tenths));
+            }
         }
     });
     out
