@@ -416,4 +416,44 @@ mod tests {
         assert!(adm[3]);
         assert_eq!(errs[3][0], 0);
     }
+
+    /// BAF-XOR2-DEGREE1-NEGATIVE: xor2 IS expressible at ANF degree 1 under
+    /// the set-only write semantics (oracle activation `e ^ s` is exact on
+    /// every split), yet greedy single-flip descent never reaches it: a lone
+    /// XOR atom does not strictly improve TRAIN (plateau). Locks the negative
+    /// result as a *search* failure, not a hypothesis-class failure.
+    #[test]
+    fn xor2_degree1_representable_but_greedy_misses() {
+        use sml_core::boolean_associative_focus::AnfMonomial as M;
+        for seed in 0..SEEDS {
+            let target = Target::new(Family::Xor2, seed);
+            let data = panels(&target, seed);
+            let mut oracle = pages();
+            for k in 0..2 {
+                oracle[k].activation.terms = vec![
+                    M {
+                        event_mask: 1 << target.e[k],
+                        state_mask: 0,
+                    },
+                    M {
+                        event_mask: 0,
+                        state_mask: 1 << target.s[k],
+                    },
+                ];
+            }
+            let model = BooleanAssociativeFocus::new(cfg(), oracle).expect("valid");
+            for rows in &data {
+                assert_eq!(
+                    errors(rows, baf(&model)),
+                    0,
+                    "seed {seed}: oracle must be exact"
+                );
+            }
+            let (fitted, _) = fit_anf(&pages(), &data[0], &data[1], 1);
+            assert!(
+                errors(&data[0], baf(&fitted)) > 0,
+                "seed {seed}: greedy now solves xor2; update docs/BAF-XOR2-DEGREE1-NEGATIVE.md"
+            );
+        }
+    }
 }
