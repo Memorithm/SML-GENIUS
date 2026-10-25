@@ -68,9 +68,7 @@ impl CopyExpert {
             let mut matched = 0;
             let limit = candidate_index.min(COPY_MAX_SUFFIX);
             for length in 1..=limit {
-                if self.history_at(candidate_index - length)
-                    == self.history_at(self.len - length)
-                {
+                if self.history_at(candidate_index - length) == self.history_at(self.len - length) {
                     matched = length;
                 } else {
                     break;
@@ -202,8 +200,7 @@ pub fn oracle_probability(history: &[u8], depth: usize, decoded_msb: u8) -> Opti
     if matched == 0 {
         return None;
     }
-    Some((((bit_ones + 1) << 32) / (matched + 2))
-        .clamp(1, u64::from(u32::MAX) - 1) as u32)
+    Some((((bit_ones + 1) << 32) / (matched + 2)).clamp(1, u64::from(u32::MAX) - 1) as u32)
 }
 
 #[cfg(test)]
@@ -271,7 +268,10 @@ mod tests {
         assert!(!expert.has_match());
         assert_eq!(expert.probability(0, 0), None);
         assert_eq!(mix_probability(123_456_789, None, 2), 123_456_789);
-        assert_eq!(mix_probability(123_456_789, Some(345_678_901), 0), 123_456_789);
+        assert_eq!(
+            mix_probability(123_456_789, Some(345_678_901), 0),
+            123_456_789
+        );
     }
 
     #[test]
