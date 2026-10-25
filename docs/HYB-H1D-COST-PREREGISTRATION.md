@@ -23,12 +23,12 @@ Il n'y a ni `unsafe` ni option de compilation particulière : le binaire est con
   
   Rien n'est choisi ni jugé sur EVAL3 : aucun paramètre ne dépend de cette lecture.
 - **Temps.** La méthode est la même qu'en H-1d. Le temps tête est le temps de scoring A1d (graine 11) moins le temps du coût de décision commun (`a0_cost`), par position. L'ancien noyau est chronométré dans la même boucle, comme contrôle, et l'ordre des deux noyaux alterne d'un enregistrement à l'autre.
-- **Temps P1.** C'est celui que P1 a mesuré pendant H-1d (`eval3_us_per_position` dans `eval3.json`, 0,8696 µs). Il n'est pas re-mesuré.
+- **Temps P1.** C'est celui que P1 a mesuré pendant H-1d (`eval3_us_per_position` dans `eval3.json`, 0,8696 µs). Il n'est pas re-mesuré. Le programme refuse un `eval3.json` dont le temps diffère de `bytes_q4_us_per_position_p1` dans `h1d.tsv`.
 
 ## Critère (figé)
 
 - Ratio = (temps P1 + temps tête fusionnée) / temps P1.
-- Si le ratio est inférieur ou égal à 1,5, le verdict de coût est `COST_PASS`, et le verdict H-1d devient **GO**. Sinon, le verdict de coût est `COST_FAIL`, et H-1d reste GO_DIAGNOSTIC_COST.
+- Si le ratio est inférieur ou égal à 1,5, le verdict de coût est `COST_PASS`, et le verdict H-1d devient **GO**. Sinon, le verdict de coût est `COST_FAIL`, et H-1d reste GO_DIAGNOSTIC_COST. Le programme ne change que le critère de coût : un run H-1d dont le verdict n'était ni GO ni GO_DIAGNOSTIC_COST garde son verdict.
 - Un écart d'identité arrête le run sans verdict.
 - **Rapport (`cost.tsv`).** Tout est publié : le temps de l'ancien noyau re-mesuré (contrôle), le temps du noyau fusionné, le ratio, les deux BPC et les SHA-256 des têtes.
 - **Lecture.** Le temps de contrôle de l'ancien noyau dit si la machine se comporte comme pendant H-1d (environ 0,65 µs). S'il s'en écarte fortement, le rapport le signale. Le verdict ne change pas pour autant.

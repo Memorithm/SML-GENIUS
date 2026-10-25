@@ -574,6 +574,11 @@ fn cost(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     if p1_us.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         return Err("eval3.json eval3_us_per_position must be positive".into());
     }
+    // The denominator is frozen: it must be the P1 time of this H-1d run.
+    let p1_key = format!("{BASE}_us_per_position_p1");
+    if format!("{p1_us:.4}") != field(&p1_key)? {
+        return Err(format!("eval3.json P1 time {p1_us:.4} is not {p1_key} of h1d.tsv").into());
+    }
     let eval3 = scan(
         &dir.join("trace-eval3.bin"),
         &dir.join("trace-eval3.banks.bin"),
@@ -642,12 +647,18 @@ fn cost(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     let bank_us = (per_pos(nanos[2]) - per_pos(nanos[0])).max(0.0);
     let ratio = (p1_us + fused_us) / p1_us;
     let pass = ratio <= MAX_COST_RATIO;
+    // Only the cost criterion is re-measured: a quality verdict stays as it was.
+    let h1d_verdict = match field("verdict")? {
+        "GO" | "GO_DIAGNOSTIC_COST" if pass => "GO",
+        "GO" | "GO_DIAGNOSTIC_COST" => "GO_DIAGNOSTIC_COST",
+        other => other,
+    };
     lines += &format!(
         "{BASE}_us_per_position_p1\t{p1_us:.4}\n{BASE}_us_per_position_head_fused\t{fused_us:.4}\n\
          {BASE}_us_per_position_head_bank_control\t{bank_us:.4}\n{BASE}_cost_ratio\t{ratio:.4}\n\
          cost_verdict\t{}\nh1d_verdict\t{}\n",
         if pass { "COST_PASS" } else { "COST_FAIL" },
-        if pass { "GO" } else { "GO_DIAGNOSTIC_COST" },
+        h1d_verdict,
     );
     fs::write(out.join("cost.tsv"), &lines)?;
     print!("{lines}");
@@ -838,6 +849,21 @@ mod tests {
         assert!(["COST_PASS", "COST_FAIL"].contains(&value(&report, "cost_verdict").as_str()));
         // The preregistered label needs the published H-1d heads.
         assert!(cost(&p1, &h1d, &root.join("cost2"), "PREREGISTERED").is_err());
+        // A quality verdict other than GO is never upgraded by the cost.
+        let original = value(&full, "verdict");
+        if !["GO", "GO_DIAGNOSTIC_COST"].contains(&original.as_str()) {
+            assert_eq!(value(&report, "h1d_verdict"), original);
+        }
+        // The P1 time must be the one published by the H-1d run.
+        let key = "bytes_q4_us_per_position_p1";
+        let p1_us = value(&full, key);
+        fs::write(
+            h1d.join("h1d.tsv"),
+            full.replace(&format!("{key}\t{p1_us}"), &format!("{key}\t9{p1_us}")),
+        )
+        .unwrap();
+        assert!(cost(&p1, &h1d, &root.join("cost4"), "SMOKE").is_err());
+        fs::write(h1d.join("h1d.tsv"), &full).unwrap();
         // A head changed after the run no longer matches the H-1d BPC.
         let path = h1d.join("head-a1d-seed11.tsv");
         let text = fs::read_to_string(&path).unwrap();
