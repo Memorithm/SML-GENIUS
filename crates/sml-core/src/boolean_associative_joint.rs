@@ -29,6 +29,15 @@ pub struct JointFocusPolicy {
     /// Preflight bound on the entire worst-case TRAIN candidate evaluation
     /// count; refused before computing any search result.
     pub max_candidate_evaluations: u64,
+    /// Bounded pair-flip escape: every round, after all single flips, also
+    /// enumerate pairs of degree-1 monomial flips on the SAME
+    /// page (deterministic order); a pair wins only if it STRICTLY beats the best
+    /// single flip, so plateaus (no single improves) are escaped and early
+    /// greedy commitments to a lone XOR half are avoided. This is the per-round, all-pages pair count
+    /// ceiling; 0 disables the escape (single-flip-only mode). If the needed
+    /// pair count exceeds this bound the fit fails closed (CandidateBudget).
+    /// Pair evaluations also count against `max_candidate_evaluations`.
+    pub max_pair_flips: u64,
 }
 
 impl Default for JointFocusPolicy {
@@ -37,6 +46,7 @@ impl Default for JointFocusPolicy {
             local: FocusFitPolicy::default(),
             max_editable_pages: 4,
             max_candidate_evaluations: 5_000,
+            max_pair_flips: 256,
         }
     }
 }
@@ -168,6 +178,27 @@ pub fn fit_joint_focus(
         .and_then(|features| features.checked_mul(ids.len() as u64))
         .and_then(|features| features.checked_mul(local.max_rounds as u64))
         .ok_or(JointFocusError::CandidateBudget)?;
+    let atoms: Vec<AnfMonomial> = basis
+        .iter()
+        .copied()
+        .filter(|m| m.event_mask.count_ones() + m.state_mask.count_ones() == 1)
+        .collect();
+    let pairs_per_round = if policy.max_pair_flips == 0 {
+        0
+    } else {
+        let n = atoms.len() as u64;
+        let pairs = (n * n.saturating_sub(1) / 2)
+            .checked_mul(ids.len() as u64)
+            .ok_or(JointFocusError::CandidateBudget)?;
+        if pairs > policy.max_pair_flips {
+            return Err(JointFocusError::CandidateBudget);
+        }
+        pairs
+    };
+    let worst_case = pairs_per_round
+        .checked_mul(local.max_rounds as u64)
+        .and_then(|p| p.checked_add(worst_case))
+        .ok_or(JointFocusError::CandidateBudget)?;
     if worst_case > policy.max_candidate_evaluations {
         return Err(JointFocusError::CandidateBudget);
     }
@@ -213,17 +244,62 @@ pub fn fit_joint_focus(
                 }
             }
         }
+        let mut best_pair = None;
+        if pairs_per_round > 0 {
+            // Escape: same-page degree-1 pairs (i < j), page IDs ascending; must
+            // strictly beat the best single flip (ties keep the single).
+            for (id, index) in indices.iter().copied() {
+                for i in 0..atoms.len() {
+                    for j in (i + 1)..atoms.len() {
+                        let mut trial = candidate_pages.clone();
+                        let activation = &mut trial[index].activation;
+                        let mut ok = true;
+                        for term in [atoms[i], atoms[j]] {
+                            if let Some(pos) = activation.terms.iter().position(|x| *x == term) {
+                                activation.terms.remove(pos);
+                            } else if activation.terms.len() >= local.max_terms {
+                                ok = false;
+                            } else {
+                                activation.terms.push(term);
+                            }
+                        }
+                        if !ok {
+                            continue;
+                        }
+                        let engine = BooleanAssociativeFocus::new(config, trial.clone())
+                            .map_err(JointFocusError::Engine)?;
+                        let loss = error_bits(&engine, train).map_err(JointFocusError::Split)?;
+                        evaluated += 1;
+                        if loss < best_error {
+                            best_error = loss;
+                            best_pair = Some((id, atoms[i], atoms[j]));
+                            best_pages = Some(trial);
+                        }
+                    }
+                }
+            }
+        }
         let Some(winner) = best_pages else {
             break;
         };
         candidate_pages = winner;
         train_error = best_error;
-        let (id, term) = best_flip.expect("a strictly improving candidate has a flip");
-        accepted.push(JointFocusAcceptedFlip {
-            page: id,
-            term,
-            train_errors_after: best_error,
-        });
+        if let Some((id, a, b)) = best_pair {
+            for term in [a, b] {
+                accepted.push(JointFocusAcceptedFlip {
+                    page: id,
+                    term: Some(term),
+                    train_errors_after: best_error,
+                });
+            }
+        } else {
+            let (id, term) = best_flip.expect("a strictly improving candidate has a flip");
+            accepted.push(JointFocusAcceptedFlip {
+                page: id,
+                term,
+                train_errors_after: best_error,
+            });
+        }
     }
 
     let candidate = BooleanAssociativeFocus::new(config, candidate_pages.clone())
