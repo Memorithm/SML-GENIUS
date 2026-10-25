@@ -12,7 +12,12 @@
 //! * A2r, the same experts behind the fixed hash router (control).
 //!
 //! (tau, lambda), shared by the experts of an arm, are picked on CAL-SEL
-//! (`doc_index % 32 == 23`).
+//! (`doc_index % 32 == 23`). An expert is then admitted only if, on its
+//! own CAL-SEL bytes, it beats P1 by at least `ADMIT_BPC`; the bytes of an
+//! expert that is not admitted are coded by P1 alone. Every `gate` or
+//! `run` first runs the same pipeline on a synthetic task with no signal
+//! (null control): if it admits any expert, the verdict is
+//! `NO_GO_NULL_CONTROL`.
 //!
 //! * `gate P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is stage 1: `CAL_GATE_PASS`
 //!   when the CAL-SEL gain of A2 over A1d reaches `CAL_GATE_BPC` for both
@@ -60,6 +65,9 @@ const GO_MARGIN_A1D_BPC: f64 = 0.01;
 /// ... and the hash-routed control A2r by this much.
 const GO_MARGIN_A2R_BPC: f64 = 0.005;
 const MAX_COST_RATIO: f64 = 1.5;
+/// Admission: smallest CAL-SEL gain over P1, in bits per byte routed to
+/// the expert, for the expert to run.
+const ADMIT_BPC: f64 = 0.01;
 const REPLAY_RECORDS: usize = 65_536;
 const CAL_FIT: u32 = 7;
 const CAL_SEL: u32 = 23;
@@ -249,6 +257,11 @@ impl Routing {
 struct Arm {
     routing: Routing,
     heads: Vec<BankHead>,
+    /// Experts whose CAL-SEL gain over P1 on their own bytes reaches
+    /// `ADMIT_BPC`; the bytes of the others keep P1 alone.
+    admitted: [bool; EXPERTS],
+    /// CAL-SEL gain over P1, in bits per routed byte, per expert.
+    gains: [f64; EXPERTS],
     tau: f32,
     eighths: i32,
     sel_bpc: f64,
@@ -300,13 +313,35 @@ fn select(
             }
         }
     })?;
-    let (t, l, b) = pick(&bits);
+    let (t, l, _) = pick(&bits);
+    let heads = heads.into_iter().nth(t).expect("tau index");
+    let eighths = LAMBDA_EIGHTHS[l];
+    // Admission per expert at the chosen (tau, lambda).
+    let (mut a0, mut head, mut n) = ([0.0; EXPERTS], [0.0; EXPERTS], [0u64; EXPERTS]);
+    pair.all(sel, |r| {
+        let k = routing.route(r);
+        a0[k] += a0_cost(&r.record);
+        head[k] += heads[k].cost(r, eighths);
+        n[k] += 1;
+    })?;
+    let mut gains = [0.0; EXPERTS];
+    let mut admitted = [false; EXPERTS];
+    let mut total = 0.0;
+    for k in 0..EXPERTS {
+        if n[k] > 0 {
+            gains[k] = (a0[k] - head[k]) / n[k] as f64;
+        }
+        admitted[k] = n[k] > 0 && gains[k] >= ADMIT_BPC;
+        total += if admitted[k] { head[k] } else { a0[k] };
+    }
     Ok(Arm {
         routing,
-        heads: heads.into_iter().nth(t).expect("tau index"),
+        heads,
+        admitted,
+        gains,
         tau: TAUS[t],
-        eighths: LAMBDA_EIGHTHS[l],
-        sel_bpc: bpc(b, sel_records),
+        eighths,
+        sel_bpc: bpc(total, sel_records),
         snapshots,
     })
 }
@@ -413,10 +448,16 @@ fn experts_tsv(arm: &Arm) -> Result<String> {
     let Routing::Learned(router) = arm.routing else {
         return Err("only a learned router is exported".into());
     };
+    let admitted: Vec<&str> = arm
+        .admitted
+        .iter()
+        .map(|&a| if a { "1" } else { "0" })
+        .collect();
     let mut text = format!(
-        "row\t{ROW}\ndepths\t{DEPTHS}\nbanks\t{MAX_BANKS}\nexperts\t{EXPERTS}\nlambda_eighths\t{}\nrouter\t{}\n",
+        "row\t{ROW}\ndepths\t{DEPTHS}\nbanks\t{MAX_BANKS}\nexperts\t{EXPERTS}\nlambda_eighths\t{}\nrouter\t{}\nadmitted\t{}\n",
         arm.eighths,
         router_hex(&router),
+        admitted.join(","),
     );
     for (k, head) in arm.heads.iter().enumerate() {
         let weights: Vec<String> = head.weights().iter().map(i8::to_string).collect();
@@ -430,7 +471,15 @@ fn experts_tsv(arm: &Arm) -> Result<String> {
     Ok(text)
 }
 
-fn parse_experts(text: &str) -> Result<(Router, Vec<BankHead>, i32)> {
+/// A learned router, its experts, their admission and the shared lambda.
+struct Exported {
+    router: Router,
+    heads: Vec<BankHead>,
+    admitted: [bool; EXPERTS],
+    eighths: i32,
+}
+
+fn parse_experts(text: &str) -> Result<Exported> {
     let field = |name: &str| -> Result<&str> {
         text.lines()
             .find_map(|l| l.strip_prefix(name)?.strip_prefix('\t'))
@@ -481,7 +530,20 @@ fn parse_experts(text: &str) -> Result<(Router, Vec<BankHead>, i32)> {
     if !LAMBDA_EIGHTHS.contains(&eighths) {
         return Err("lambda outside the registered grid".into());
     }
-    Ok((Router { prototypes }, heads, eighths))
+    let flags: Vec<&str> = field("admitted")?.split(',').collect();
+    if flags.len() != EXPERTS || flags.iter().any(|f| *f != "0" && *f != "1") {
+        return Err("admitted needs EXPERTS flags 0 or 1".into());
+    }
+    let mut admitted = [false; EXPERTS];
+    for (a, f) in admitted.iter_mut().zip(flags) {
+        *a = f == "1";
+    }
+    Ok(Exported {
+        router: Router { prototypes },
+        heads,
+        admitted,
+        eighths,
+    })
 }
 
 /// The H-1d head format (`sml-hyb-h1d-s5h`): one head and its lambda.
@@ -522,26 +584,47 @@ fn parse_h1d_head(text: &str) -> Result<(BankHead, i32)> {
     ))
 }
 
-/// SHA-256 of the route and every i32 correction on fixed synthetic
-/// records; stops if a kernel and its oracle disagree.
-fn replay_digest(router: &Router, heads: &[BankHead], eighths: i32) -> Result<String> {
-    let mut bytes = router_bytes(router);
+/// SHA-256 of the route and every i32 correction (0 for an expert that
+/// is not admitted) on fixed synthetic records; stops if a kernel and its
+/// oracle disagree.
+fn replay_digest(e: &Exported) -> Result<String> {
+    let mut bytes = router_bytes(&e.router);
+    bytes.extend(e.admitted.iter().map(|&a| u8::from(a)));
     bytes.reserve(REPLAY_RECORDS * (1 + DEPTHS * 4));
     for r in replay_bank_records(REPLAY_RECORDS) {
-        let k = router.route(&r);
-        if k != router.oracle_route(&r) {
+        let k = e.router.route(&r);
+        if k != e.router.oracle_route(&r) {
             return Err("replay: router/oracle mismatch".into());
         }
         bytes.push(k as u8);
         for d in 0..DEPTHS {
-            let raw = heads[k].raw(&r, d);
-            if raw != heads[k].oracle_raw(&r, d) {
+            let raw = e.heads[k].raw(&r, d);
+            if raw != e.heads[k].oracle_raw(&r, d) {
                 return Err("replay: kernel/oracle mismatch".into());
             }
-            bytes.extend_from_slice(&heads[k].correction(raw, d, eighths).to_le_bytes());
+            let correction = if e.admitted[k] {
+                e.heads[k].correction(raw, d, e.eighths)
+            } else {
+                0
+            };
+            bytes.extend_from_slice(&correction.to_le_bytes());
         }
     }
     Ok(hex(&sha256(&bytes)))
+}
+
+impl Arm {
+    fn exported(&self) -> Result<Exported> {
+        let Routing::Learned(router) = self.routing else {
+            return Err("only a learned router is exported".into());
+        };
+        Ok(Exported {
+            router,
+            heads: self.heads.clone(),
+            admitted: self.admitted,
+            eighths: self.eighths,
+        })
+    }
 }
 
 /// The A1d control: the two heads of a finished H-1d run.
@@ -570,6 +653,11 @@ fn h1d_heads(h1d: &Path, label: &str, weights: &str) -> Result<Vec<(BankHead, i3
         heads.push(parse_h1d_head(&text)?);
     }
     Ok(heads)
+}
+
+fn gains_text(gains: &[f64; EXPERTS]) -> String {
+    let parts: Vec<String> = gains.iter().map(|g| format!("{g:.6}")).collect();
+    parts.join(",")
 }
 
 fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -> Result<String> {
@@ -651,7 +739,9 @@ fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -
              {BASE}_a2_seed{seed}_router\t{}\n{BASE}_a2_seed{seed}_zero_fraction\t{:.6}\n\
              {BASE}_a2_seed{seed}_replay_sha256\t{}\n\
              {BASE}_a2r_seed{seed}_sel_bpc\t{:.9}\n{BASE}_a2r_seed{seed}_tau\t{}\n\
-             {BASE}_a2r_seed{seed}_lambda_eighths\t{}\n{BASE}_a2r_seed{seed}_snapshots\t{}\n",
+             {BASE}_a2r_seed{seed}_lambda_eighths\t{}\n{BASE}_a2r_seed{seed}_snapshots\t{}\n\
+             {BASE}_a2_seed{seed}_admitted\t{:?}\n{BASE}_a2_seed{seed}_expert_sel_gains\t{}\n\
+             {BASE}_a2r_seed{seed}_admitted\t{:?}\n{BASE}_a2r_seed{seed}_expert_sel_gains\t{}\n",
             a1d_sel[k],
             a.a2.sel_bpc,
             a1d_sel[k] - a.a2.sel_bpc,
@@ -661,11 +751,15 @@ fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -
             rounds.join(";"),
             router_hex(&router),
             a.a2.heads.iter().map(BankHead::zero_fraction).sum::<f64>() / EXPERTS as f64,
-            replay_digest(&router, &a.a2.heads, a.a2.eighths)?,
+            replay_digest(&a.a2.exported()?)?,
             a.a2r.sel_bpc,
             a.a2r.tau,
             a.a2r.eighths,
             a.a2r.snapshots,
+            a.a2.admitted,
+            gains_text(&a.a2.gains),
+            a.a2r.admitted,
+            gains_text(&a.a2r.gains),
         );
         fs::write(
             out.join(format!("experts-a2-seed{seed}.tsv")),
@@ -725,13 +819,21 @@ fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -
         for (s, a) in arms.iter().enumerate() {
             let t = Instant::now();
             let k = a.a2.routing.route(r);
-            bits[s][0] += fused[s].0[k].cost(r, a.a2.eighths);
+            bits[s][0] += if a.a2.admitted[k] {
+                fused[s].0[k].cost(r, a.a2.eighths)
+            } else {
+                a0_cost(&r.record)
+            };
             if s == 0 {
                 nanos[1] += t.elapsed().as_nanos();
             }
             used[s][k] += 1;
             let j = a.a2r.routing.route(r);
-            bits[s][1] += fused[s].1[j].cost(r, a.a2r.eighths);
+            bits[s][1] += if a.a2r.admitted[j] {
+                fused[s].1[j].cost(r, a.a2r.eighths)
+            } else {
+                a0_cost(&r.record)
+            };
             bits[s][2] += a1d_fused[s].0.cost(r, a1d_fused[s].1);
             if k != a.a2.routing.oracle_route(r) || j != a.a2r.routing.oracle_route(r) {
                 mismatches += 1;
@@ -784,12 +886,50 @@ fn evaluate(dir: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -
     Ok(report)
 }
 
+/// Runs the whole CAL pipeline on a synthetic task with no signal and
+/// returns how many experts (A2 and A2r, both seeds) it admits: a sound
+/// admission rule admits none.
+fn null_control(out: &Path) -> Result<usize> {
+    let root = out.join("null-control");
+    write_smoke(&root, 8)?;
+    let task = root.join("out");
+    fs::create_dir(&task)?;
+    let report = evaluate(
+        &root.join("p1").join(BASE),
+        &root.join("h1d"),
+        &task,
+        "SMOKE",
+        false,
+    )?;
+    let mut admitted = 0;
+    for line in report.lines() {
+        let Some((key, value)) = line.split_once('\t') else {
+            continue;
+        };
+        if key.ends_with("_admitted") {
+            admitted += value.matches("true").count();
+        }
+    }
+    Ok(admitted)
+}
+
 fn run(p1: &Path, h1d: &Path, out: &Path, label: &str, open_eval4: bool) -> Result<()> {
     fs::create_dir(out)?;
+    let null_admitted = null_control(out)?;
+    let report = evaluate(&p1.join(BASE), h1d, out, label, open_eval4)?;
+    let (body, verdict) = report
+        .trim_end()
+        .rsplit_once("verdict\t")
+        .ok_or("the report has no verdict")?;
+    let verdict = if null_admitted == 0 {
+        verdict
+    } else {
+        "NO_GO_NULL_CONTROL"
+    };
     let report = format!(
-        "label\t{label}\nstage\t{}\n{}",
+        "label\t{label}\nstage\t{}\n{body}{BASE}_admit_bpc\t{ADMIT_BPC}\n\
+         {BASE}_null_control_admitted\t{null_admitted}\nverdict\t{verdict}\n",
         if open_eval4 { "run" } else { "gate" },
-        evaluate(&p1.join(BASE), h1d, out, label, open_eval4)?
     );
     fs::write(out.join("h2.tsv"), &report)?;
     print!("{report}");
@@ -904,11 +1044,8 @@ fn cli(args: &[String]) -> Result<()> {
             mode == "run",
         ),
         Some("replay") if args.len() == 3 => {
-            let (router, heads, eighths) = parse_experts(&fs::read_to_string(&args[2])?)?;
-            println!(
-                "replay_sha256\t{}",
-                replay_digest(&router, &heads, eighths)?
-            );
+            let exported = parse_experts(&fs::read_to_string(&args[2])?)?;
+            println!("replay_sha256\t{}", replay_digest(&exported)?);
             Ok(())
         }
         Some("smoke") if args.len() == 3 => {
@@ -977,17 +1114,18 @@ mod tests {
                 "seed {seed}: {a2} {a1d} {a2r}"
             );
             let path = root.join(format!("out/experts-a2-seed{seed}.tsv"));
-            let (router, heads, eighths) =
-                parse_experts(&fs::read_to_string(path).unwrap()).unwrap();
+            let exported = parse_experts(&fs::read_to_string(path).unwrap()).unwrap();
+            assert!(exported.admitted.iter().any(|&a| a));
             assert_eq!(
                 value(&report, &format!("bytes_q4_a2_seed{seed}_replay_sha256")),
-                replay_digest(&router, &heads, eighths).unwrap()
+                replay_digest(&exported).unwrap()
             );
             assert_eq!(
                 value(&report, &format!("bytes_q4_a2_seed{seed}_router")),
-                router_hex(&router)
+                router_hex(&exported.router)
             );
         }
+        assert_eq!(value(&report, "bytes_q4_null_control_admitted"), "0");
         assert!(["GO", "GO_DIAGNOSTIC_COST"].contains(&value(&report, "verdict").as_str()));
         // A preregistered run refuses smoke weights and heads, and the
         // output directory is never overwritten.
@@ -1049,6 +1187,15 @@ mod tests {
         let report = fs::read_to_string(root.join("out/h2.tsv")).unwrap();
         assert_eq!(value(&report, "verdict"), "NO_GO_CAL_GATE");
         assert_eq!(value(&report, "bytes_q4_eval4_read"), "false");
+        // Without signal, no expert of either arm is admitted.
+        for seed in SEEDS {
+            for arm in ["a2", "a2r"] {
+                assert_eq!(
+                    value(&report, &format!("bytes_q4_{arm}_seed{seed}_admitted")),
+                    format!("{:?}", [false; EXPERTS])
+                );
+            }
+        }
         // An H-1d output that is not a finished run is refused.
         let h1d = root.join("h1d");
         let text = fs::read_to_string(h1d.join("h1d.tsv")).unwrap();
@@ -1087,16 +1234,23 @@ mod tests {
             eighths: 8,
             sel_bpc: 0.0,
             snapshots: 0,
+            admitted: [true, false, true, true],
+            gains: [0.0; EXPERTS],
         };
         let text = experts_tsv(&arm).unwrap();
-        let (r2, h2, e2) = parse_experts(&text).unwrap();
-        assert_eq!(r2, router);
-        assert_eq!(e2, 8);
-        let digest = replay_digest(&router, &heads, 8).unwrap();
-        assert_eq!(digest, replay_digest(&r2, &h2, e2).unwrap());
-        let mut other = router;
-        other.prototypes[0][0] ^= 1 << 7;
-        assert_ne!(digest, replay_digest(&other, &heads, 8).unwrap());
+        let parsed = parse_experts(&text).unwrap();
+        assert_eq!(parsed.router, router);
+        assert_eq!(parsed.eighths, 8);
+        assert_eq!(parsed.admitted, arm.admitted);
+        let digest = replay_digest(&arm.exported().unwrap()).unwrap();
+        assert_eq!(digest, replay_digest(&parsed).unwrap());
+        let mut other = arm.exported().unwrap();
+        other.router.prototypes[0][0] ^= 1 << 7;
+        assert_ne!(digest, replay_digest(&other).unwrap());
+        let mut other = arm.exported().unwrap();
+        other.admitted[1] = true;
+        assert_ne!(digest, replay_digest(&other).unwrap());
+        assert!(parse_experts(&text.replace("admitted\t1,0,1,1", "admitted\t1,0,1")).is_err());
         assert!(parse_experts(&text.replace("experts\t4", "experts\t3")).is_err());
         assert!(parse_experts(&text.replace("lambda_eighths\t8", "lambda_eighths\t3")).is_err());
     }

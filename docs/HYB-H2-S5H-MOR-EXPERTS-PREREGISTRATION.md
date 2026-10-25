@@ -51,6 +51,7 @@ Le code est dans `hyb_h2_mor_experts.rs` et le binaire `sml-hyb-h2-s5h`. Chaque 
   - Le routeur initial est commun aux deux graines ; l'expert `k` part de la graine `graine ^ (k << 40)`.
 - **A2r — les mêmes 4 experts derrière un routeur par hachage (contrôle).** L'octet va à l'expert `splitmix(contexte ^ constante) mod 4`. Les experts sont entraînés une fois sur ce routage, avec la même procédure.
 - **Sélection.** Pour A2 et A2r, un seul couple (τ, λ8), commun aux 4 experts d'un bras, est choisi sur CAL-SEL, comme en H-1d.
+- **Admission par le coût.** Une fois (τ, λ8) choisi, chaque expert n'est admis que si, sur ses propres octets de CAL-SEL, il code mieux que P1 d'au moins `ADMIT_BPC` = 0,01 bit par octet. Les octets routés vers un expert non admis sont codés par P1 seul, sans coût d'expert. Le masque d'admission est exporté avec les experts et entre dans l'empreinte de rejeu Thor. Les BPC CAL-SEL et EVAL4 de A2 et A2r tiennent compte de ce masque.
 - Graines 11 et 23.
 
 ## Critères (figés, sur `bytes_q4`)
@@ -59,26 +60,28 @@ Le code est dans `hyb_h2_mor_experts.rs` et le binaire `sml-hyb-h2-s5h`. Chaque 
    - Pour chaque graine, gain CAL-SEL = BPC_CAL-SEL(A1d) − BPC_CAL-SEL(A2).
    - Si ce gain est inférieur à 0,01 pour au moins une graine, le verdict est `NO_GO_CAL_GATE`. EVAL4 n'est ni tracé ni lu, et reste disponible. Sinon, le verdict d'étape est `CAL_GATE_PASS`.
    - `sml-hyb-h2-s5h run` refait cette étape (elle est déterministe ; les experts jugés doivent être identiques octet pour octet à ceux de la porte), puis lit EVAL4 une seule fois.
-2. **Exactitude.**
+2. **Contrôle nul.** Avant chaque `gate` ou `run`, le programme exécute exactement la même chaîne (EM, sélection, admission, deux graines, A2 et A2r) sur une tâche synthétique sans signal : la cible n'est liée ni au contexte ni aux banques, et le stretch de P1 est nul. Aucun expert ne doit y être admis. Sinon, le verdict est `NO_GO_NULL_CONTROL`, quel que soit le reste. `h2.tsv` publie `null_control_admitted`.
+3. **Exactitude.**
    - Sur le Dell, sur toutes les positions EVAL4 et pour les deux graines, le routeur et son oracle scalaire, ainsi que le noyau popcount de l'expert choisi et son oracle, doivent donner 0 écart.
    - Les routeurs et experts A2 des deux graines sont rejoués sur Thor. Le SHA-256 des routes et des corrections i32 sur 65 536 enregistrements synthétiques doit être le même que sur le Dell.
-3. **Go.** Pour les deux graines, sur EVAL4 :
+4. **Go.** Pour les deux graines, sur EVAL4 :
    - BPC(A2) < BPC(A1d) − 0,01 ;
    - BPC(A2) < BPC(A2r) − 0,005 : le routage appris compte, pas seulement la capacité ;
    - BPC(A1d) − BPC(A2) > 2 × l'écart entre les graines de A2.
-4. **Coût.**
+5. **Coût.**
    - Formule : (`eval4_us_per_position` de P1 + temps routeur et expert fusionné) / `eval4_us_per_position` ≤ 1,5.
    - Le temps routeur et expert est le temps de routage plus le scoring par le noyau fusionné (`FusedBankHead`) de l'expert choisi, moins le temps du coût de décision commun, mesuré comme en H-1d-cost.
    - Si ce critère échoue, le verdict devient `GO_DIAGNOSTIC_COST`.
-5. **Lecture.**
+6. **Lecture.**
    - GO : le routage MOR est démontré sur ce moteur ; H-3 (moteur natif) peut être préenregistré.
-   - NO_GO ou NO_GO_CAL_GATE : H-3 se fera avec une seule tête H-1d, qui est déjà GO.
+   - NO_GO, NO_GO_CAL_GATE ou NO_GO_NULL_CONTROL : H-3 se fera avec une seule tête H-1d, qui est déjà GO.
    - Le gain A0 − A1d sur EVAL4 est publié comme réplication de H-1d sur un deuxième échantillon neuf. C'est un diagnostic : il ne change pas le verdict H-2.
-6. **Rapport.** `h2.tsv` publie tout, sans sélection a posteriori :
+7. **Rapport.** `h2.tsv` publie tout, sans sélection a posteriori :
    - les deux graines, A0, A1d, A2 et A2r, sur CAL-SEL et (si la porte passe) sur EVAL4 ;
    - les bornes des quartiles initiaux, le routeur initial et les routeurs finaux ;
    - le nombre d'octets par expert à chaque tour et sur EVAL4 ;
    - (τ, λ), la fraction de poids nuls, le nombre d'instantanés moyennés ;
+   - pour chaque expert, son gain CAL-SEL sur ses octets et son admission ;
    - les temps et le ratio de coût ;
    - `dev_read false` et `eval4_read`.
 
