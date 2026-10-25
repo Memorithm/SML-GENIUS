@@ -262,31 +262,79 @@ pub fn cluster(samples: &[Shape], k: usize, seed: u64, rounds: usize) -> Vec<Sha
     centres
 }
 
-/// Share of positions on which two labelings agree after the greedy
-/// one-to-one matching of their labels (largest confusion cell first).
+/// Share of positions on which two labelings agree under the best
+/// one-to-one matching of their labels (maximum-weight assignment on the
+/// confusion matrix), so it does not depend on how either side numbers
+/// its labels.
 #[must_use]
 pub fn agreement(a: &[u8], b: &[u8], k: usize) -> f64 {
     assert_eq!(a.len(), b.len());
     if a.is_empty() {
         return 1.0;
     }
-    let mut confusion = vec![0u64; k * k];
+    let mut confusion = vec![vec![0i64; k]; k];
     for (&x, &y) in a.iter().zip(b) {
-        confusion[usize::from(x) * k + usize::from(y)] += 1;
+        confusion[usize::from(x)][usize::from(y)] += 1;
     }
-    let mut cells: Vec<(u64, usize, usize)> =
-        (0..k * k).map(|i| (confusion[i], i / k, i % k)).collect();
-    cells.sort_by(|p, q| q.0.cmp(&p.0).then(p.1.cmp(&q.1)).then(p.2.cmp(&q.2)));
-    let (mut used_a, mut used_b) = (vec![false; k], vec![false; k]);
-    let mut matched = 0;
-    for (n, i, j) in cells {
-        if !used_a[i] && !used_b[j] {
-            used_a[i] = true;
-            used_b[j] = true;
-            matched += n;
+    max_assignment(&confusion) as f64 / a.len() as f64
+}
+
+/// Largest total weight of a one-to-one assignment of rows to columns of
+/// a square matrix (Hungarian algorithm on the negated weights, O(k^3)).
+#[must_use]
+pub fn max_assignment(w: &[Vec<i64>]) -> i64 {
+    let n = w.len();
+    if n == 0 {
+        return 0;
+    }
+    let cost = |i: usize, j: usize| -w[i - 1][j - 1];
+    // Potentials and matching, 1-based with column 0 as the virtual start.
+    let (mut u, mut v) = (vec![0i64; n + 1], vec![0i64; n + 1]);
+    let (mut p, mut way) = (vec![0usize; n + 1], vec![0usize; n + 1]);
+    for i in 1..=n {
+        p[0] = i;
+        let mut j0 = 0;
+        let mut minv = vec![i64::MAX; n + 1];
+        let mut used = vec![false; n + 1];
+        loop {
+            used[j0] = true;
+            let (i0, mut delta, mut j1) = (p[j0], i64::MAX, 0);
+            for j in 1..=n {
+                if !used[j] {
+                    let cur = cost(i0, j) - u[i0] - v[j];
+                    if cur < minv[j] {
+                        minv[j] = cur;
+                        way[j] = j0;
+                    }
+                    if minv[j] < delta {
+                        delta = minv[j];
+                        j1 = j;
+                    }
+                }
+            }
+            for j in 0..=n {
+                if used[j] {
+                    u[p[j]] += delta;
+                    v[j] -= delta;
+                } else {
+                    minv[j] -= delta;
+                }
+            }
+            j0 = j1;
+            if p[j0] == 0 {
+                break;
+            }
+        }
+        loop {
+            let j1 = way[j0];
+            p[j0] = p[j1];
+            j0 = j1;
+            if j0 == 0 {
+                break;
+            }
         }
     }
-    matched as f64 / a.len() as f64
+    (1..=n).map(|j| w[p[j] - 1][j - 1]).sum()
 }
 
 /// Bytes hashed to find a match.
@@ -471,6 +519,61 @@ mod tests {
         let swapped: Vec<u8> = labels.iter().map(|&l| 1 - l).collect();
         assert!((agreement(&labels, &swapped, 2) - 1.0).abs() < 1e-12);
         assert_eq!(cluster(&samples, 2, 11, 6), centres);
+    }
+
+    #[test]
+    fn agreement_is_the_best_matching_whatever_the_label_numbers() {
+        // Tied cells: a greedy match depends on label order, the best
+        // matching does not (Codex review of #724).
+        let rows = [
+            [10u64, 10, 0, 0],
+            [10, 0, 0, 0],
+            [0, 0, 25, 0],
+            [0, 0, 0, 25],
+        ];
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        for (x, row) in rows.iter().enumerate() {
+            for (y, &n) in row.iter().enumerate() {
+                for _ in 0..n {
+                    a.push(x as u8);
+                    b.push(y as u8);
+                }
+            }
+        }
+        let best = agreement(&a, &b, 4);
+        assert!((best - 70.0 / 80.0).abs() < 1e-12, "{best}");
+        for perm in [[1u8, 0, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]] {
+            let pa: Vec<u8> = a.iter().map(|&x| perm[usize::from(x)]).collect();
+            let pb: Vec<u8> = b.iter().map(|&y| perm[usize::from(3 - y)]).collect();
+            assert!((agreement(&pa, &b, 4) - best).abs() < 1e-12);
+            assert!((agreement(&a, &pb, 4) - best).abs() < 1e-12);
+        }
+        // Against brute force on small random matrices.
+        let mut z = 7u64;
+        for _ in 0..200 {
+            let w: Vec<Vec<i64>> = (0..4)
+                .map(|_| {
+                    (0..4)
+                        .map(|_| {
+                            z = splitmix(z);
+                            (z % 9) as i64
+                        })
+                        .collect()
+                })
+                .collect();
+            let mut brute = 0;
+            for p in 0..24usize {
+                let mut cols: Vec<usize> = (0..4).collect();
+                let mut perm = Vec::new();
+                let mut q = p;
+                for left in (1..=4).rev() {
+                    perm.push(cols.remove(q % left));
+                    q /= left;
+                }
+                brute = brute.max((0..4).map(|i| w[i][perm[i]]).sum::<i64>());
+            }
+            assert_eq!(max_assignment(&w), brute);
+        }
     }
 
     #[test]
