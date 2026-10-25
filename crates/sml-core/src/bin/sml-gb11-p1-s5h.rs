@@ -1102,6 +1102,9 @@ fn cli_h3(
     if fs::canonicalize(out)?.starts_with(&canonical_root) {
         return Err("output must not be inside the data root".into());
     }
+    for arm in &arms {
+        fs::create_dir_all(out.join("containers").join(arm.name))?;
+    }
     let tables = Tables::new();
     let (mut docs, mut bytes, mut mismatches, mut failures) = (0u64, 0u64, 0u64, 0u64);
     for doc in roster.docs.iter().filter(|d| d.role == Role::Eval2) {
@@ -1129,6 +1132,13 @@ fn cli_h3(
             }
             arm.container_bytes += packed.len() as u64;
             arm.containers.extend_from_slice(&sha256(&packed));
+            // The containers stay with the run (outside the timed region).
+            fs::write(
+                out.join("containers")
+                    .join(arm.name)
+                    .join(format!("{}.smlh3", doc.index)),
+                &packed,
+            )?;
         }
     }
     if docs == 0 {
@@ -1825,6 +1835,11 @@ mod tests {
             cli(&h3(&eval5_path, "single", "h3")).is_err(),
             "no overwrite"
         );
+        // Every container is kept, per arm and document.
+        for arm in ["b0", "b1_seed11", "b1_seed23"] {
+            let kept = fs::read_dir(home.join("h3/containers").join(arm)).unwrap();
+            assert_eq!(kept.count(), 2);
+        }
         // The engine ran the frozen model of the run.
         let weights_line = report
             .lines()

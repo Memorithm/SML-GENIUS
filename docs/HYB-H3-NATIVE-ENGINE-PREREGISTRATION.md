@@ -64,7 +64,7 @@ Chaque document d'EVAL5 est compressé puis décompressé par chacun des trois b
    - pour chaque bras : octets de conteneur, BPC de conteneur et de modèle, µs par octet en compression et en décompression, poids de tête admis, SHA-256 de la suite des conteneurs ;
    - les gains, l'écart entre graines, les rapports de coût ;
    - `dev_read false`, `test UNOPENED`, le commit source et le verdict.
-   - Les conteneurs eux-mêmes restent sur le Dell.
+   - Les conteneurs eux-mêmes restent sur le Dell, dans `containers/<bras>/<doc_index>.smlh3`.
 
 ## Ce que H-3 ne démontre pas
 
