@@ -35,7 +35,7 @@
 //! * `copy P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is the H-2c copy-expert
 //!   feasibility diagnostic (docs/HYB-H2C-COPY-FEASIBILITY.md): CAL only,
 //!   a per-document match model mixed after each A1d head
-//!   (`hyb_h2c_copy`) with a random-byte null control; it writes
+//!   (`hyb_h2c_copy`) with a random null control and a timing control; it writes
 //!   `h2c.tsv` and never opens EVAL4.
 //!
 //! The S5h DEV, EVAL2 and EVAL3 are never opened. `replay EXPERTS.tsv`
@@ -1376,16 +1376,22 @@ const COPY_MINS: [usize; 3] = [6, 8, 12];
 const COPY_TABLE_BITS: u32 = 18;
 /// Both seeds must gain this much over A1d on CAL-SEL.
 const COPY_GAIN_BPC: f64 = CAL_GATE_BPC;
-/// The null control (random predicted byte) must stay within this.
+/// The null control must stay within this.
 const COPY_NULL_BPC: f64 = 0.002;
-/// The variants: each context length, then the null control, which keeps
-/// the timing of the longest-context expert but predicts a random byte.
-const COPY_VARIANTS: usize = COPY_MINS.len() + 1;
+/// The variants: each context length; `timing`, which keeps the timing
+/// and lengths of the longest-context expert but predicts a random byte
+/// (reported only: it knows where the text repeats); and `null`, a random
+/// byte with a random length at every position, which knows nothing.
+const COPY_VARIANTS: usize = COPY_MINS.len() + 2;
+const COPY_TIMING: usize = COPY_MINS.len();
+const COPY_NULL: usize = COPY_MINS.len() + 1;
 
 fn copy_name(v: usize) -> String {
-    COPY_MINS
-        .get(v)
-        .map_or_else(|| "null".to_string(), |m| format!("min{m}"))
+    match v {
+        COPY_TIMING => "timing".to_string(),
+        COPY_NULL => "null".to_string(),
+        _ => format!("min{}", COPY_MINS[v]),
+    }
 }
 
 /// Stretches of the eight decisions after one A1d head.
@@ -1409,11 +1415,11 @@ fn copy_pass(
             for (v, model) in models.iter().enumerate() {
                 predictions[v] = model.predict();
             }
-            predictions[COPY_MINS.len()] = predictions[COPY_MINS.len() - 1].map(|(_, n)| {
-                let noise =
-                    splitmix((u64::from(r.record.doc_index) << 32) | u64::from(r.record.position));
-                (noise as u8, n)
-            });
+            let noise =
+                splitmix((u64::from(r.record.doc_index) << 32) | u64::from(r.record.position));
+            predictions[COPY_TIMING] =
+                predictions[COPY_MINS.len() - 1].map(|(_, n)| (noise as u8, n));
+            predictions[COPY_NULL] = Some(((noise >> 8) as u8, (noise >> 16) as usize % 512));
             each(r, &predictions);
             for model in &mut models {
                 model.push(r.record.target);
@@ -1521,9 +1527,8 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     let chosen = (0..COPY_MINS.len())
         .min_by(|&a, &b| mean(a).total_cmp(&mean(b)))
         .unwrap_or(0);
-    let null = COPY_MINS.len();
     let feasible = (0..seeds).all(|k| gain(k, chosen) >= COPY_GAIN_BPC)
-        && (0..seeds).all(|k| gain(k, null).abs() < COPY_NULL_BPC);
+        && (0..seeds).all(|k| gain(k, COPY_NULL).abs() < COPY_NULL_BPC);
     report += &format!(
         "{BASE}_copy_chosen_min\t{}\n{BASE}_copy_gain_bpc\t{COPY_GAIN_BPC}\n\
          {BASE}_copy_null_bpc\t{COPY_NULL_BPC}\nverdict\t{}\n",

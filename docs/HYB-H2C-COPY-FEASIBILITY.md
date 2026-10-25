@@ -21,7 +21,7 @@ Le 25 octobre, le propriétaire a choisi cette piste. H-2c mesure le gain réel,
    Cela fait 96 décalages. Quand la prédiction ne concorde plus, ou qu'il n'y en a pas, la tête A1d code seule.
 3. **Apprentissage sur CAL-FIT.** Chaque décalage est le meilleur, en longueur de code exacte, parmi les valeurs de −1024 à 2047 par pas de 8. Une case vue moins de 1 000 fois garde un décalage nul. Les têtes A1d publiées (graines 11 et 23) sont reprises telles quelles, avec leur λ.
 4. **Choix sur CAL-SEL.** On essaie trois longueurs de contexte, `m` = 6, 8 et 12. On retient celle qui donne le meilleur BPC moyen des deux graines sur CAL-SEL.
-5. **Contrôle nul.** Il garde le rythme de l'expert `m` = 12 (mêmes octets couverts, mêmes longueurs) mais prédit un octet tiré au hasard. Le mélangeur, appris de la même façon, ne doit rien gagner.
+5. **Contrôle nul.** Il garde le rythme de l'expert `m` = 12 (mêmes octets couverts, mêmes longueurs) mais prédit un octet tiré au hasard. Le mélangeur, appris de la même façon, ne doit rien gagner. *(Remplacé après le premier run : voir la révision plus bas.)*
 
 Sont publiés, pour chaque variante :
 - la couverture et le taux de réussite ;
@@ -36,6 +36,18 @@ Le BPC de A1d sur CAL-SEL doit retrouver celui de H-2 (2,5540 et 2,5584). C'est 
 `COPY_FEASIBLE` exige les deux conditions suivantes. Sinon, le verdict est `COPY_NOT_FEASIBLE`.
 - À la longueur `m` retenue, la recopie gagne au moins **0,01 BPC sur A1d** sur CAL-SEL pour les deux graines. C'est la porte de H-2 et de H-2t.
 - Le contrôle nul reste à moins de **0,002 BPC** de A1d pour les deux graines.
+
+## Révision du contrôle nul (25 octobre, après le premier run)
+
+Premier run : RemoteOps #858, SML `c7bba16e`, `h2c.tsv` sha256 `1c27a4830d66cdc758667523fe801047abbf229e44461ecb281e140e376800f8`. Résultats : `RESULTS-HYB-H2C-COPY-FEASIBILITY.md`.
+
+La recopie a gagné 0,54 et 0,56 BPC sur A1d (contexte 6). Le verdict a pourtant été `COPY_NOT_FEASIBLE` : le contrôle nul a gagné 0,0029 et 0,0050 BPC, au-dessus de 0,002.
+
+Ce contrôle était mal conçu. Il ne prédisait qu'aux positions où l'expert `m` = 12 trouvait une correspondance, et avec ses longueurs. Il savait donc où le texte se répète. Ses décalages appris sont opposés deux à deux selon l'accord avec la tête : ils ne font que recalibrer la confiance de la tête à ces positions.
+
+Sur décision du propriétaire, l'étude est refaite sur la calibration, avec le même code et le même critère. Seul le contrôle nul change :
+- **`null`** (critère, seuil inchangé à 0,002) : un octet au hasard et une longueur au hasard (0 à 511), à **chaque** position. Il ne sait rien du texte.
+- **`timing`** : l'ancien contrôle, publié sans critère, pour mesurer ce que vaut le seul fait de savoir où le texte se répète.
 
 ## Ce qui suit
 
