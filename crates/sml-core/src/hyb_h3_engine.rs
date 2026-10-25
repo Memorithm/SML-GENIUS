@@ -24,6 +24,7 @@ use crate::{
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
+    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
 
@@ -43,6 +44,7 @@ pub struct HybridHead {
     fused: Vec<FusedBankHead>,
     admitted: Vec<bool>,
     eighths: i32,
+    copy_weight_tenths: u8,
 }
 
 impl HybridHead {
@@ -57,6 +59,7 @@ impl HybridHead {
             fused: Vec::new(),
             admitted: Vec::new(),
             eighths: 0,
+            copy_weight_tenths: 0,
         }
     }
 
@@ -71,7 +74,32 @@ impl HybridHead {
             heads: vec![head],
             admitted: vec![true],
             eighths,
+            copy_weight_tenths: 0,
         }
+    }
+
+    /// A frozen H-1d head blended with a causally recurrent byte-copy expert.
+    /// The original P1 and neural weights remain unchanged. w=0 retains
+    /// byte-for-byte compatibility with the existing H-1d engine.
+    pub fn single_with_copy(
+        head: BankHead,
+        eighths: i32,
+        copy_weight_tenths: u8,
+    ) -> Result<Self, &'static str> {
+        if copy_weight_tenths > 10 {
+            return Err("H-1d copy mixture weight must be in 0..=10 tenths");
+        }
+        let mut result = Self::single(head, eighths);
+        result.copy_weight_tenths = copy_weight_tenths;
+        Ok(result)
+    }
+
+    /// Activate the owner-selected initial 20% causal copy / 80% H-1d mixture.
+    /// This is opt-in: existing single() retains exactly the prior behavior.
+    #[must_use]
+    pub fn single_with_default_copy(head: BankHead, eighths: i32) -> Self {
+        Self::single_with_copy(head, eighths, DEFAULT_COPY_WEIGHT_TENTHS)
+            .expect("fixed 20/80 copy mixture is in the validated range")
     }
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
@@ -116,6 +144,7 @@ impl HybridHead {
             heads: exported.heads,
             admitted: exported.admitted.to_vec(),
             eighths: exported.eighths,
+            copy_weight_tenths: 0,
         }
     }
 
@@ -190,6 +219,7 @@ pub struct HybridPredictor<'a> {
     code: ByteCode,
     record: BankRecord,
     expert: Option<usize>,
+    copy: Option<CopyExpert>,
     p1: u32,
 }
 
@@ -208,6 +238,7 @@ impl<'a> HybridPredictor<'a> {
             code: ByteCode::default(),
             record: BankRecord::default(),
             expert: None,
+            copy: (head.copy_weight_tenths > 0).then(CopyExpert::default),
             p1: HALF,
         };
         predictor.prepare();
@@ -223,6 +254,9 @@ impl<'a> HybridPredictor<'a> {
         }
         let d = self.decision;
         if d == 0 {
+            if let Some(copy) = self.copy.as_mut() {
+                copy.prepare_byte();
+            }
             self.code = ByteCode::default();
             self.blocks = self.model.frozen_blocks(self.ctx, 0);
             self.record = BankRecord::default();
@@ -249,7 +283,14 @@ impl<'a> HybridPredictor<'a> {
         let shift = self.expert.map_or(0, |k| {
             self.head.fused[k].correction(r, d, self.head.eighths)
         });
-        self.p1 = coder_p1(self.tables, st.saturating_add(shift));
+        let neural = coder_p1(self.tables, st.saturating_add(shift));
+        self.p1 = self.copy.as_ref().map_or(neural, |copy| {
+            mix_probability(
+                neural,
+                copy.probability(d, r.record.target),
+                self.head.copy_weight_tenths,
+            )
+        });
     }
 }
 
@@ -271,6 +312,9 @@ impl BitPredictor for HybridPredictor<'_> {
         };
         self.decision += 1;
         if self.decision == 8 {
+            if let Some(copy) = self.copy.as_mut() {
+                copy.push_decoded(self.record.record.target);
+            }
             self.ctx.push(self.record.record.target);
             self.position += 1;
             self.decision = 0;
@@ -358,10 +402,18 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 let h = &head.heads[k];
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
-            out.push(coder_p1(
-                tables,
-                i32::from(code.logits[d]).saturating_add(shift),
-            ));
+            let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
+            let copy = if head.copy_weight_tenths == 0 {
+                None
+            } else {
+                let known = if d == 0 {
+                    0
+                } else {
+                    byte & (u8::MAX << (8 - d))
+                };
+                oracle_probability(&data[..position], d, known)
+            };
+            out.push(mix_probability(neural, copy, head.copy_weight_tenths));
         }
     });
     out
@@ -698,6 +750,69 @@ mod tests {
             }],
         };
         assert!(HybridHead::single_baf(head(1), 8, invalid).is_err());
+    }
+
+    #[test]
+    fn copy_expert_and_frozen_h1d_blend_are_causal_and_losslessly_decodable() {
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let base = HybridHead::single(head(1), 8);
+        let disabled = HybridHead::single_with_copy(head(1), 8, 0).unwrap();
+        let mixed = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
+        let default_mixed = HybridHead::single_with_default_copy(head(1), 8);
+        let copy_heavy = HybridHead::single_with_copy(head(1), 8, 10).unwrap();
+        let inputs = [
+            Vec::new(),
+            vec![7],
+            vec![7, 8],
+            vec![7, 8, 9],
+            vec![0u8; 2048],
+            b"abcabc".repeat(500),
+            text(71, 3000),
+            (0..4096).map(|i| (i * 29) as u8).collect::<Vec<_>>(),
+        ];
+        for data in inputs {
+            assert_eq!(
+                compress(&m, &tables, &mixed, &data),
+                compress(&m, &tables, &default_mixed, &data),
+                "default opt-in copy must use 20/80"
+            );
+            assert_eq!(
+                compress(&m, &tables, &base, &data),
+                compress(&m, &tables, &disabled, &data),
+                "weight 0 must preserve legacy H-1d stream"
+            );
+            for h in [&mixed, &copy_heavy] {
+                let fast = engine_p1s(&m, &tables, h, &data);
+                let oracle = oracle_p1s(&mut m, &tables, h, &data);
+                assert_eq!(fast, oracle, "independent causal oracle mismatch");
+                let container = compress(&m, &tables, h, &data);
+                assert_eq!(decompress(&m, &tables, h, &container).unwrap(), data);
+            }
+        }
+        let repeated = b"abcabc".repeat(50);
+        assert_ne!(
+            engine_p1s(&m, &tables, &base, &repeated),
+            engine_p1s(&m, &tables, &mixed, &repeated),
+            "repeated context should actually activate the copy expert"
+        );
+    }
+
+    #[test]
+    fn copy_expert_rejects_invalid_weight_and_does_not_look_at_future_bits() {
+        let tables = Tables::new();
+        let m = model(&tables);
+        let h = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
+        assert!(HybridHead::single_with_copy(head(1), 8, 11).is_err());
+        let history = b"abcabcabcabc";
+        let a = [history.as_slice(), b"aX"].concat();
+        let b = [history.as_slice(), b"zY"].concat();
+        let pa = engine_p1s(&m, &tables, &h, &a);
+        let pb = engine_p1s(&m, &tables, &h, &b);
+        let current = history.len() * 8;
+        assert_eq!(pa[..=current], pb[..=current]);
+        // A new document must reset the copy history: same data, same output.
+        assert_eq!(compress(&m, &tables, &h, &a), compress(&m, &tables, &h, &a));
     }
 
     #[test]
