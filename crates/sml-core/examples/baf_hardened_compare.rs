@@ -19,6 +19,8 @@
 //!   --max-samples N      max train+validation samples per fit (default 8192;
 //!                        width 16 needs >= 40960, else every fit errors with
 //!                        TooManySamples = status 2)
+//!   --search S           kflip (default) | beam | gf2 (BAF-SEARCH-COMPARE)
+//!   --beam-width N       beam width for --search beam (default 4)
 //!   --json PATH          write a JSON summary (means, admits, fit stats)
 //! Over-budget fits FAIL CLOSED (inactive atlas, not admitted, status=budget). The full `hybrid_logic_engine` is NOT
 //! an arm here (it executes learned HardLogicNetwork XOR payloads, which would
@@ -31,6 +33,7 @@ use sml_core::{
         AnfActivation, AssociativeFocusConfig, AssociativeFocusPage, BooleanAssociativeFocus,
     },
     boolean_associative_joint::{fit_joint_focus, JointFocusError, JointFocusPolicy},
+    boolean_associative_search::{fit_joint_focus_beam, fit_joint_focus_gf2},
     boolean_associative_train::{FocusFitPolicy, FocusTransition},
     PageId,
 };
@@ -57,6 +60,29 @@ struct Opts {
     parity4: bool,
     policy: JointFocusPolicy,
     json: Option<String>,
+    search: SearchKind,
+    beam_width: usize,
+}
+
+/// BAF-SEARCH-COMPARE: TRAIN-side search strategy for the anf_degree* arms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchKind {
+    /// `fit_joint_focus` (single flips + k-flip escapes), the default.
+    KFlip,
+    /// `fit_joint_focus_beam` (single flips, beam of `--beam-width`).
+    Beam,
+    /// `fit_joint_focus_gf2` (exact GF(2) solve on the feature bank).
+    Gf2,
+}
+
+impl SearchKind {
+    fn name(self) -> &'static str {
+        match self {
+            SearchKind::KFlip => "kflip",
+            SearchKind::Beam => "beam",
+            SearchKind::Gf2 => "gf2",
+        }
+    }
 }
 
 impl Default for Opts {
@@ -68,6 +94,8 @@ impl Default for Opts {
             parity4: false,
             policy: JointFocusPolicy::default(),
             json: None,
+            search: SearchKind::KFlip,
+            beam_width: 4,
         }
     }
 }
@@ -99,6 +127,15 @@ fn parse_opts() -> Result<Opts, String> {
             "--max-basis" => o.policy.local.max_basis_terms = num()? as usize,
             "--max-samples" => o.policy.local.max_samples = num()? as usize,
             "--json" => o.json = Some(value),
+            "--search" => {
+                o.search = match value.as_str() {
+                    "kflip" => SearchKind::KFlip,
+                    "beam" => SearchKind::Beam,
+                    "gf2" => SearchKind::Gf2,
+                    _ => return Err(format!("--search: unknown strategy {value}")),
+                }
+            }
+            "--beam-width" => o.beam_width = num()? as usize,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -442,14 +479,20 @@ fn fit_anf_stats(
         ..base
     };
     let start = Instant::now();
-    let fitted = fit_joint_focus(
-        cfg(),
-        pages,
-        &[PageId(10), PageId(20)],
-        train,
-        validation,
-        policy,
-    );
+    let editable = [PageId(10), PageId(20)];
+    let fitted = match opts().search {
+        SearchKind::KFlip => fit_joint_focus(cfg(), pages, &editable, train, validation, policy),
+        SearchKind::Beam => fit_joint_focus_beam(
+            cfg(),
+            pages,
+            &editable,
+            train,
+            validation,
+            policy,
+            opts().beam_width,
+        ),
+        SearchKind::Gf2 => fit_joint_focus_gf2(cfg(), pages, &editable, train, validation, policy),
+    };
     let micros = start.elapsed().as_micros();
     match fitted {
         Ok(r) => (
@@ -617,6 +660,13 @@ fn main() {
         }
     }
     println!();
+    if o.search != SearchKind::KFlip {
+        println!(
+            "# search: {} (beam_width={})",
+            o.search.name(),
+            o.beam_width
+        );
+    }
     println!("# fit stats (scaling bookkeeping only; status 0=ok 1=budget-fail-closed 2=error)");
     println!("family,seed,degree,evaluations,micros,status,train_error_bits");
     let mut json_fits = Vec::new();
@@ -638,8 +688,17 @@ fn main() {
     }
     if let Some(path) = &o.json {
         let p = o.policy;
+        let search = if o.search == SearchKind::KFlip {
+            String::new()
+        } else {
+            format!(
+                "\"search\":\"{}\",\"beam_width\":{},",
+                o.search.name(),
+                o.beam_width
+            )
+        };
         let json = format!(
-            "{{\"width\":{},\"seeds\":{seeds},\"max_degree\":{},\"parity4\":{},\"policy\":{{\"max_pair_flips\":{},\"max_triple_flips\":{},\"max_quad_flips\":{},\"max_candidate_evaluations\":{},\"max_basis_terms\":{}}},\"summary\":[{}],\"fits\":[{}]}}\n",
+            "{{{search}\"width\":{},\"seeds\":{seeds},\"max_degree\":{},\"parity4\":{},\"policy\":{{\"max_pair_flips\":{},\"max_triple_flips\":{},\"max_quad_flips\":{},\"max_candidate_evaluations\":{},\"max_basis_terms\":{}}},\"summary\":[{}],\"fits\":[{}]}}\n",
             o.width,
             o.max_degree,
             o.parity4,
