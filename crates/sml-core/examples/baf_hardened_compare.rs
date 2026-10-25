@@ -262,7 +262,24 @@ fn fit_anf(
     validation: &[FocusTransition],
     degree: usize,
 ) -> (BooleanAssociativeFocus, bool) {
+    fit_anf_with(
+        pages,
+        train,
+        validation,
+        degree,
+        JointFocusPolicy::default().max_pair_flips,
+    )
+}
+
+fn fit_anf_with(
+    pages: &[AssociativeFocusPage],
+    train: &[FocusTransition],
+    validation: &[FocusTransition],
+    degree: usize,
+    max_pair_flips: u64,
+) -> (BooleanAssociativeFocus, bool) {
     let policy = JointFocusPolicy {
+        max_pair_flips,
         local: FocusFitPolicy {
             max_degree: degree,
             ..FocusFitPolicy::default()
@@ -417,13 +434,12 @@ mod tests {
         assert_eq!(errs[3][0], 0);
     }
 
-    /// BAF-XOR2-DEGREE1-NEGATIVE: xor2 IS expressible at ANF degree 1 under
-    /// the set-only write semantics (oracle activation `e ^ s` is exact on
-    /// every split), yet greedy single-flip descent never reaches it: a lone
-    /// XOR atom does not strictly improve TRAIN (plateau). Locks the negative
-    /// result as a *search* failure, not a hypothesis-class failure.
+    /// BAF-XOR2-DEGREE1-NEGATIVE / pair-escape: xor2 IS expressible at ANF
+    /// degree 1 (oracle `e ^ s` exact on every split). Single-flip-only descent
+    /// (`max_pair_flips = 0`) plateaus; the bounded same-page pair-flip escape
+    /// (default policy) recovers the exact rule on all splits.
     #[test]
-    fn xor2_degree1_representable_but_greedy_misses() {
+    fn xor2_degree1_single_flip_plateaus_pair_escape_recovers() {
         use sml_core::boolean_associative_focus::AnfMonomial as M;
         for seed in 0..SEEDS {
             let target = Target::new(Family::Xor2, seed);
@@ -443,17 +459,18 @@ mod tests {
             }
             let model = BooleanAssociativeFocus::new(cfg(), oracle).expect("valid");
             for rows in &data {
-                assert_eq!(
-                    errors(rows, baf(&model)),
-                    0,
-                    "seed {seed}: oracle must be exact"
-                );
+                assert_eq!(errors(rows, baf(&model)), 0, "seed {seed}: oracle exact");
             }
-            let (fitted, _) = fit_anf(&pages(), &data[0], &data[1], 1);
+            let (single, _) = fit_anf_with(&pages(), &data[0], &data[1], 1, 0);
             assert!(
-                errors(&data[0], baf(&fitted)) > 0,
-                "seed {seed}: greedy now solves xor2; update docs/BAF-XOR2-DEGREE1-NEGATIVE.md"
+                errors(&data[0], baf(&single)) > 0,
+                "seed {seed}: single-flip-only now solves xor2; update docs"
             );
+            let (paired, admitted) = fit_anf(&pages(), &data[0], &data[1], 1);
+            assert!(admitted, "seed {seed}: pair escape not admitted");
+            for rows in &data {
+                assert_eq!(errors(rows, baf(&paired)), 0, "seed {seed}: pair escape");
+            }
         }
     }
 }
