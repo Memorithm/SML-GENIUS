@@ -35,6 +35,13 @@
 //! * `trace-h2-eval4` (same arguments, `EVAL4_MANIFEST.tsv`) does the same
 //!   for HYB H-2 (docs/HYB-H2-S5H-MOR-EXPERTS-PREREGISTRATION.md) on EVAL4,
 //!   as split 5 into `trace-eval4.bin` and `eval4.json`.
+//!
+//! `engine-h3-eval5` / `smoke-h3-eval5` serve HYB H-3
+//! (docs/HYB-H3-NATIVE-ENGINE-PREREGISTRATION.md): the frozen model of
+//! `run-h1d` and two heads (`single` H-1d heads or `routed` H-2 experts)
+//! run as a native compressor (`hyb_h3_engine`) over EVAL5, with every
+//! decision checked against the trace way. `engine-h3-synthetic` writes the
+//! cross-host `deterministic.csv` from synthetic inputs only.
 
 use sml_core::hyb_h1d_bank_head::BankPlane;
 use sml_core::{
@@ -871,6 +878,34 @@ fn json_str<'a>(json: &'a str, key: &str) -> Result<&'a str> {
     Ok(&rest[..rest.find('"').ok_or("unterminated string")?])
 }
 
+/// Restores the frozen `bytes_q4` model of a `run-h1d` output (`dir` is
+/// its `bytes_q4/`), after checking it was made from this manifest and
+/// that `weights.bin` is the model `trace.json` names.
+fn restore_h1d(plan: Plan, roster: &Roster, dir: &Path) -> Result<(Model, String)> {
+    let json = fs::read_to_string(dir.join("trace.json"))?;
+    if json_str(&json, "schema")? != "SML_GB11_P1_H1D_TRACE_V1"
+        || json_str(&json, "manifest_sha256")? != roster.manifest_sha
+    {
+        return Err("trace.json is not a run-h1d output of this manifest".into());
+    }
+    let (rule, update) = CONFIGS
+        .into_iter()
+        .find(|(r, u)| {
+            json_str(&json, "rule").is_ok_and(|n| n == r.name())
+                && json_str(&json, "update").is_ok_and(|n| n == u.name())
+        })
+        .ok_or("trace.json names no registered configuration")?;
+    let masks = h1d_masks();
+    let bank_bytes = bank_bytes("bytes_q4", plan.small_table, masks.len());
+    let mut model = Model::with_bank_bytes(masks, rule, update, bank_bytes);
+    model.read_weights(&fs::read(dir.join("weights.bin"))?)?;
+    let weights_sha = hex(&model.weights_sha());
+    if weights_sha != json_str(&json, "weights_sha256")? {
+        return Err("weights.bin differs from trace.json".into());
+    }
+    Ok((model, weights_sha))
+}
+
 /// A held-out sample traced by a frozen `run-h1d` model: EVAL3 for H-1d,
 /// EVAL4 for H-2. `slug` names the files (`trace-{slug}.bin`,
 /// `{slug}.json`), `role` the only manifest role admitted.
@@ -914,27 +949,7 @@ fn cli_h1d_eval(
 ) -> Result<()> {
     let roster = h1d_roster(root, manifest, expected, Some((eval, held.role)))?;
     let dir = p1.join("bytes_q4");
-    let json = fs::read_to_string(dir.join("trace.json"))?;
-    if json_str(&json, "schema")? != "SML_GB11_P1_H1D_TRACE_V1"
-        || json_str(&json, "manifest_sha256")? != roster.manifest_sha
-    {
-        return Err("trace.json is not a run-h1d output of this manifest".into());
-    }
-    let (rule, update) = CONFIGS
-        .into_iter()
-        .find(|(r, u)| {
-            json_str(&json, "rule").is_ok_and(|n| n == r.name())
-                && json_str(&json, "update").is_ok_and(|n| n == u.name())
-        })
-        .ok_or("trace.json names no registered configuration")?;
-    let masks = h1d_masks();
-    let bank_bytes = bank_bytes("bytes_q4", plan.small_table, masks.len());
-    let mut model = Model::with_bank_bytes(masks, rule, update, bank_bytes);
-    model.read_weights(&fs::read(dir.join("weights.bin"))?)?;
-    let weights_sha = hex(&model.weights_sha());
-    if weights_sha != json_str(&json, "weights_sha256")? {
-        return Err("weights.bin differs from trace.json".into());
-    }
+    let (mut model, weights_sha) = restore_h1d(plan, &roster, &dir)?;
     let tables = Tables::new();
     let eval_docs = || roster.docs.iter().filter(|d| d.role == Role::Eval2);
     let mut eval_seconds = 0.0;
@@ -991,8 +1006,242 @@ fn cli_h1d_eval(
     Ok(())
 }
 
+/// HYB H-3 EVAL5: DEV-bucket articles of peS2o-0005, never read before.
+const EVAL5_ROLE: &str = "EVAL5";
+/// H-3 GO: the hybrid compresses EVAL5 at least this much better than P1
+/// alone, for both seeds (container bits per byte).
+const H3_GAIN_BPC: f64 = 0.02;
+const H3_MAX_COST_RATIO: f64 = 1.5;
+/// The published bytes_q4 weights of the H-1d P1 run.
+const H3_P1_WEIGHTS_SHA256: &str =
+    "7f4c233d6c4d67e1d300068799f4653cfcaedda4158587478c99ec1d31c3c418";
+/// The published H-1d heads (seeds 11 and 23), used when H-2 is not GO.
+const H3_A1D_SHA256: [&str; 2] = [
+    "b77e3f1301c414ff21246b3c5ad600b07e2adf44633a671ecd90fd1160e5e46e",
+    "3c6192e8a248fb47680d941866e6cf22d6483636f539fa2aa4564430127c990f",
+];
+
+/// One engine arm of H-3 and its totals over EVAL5.
+struct EngineArm {
+    name: &'static str,
+    head: sml_core::hyb_h3_engine::HybridHead,
+    container_bytes: u64,
+    model_bits: f64,
+    encode_ns: u128,
+    decode_ns: u128,
+    containers: Vec<u8>,
+}
+
+/// `engine-h3-eval5` / `smoke-h3-eval5`: the frozen H-1d P1 and the H-3
+/// heads (`single`: the H-1d heads; `routed`: the H-2 experts) run as a
+/// native compressor over EVAL5. Every document is compressed and
+/// decompressed by each arm (P1 alone, then each seed), every decision is
+/// checked against the trace way, and `h3.tsv` gets the verdict.
+#[allow(clippy::too_many_arguments)]
+fn cli_h3(
+    plan: Plan,
+    root: &Path,
+    manifest: &Path,
+    p1: &Path,
+    expected: Option<&str>,
+    eval: &Path,
+    kind: &str,
+    head_paths: [&Path; 2],
+    out: &Path,
+) -> Result<()> {
+    use sml_core::hyb_h3_engine::{
+        compress, decompress, engine_p1s, oracle_p1s, parse_experts, parse_h1d_head, HybridHead,
+    };
+    let roster = h1d_roster(root, manifest, expected, Some((eval, EVAL5_ROLE)))?;
+    let dir = p1.join("bytes_q4");
+    let (mut model, weights_sha) = restore_h1d(plan, &roster, &dir)?;
+    if plan.label == "PREREGISTERED" && weights_sha != H3_P1_WEIGHTS_SHA256 {
+        return Err(format!("P1 weights {weights_sha} are not the H-1d bytes_q4 weights").into());
+    }
+    let mut head_shas = Vec::new();
+    let mut arms = vec![EngineArm {
+        name: "b0",
+        head: HybridHead::none(),
+        container_bytes: 0,
+        model_bits: 0.0,
+        encode_ns: 0,
+        decode_ns: 0,
+        containers: Vec::new(),
+    }];
+    for (k, (path, name)) in head_paths
+        .iter()
+        .zip(["b1_seed11", "b1_seed23"])
+        .enumerate()
+    {
+        let text = fs::read_to_string(path)?;
+        let sha = hex(&sha256(text.as_bytes()));
+        let head = match kind {
+            "single" => {
+                if plan.label == "PREREGISTERED" && sha != H3_A1D_SHA256[k] {
+                    return Err(format!("{} is not the H-1d head ({sha})", path.display()).into());
+                }
+                let (head, eighths) = parse_h1d_head(&text)?;
+                HybridHead::single(head, eighths)
+            }
+            "routed" => HybridHead::routed(parse_experts(&text)?),
+            _ => return Err("head kind must be single or routed".into()),
+        };
+        head_shas.push(sha);
+        arms.push(EngineArm {
+            name,
+            head,
+            container_bytes: 0,
+            model_bits: 0.0,
+            encode_ns: 0,
+            decode_ns: 0,
+            containers: Vec::new(),
+        });
+    }
+    let canonical_root = fs::canonicalize(root)?;
+    fs::create_dir(out)?;
+    if fs::canonicalize(out)?.starts_with(&canonical_root) {
+        return Err("output must not be inside the data root".into());
+    }
+    for arm in &arms {
+        fs::create_dir_all(out.join("containers").join(arm.name))?;
+    }
+    let tables = Tables::new();
+    let (mut docs, mut bytes, mut mismatches, mut failures) = (0u64, 0u64, 0u64, 0u64);
+    for doc in roster.docs.iter().filter(|d| d.role == Role::Eval2) {
+        let data = load(doc)?;
+        docs += 1;
+        bytes += data.len() as u64;
+        for arm in &mut arms {
+            let p1s = engine_p1s(&model, &tables, &arm.head, &data);
+            if p1s != oracle_p1s(&mut model, &tables, &arm.head, &data) {
+                mismatches += 1;
+            }
+            for (i, &p) in p1s.iter().enumerate() {
+                let bit = (data[i / 8] >> (7 - i % 8)) & 1 == 1;
+                let p = f64::from(if bit { p } else { p.wrapping_neg() }) / 4_294_967_296.0;
+                arm.model_bits -= p.log2();
+            }
+            let t = Instant::now();
+            let packed = compress(&model, &tables, &arm.head, &data);
+            arm.encode_ns += t.elapsed().as_nanos();
+            let t = Instant::now();
+            let back = decompress(&model, &tables, &arm.head, &packed);
+            arm.decode_ns += t.elapsed().as_nanos();
+            if back.as_deref().ok() != Some(data.as_slice()) {
+                failures += 1;
+            }
+            arm.container_bytes += packed.len() as u64;
+            arm.containers.extend_from_slice(&sha256(&packed));
+            // The containers stay with the run (outside the timed region).
+            fs::write(
+                out.join("containers")
+                    .join(arm.name)
+                    .join(format!("{}.smlh3", doc.index)),
+                &packed,
+            )?;
+        }
+    }
+    if docs == 0 {
+        return Err("empty EVAL5".into());
+    }
+    if hex(&model.weights_sha()) != weights_sha {
+        return Err("EVAL5 changed the weights".into());
+    }
+    let per_byte = |v: f64| v / bytes as f64;
+    let bpc: Vec<f64> = arms
+        .iter()
+        .map(|a| per_byte(8.0 * a.container_bytes as f64))
+        .collect();
+    let us = |ns: u128| ns as f64 / 1000.0 / bytes as f64;
+    let mut report = format!(
+        "label\t{}\nschema\tSML_HYB_H3_ENGINE_V1\nmanifest_sha256\t{}\neval5_manifest_sha256\t{}\n\
+         weights_sha256\t{weights_sha}\ntables_sha256\t{}\nhead_kind\t{kind}\n\
+         head_seed11_sha256\t{}\nhead_seed23_sha256\t{}\neval5_docs\t{docs}\neval5_bytes\t{bytes}\n\
+         engine_oracle_mismatches\t{mismatches}\nround_trip_failures\t{failures}\n",
+        plan.label,
+        roster.manifest_sha,
+        roster.eval2_sha.as_deref().unwrap_or("none"),
+        hex(&tables.sha()),
+        head_shas[0],
+        head_shas[1],
+    );
+    for (arm, &b) in arms.iter().zip(&bpc) {
+        let n = arm.name;
+        report += &format!(
+            "{n}_container_bytes\t{}\n{n}_container_bpc\t{b:.9}\n{n}_model_bpc\t{:.9}\n\
+             {n}_encode_us_per_byte\t{:.4}\n{n}_decode_us_per_byte\t{:.4}\n\
+             {n}_admitted_head_weights\t{}\n{n}_containers_sha256\t{}\n",
+            arm.container_bytes,
+            per_byte(arm.model_bits),
+            us(arm.encode_ns),
+            us(arm.decode_ns),
+            arm.head.admitted_weights(),
+            hex(&sha256(&arm.containers)),
+        );
+    }
+    let gains = [bpc[0] - bpc[1], bpc[0] - bpc[2]];
+    let spread = (bpc[1] - bpc[2]).abs();
+    let ratio = |s: usize, ns: fn(&EngineArm) -> u128| ns(&arms[s]) as f64 / ns(&arms[0]) as f64;
+    let encode = [ratio(1, |a| a.encode_ns), ratio(2, |a| a.encode_ns)];
+    let decode = [ratio(1, |a| a.decode_ns), ratio(2, |a| a.decode_ns)];
+    let quality = gains.iter().all(|&g| g > H3_GAIN_BPC && g > 2.0 * spread);
+    let cost = encode
+        .iter()
+        .chain(&decode)
+        .all(|&r| r <= H3_MAX_COST_RATIO);
+    let verdict = match (mismatches + failures == 0, quality, cost) {
+        (false, _, _) => "NO_GO_EXACTNESS",
+        (true, false, _) => "NO_GO",
+        (true, true, false) => "GO_DIAGNOSTIC_COST",
+        (true, true, true) => "GO",
+    };
+    report += &format!(
+        "gain_seed11_bpc\t{:.9}\ngain_seed23_bpc\t{:.9}\nseed_spread_bpc\t{spread:.9}\n\
+         encode_cost_ratio_seed11\t{:.4}\nencode_cost_ratio_seed23\t{:.4}\n\
+         decode_cost_ratio_seed11\t{:.4}\ndecode_cost_ratio_seed23\t{:.4}\n\
+         gain_threshold_bpc\t{H3_GAIN_BPC}\nmax_cost_ratio\t{H3_MAX_COST_RATIO}\n\
+         dev_read\tfalse\ntest\tUNOPENED\nsource_commit\t{}\nverdict\t{verdict}\n",
+        gains[0],
+        gains[1],
+        encode[0],
+        encode[1],
+        decode[0],
+        decode[1],
+        std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
+    );
+    fs::write(out.join("h3.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
+/// `engine-h3-synthetic NEW_OUTPUT_DIR`: the cross-host determinism file
+/// (synthetic model, heads and documents; no data is read) and the
+/// engine timing on this host.
+fn cli_h3_synthetic(out: &Path) -> Result<()> {
+    use sml_core::hyb_h3_engine::{compress, synthetic};
+    fs::create_dir(out)?;
+    let csv = synthetic::deterministic_csv();
+    fs::write(out.join("deterministic.csv"), &csv)?;
+    let tables = Tables::new();
+    let model = synthetic::model(&tables);
+    let doc = synthetic::text(4242, 1 << 20);
+    let mut timing = String::from("head\tbytes\tencode_us_per_byte\n");
+    for (name, head) in synthetic::heads() {
+        let t = Instant::now();
+        std::hint::black_box(compress(&model, &tables, &head, &doc));
+        let us = t.elapsed().as_secs_f64() * 1e6 / doc.len() as f64;
+        timing += &format!("{name}\t{}\t{us:.4}\n", doc.len());
+    }
+    fs::write(out.join("timing.tsv"), &timing)?;
+    print!(
+        "deterministic_sha256\t{}\n{timing}",
+        hex(&sha256(csv.as_bytes()))
+    );
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
-    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3|trace-h2-eval4|smoke-h2-eval4) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL_MANIFEST.tsv";
+    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3|trace-h2-eval4|smoke-h2-eval4) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL_MANIFEST.tsv | (engine-h3-eval5|smoke-h3-eval5) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL5_MANIFEST.tsv single|routed HEAD_SEED11 HEAD_SEED23 NEW_OUTPUT_DIR | engine-h3-synthetic NEW_OUTPUT_DIR";
     match args {
         [_, mode, root, manifest, out, sha] if mode == "run-h1d" || mode == "smoke-h1d" => {
             let base = if mode == "run-h1d" { RUN } else { SMOKE };
@@ -1033,6 +1282,31 @@ fn cli(args: &[String]) -> Result<()> {
                 Path::new(eval),
                 held,
             );
+        }
+        [_, mode, root, manifest, p1, sha, eval, kind, head11, head23, out]
+            if mode == "engine-h3-eval5" || mode == "smoke-h3-eval5" =>
+        {
+            let base = if mode == "engine-h3-eval5" {
+                RUN
+            } else {
+                SMOKE
+            };
+            let plan = Plan { cal: true, ..base };
+            let expected = (sha != "-").then_some(sha.as_str());
+            return cli_h3(
+                plan,
+                Path::new(root),
+                Path::new(manifest),
+                Path::new(p1),
+                expected,
+                Path::new(eval),
+                kind,
+                [Path::new(head11), Path::new(head23)],
+                Path::new(out),
+            );
+        }
+        [_, mode, out] if mode == "engine-h3-synthetic" => {
+            return cli_h3_synthetic(Path::new(out));
         }
         _ => {}
     }
@@ -1411,7 +1685,7 @@ mod tests {
                 .map(|s| s.to_string())
                 .chain([&data, &manifest_path, &home.join(out)].map(|p| p.display().to_string()))
                 .collect();
-            if mode.contains("h1d") || mode.contains("h2") {
+            if mode.contains("h1d") || mode.contains("h2") || mode.contains("h3") {
                 v.push("-".into());
             }
             v.extend(tail.iter().map(|p| p.display().to_string()));
@@ -1497,6 +1771,81 @@ mod tests {
                 .len(),
             records * BANK_PLANE_BYTES as u64
         );
+        // H-3: the engine compresses EVAL5 with P1 alone and both heads,
+        // matches the trace way on every decision and round-trips.
+        let mut eval5 = format!("{HEADER}\n");
+        for i in 0..2 {
+            let text = format!("a third unseen sample, number {i}; ").repeat(300);
+            let name = format!("h{i}.txt");
+            fs::write(data.join(&name), &text).unwrap();
+            eval5.push_str(&format!(
+                "EVAL5\t{name}\t{}\t{}\tOWNED_REVIEWED\n",
+                text.len(),
+                hex(&sha256(text.as_bytes()))
+            ));
+        }
+        let eval5_path = home.join("eval5.tsv");
+        fs::write(&eval5_path, &eval5).unwrap();
+        let row = sml_core::hyb_h1d_bank_head::ROW;
+        let depths = sml_core::hyb_h1_residual::DEPTHS;
+        let ones = vec!["1"; depths].join(",");
+        let heads: Vec<PathBuf> = [11u64, 23]
+            .iter()
+            .map(|&seed| {
+                let weights: Vec<String> = (0..depths * row)
+                    .map(|i| {
+                        ((sml_core::hyb_h1_residual::splitmix(seed ^ i as u64) % 3) as i8 - 1)
+                            .to_string()
+                    })
+                    .collect();
+                let path = home.join(format!("head{seed}.tsv"));
+                fs::write(
+                    &path,
+                    format!(
+                        "row\t{row}\ndepths\t{depths}\nbanks\t8\nlambda_eighths\t2\nunit\t{ones}\nbias\t{ones}\nweights\t{}\n",
+                        weights.join(",")
+                    ),
+                )
+                .unwrap();
+                path
+            })
+            .collect();
+        let h3 = |eval: &Path, kind: &str, out: &str| {
+            let mut v = args("smoke-h3-eval5", "out", &[eval]);
+            v.push(kind.into());
+            v.extend(heads.iter().map(|p| p.display().to_string()));
+            v.push(home.join(out).display().to_string());
+            v
+        };
+        assert!(cli(&h3(&eval3_path, "single", "h3-bad")).is_err());
+        assert!(cli(&h3(&eval5_path, "neither", "h3-bad2")).is_err());
+        cli(&h3(&eval5_path, "single", "h3")).unwrap();
+        let report = fs::read_to_string(home.join("h3/h3.tsv")).unwrap();
+        for line in [
+            "label\tSMOKE",
+            "head_kind\tsingle",
+            "eval5_docs\t2",
+            "engine_oracle_mismatches\t0",
+            "round_trip_failures\t0",
+            "dev_read\tfalse",
+        ] {
+            assert!(report.lines().any(|l| l == line), "{line}\n{report}");
+        }
+        assert!(
+            cli(&h3(&eval5_path, "single", "h3")).is_err(),
+            "no overwrite"
+        );
+        // Every container is kept, per arm and document.
+        for arm in ["b0", "b1_seed11", "b1_seed23"] {
+            let kept = fs::read_dir(home.join("h3/containers").join(arm)).unwrap();
+            assert_eq!(kept.count(), 2);
+        }
+        // The engine ran the frozen model of the run.
+        let weights_line = report
+            .lines()
+            .find_map(|l| l.strip_prefix("weights_sha256\t"))
+            .unwrap();
+        assert_eq!(weights_line, json_str(&json, "weights_sha256").unwrap());
         // Tampered weights are refused.
         let mut weights = fs::read(dir.join("weights.bin")).unwrap();
         weights[0] ^= 1;
@@ -1555,5 +1904,25 @@ mod tests {
         wrong.push("00".repeat(32));
         assert!(cli(&wrong).is_err());
         fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn the_h3_determinism_file_is_the_library_one() {
+        let out = std::env::temp_dir().join(format!("gb11-p1-h3-syn-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&out);
+        let args: Vec<String> = ["bin", "engine-h3-synthetic"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([out.display().to_string()])
+            .collect();
+        cli(&args).unwrap();
+        assert_eq!(
+            fs::read_to_string(out.join("deterministic.csv")).unwrap(),
+            sml_core::hyb_h3_engine::synthetic::deterministic_csv()
+        );
+        let timing = fs::read_to_string(out.join("timing.tsv")).unwrap();
+        assert_eq!(timing.lines().count(), 4);
+        assert!(cli(&args).is_err(), "no overwrite");
+        fs::remove_dir_all(&out).unwrap();
     }
 }
