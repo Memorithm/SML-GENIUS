@@ -219,7 +219,11 @@ mod tests {
             expert.prepare_byte();
             for target in [0u8, 0xff, 0x5a, (x >> 17) as u8] {
                 for depth in 0..8 {
-                    let known = target & (u8::MAX << (8 - depth));
+                    let known = if depth == 0 {
+                        0
+                    } else {
+                        target & (u8::MAX << (8 - depth))
+                    };
                     assert_eq!(
                         expert.probability(depth, known),
                         oracle_probability(&history, depth, known),
