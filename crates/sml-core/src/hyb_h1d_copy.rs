@@ -13,6 +13,8 @@
 pub const COPY_WINDOW: usize = 256;
 /// Longest suffix supported by the initial research control.
 pub const COPY_MAX_SUFFIX: usize = 4;
+/// Owner-selected initial opt-in mixture: 20% recopy, 80% frozen H-1d.
+pub const DEFAULT_COPY_WEIGHT_TENTHS: u8 = 2;
 const Q32: u64 = 1u64 << 32;
 
 /// Fixed-footprint recurrent copy expert. It never stores any part of the
