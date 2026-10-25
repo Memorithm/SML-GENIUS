@@ -16,7 +16,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Calibration is from disjoint synthetic TRAIN strings, not heldout
     // code losses, and it is common to both H-1d seeds.
     for _ in 0..6 {
-        train.observe_train_document(&b"ababababcababababc".repeat(250))
+        train
+            .observe_train_document(&b"ababababcababababc".repeat(250))
             .map_err(|e| format!("TRAIN Gaussian calibration observation: {e:?}"))?;
     }
     let profile = GaussianCopyProfile::fit_train_only(&train)
@@ -37,12 +38,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let documents = [
         ("repeat", b"abcabcabc---abcabcabc---".repeat(96)),
         ("holdout", synthetic::text(97, 2304)),
-        ("binary", (0..2304).map(|i| (i as u8).wrapping_mul(37)).collect()),
+        (
+            "binary",
+            (0..2304).map(|i| (i as u8).wrapping_mul(37)).collect(),
+        ),
     ];
     for seed in [11, 23] {
         let heads = [
             ("neural", HybridHead::single(synthetic::head(seed), 8)),
-            ("fixed20", HybridHead::single_with_default_copy(synthetic::head(seed), 8)),
+            (
+                "fixed20",
+                HybridHead::single_with_default_copy(synthetic::head(seed), 8),
+            ),
             (
                 "gaussian",
                 HybridHead::single_with_gaussian_copy(synthetic::head(seed), 8, profile),
