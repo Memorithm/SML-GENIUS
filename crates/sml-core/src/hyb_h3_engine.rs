@@ -44,7 +44,7 @@ pub struct HybridHead {
     fused: Vec<FusedBankHead>,
     admitted: Vec<bool>,
     eighths: i32,
-    copy_weight_eighths: u8,
+    copy_weight_tenths: u8,
 }
 
 impl HybridHead {
@@ -59,7 +59,7 @@ impl HybridHead {
             fused: Vec::new(),
             admitted: Vec::new(),
             eighths: 0,
-            copy_weight_eighths: 0,
+            copy_weight_tenths: 0,
         }
     }
 
@@ -74,7 +74,7 @@ impl HybridHead {
             heads: vec![head],
             admitted: vec![true],
             eighths,
-            copy_weight_eighths: 0,
+            copy_weight_tenths: 0,
         }
     }
 
@@ -84,13 +84,13 @@ impl HybridHead {
     pub fn single_with_copy(
         head: BankHead,
         eighths: i32,
-        copy_weight_eighths: u8,
+        copy_weight_tenths: u8,
     ) -> Result<Self, &'static str> {
-        if copy_weight_eighths > 8 {
-            return Err("H-1d copy mixture weight must be in 0..=8 eighths");
+        if copy_weight_tenths > 10 {
+            return Err("H-1d copy mixture weight must be in 0..=10 tenths");
         }
         let mut result = Self::single(head, eighths);
-        result.copy_weight_eighths = copy_weight_eighths;
+        result.copy_weight_tenths = copy_weight_tenths;
         Ok(result)
     }
 
@@ -136,7 +136,7 @@ impl HybridHead {
             heads: exported.heads,
             admitted: exported.admitted.to_vec(),
             eighths: exported.eighths,
-            copy_weight_eighths: 0,
+            copy_weight_tenths: 0,
         }
     }
 
@@ -230,7 +230,7 @@ impl<'a> HybridPredictor<'a> {
             code: ByteCode::default(),
             record: BankRecord::default(),
             expert: None,
-            copy: (head.copy_weight_eighths > 0).then(CopyExpert::default),
+            copy: (head.copy_weight_tenths > 0).then(CopyExpert::default),
             p1: HALF,
         };
         predictor.prepare();
@@ -280,7 +280,7 @@ impl<'a> HybridPredictor<'a> {
             mix_probability(
                 neural,
                 copy.probability(d, r.record.target),
-                self.head.copy_weight_eighths,
+                self.head.copy_weight_tenths,
             )
         });
     }
@@ -395,7 +395,7 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
             let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
-            let copy = if head.copy_weight_eighths == 0 {
+            let copy = if head.copy_weight_tenths == 0 {
                 None
             } else {
                 let known = if d == 0 {
@@ -405,7 +405,7 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 };
                 oracle_probability(&data[..position], d, known)
             };
-            out.push(mix_probability(neural, copy, head.copy_weight_eighths));
+            out.push(mix_probability(neural, copy, head.copy_weight_tenths));
         }
     });
     out
@@ -751,7 +751,7 @@ mod tests {
         let base = HybridHead::single(head(1), 8);
         let disabled = HybridHead::single_with_copy(head(1), 8, 0).unwrap();
         let mixed = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
-        let copy_heavy = HybridHead::single_with_copy(head(1), 8, 8).unwrap();
+        let copy_heavy = HybridHead::single_with_copy(head(1), 8, 10).unwrap();
         let inputs = [
             Vec::new(),
             vec![7],
@@ -789,7 +789,7 @@ mod tests {
         let tables = Tables::new();
         let m = model(&tables);
         let h = HybridHead::single_with_copy(head(1), 8, 2).unwrap();
-        assert!(HybridHead::single_with_copy(head(1), 8, 9).is_err());
+        assert!(HybridHead::single_with_copy(head(1), 8, 11).is_err());
         let history = b"abcabcabcabc";
         let a = [history.as_slice(), b"aX"].concat();
         let b = [history.as_slice(), b"zY"].concat();
