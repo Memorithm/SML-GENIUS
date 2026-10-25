@@ -151,8 +151,7 @@ impl HeadGateEvidence {
             return Err(HeadGateError::TooManySamples);
         }
         let index = row.index();
-        self.delta[index] +=
-            i128::from(row.p1_microbits) - i128::from(row.neural_microbits);
+        self.delta[index] += i128::from(row.p1_microbits) - i128::from(row.neural_microbits);
         self.count[index] += 1;
         self.p1_microbits += i128::from(row.p1_microbits);
         self.neural_microbits += i128::from(row.neural_microbits);
@@ -317,8 +316,8 @@ pub fn fit_head_gate(
     let validation_candidate = validation.routed_microbits(&candidate);
     let required = i128::from(policy.min_validation_improvement_microbits_per_byte)
         * i128::from(validation.samples);
-    let admitted = current_loss < train_baseline
-        && validation_candidate <= validation_baseline - required;
+    let admitted =
+        current_loss < train_baseline && validation_candidate <= validation_baseline - required;
     let gate = if admitted {
         candidate.clone()
     } else {
