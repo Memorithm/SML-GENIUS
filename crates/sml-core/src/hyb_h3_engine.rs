@@ -20,7 +20,7 @@ use crate::{
     bool_coder::{BinaryDecoder, BinaryEncoder, BitPredictor, CoderError},
     boolean_associative_focus::AnfActivation,
     gb11_p1_stream::{ByteCode, Context, Model, PhaseBlocks, Tables, TraceRecord, MAX_BANKS},
-    hyb_baf_neural_gate::{causal_features, oracle_causal_features},
+    hyb_baf_neural_gate::{causal_features, hash_gate_is_active, oracle_causal_features},
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
@@ -37,6 +37,7 @@ const HALF: u32 = 1 << 31;
 #[derive(Debug, Clone)]
 pub struct HybridHead {
     baf_gate: Option<AnfActivation>,
+    hash_gate_threshold: Option<u16>,
     router: Option<Router>,
     heads: Vec<BankHead>,
     fused: Vec<FusedBankHead>,
@@ -51,6 +52,7 @@ impl HybridHead {
         Self {
             router: None,
             baf_gate: None,
+            hash_gate_threshold: None,
             heads: Vec::new(),
             fused: Vec::new(),
             admitted: Vec::new(),
@@ -64,6 +66,7 @@ impl HybridHead {
         Self {
             router: None,
             baf_gate: None,
+            hash_gate_threshold: None,
             fused: vec![FusedBankHead::new(&head)],
             heads: vec![head],
             admitted: vec![true],
@@ -90,6 +93,17 @@ impl HybridHead {
         Ok(result)
     }
 
+    /// Non-learned TRAIN-activity-matched hash control, with identical
+    /// frozen head, P1 bytes, and exact arithmetic coder.
+    pub fn single_hash(head: BankHead, eighths: i32, threshold: u16) -> Result<Self, &'static str> {
+        if threshold > 256 {
+            return Err("BAF-H4 matched hash threshold is outside 0..=256");
+        }
+        let mut result = Self::single(head, eighths);
+        result.hash_gate_threshold = Some(threshold);
+        Ok(result)
+    }
+
     /// The H-2 router; bytes routed to an expert that is not admitted are
     /// coded by P1 alone.
     #[must_use]
@@ -97,6 +111,7 @@ impl HybridHead {
         Self {
             router: Some(exported.router),
             baf_gate: None,
+            hash_gate_threshold: None,
             fused: exported.heads.iter().map(FusedBankHead::new).collect(),
             heads: exported.heads,
             admitted: exported.admitted.to_vec(),
@@ -107,6 +122,9 @@ impl HybridHead {
     /// Expert that corrects this byte, from what is known at decision 0.
     #[inline]
     fn select(&self, r: &BankRecord) -> Option<usize> {
+        if self.hash_gate_threshold.is_some_and(|threshold| !hash_gate_is_active(r, threshold)) {
+            return None;
+        }
         if self.baf_gate.as_ref().is_some_and(|gate| {
             let (event, state) = causal_features(r);
             !gate.is_active(u64::from(event), u64::from(state))
@@ -122,6 +140,9 @@ impl HybridHead {
     }
 
     fn oracle_select(&self, r: &BankRecord) -> Option<usize> {
+        if self.hash_gate_threshold.is_some_and(|threshold| !hash_gate_is_active(r, threshold)) {
+            return None;
+        }
         if self.baf_gate.as_ref().is_some_and(|gate| {
             let (event, state) = oracle_causal_features(r);
             !gate.is_active(u64::from(event), u64::from(state))
