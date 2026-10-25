@@ -193,6 +193,26 @@ impl BankMaster {
         }
     }
 
+    /// Code length in bits of one byte under this f32 master (the
+    /// training model, before export).
+    #[must_use]
+    pub fn cost_bits(&self, r: &BankRecord) -> f64 {
+        let mut bits = 0.0;
+        for depth in 0..DEPTHS {
+            let words = bank_features(r, depth);
+            let row = &self.weights[depth * ROW..(depth + 1) * ROW];
+            let mut score = self.bias[depth];
+            for_each_set_bit(&words, |i| score += row[i]);
+            let z = f64::from(r.record.logits[depth]) / STRETCH_SCALE
+                + f64::from(score) * f64::from(STEP_UNITS) / STRETCH_SCALE;
+            // -log2(sigmoid(+-z)), stable for large |z|.
+            let signed = if target_bit(&r.record, depth) { z } else { -z };
+            bits +=
+                (-signed).max(0.0) / std::f64::consts::LN_2 + (1.0 + (-signed.abs()).exp()).log2();
+        }
+        bits
+    }
+
     #[must_use]
     pub fn weights(&self) -> &[f32] {
         &self.weights
@@ -201,6 +221,13 @@ impl BankMaster {
     #[must_use]
     pub fn bias(&self) -> [f32; DEPTHS] {
         self.bias
+    }
+
+    /// Rebuilds a master from its weights (`DEPTHS * ROW`) and biases.
+    #[must_use]
+    pub fn from_parts(weights: Vec<f32>, bias: [f32; DEPTHS]) -> Self {
+        assert_eq!(weights.len(), DEPTHS * ROW);
+        Self { weights, bias }
     }
 }
 
