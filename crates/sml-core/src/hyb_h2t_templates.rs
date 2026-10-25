@@ -342,7 +342,8 @@ pub const MATCH_MIN: usize = 12;
 /// Hash table size of a match model over a whole corpus.
 pub const MATCH_TABLE_BITS: u32 = 22;
 
-/// LZP match predictor over one stream: after `MATCH_MIN` bytes it looks
+/// LZP match predictor over one stream: after `min` bytes (`MATCH_MIN`
+/// by default) it looks
 /// up where that context last occurred and predicts the byte that
 /// followed; a correct prediction extends the match, a wrong one drops it.
 #[derive(Debug, Clone)]
@@ -352,6 +353,7 @@ pub struct MatchModel {
     pointer: Option<usize>,
     length: usize,
     bits: u32,
+    min: usize,
 }
 
 impl Default for MatchModel {
@@ -369,13 +371,20 @@ impl MatchModel {
     /// A model with a `2^bits` entry hash table (`bits` in 8..=30).
     #[must_use]
     pub fn with_bits(bits: u32) -> Self {
-        assert!((8..=30).contains(&bits));
+        Self::with_min(bits, MATCH_MIN)
+    }
+
+    /// A model that hashes the last `min` bytes (`min` >= 1).
+    #[must_use]
+    pub fn with_min(bits: u32, min: usize) -> Self {
+        assert!((8..=30).contains(&bits) && min >= 1);
         Self {
             history: Vec::new(),
             table: vec![0; 1 << bits],
             pointer: None,
             length: 0,
             bits,
+            min,
         }
     }
 
@@ -388,7 +397,7 @@ impl MatchModel {
     }
 
     fn hash(&self) -> usize {
-        let tail = &self.history[self.history.len() - MATCH_MIN..];
+        let tail = &self.history[self.history.len() - self.min..];
         let mut h = 0u64;
         for &b in tail {
             h = splitmix(h ^ u64::from(b));
@@ -408,7 +417,7 @@ impl MatchModel {
             }
         }
         self.history.push(b);
-        if self.history.len() >= MATCH_MIN {
+        if self.history.len() >= self.min {
             let h = self.hash();
             if self.pointer.is_none() && self.table[h] != 0 {
                 self.pointer = Some(self.table[h] as usize);

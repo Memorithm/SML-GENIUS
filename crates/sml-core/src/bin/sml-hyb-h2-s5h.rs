@@ -32,16 +32,21 @@
 //!   only, flat templates from the shape of the decoded text
 //!   (`hyb_h2t_templates`), one expert per template, a match-model
 //!   estimate; it writes `h2t.tsv` and never opens EVAL4.
+//! * `copy P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is the H-2c copy-expert
+//!   feasibility diagnostic (docs/HYB-H2C-COPY-FEASIBILITY.md): CAL only,
+//!   a per-document match model mixed after each A1d head
+//!   (`hyb_h2c_copy`) with a random-byte null control; it writes
+//!   `h2c.tsv` and never opens EVAL4.
 //!
 //! The S5h DEV, EVAL2 and EVAL3 are never opened. `replay EXPERTS.tsv`
 //! prints the digest of a router and its experts on synthetic records
-//! (cross-host check); `smoke` and `smoke-templates` run on generated
+//! (cross-host check); `smoke`, `smoke-templates` and `smoke-copy` run on generated
 //! traces and are labelled SMOKE, never a result. TEST is never read. NOT_PROMOTED.
 
 use sml_core::{
     elastic_ngram_paged_sha::{hex, sha256},
     gb11_p1_stream::{read_trace, TraceRecord, MAX_BANKS, TRACE_RECORD_BYTES},
-    hyb_h1_residual::{a0_cost, splitmix, DEPTHS},
+    hyb_h1_residual::{a0_cost, decision_cost, splitmix, target_bit, DEPTHS},
     hyb_h1b_calibrated::{LAMBDA_EIGHTHS, TAUS},
     hyb_h1c_stable::{BURN_IN_EPOCHS, EPOCHS},
     hyb_h1d_bank_head::{
@@ -52,6 +57,7 @@ use sml_core::{
         best_expert, hash_route, initial_group, quartile_edges, route_bits, router_bytes,
         train_routed, Majority, Router, EXPERTS, ROUNDS, ROUTE_WORDS,
     },
+    hyb_h2c_copy::{copy_bucket, expected_bit, CopyFit, CopyMixer, COPY_BUCKETS},
     hyb_h2t_templates::{
         agreement, cluster, length_bucket, nearest, MatchModel, Shape, ShapeState,
     },
@@ -1190,15 +1196,25 @@ fn match_report(pair: &mut Pair, fit: &[Span], sel: &[Span], variant: &str) -> R
     ))
 }
 
-fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
-    fs::create_dir(out)?;
+/// The H-1d calibration trace split into CAL-FIT and CAL-SEL, with the
+/// published A1d heads. Nothing else is opened.
+struct Cal {
+    dir: std::path::PathBuf,
+    weights: String,
+    heads: Vec<(BankHead, i32)>,
+    fit: Vec<Span>,
+    sel: Vec<Span>,
+    sel_records: u64,
+}
+
+fn load_cal(p1: &Path, h1d: &Path, label: &str) -> Result<Cal> {
     let dir = p1.join(BASE);
     let json = fs::read_to_string(dir.join("trace.json"))?;
-    let weights = json_str(&json, "weights_sha256")?;
+    let weights = json_str(&json, "weights_sha256")?.to_string();
     if label == "PREREGISTERED" && weights != P1_WEIGHTS_SHA256 {
         return Err(format!("P1 weights {weights} are not the H-1d bytes_q4 weights").into());
     }
-    let a1d_heads = h1d_heads(h1d, label, weights)?;
+    let heads = h1d_heads(h1d, label, &weights)?;
     let cal = scan(
         &dir.join("trace-cal.bin"),
         &dir.join("trace-cal.banks.bin"),
@@ -1216,7 +1232,27 @@ fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     if fit.is_empty() || sel.is_empty() {
         return Err("CAL-FIT and CAL-SEL must both be non-empty".into());
     }
-    let sel_records: u64 = sel.iter().map(|s| s.count).sum();
+    let sel_records = sel.iter().map(|s| s.count).sum();
+    Ok(Cal {
+        dir,
+        weights,
+        heads,
+        fit,
+        sel,
+        sel_records,
+    })
+}
+
+fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
+    fs::create_dir(out)?;
+    let Cal {
+        dir,
+        weights,
+        heads: a1d_heads,
+        fit,
+        sel,
+        sel_records,
+    } = load_cal(p1, h1d, label)?;
     let mut pair = Pair::open(&dir, "trace-cal")?;
     let (mut a0_sel, mut a1d_sel) = (0.0, [0.0; SEEDS.len()]);
     pair.all(&sel, |r| {
@@ -1330,6 +1366,179 @@ fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     Ok(())
 }
 
+// H-2c: a per-document copy expert mixed after the A1d head
+// (`HYB-H2C-COPY-FEASIBILITY.md`). CAL only: shifts are fitted on
+// CAL-FIT, the context length is chosen and the gain measured on CAL-SEL.
+
+/// Context lengths hashed by the copy expert; one is chosen on CAL-SEL.
+const COPY_MINS: [usize; 3] = [6, 8, 12];
+/// Hash table of one document's copy expert.
+const COPY_TABLE_BITS: u32 = 18;
+/// Both seeds must gain this much over A1d on CAL-SEL.
+const COPY_GAIN_BPC: f64 = CAL_GATE_BPC;
+/// The null control (random predicted byte) must stay within this.
+const COPY_NULL_BPC: f64 = 0.002;
+/// The variants: each context length, then the null control, which keeps
+/// the timing of the longest-context expert but predicts a random byte.
+const COPY_VARIANTS: usize = COPY_MINS.len() + 1;
+
+fn copy_name(v: usize) -> String {
+    COPY_MINS
+        .get(v)
+        .map_or_else(|| "null".to_string(), |m| format!("min{m}"))
+}
+
+/// Stretches of the eight decisions after one A1d head.
+fn head_stretches(head: &BankHead, eighths: i32, r: &BankRecord) -> [i32; DEPTHS] {
+    std::array::from_fn(|d| {
+        i32::from(r.record.logits[d]).saturating_add(head.correction(head.raw(r, d), d, eighths))
+    })
+}
+
+/// Calls `each` with every CAL record of `spans` and the predictions of
+/// each variant, from models that restart with every document.
+fn copy_pass(
+    pair: &mut Pair,
+    spans: &[Span],
+    mut each: impl FnMut(&BankRecord, &[Option<(u8, usize)>; COPY_VARIANTS]),
+) -> Result<()> {
+    for &span in spans {
+        let mut models = COPY_MINS.map(|m| MatchModel::with_min(COPY_TABLE_BITS, m));
+        pair.each(span, |r| {
+            let mut predictions = [None; COPY_VARIANTS];
+            for (v, model) in models.iter().enumerate() {
+                predictions[v] = model.predict();
+            }
+            predictions[COPY_MINS.len()] = predictions[COPY_MINS.len() - 1].map(|(_, n)| {
+                let noise =
+                    splitmix((u64::from(r.record.doc_index) << 32) | u64::from(r.record.position));
+                (noise as u8, n)
+            });
+            each(r, &predictions);
+            for model in &mut models {
+                model.push(r.record.target);
+            }
+        })?;
+    }
+    Ok(())
+}
+
+fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
+    fs::create_dir(out)?;
+    let cal = load_cal(p1, h1d, label)?;
+    let mut pair = Pair::open(&cal.dir, "trace-cal")?;
+    let seeds = cal.heads.len();
+    let mut fits: Vec<Vec<CopyFit>> = (0..seeds)
+        .map(|_| (0..COPY_VARIANTS).map(|_| CopyFit::new()).collect())
+        .collect();
+    copy_pass(&mut pair, &cal.fit, |r, predictions| {
+        for (k, (head, eighths)) in cal.heads.iter().enumerate() {
+            let s = head_stretches(head, *eighths, r);
+            for (v, p) in predictions.iter().enumerate() {
+                let Some((q, n)) = *p else { continue };
+                for (d, &stretch) in s.iter().enumerate() {
+                    if let Some(e) = expected_bit(q, r.record.target, d) {
+                        fits[k][v].add(stretch, e, target_bit(&r.record, d), copy_bucket(n), d);
+                    }
+                }
+            }
+        }
+    })?;
+    let mixers: Vec<Vec<CopyMixer>> = fits
+        .iter()
+        .map(|f| f.iter().map(CopyFit::fit).collect())
+        .collect();
+    let (mut a0, mut a1d) = (0.0, vec![0.0; seeds]);
+    let mut mixed = vec![[0.0; COPY_VARIANTS]; seeds];
+    let (mut covered, mut hits) = ([0u64; COPY_VARIANTS], [0u64; COPY_VARIANTS]);
+    copy_pass(&mut pair, &cal.sel, |r, predictions| {
+        a0 += a0_cost(&r.record);
+        for (v, p) in predictions.iter().enumerate() {
+            if let Some((q, _)) = *p {
+                covered[v] += 1;
+                hits[v] += u64::from(q == r.record.target);
+            }
+        }
+        for (k, (head, eighths)) in cal.heads.iter().enumerate() {
+            let s = head_stretches(head, *eighths, r);
+            for (d, &stretch) in s.iter().enumerate() {
+                let bit = target_bit(&r.record, d);
+                let base = decision_cost(stretch, bit);
+                a1d[k] += base;
+                for (v, p) in predictions.iter().enumerate() {
+                    mixed[k][v] += match *p {
+                        Some((q, n)) => expected_bit(q, r.record.target, d).map_or(base, |e| {
+                            decision_cost(mixers[k][v].stretch(stretch, e, copy_bucket(n), d), bit)
+                        }),
+                        None => base,
+                    };
+                }
+            }
+        }
+    })?;
+    let n = cal.sel_records;
+    let a1d: Vec<f64> = a1d.iter().map(|&b| bpc(b, n)).collect();
+    let gain = |k: usize, v: usize| a1d[k] - bpc(mixed[k][v], n);
+    let mut report = format!(
+        "label\t{label}\nstage\tcopy\nschema\tSML_HYB_H2C_COPY_V1\n\
+         {BASE}_p1_weights_sha256\t{}\n{BASE}_dev_read\tfalse\n{BASE}_eval4_read\tfalse\n\
+         {BASE}_cal_sel_records\t{n}\n{BASE}_a0_sel_bpc\t{:.9}\n\
+         {BASE}_copy_table_bits\t{COPY_TABLE_BITS}\n",
+        cal.weights,
+        bpc(a0, n),
+    );
+    for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+        report += &format!("{BASE}_a1d_seed{seed}_sel_bpc\t{:.9}\n", a1d[k]);
+    }
+    for v in 0..COPY_VARIANTS {
+        let name = copy_name(v);
+        let seen = &fits[0][v].seen;
+        let rates: Vec<String> = (0..COPY_BUCKETS)
+            .map(|b| format!("{:.4}", seen[b][1] as f64 / seen[b][0].max(1) as f64))
+            .collect();
+        let counts: Vec<String> = (0..COPY_BUCKETS).map(|b| seen[b][0].to_string()).collect();
+        report += &format!(
+            "{BASE}_copy_{name}_fit_decisions_by_bucket\t{}\n\
+             {BASE}_copy_{name}_fit_right_rate_by_bucket\t{}\n\
+             {BASE}_copy_{name}_sel_coverage\t{:.6}\n{BASE}_copy_{name}_sel_hit_rate\t{:.6}\n",
+            counts.join(","),
+            rates.join(","),
+            covered[v] as f64 / n.max(1) as f64,
+            hits[v] as f64 / covered[v].max(1) as f64,
+        );
+        for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+            report += &format!(
+                "{BASE}_copy_{name}_seed{seed}_sel_bpc\t{:.9}\n\
+                 {BASE}_copy_{name}_seed{seed}_sel_gain_over_a1d\t{:.9}\n\
+                 {BASE}_copy_{name}_seed{seed}_shifts\t{}\n",
+                bpc(mixed[k][v], n),
+                gain(k, v),
+                mixers[k][v].text(),
+            );
+        }
+    }
+    let mean = |v: usize| (0..seeds).map(|k| bpc(mixed[k][v], n)).sum::<f64>() / seeds as f64;
+    let chosen = (0..COPY_MINS.len())
+        .min_by(|&a, &b| mean(a).total_cmp(&mean(b)))
+        .unwrap_or(0);
+    let null = COPY_MINS.len();
+    let feasible = (0..seeds).all(|k| gain(k, chosen) >= COPY_GAIN_BPC)
+        && (0..seeds).all(|k| gain(k, null).abs() < COPY_NULL_BPC);
+    report += &format!(
+        "{BASE}_copy_chosen_min\t{}\n{BASE}_copy_gain_bpc\t{COPY_GAIN_BPC}\n\
+         {BASE}_copy_null_bpc\t{COPY_NULL_BPC}\nverdict\t{}\n",
+        COPY_MINS[chosen],
+        if feasible {
+            "COPY_FEASIBLE"
+        } else {
+            "COPY_NOT_FEASIBLE"
+        }
+    );
+    fs::write(out.join("h2c.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
         Some(mode @ ("gate" | "run")) if args.len() == 5 => run(
@@ -1345,6 +1554,22 @@ fn cli(args: &[String]) -> Result<()> {
             Path::new(&args[4]),
             "PREREGISTERED",
         ),
+        Some("copy") if args.len() == 5 => copy(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+            "PREREGISTERED",
+        ),
+        Some("smoke-copy") if args.len() == 3 => {
+            let root = Path::new(&args[2]);
+            write_smoke(root, 14)?;
+            copy(
+                &root.join("p1"),
+                &root.join("h1d"),
+                &root.join("out"),
+                "SMOKE",
+            )
+        }
         Some("smoke-templates") if args.len() == 3 => {
             let root = Path::new(&args[2]);
             write_smoke(root, 14)?;
@@ -1372,8 +1597,8 @@ fn cli(args: &[String]) -> Result<()> {
             )
         }
         _ => Err(
-            "usage: (gate|run|templates) P1_H1D_OUT H1D_OUT NEW_OUT | replay EXPERTS.tsv | \
-             (smoke|smoke-templates) NEW_DIR"
+            "usage: (gate|run|templates|copy) P1_H1D_OUT H1D_OUT NEW_OUT | replay EXPERTS.tsv | \
+             (smoke|smoke-templates|smoke-copy) NEW_DIR"
                 .into(),
         ),
     }
@@ -1452,6 +1677,58 @@ mod tests {
         )
         .is_err());
         assert!(run(&p1, &root.join("h1d"), &root.join("out"), "SMOKE", false).is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_copy_diagnostic_reads_cal_only_and_reports_every_field() {
+        let root = temp("copy");
+        let _ = fs::remove_dir_all(&root);
+        write_smoke(&root, 14).unwrap();
+        // EVAL4 is never needed: hide it.
+        let dir = root.join("p1").join(BASE);
+        for f in ["trace-eval4.bin", "trace-eval4.banks.bin", "eval4.json"] {
+            fs::remove_file(dir.join(f)).unwrap();
+        }
+        let run = |name: &str, label: &str| {
+            copy(&root.join("p1"), &root.join("h1d"), &root.join(name), label)
+        };
+        run("out", "SMOKE").unwrap();
+        let report = fs::read_to_string(root.join("out/h2c.tsv")).unwrap();
+        assert_eq!(value(&report, "label"), "SMOKE");
+        assert_eq!(value(&report, "bytes_q4_eval4_read"), "false");
+        assert_eq!(value(&report, "bytes_q4_dev_read"), "false");
+        for v in 0..COPY_VARIANTS {
+            let name = copy_name(v);
+            let c = num(&report, &format!("bytes_q4_copy_{name}_sel_coverage"));
+            assert!((0.0..=1.0).contains(&c));
+            for seed in SEEDS {
+                let shifts = value(&report, &format!("bytes_q4_copy_{name}_seed{seed}_shifts"));
+                assert_eq!(
+                    shifts.split(',').count(),
+                    sml_core::hyb_h2c_copy::COPY_CELLS
+                );
+                // Random smoke bytes leave every cell under the minimum
+                // count, so nothing is learned and nothing is gained.
+                assert!(shifts.split(',').all(|w| w == "0"));
+                let g = num(
+                    &report,
+                    &format!("bytes_q4_copy_{name}_seed{seed}_sel_gain_over_a1d"),
+                );
+                assert!(g.abs() < 1e-9);
+            }
+        }
+        assert!(COPY_MINS.contains(&(num(&report, "bytes_q4_copy_chosen_min") as usize)));
+        assert_eq!(value(&report, "verdict"), "COPY_NOT_FEASIBLE");
+        // Deterministic, never overwrites, and refuses smoke weights when
+        // preregistered.
+        run("again", "SMOKE").unwrap();
+        assert_eq!(
+            fs::read(root.join("again/h2c.tsv")).unwrap(),
+            fs::read(root.join("out/h2c.tsv")).unwrap()
+        );
+        assert!(run("out", "SMOKE").is_err());
+        assert!(run("pre", "PREREGISTERED").is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 

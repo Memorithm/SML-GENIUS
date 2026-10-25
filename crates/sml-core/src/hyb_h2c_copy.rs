@@ -1,0 +1,273 @@
+//! HYB H-2c: a copy expert mixed after the H-1d head.
+//!
+//! A per-document LZP match model (`MatchModel`) predicts the byte that
+//! followed the last occurrence of the current context. While the bits
+//! already coded of the current byte agree with that prediction, the
+//! prediction gives an expected bit for the next decision, and the mixer
+//! moves the head's stretch towards (or away from) it by a learned shift.
+//! The shift depends on the match length bucket, the decision depth and
+//! whether the head already leans the same way. Everything it reads is
+//! known to a decoder before the decision. Research only. NOT_PROMOTED.
+
+use crate::{
+    gb11_p1_stream::STRETCH_LIMIT,
+    hyb_h1_residual::{decision_cost, DEPTHS},
+};
+
+/// Match length buckets: 0, 1..=3, 4..=15, 16..=63, 64..=255, 256+.
+pub const COPY_BUCKETS: usize = 6;
+/// One shift per bucket, depth and agreement with the head.
+pub const COPY_CELLS: usize = COPY_BUCKETS * DEPTHS * 2;
+/// Aligned stretches are kept exactly over this range; beyond it, every
+/// candidate shift leaves the decision saturated.
+const SPAN: i32 = 2 * STRETCH_LIMIT + 1;
+const BINS: usize = 2 * SPAN as usize + 1;
+/// Candidate shifts, in stretch units.
+pub const SHIFT_MIN: i32 = -1024;
+pub const SHIFT_MAX: i32 = STRETCH_LIMIT;
+pub const SHIFT_STEP: i32 = 8;
+/// A cell seen fewer times than this keeps a zero shift.
+pub const MIN_CELL_DECISIONS: u64 = 1000;
+
+/// Bucket of a match that has been confirmed `length` times.
+#[inline]
+#[must_use]
+pub fn copy_bucket(length: usize) -> usize {
+    match length {
+        0 => 0,
+        1..=3 => 1,
+        4..=15 => 2,
+        16..=63 => 3,
+        64..=255 => 4,
+        _ => 5,
+    }
+}
+
+/// Expected bit of decision `depth` when the copy prediction `predicted`
+/// still agrees with the bits of `target` above it, else `None`.
+#[inline]
+#[must_use]
+pub fn expected_bit(predicted: u8, target: u8, depth: usize) -> Option<bool> {
+    let above = 8 - depth as u32;
+    (u32::from(predicted) >> above == u32::from(target) >> above)
+        .then_some((predicted >> (7 - depth)) & 1 != 0)
+}
+
+#[inline]
+fn cell(bucket: usize, depth: usize, agree: bool) -> usize {
+    (bucket * DEPTHS + depth) * 2 + usize::from(agree)
+}
+
+/// The head stretch seen from the copy prediction: positive when the
+/// head leans towards the expected bit.
+#[inline]
+fn aligned(stretch: i32, expected: bool) -> i32 {
+    if expected {
+        stretch
+    } else {
+        stretch.saturating_neg()
+    }
+}
+
+/// Learned shifts of the copy mixer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CopyMixer {
+    pub shifts: [i32; COPY_CELLS],
+}
+
+impl CopyMixer {
+    #[must_use]
+    pub fn zero() -> Self {
+        Self {
+            shifts: [0; COPY_CELLS],
+        }
+    }
+
+    /// Stretch of decision `depth` after the copy expert.
+    #[inline]
+    #[must_use]
+    pub fn stretch(&self, stretch: i32, expected: bool, bucket: usize, depth: usize) -> i32 {
+        let a = aligned(stretch, expected);
+        let w = self.shifts[cell(bucket, depth, a > 0)];
+        if expected {
+            stretch.saturating_add(w)
+        } else {
+            stretch.saturating_sub(w)
+        }
+    }
+
+    #[must_use]
+    pub fn text(&self) -> String {
+        self.shifts
+            .iter()
+            .map(i32::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
+/// Histograms of aligned stretch and outcome per cell, from which the
+/// best shift of each cell is found exactly.
+#[derive(Debug, Clone)]
+pub struct CopyFit {
+    hist: Vec<Vec<u64>>,
+    /// Decisions seen and decisions where the expected bit was right.
+    pub seen: [[u64; 2]; COPY_BUCKETS],
+}
+
+impl Default for CopyFit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CopyFit {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            hist: vec![Vec::new(); COPY_CELLS],
+            seen: [[0; 2]; COPY_BUCKETS],
+        }
+    }
+
+    /// Records one decision with an expected bit.
+    pub fn add(&mut self, stretch: i32, expected: bool, bit: bool, bucket: usize, depth: usize) {
+        let a = aligned(stretch, expected);
+        let h = &mut self.hist[cell(bucket, depth, a > 0)];
+        if h.is_empty() {
+            h.resize(2 * BINS, 0);
+        }
+        let right = bit == expected;
+        h[usize::from(right) * BINS + (a.clamp(-SPAN, SPAN) + SPAN) as usize] += 1;
+        self.seen[bucket][0] += 1;
+        self.seen[bucket][1] += u64::from(right);
+    }
+
+    /// Per cell, the candidate shift with the lowest code length on the
+    /// recorded decisions; ties go to the shift closest to zero, and a
+    /// cell with fewer than `MIN_CELL_DECISIONS` decisions keeps zero.
+    #[must_use]
+    pub fn fit(&self) -> CopyMixer {
+        // decision_cost clamps its stretch, so a table over the clamped
+        // range gives the same code lengths.
+        let table: Vec<[f64; 2]> = (-STRETCH_LIMIT..=STRETCH_LIMIT)
+            .map(|s| [decision_cost(s, false), decision_cost(s, true)])
+            .collect();
+        let lookup = |s: i32, right: bool| {
+            table[(s.clamp(-STRETCH_LIMIT, STRETCH_LIMIT) + STRETCH_LIMIT) as usize]
+                [usize::from(right)]
+        };
+        let mut shifts = [0; COPY_CELLS];
+        for (c, h) in self.hist.iter().enumerate() {
+            let filled: Vec<(i32, bool, f64)> = h
+                .iter()
+                .enumerate()
+                .filter(|(_, &n)| n > 0)
+                .map(|(i, &n)| ((i % BINS) as i32 - SPAN, i >= BINS, n as f64))
+                .collect();
+            if filled.iter().map(|&(_, _, n)| n).sum::<f64>() < MIN_CELL_DECISIONS as f64 {
+                continue;
+            }
+            let cost = |w: i32| -> f64 {
+                filled
+                    .iter()
+                    .map(|&(a, right, n)| n * lookup(a + w, right))
+                    .sum()
+            };
+            let mut best = (cost(0), 0i32);
+            let mut w = SHIFT_MIN;
+            while w <= SHIFT_MAX {
+                let bits = cost(w);
+                if bits < best.0 || (bits == best.0 && w.abs() < best.1.abs()) {
+                    best = (bits, w);
+                }
+                w += SHIFT_STEP;
+            }
+            shifts[c] = best.1;
+        }
+        CopyMixer { shifts }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hyb_h2t_templates::MatchModel;
+
+    #[test]
+    fn buckets_and_expected_bits() {
+        assert_eq!(
+            [0, 1, 3, 4, 15, 16, 63, 64, 255, 256].map(copy_bucket),
+            [0, 1, 1, 2, 2, 3, 3, 4, 4, 5]
+        );
+        // 0b1010_0000 predicted, target 0b1011_0000: alive down to depth 3.
+        let (q, t) = (0b1010_0000, 0b1011_0000);
+        let got: Vec<_> = (0..DEPTHS).map(|d| expected_bit(q, t, d)).collect();
+        assert_eq!(
+            got,
+            [
+                Some(true),
+                Some(false),
+                Some(true),
+                Some(false),
+                None,
+                None,
+                None,
+                None
+            ]
+        );
+        for b in 0..=255u8 {
+            for d in 0..DEPTHS {
+                assert_eq!(expected_bit(b, b, d), Some((b >> (7 - d)) & 1 != 0));
+            }
+        }
+    }
+
+    /// A reliable copy signal learns a large positive shift, a random one
+    /// learns none, and the mixer is symmetric in the expected bit.
+    #[test]
+    fn the_fit_trusts_reliable_copies_only() {
+        let mut fit = CopyFit::new();
+        let mut state = 7u64;
+        for i in 0..20_000u64 {
+            state = crate::hyb_h1_residual::splitmix(state ^ i);
+            let expected = state & 1 != 0;
+            // Bucket 5: right 99 %; bucket 0: right 50 %.
+            fit.add(0, expected, expected ^ (state % 100 == 0), 5, 3);
+            fit.add(0, expected, (state >> 7) & 1 != 0, 0, 3);
+        }
+        let mixer = fit.fit();
+        let strong = mixer.shifts[cell(5, 3, false)];
+        assert!(strong > 1000, "{strong}");
+        assert!(mixer.shifts[cell(0, 3, false)].abs() <= 16);
+        // Fitted at stretch 0, i.e. in the cell where the head does not
+        // lean towards the copy; the head leaning away lands there too.
+        assert_eq!(mixer.stretch(-100, true, 5, 3), -100 + strong);
+        assert_eq!(mixer.stretch(100, false, 5, 3), 100 - strong);
+        // The cell where the head already agrees saw nothing: no shift.
+        assert_eq!(mixer.stretch(100, true, 5, 3), 100);
+        assert!(fit.seen[5][1] > 19_700 && fit.seen[0][0] == 20_000);
+        assert_eq!(CopyMixer::zero().stretch(5, true, 2, 1), 5);
+    }
+
+    #[test]
+    fn a_copied_paragraph_is_predicted_with_long_matches() {
+        let text = b"The quick brown fox jumps over the lazy dog near the river bank. ";
+        let mut doc = Vec::new();
+        doc.extend_from_slice(text);
+        doc.extend_from_slice(b"Something else entirely. ");
+        doc.extend_from_slice(text);
+        let mut model = MatchModel::with_min(16, 6);
+        let mut hits = 0;
+        let mut last = None;
+        for &b in &doc {
+            if let Some((q, n)) = model.predict() {
+                hits += usize::from(q == b);
+                last = Some(n);
+            }
+            model.push(b);
+        }
+        assert!(hits >= text.len() - 8, "{hits}");
+        assert!(last.unwrap() >= 50);
+    }
+}
