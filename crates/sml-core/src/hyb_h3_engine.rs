@@ -23,6 +23,7 @@ use crate::{
     hyb_baf_neural_gate::{causal_features, hash_gate_is_active, oracle_causal_features},
     hyb_h1_residual::DEPTHS,
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
+    hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert},
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
@@ -43,6 +44,7 @@ pub struct HybridHead {
     fused: Vec<FusedBankHead>,
     admitted: Vec<bool>,
     eighths: i32,
+    copy_weight_eighths: u8,
 }
 
 impl HybridHead {
@@ -57,6 +59,7 @@ impl HybridHead {
             fused: Vec::new(),
             admitted: Vec::new(),
             eighths: 0,
+            copy_weight_eighths: 0,
         }
     }
 
@@ -71,7 +74,24 @@ impl HybridHead {
             heads: vec![head],
             admitted: vec![true],
             eighths,
+            copy_weight_eighths: 0,
         }
+    }
+
+    /// A frozen H-1d head blended with a causally recurrent byte-copy expert.
+    /// The original P1 and neural weights remain unchanged. w=0 retains
+    /// byte-for-byte compatibility with the existing H-1d engine.
+    pub fn single_with_copy(
+        head: BankHead,
+        eighths: i32,
+        copy_weight_eighths: u8,
+    ) -> Result<Self, &'static str> {
+        if copy_weight_eighths > 8 {
+            return Err("H-1d copy mixture weight must be in 0..=8 eighths");
+        }
+        let mut result = Self::single(head, eighths);
+        result.copy_weight_eighths = copy_weight_eighths;
+        Ok(result)
     }
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
@@ -116,6 +136,7 @@ impl HybridHead {
             heads: exported.heads,
             admitted: exported.admitted.to_vec(),
             eighths: exported.eighths,
+            copy_weight_eighths: 0,
         }
     }
 
@@ -190,6 +211,7 @@ pub struct HybridPredictor<'a> {
     code: ByteCode,
     record: BankRecord,
     expert: Option<usize>,
+    copy: Option<CopyExpert>,
     p1: u32,
 }
 
@@ -208,6 +230,7 @@ impl<'a> HybridPredictor<'a> {
             code: ByteCode::default(),
             record: BankRecord::default(),
             expert: None,
+            copy: (head.copy_weight_eighths > 0).then(CopyExpert::default),
             p1: HALF,
         };
         predictor.prepare();
@@ -223,6 +246,9 @@ impl<'a> HybridPredictor<'a> {
         }
         let d = self.decision;
         if d == 0 {
+            if let Some(copy) = self.copy.as_mut() {
+                copy.prepare_byte();
+            }
             self.code = ByteCode::default();
             self.blocks = self.model.frozen_blocks(self.ctx, 0);
             self.record = BankRecord::default();
@@ -249,7 +275,14 @@ impl<'a> HybridPredictor<'a> {
         let shift = self.expert.map_or(0, |k| {
             self.head.fused[k].correction(r, d, self.head.eighths)
         });
-        self.p1 = coder_p1(self.tables, st.saturating_add(shift));
+        let neural = coder_p1(self.tables, st.saturating_add(shift));
+        self.p1 = self.copy.as_ref().map_or(neural, |copy| {
+            mix_probability(
+                neural,
+                copy.probability(d, r.record.target),
+                self.head.copy_weight_eighths,
+            )
+        });
     }
 }
 
@@ -271,6 +304,9 @@ impl BitPredictor for HybridPredictor<'_> {
         };
         self.decision += 1;
         if self.decision == 8 {
+            if let Some(copy) = self.copy.as_mut() {
+                copy.push_decoded(self.record.record.target);
+            }
             self.ctx.push(self.record.record.target);
             self.position += 1;
             self.decision = 0;
@@ -358,10 +394,21 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 let h = &head.heads[k];
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
-            out.push(coder_p1(
+            let neural = coder_p1(
                 tables,
                 i32::from(code.logits[d]).saturating_add(shift),
-            ));
+            );
+            let copy = if head.copy_weight_eighths == 0 {
+                None
+            } else {
+                let known = if d == 0 {
+                    0
+                } else {
+                    byte & (u8::MAX << (8 - d))
+                };
+                oracle_probability(&data[..position], d, known)
+            };
+            out.push(mix_probability(neural, copy, head.copy_weight_eighths));
         }
     });
     out
