@@ -78,6 +78,14 @@ pub enum HeadGateError {
     CandidateBudget,
 }
 
+impl core::fmt::Display for HeadGateError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "BAF-H4 gate error: {self:?}")
+    }
+}
+
+impl std::error::Error for HeadGateError {}
+
 fn microbits(bits: f64) -> Result<u64, HeadGateError> {
     if !bits.is_finite() || bits < 0.0 || bits > u64::MAX as f64 / SCALE as f64 {
         return Err(HeadGateError::InvalidScore);
