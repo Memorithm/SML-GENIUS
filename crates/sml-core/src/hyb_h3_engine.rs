@@ -25,6 +25,7 @@ use crate::{
     hyb_h1b_calibrated::LAMBDA_EIGHTHS,
     hyb_h1d_bank_head::{BankHead, BankPlane, BankRecord, FusedBankHead, ROW},
     hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
+    hyb_h1d_gaussian_copy::{mix_gaussian_probability, oracle_longest_match, GaussianCopyProfile},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
 };
 
@@ -45,6 +46,7 @@ pub struct HybridHead {
     admitted: Vec<bool>,
     eighths: i32,
     copy_weight_tenths: u8,
+    gaussian_copy: Option<GaussianCopyProfile>,
 }
 
 impl HybridHead {
@@ -60,6 +62,7 @@ impl HybridHead {
             admitted: Vec::new(),
             eighths: 0,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -75,6 +78,7 @@ impl HybridHead {
             admitted: vec![true],
             eighths,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -100,6 +104,20 @@ impl HybridHead {
     pub fn single_with_default_copy(head: BankHead, eighths: i32) -> Self {
         Self::single_with_copy(head, eighths, DEFAULT_COPY_WEIGHT_TENTHS)
             .expect("fixed 20/80 copy mixture is in the validated range")
+    }
+
+    /// Gaussian competitor: identical frozen neural H-1d and copy history.
+    /// The profile is frozen by label-free TRAIN-only exposure calibration;
+    /// weights depend on the longest decoder-visible matching suffix.
+    #[must_use]
+    pub fn single_with_gaussian_copy(
+        head: BankHead,
+        eighths: i32,
+        gaussian_copy: GaussianCopyProfile,
+    ) -> Self {
+        let mut result = Self::single(head, eighths);
+        result.gaussian_copy = Some(gaussian_copy);
+        result
     }
 
     /// Native BAF ANF activation for one frozen H-1d neural head.
@@ -145,6 +163,7 @@ impl HybridHead {
             admitted: exported.admitted.to_vec(),
             eighths: exported.eighths,
             copy_weight_tenths: 0,
+            gaussian_copy: None,
         }
     }
 
@@ -238,7 +257,8 @@ impl<'a> HybridPredictor<'a> {
             code: ByteCode::default(),
             record: BankRecord::default(),
             expert: None,
-            copy: (head.copy_weight_tenths > 0).then(CopyExpert::default),
+            copy: (head.copy_weight_tenths > 0 || head.gaussian_copy.is_some())
+                .then(CopyExpert::default),
             p1: HALF,
         };
         predictor.prepare();
@@ -285,11 +305,16 @@ impl<'a> HybridPredictor<'a> {
         });
         let neural = coder_p1(self.tables, st.saturating_add(shift));
         self.p1 = self.copy.as_ref().map_or(neural, |copy| {
-            mix_probability(
-                neural,
-                copy.probability(d, r.record.target),
-                self.head.copy_weight_tenths,
-            )
+            let proposal = copy.probability(d, r.record.target);
+            if let Some(gaussian) = self.head.gaussian_copy {
+                mix_gaussian_probability(
+                    neural,
+                    proposal,
+                    gaussian.weight_for_match(copy.longest_match()),
+                )
+            } else {
+                mix_probability(neural, proposal, self.head.copy_weight_tenths)
+            }
         });
     }
 }
@@ -403,7 +428,7 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
             let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
-            let copy = if head.copy_weight_tenths == 0 {
+            let copy = if head.copy_weight_tenths == 0 && head.gaussian_copy.is_none() {
                 None
             } else {
                 let known = if d == 0 {
@@ -413,7 +438,15 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 };
                 oracle_probability(&data[..position], d, known)
             };
-            out.push(mix_probability(neural, copy, head.copy_weight_tenths));
+            if let Some(profile) = head.gaussian_copy {
+                out.push(mix_gaussian_probability(
+                    neural,
+                    copy,
+                    profile.weight_for_match(oracle_longest_match(&data[..position])),
+                ));
+            } else {
+                out.push(mix_probability(neural, copy, head.copy_weight_tenths));
+            }
         }
     });
     out
@@ -750,6 +783,56 @@ mod tests {
             }],
         };
         assert!(HybridHead::single_baf(head(1), 8, invalid).is_err());
+    }
+
+    #[test]
+    fn gaussian_copy_competes_with_fixed_twenty_eighty_in_full_lossless_coder() {
+        use crate::hyb_h1d_gaussian_copy::{
+            CopyActivityHistogram, GaussianCopyProfile, GAUSSIAN_KERNEL_Q1024,
+        };
+        let mut histogram = CopyActivityHistogram::default();
+        histogram
+            .observe_train_document(&b"abababab".repeat(1024))
+            .unwrap();
+        let gaussian = GaussianCopyProfile::fit_train_only(&histogram).unwrap();
+        assert_eq!(GAUSSIAN_KERNEL_Q1024, [0, 139, 421, 820, 1024]);
+
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let neural = HybridHead::single(head(1), 8);
+        let fixed = HybridHead::single_with_default_copy(head(1), 8);
+        let gaussian_head = HybridHead::single_with_gaussian_copy(head(1), 8, gaussian);
+        let documents = [
+            Vec::new(),
+            vec![7],
+            vec![7, 8],
+            vec![7, 8, 9],
+            b"abababcabababc".repeat(200),
+            b"abcabcabc___abcabcabc___".repeat(200),
+            text(137, 2048),
+            (0..1024).map(|i| (i as u8).wrapping_mul(41)).collect(),
+        ];
+        for data in documents {
+            for variant in [&neural, &fixed, &gaussian_head] {
+                assert_eq!(
+                    engine_p1s(&m, &tables, variant, &data),
+                    oracle_p1s(&mut m, &tables, variant, &data),
+                    "independent oracle must agree for all competitor arms"
+                );
+                let packed = compress(&m, &tables, variant, &data);
+                assert_eq!(
+                    decompress(&m, &tables, variant, &packed).unwrap(),
+                    data,
+                    "each competitor must be losslessly decoded"
+                );
+            }
+        }
+        let data = b"abababababa".repeat(200);
+        assert_ne!(
+            engine_p1s(&m, &tables, &neural, &data),
+            engine_p1s(&m, &tables, &gaussian_head, &data),
+            "Gaussian mixture must be active, not merely a configuration flag"
+        );
     }
 
     #[test]
