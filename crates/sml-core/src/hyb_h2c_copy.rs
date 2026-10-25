@@ -11,7 +11,7 @@
 
 use crate::{
     gb11_p1_stream::STRETCH_LIMIT,
-    hyb_h1_residual::{decision_cost, DEPTHS},
+    hyb_h1_residual::{decision_cost, splitmix, DEPTHS},
 };
 
 /// Match length buckets: 0, 1..=3, 4..=15, 16..=63, 64..=255, 256+.
@@ -189,6 +189,101 @@ impl CopyFit {
     }
 }
 
+/// Control: an LZP match model whose matches are looked up in another
+/// document (`donor`), never in the document being coded. Its predictions
+/// look like real copies (real words, real match lengths) but carry no
+/// repetition of the current document.
+#[derive(Debug, Clone)]
+pub struct DonorModel {
+    donor: Vec<u8>,
+    table: Vec<u32>,
+    bits: u32,
+    min: usize,
+    context: Vec<u8>,
+    pointer: Option<usize>,
+    length: usize,
+}
+
+fn context_hash(tail: &[u8], bits: u32) -> usize {
+    let mut h = 0u64;
+    for &b in tail {
+        h = splitmix(h ^ u64::from(b));
+    }
+    (h >> (64 - bits)) as usize
+}
+
+impl DonorModel {
+    /// Indexes every `min`-byte context of `donor` (latest occurrence wins).
+    #[must_use]
+    pub fn new(donor: Vec<u8>, bits: u32, min: usize) -> Self {
+        assert!((8..=30).contains(&bits) && min >= 1);
+        let mut table = vec![0u32; 1 << bits];
+        for end in min..=donor.len() {
+            table[context_hash(&donor[end - min..end], bits)] =
+                u32::try_from(end).unwrap_or(u32::MAX);
+        }
+        Self {
+            donor,
+            table,
+            bits,
+            min,
+            context: Vec::new(),
+            pointer: None,
+            length: 0,
+        }
+    }
+
+    /// Predicted next byte and the current match length, if any.
+    #[must_use]
+    pub fn predict(&self) -> Option<(u8, usize)> {
+        self.pointer
+            .filter(|&p| p < self.donor.len())
+            .map(|p| (self.donor[p], self.length))
+    }
+
+    pub fn push(&mut self, b: u8) {
+        match self.predict() {
+            Some((p, _)) if p == b => {
+                self.pointer = self.pointer.map(|q| q + 1);
+                self.length += 1;
+            }
+            _ => {
+                self.pointer = None;
+                self.length = 0;
+            }
+        }
+        self.context.push(b);
+        if self.context.len() > self.min {
+            self.context.remove(0);
+        }
+        if self.pointer.is_none() && self.context.len() == self.min {
+            let at = self.table[context_hash(&self.context, self.bits)];
+            if at != 0 {
+                self.pointer = Some(at as usize);
+            }
+        }
+    }
+}
+
+impl CopyFit {
+    /// One shift for every cell: the candidate with the lowest code length
+    /// over all recorded decisions (control for the 96 learned shifts).
+    #[must_use]
+    pub fn fit_single(&self) -> CopyMixer {
+        let mut merged = Self::new();
+        merged.hist[0] = vec![0; 2 * BINS];
+        for h in self.hist.iter().filter(|h| !h.is_empty()) {
+            for (m, &n) in merged.hist[0].iter_mut().zip(h) {
+                *m += n;
+            }
+        }
+        let w = merged.fit().shifts[0];
+        CopyMixer {
+            shifts: [w; COPY_CELLS],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +343,39 @@ mod tests {
         assert_eq!(mixer.stretch(100, true, 5, 3), 100);
         assert!(fit.seen[5][1] > 19_700 && fit.seen[0][0] == 20_000);
         assert_eq!(CopyMixer::zero().stretch(5, true, 2, 1), 5);
+    }
+
+    #[test]
+    fn the_donor_predicts_from_the_other_document_only() {
+        let donor = b"alpha beta gamma delta epsilon zeta eta theta".to_vec();
+        let mut model = DonorModel::new(donor, 12, 4);
+        let mut hits = 0;
+        // Text that repeats itself but shares only `gamma delta` with the
+        // donor: only that part can be predicted.
+        for &b in b"xyz gamma delta qqq xyz gamma qqq xyz" {
+            if model.predict().is_some_and(|(q, _)| q == b) {
+                hits += 1;
+            }
+            model.push(b);
+        }
+        assert!((3..=12).contains(&hits), "{hits}");
+        let mut empty = DonorModel::new(Vec::new(), 8, 4);
+        for &b in b"abcdabcdabcd" {
+            assert_eq!(empty.predict(), None);
+            empty.push(b);
+        }
+    }
+
+    #[test]
+    fn a_single_shift_is_shared_by_every_cell() {
+        let mut fit = CopyFit::new();
+        for i in 0..5000u64 {
+            let e = i % 2 == 0;
+            fit.add(0, e, e ^ (i % 10 == 0), (i % 6) as usize, (i % 8) as usize);
+        }
+        let single = fit.fit_single();
+        assert!(single.shifts.iter().all(|&w| w == single.shifts[0]));
+        assert!(single.shifts[0] > 400, "{}", single.shifts[0]);
     }
 
     #[test]

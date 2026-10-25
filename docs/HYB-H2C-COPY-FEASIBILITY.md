@@ -21,7 +21,7 @@ Le 25 octobre, le propriétaire a choisi cette piste. H-2c mesure le gain réel,
    Cela fait 96 décalages. Quand la prédiction ne concorde plus, ou qu'il n'y en a pas, la tête A1d code seule.
 3. **Apprentissage sur CAL-FIT.** Chaque décalage est le meilleur, en longueur de code exacte, parmi les valeurs de −1024 à 2047 par pas de 8. Une case vue moins de 1 000 fois garde un décalage nul. Les têtes A1d publiées (graines 11 et 23) sont reprises telles quelles, avec leur λ.
 4. **Choix sur CAL-SEL.** On essaie trois longueurs de contexte, `m` = 6, 8 et 12. On retient celle qui donne le meilleur BPC moyen des deux graines sur CAL-SEL.
-5. **Contrôle nul.** Il garde le rythme de l'expert `m` = 12 (mêmes octets couverts, mêmes longueurs) mais prédit un octet tiré au hasard. Le mélangeur, appris de la même façon, ne doit rien gagner.
+5. **Contrôle nul.** Il garde le rythme de l'expert `m` = 12 (mêmes octets couverts, mêmes longueurs) mais prédit un octet tiré au hasard. Le mélangeur, appris de la même façon, ne doit rien gagner. *(Remplacé après le premier run : voir la révision plus bas.)*
 
 Sont publiés, pour chaque variante :
 - la couverture et le taux de réussite ;
@@ -31,11 +31,38 @@ Sont publiés, pour chaque variante :
 
 Le BPC de A1d sur CAL-SEL doit retrouver celui de H-2 (2,5540 et 2,5584). C'est un contrôle de non-régression.
 
-## Critère de faisabilité (figé ici)
+## Critère de faisabilité (figé ici, remplacé par la révision plus bas)
 
 `COPY_FEASIBLE` exige les deux conditions suivantes. Sinon, le verdict est `COPY_NOT_FEASIBLE`.
 - À la longueur `m` retenue, la recopie gagne au moins **0,01 BPC sur A1d** sur CAL-SEL pour les deux graines. C'est la porte de H-2 et de H-2t.
 - Le contrôle nul reste à moins de **0,002 BPC** de A1d pour les deux graines.
+
+## Révision des contrôles (25 octobre, après le premier run)
+
+Premier run : RemoteOps #858, SML `c7bba16e`, `h2c.tsv` sha256 `1c27a4830d66cdc758667523fe801047abbf229e44461ecb281e140e376800f8`. Résultats : `RESULTS-HYB-H2C-COPY-FEASIBILITY.md`.
+
+La recopie a gagné 0,54 et 0,56 BPC sur A1d (contexte 6). Le verdict a pourtant été `COPY_NOT_FEASIBLE` : le contrôle nul a gagné 0,0029 et 0,0050 BPC, au-dessus de 0,002.
+
+Ce contrôle était mal conçu. Il ne prédisait qu'aux positions où l'expert `m` = 12 trouvait une correspondance, et avec ses longueurs. Il savait donc où le texte se répète. Ses décalages appris sont opposés deux à deux selon l'accord avec la tête : ils ne font que recalibrer la confiance de la tête à ces positions.
+
+Sur décision du propriétaire, l'étude est refaite sur la calibration avec le même expert et le même mélangeur. Le propriétaire a demandé tous les contrôles proposés. Ils sont figés ici, avant le second run.
+
+**Critères** (tous requis, pour les deux graines) :
+1. **Gain** : au moins 0,01 BPC sur A1d, à la longueur de contexte retenue sur CAL-SEL (6, 8 ou 12).
+2. **Nul aléatoire** (`null`) : un octet et une longueur au hasard à chaque position. Il doit rester à moins de 0,002 BPC de A1d.
+3. **Donneur** (`donor`) : un expert de contexte 6 qui cherche ses correspondances dans un autre article de la même partie (le suivant dans la liste), jamais dans l'article codé. Son gain doit rester sous 10 % du gain retenu.
+4. **Retard** (`lag`) : la prédiction de contexte 6 faite 4 096 octets plus tôt dans le même article. Son gain doit rester sous 10 % du gain retenu.
+5. **Bootstrap par article** : 1 000 tirages d'articles de CAL-SEL avec remise. La borne à 2,5 % du gain doit atteindre 0,01 BPC. Sont aussi publiés la part des articles qui gagnent, la médiane et le premier décile du gain par article.
+6. **Échange** : on apprend sur CAL-SEL et on mesure sur CAL-FIT. Le gain doit garder au moins la moitié du gain retenu, et le nul doit rester sous 0,002 BPC.
+7. **Causalité** : pour un article de CAL-SEL sur 16, la seconde moitié est remplacée par du bruit. Toutes les prédictions jusqu'au milieu inclus, celles de chaque variante et de COPY-1, doivent rester identiques. Une seule différence donne le verdict `COPY_CAUSALITY_FAIL`.
+
+**Publiés sans seuil** :
+- **Rythme** (`timing`, l'ancien nul) : ce que vaut le seul fait de savoir où le texte se répète.
+- **Décalage unique** : un seul décalage pour les 96 cases, appris sur CAL-FIT.
+- **Recopie sur P1 seul**, sans la tête H-1d, pour mesurer la complémentarité.
+- **COPY-1** (GPT/Grok, SML #725) : fenêtre de 256 octets, suffixe de 4 octets au plus, mélange fixe de 20 % en probabilité. Il est évalué sur les mêmes octets et avec les mêmes têtes. La probabilité H-1d est prise au 16 bits de `squash_value`, ce qui en fait une évaluation hors moteur.
+
+Limite connue : le mélangeur distingue les cas où la tête penche vers le bit attendu ou non. Un nul aléatoire peut donc en tirer un léger recalibrage de la tête par profondeur, si elle est mal calibrée. Le critère 2 le mesurera tel quel.
 
 ## Ce qui suit
 
