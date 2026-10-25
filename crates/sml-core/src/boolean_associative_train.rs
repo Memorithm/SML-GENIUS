@@ -29,7 +29,8 @@ pub struct FocusTransition {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FocusFitPolicy {
-    /// Maximum supported degree is 2, to keep the hypothesis class explicit.
+    /// Single-page fitter supports degree <= 2; the joint fitter
+    /// (`fit_joint_focus`) additionally accepts degree 3 (BAF-SCALE, opt-in).
     pub max_degree: usize,
     /// Maximum number of train-only greedy coefficient-flip iterations.
     pub max_rounds: usize,
@@ -263,17 +264,44 @@ pub(crate) fn feature_bank(config: AssociativeFocusConfig, max_degree: usize) ->
     };
     let atoms: Vec<_> = (0..total).map(atom).collect();
     let mut basis = atoms.clone();
-    if max_degree == 2 {
-        for i in 0..atoms.len() {
-            for j in (i + 1)..atoms.len() {
-                basis.push(AnfMonomial {
-                    event_mask: atoms[i].event_mask | atoms[j].event_mask,
-                    state_mask: atoms[i].state_mask | atoms[j].state_mask,
-                });
+    // Deterministic order: degree ascending, then lexicographic index tuples.
+    for degree in 2..=max_degree.min(atoms.len()) {
+        let mut idx: Vec<usize> = (0..degree).collect();
+        loop {
+            basis.push(idx.iter().fold(
+                AnfMonomial {
+                    event_mask: 0,
+                    state_mask: 0,
+                },
+                |acc, &i| AnfMonomial {
+                    event_mask: acc.event_mask | atoms[i].event_mask,
+                    state_mask: acc.state_mask | atoms[i].state_mask,
+                },
+            ));
+            if !next_combination(&mut idx, atoms.len()) {
+                break;
             }
         }
     }
     basis
+}
+
+/// Advance `idx` (strictly increasing, values < n) to the next lexicographic
+/// k-combination. Returns false when exhausted.
+pub(crate) fn next_combination(idx: &mut [usize], n: usize) -> bool {
+    let k = idx.len();
+    let mut i = k;
+    while i > 0 {
+        i -= 1;
+        if idx[i] < n - k + i {
+            idx[i] += 1;
+            for j in (i + 1)..k {
+                idx[j] = idx[j - 1] + 1;
+            }
+            return true;
+        }
+    }
+    false
 }
 
 pub(crate) fn error_bits(
