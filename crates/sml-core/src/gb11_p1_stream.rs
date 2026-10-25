@@ -123,6 +123,23 @@ impl Tables {
         }
     }
 
+    /// SHA-256 of the three tables (they are built with `ln` and `exp`,
+    /// so a cross-host check compares this digest).
+    #[must_use]
+    pub fn sha(&self) -> [u8; 32] {
+        let mut sha = Sha256::default();
+        for v in &self.stretch {
+            sha.update(&v.to_le_bytes());
+        }
+        for v in &self.weight {
+            sha.update(&v.to_le_bytes());
+        }
+        for v in &self.squash {
+            sha.update(&v.to_le_bytes());
+        }
+        sha.finish()
+    }
+
     /// P(bit = 1) in 1/65536 units.
     #[must_use]
     pub fn squash(&self, st: i32) -> u32 {
@@ -218,19 +235,29 @@ impl BankTable {
     /// Byte offset of the block for `key`, claiming it when `learn`. A frozen
     /// lookup whose tag differs reads as unseen.
     fn locate(&mut self, key: u64, learn: bool) -> Option<usize> {
+        if !learn {
+            return self.find(key);
+        }
         let base = (key % self.blocks) as usize * BLOCK_BYTES;
         let tag = ((key >> 56) as u8) | 1;
         if self.data[base] == tag {
             Some(base)
-        } else if learn {
+        } else {
             self.data[base..base + BLOCK_BYTES].fill(0);
             self.data[base] = tag;
             Some(base)
-        } else {
-            None
         }
     }
+
+    /// Read-only `locate(key, false)`.
+    fn find(&self, key: u64) -> Option<usize> {
+        let base = (key % self.blocks) as usize * BLOCK_BYTES;
+        (self.data[base] == ((key >> 56) as u8) | 1).then_some(base)
+    }
 }
+
+/// Located blocks of one phase, per bank (`None`: unseen).
+pub type PhaseBlocks = [Option<usize>; MAX_BANKS];
 
 /// A frozen-architecture P1 model: masks, mixer and update rule plus tables.
 #[derive(Clone)]
@@ -365,42 +392,7 @@ impl Model {
             for depth in 0..4 {
                 let decision = usize::from(phase) * 4 + depth;
                 let bit = (target >> (7 - decision)) & 1 != 0;
-                let mut sum = 0i64;
-                let mut weight = 0i64;
-                let mut top = None;
-                let mut first = 0i32;
-                for (b, block) in blocks.iter().enumerate().take(banks) {
-                    let (n0, n1) = match block {
-                        Some(base) => {
-                            let slot = base + 2 * node;
-                            let data = &self.tables[b].data;
-                            (usize::from(data[slot]), usize::from(data[slot + 1]))
-                        }
-                        None => (0, 0),
-                    };
-                    let st = i32::from(tables.stretch[n0 * 256 + n1]);
-                    code.banks[decision][b] = st as i16;
-                    let w = tables.weight[n0 + n1];
-                    sum += i64::from(w) * i64::from(st);
-                    weight += i64::from(w);
-                    if b == 0 {
-                        first = st;
-                    }
-                    if n0 + n1 >= 2 {
-                        top = Some(st);
-                    }
-                    if decision == 0 {
-                        code.confidence |= ((n0 + n1).min(15) as u32) << (4 * b);
-                    }
-                }
-                let st = match self.rule {
-                    MixRule::Average if weight > 0 => (sum / weight) as i32,
-                    MixRule::Average => 0,
-                    MixRule::HalfSum => (sum / i64::from(2 * WEIGHT_ONE)) as i32,
-                    MixRule::Top => top.unwrap_or(first),
-                }
-                .clamp(-STRETCH_LIMIT, STRETCH_LIMIT);
-                code.logits[decision] = st as i16;
+                let st = self.mix(tables, &blocks, node, decision, &mut code);
                 cost += bit_cost(tables.squash(st), bit);
                 if learn {
                     for (b, block) in blocks.iter().enumerate().take(banks) {
@@ -429,6 +421,69 @@ impl Model {
             *out = code;
         }
         cost
+    }
+
+    /// Frozen lookup of the blocks of one phase: `prefix` is 0 for the high
+    /// nibble, `0x10 | high_nibble` for the low one (as in `code_byte`).
+    #[must_use]
+    pub fn frozen_blocks(&self, ctx: Context, prefix: u8) -> PhaseBlocks {
+        let bits = ctx.bits();
+        let mut blocks = [None; MAX_BANKS];
+        for (b, block) in blocks.iter_mut().enumerate().take(self.masks.len()) {
+            *block = self.tables[b].find(block_key(bits & self.masks[b], prefix));
+        }
+        blocks
+    }
+
+    /// Mixed stretch of `decision` at `node` of its phase; writes the bank
+    /// stretches, the logit and (at decision 0) the confidence into `code`.
+    /// `code_byte` predicts every decision with it, so a decoder that
+    /// calls it decision by decision sees the same stretches.
+    pub fn mix(
+        &self,
+        tables: &Tables,
+        blocks: &PhaseBlocks,
+        node: usize,
+        decision: usize,
+        code: &mut ByteCode,
+    ) -> i32 {
+        let mut sum = 0i64;
+        let mut weight = 0i64;
+        let mut top = None;
+        let mut first = 0i32;
+        for (b, block) in blocks.iter().enumerate().take(self.masks.len()) {
+            let (n0, n1) = match block {
+                Some(base) => {
+                    let slot = base + 2 * node;
+                    let data = &self.tables[b].data;
+                    (usize::from(data[slot]), usize::from(data[slot + 1]))
+                }
+                None => (0, 0),
+            };
+            let st = i32::from(tables.stretch[n0 * 256 + n1]);
+            code.banks[decision][b] = st as i16;
+            let w = tables.weight[n0 + n1];
+            sum += i64::from(w) * i64::from(st);
+            weight += i64::from(w);
+            if b == 0 {
+                first = st;
+            }
+            if n0 + n1 >= 2 {
+                top = Some(st);
+            }
+            if decision == 0 {
+                code.confidence |= ((n0 + n1).min(15) as u32) << (4 * b);
+            }
+        }
+        let st = match self.rule {
+            MixRule::Average if weight > 0 => (sum / weight) as i32,
+            MixRule::Average => 0,
+            MixRule::HalfSum => (sum / i64::from(2 * WEIGHT_ONE)) as i32,
+            MixRule::Top => top.unwrap_or(first),
+        }
+        .clamp(-STRETCH_LIMIT, STRETCH_LIMIT);
+        code.logits[decision] = st as i16;
+        st
     }
 
     /// Codes positions `2..len` of one document (the witness's events);

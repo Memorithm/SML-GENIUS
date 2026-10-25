@@ -46,6 +46,7 @@ use sml_core::{
         best_expert, hash_route, initial_group, quartile_edges, route_bits, router_bytes,
         train_routed, Majority, Router, EXPERTS, ROUNDS, ROUTE_WORDS,
     },
+    hyb_h3_engine::{parse_experts, parse_h1d_head, Exported},
 };
 use std::{
     error::Error,
@@ -469,119 +470,6 @@ fn experts_tsv(arm: &Arm) -> Result<String> {
         );
     }
     Ok(text)
-}
-
-/// A learned router, its experts, their admission and the shared lambda.
-struct Exported {
-    router: Router,
-    heads: Vec<BankHead>,
-    admitted: [bool; EXPERTS],
-    eighths: i32,
-}
-
-fn parse_experts(text: &str) -> Result<Exported> {
-    let field = |name: &str| -> Result<&str> {
-        text.lines()
-            .find_map(|l| l.strip_prefix(name)?.strip_prefix('\t'))
-            .ok_or_else(|| format!("missing {name}").into())
-    };
-    if field("row")?.parse::<usize>()? != ROW
-        || field("depths")?.parse::<usize>()? != DEPTHS
-        || field("banks")?.parse::<usize>()? != MAX_BANKS
-        || field("experts")?.parse::<usize>()? != EXPERTS
-    {
-        return Err("experts shape mismatch".into());
-    }
-    let words: Vec<u64> = field("router")?
-        .split(',')
-        .map(|w| u64::from_str_radix(w, 16))
-        .collect::<std::result::Result<_, _>>()?;
-    if words.len() != EXPERTS * ROUTE_WORDS {
-        return Err("router needs EXPERTS * ROUTE_WORDS words".into());
-    }
-    let mut prototypes = [[0u64; ROUTE_WORDS]; EXPERTS];
-    for (k, p) in prototypes.iter_mut().enumerate() {
-        p.copy_from_slice(&words[k * ROUTE_WORDS..(k + 1) * ROUTE_WORDS]);
-    }
-    let ints = |name: &str| -> Result<[i32; DEPTHS]> {
-        let v: Vec<i32> = field(name)?
-            .split(',')
-            .map(str::parse)
-            .collect::<std::result::Result<_, _>>()?;
-        v.try_into()
-            .map_err(|_| format!("{name} needs {DEPTHS} values").into())
-    };
-    let mut heads = Vec::with_capacity(EXPERTS);
-    for k in 0..EXPERTS {
-        let weights: Vec<i8> = field(&format!("expert{k}_weights"))?
-            .split(',')
-            .map(str::parse)
-            .collect::<std::result::Result<_, _>>()?;
-        if weights.len() != DEPTHS * ROW || weights.iter().any(|w| !(-1..=1).contains(w)) {
-            return Err("weights must be DEPTHS*ROW ternary values".into());
-        }
-        heads.push(BankHead::new(
-            weights,
-            ints(&format!("expert{k}_unit"))?,
-            ints(&format!("expert{k}_bias"))?,
-        ));
-    }
-    let eighths: i32 = field("lambda_eighths")?.parse()?;
-    if !LAMBDA_EIGHTHS.contains(&eighths) {
-        return Err("lambda outside the registered grid".into());
-    }
-    let flags: Vec<&str> = field("admitted")?.split(',').collect();
-    if flags.len() != EXPERTS || flags.iter().any(|f| *f != "0" && *f != "1") {
-        return Err("admitted needs EXPERTS flags 0 or 1".into());
-    }
-    let mut admitted = [false; EXPERTS];
-    for (a, f) in admitted.iter_mut().zip(flags) {
-        *a = f == "1";
-    }
-    Ok(Exported {
-        router: Router { prototypes },
-        heads,
-        admitted,
-        eighths,
-    })
-}
-
-/// The H-1d head format (`sml-hyb-h1d-s5h`): one head and its lambda.
-fn parse_h1d_head(text: &str) -> Result<(BankHead, i32)> {
-    let field = |name: &str| -> Result<&str> {
-        text.lines()
-            .find_map(|l| l.strip_prefix(name)?.strip_prefix('\t'))
-            .ok_or_else(|| format!("missing {name}").into())
-    };
-    if field("row")?.parse::<usize>()? != ROW
-        || field("depths")?.parse::<usize>()? != DEPTHS
-        || field("banks")?.parse::<usize>()? != MAX_BANKS
-    {
-        return Err("head shape mismatch".into());
-    }
-    let ints = |name: &str| -> Result<[i32; DEPTHS]> {
-        let v: Vec<i32> = field(name)?
-            .split(',')
-            .map(str::parse)
-            .collect::<std::result::Result<_, _>>()?;
-        v.try_into()
-            .map_err(|_| format!("{name} needs {DEPTHS} values").into())
-    };
-    let weights: Vec<i8> = field("weights")?
-        .split(',')
-        .map(str::parse)
-        .collect::<std::result::Result<_, _>>()?;
-    if weights.len() != DEPTHS * ROW || weights.iter().any(|w| !(-1..=1).contains(w)) {
-        return Err("weights must be DEPTHS*ROW ternary values".into());
-    }
-    let eighths: i32 = field("lambda_eighths")?.parse()?;
-    if !LAMBDA_EIGHTHS.contains(&eighths) {
-        return Err("lambda outside the registered grid".into());
-    }
-    Ok((
-        BankHead::new(weights, ints("unit")?, ints("bias")?),
-        eighths,
-    ))
 }
 
 /// SHA-256 of the route and every i32 correction (0 for an expert that

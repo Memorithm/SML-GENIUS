@@ -529,31 +529,35 @@ impl FusedBankHead {
     #[inline]
     #[must_use]
     pub fn corrections(&self, r: &BankRecord, eighths: i32) -> [i32; DEPTHS] {
+        std::array::from_fn(|d| self.correction(r, d, eighths))
+    }
+
+    /// Stretch correction of decision `d` alone. It reads only what a
+    /// decoder knows before decision `d`: the target bits above it, the
+    /// P1 logit and bank stretches of `d`, the context and confidence.
+    #[inline]
+    #[must_use]
+    pub fn correction(&self, r: &BankRecord, d: usize, eighths: i32) -> i32 {
         let record = &r.record;
         let base = u64::from(record.word) | (u64::from(record.confidence) << 16);
         let prefix = u64::from(record.target.reverse_bits());
-        let eighths = i64::from(eighths);
-        let mut out = [0i32; DEPTHS];
-        for (d, slot) in out.iter_mut().enumerate() {
-            let stretch = i32::from(record.logits[d]);
-            let magnitude = stretch.unsigned_abs();
-            let mut high = base | ((prefix & ((1 << d.min(7)) - 1)) << 48);
-            high |= u64::from(stretch < 0) << 55;
-            high |= 1 << 56;
-            high |= u64::from(magnitude >= 128) << 57;
-            high |= u64::from(magnitude >= 512) << 58;
-            high |= u64::from(magnitude >= 1024) << 59;
-            let words = [record.context, high, bank_word_fast(&r.banks.stretch[d])];
-            let (p, m) = (&self.plus[d], &self.minus[d]);
-            let mut raw = 0i64;
-            for k in 0..WORDS {
-                raw += i64::from((words[k] & p[k]).count_ones())
-                    - i64::from((words[k] & m[k]).count_ones());
-            }
-            *slot = (((raw * self.unit[d] + self.bias[d]) * eighths) >> 3)
-                .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+        let stretch = i32::from(record.logits[d]);
+        let magnitude = stretch.unsigned_abs();
+        let mut high = base | ((prefix & ((1 << d.min(7)) - 1)) << 48);
+        high |= u64::from(stretch < 0) << 55;
+        high |= 1 << 56;
+        high |= u64::from(magnitude >= 128) << 57;
+        high |= u64::from(magnitude >= 512) << 58;
+        high |= u64::from(magnitude >= 1024) << 59;
+        let words = [record.context, high, bank_word_fast(&r.banks.stretch[d])];
+        let (p, m) = (&self.plus[d], &self.minus[d]);
+        let mut raw = 0i64;
+        for k in 0..WORDS {
+            raw += i64::from((words[k] & p[k]).count_ones())
+                - i64::from((words[k] & m[k]).count_ones());
         }
-        out
+        (((raw * self.unit[d] + self.bias[d]) * i64::from(eighths)) >> 3)
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
     }
 
     /// Code length of `r` under P1 plus this head at `eighths / 8`; equal
