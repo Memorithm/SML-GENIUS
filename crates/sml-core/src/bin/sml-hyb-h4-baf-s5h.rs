@@ -149,9 +149,7 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
         }
     }
 
-    let mut report = format!(
-        "seed,train_bytes,cal_sel_bytes,train_p1_bpc,train_neural_bpc,train_baf_bpc,cal_p1_bpc,cal_neural_bpc,cal_baf_bpc,cal_hash_bpc,cal_neural_minus_baf_bpc,cal_hash_minus_baf_bpc,train_baf_selected,cal_baf_selected,hash_threshold,candidate_evals,null_admitted,admitted\n"
-    );
+    let mut report = "seed,train_bytes,cal_sel_bytes,train_p1_bpc,train_neural_bpc,train_baf_bpc,cal_p1_bpc,cal_neural_bpc,cal_baf_bpc,cal_hash_bpc,cal_neural_minus_baf_bpc,cal_hash_minus_baf_bpc,train_baf_selected,cal_baf_selected,hash_threshold,candidate_evals,null_admitted,admitted\n".to_string();
     let mut gates = String::new();
     let mut all_pass = true;
     for (i, &seed) in HEAD_SEEDS.iter().enumerate() {
