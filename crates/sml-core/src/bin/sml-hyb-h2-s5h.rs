@@ -27,10 +27,16 @@
 //!   (deterministic) and, if the gate passes, reads `trace-eval4.bin`, its
 //!   sidecar and `eval4.json` once.
 //!
+//! * `templates P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` is the H-2t template
+//!   feasibility diagnostic (docs/HYB-H2T-TEMPLATE-FEASIBILITY.md): CAL
+//!   only, flat templates from the shape of the decoded text
+//!   (`hyb_h2t_templates`), one expert per template, a match-model
+//!   estimate; it writes `h2t.tsv` and never opens EVAL4.
+//!
 //! The S5h DEV, EVAL2 and EVAL3 are never opened. `replay EXPERTS.tsv`
 //! prints the digest of a router and its experts on synthetic records
-//! (cross-host check); `smoke` runs on generated traces and is labelled
-//! SMOKE, never a result. TEST is never read. NOT_PROMOTED.
+//! (cross-host check); `smoke` and `smoke-templates` run on generated
+//! traces and are labelled SMOKE, never a result. TEST is never read. NOT_PROMOTED.
 
 use sml_core::{
     elastic_ngram_paged_sha::{hex, sha256},
@@ -45,6 +51,9 @@ use sml_core::{
     hyb_h2_mor_experts::{
         best_expert, hash_route, initial_group, quartile_edges, route_bits, router_bytes,
         train_routed, Majority, Router, EXPERTS, ROUNDS, ROUTE_WORDS,
+    },
+    hyb_h2t_templates::{
+        agreement, cluster, length_bucket, nearest, MatchModel, Shape, ShapeState,
     },
     hyb_h3_engine::{parse_experts, parse_h1d_head, Exported},
 };
@@ -301,13 +310,44 @@ fn select(
     sel_records: u64,
     snapshots: u64,
 ) -> Result<Arm> {
+    let s = select_by(pair, masters, |r| routing.route(r), sel, sel_records)?;
+    Ok(Arm {
+        routing,
+        heads: s.heads,
+        admitted: s.admitted,
+        gains: s.gains,
+        tau: s.tau,
+        eighths: s.eighths,
+        sel_bpc: s.sel_bpc,
+        snapshots,
+    })
+}
+
+/// What `select_by` keeps: heads at the chosen tau, lambda, admission.
+struct Selected {
+    heads: Vec<BankHead>,
+    admitted: [bool; EXPERTS],
+    gains: [f64; EXPERTS],
+    tau: f32,
+    eighths: i32,
+    sel_bpc: f64,
+}
+
+/// `select` for any routing function.
+fn select_by(
+    pair: &mut Pair,
+    masters: &[BankMaster],
+    route: impl Fn(&BankRecord) -> usize,
+    sel: &[Span],
+    sel_records: u64,
+) -> Result<Selected> {
     let heads: Vec<Vec<BankHead>> = TAUS
         .iter()
         .map(|&t| masters.iter().map(|m| BankHead::export(m, t)).collect())
         .collect();
     let mut bits: SelBits = Default::default();
     pair.all(sel, |r| {
-        let k = routing.route(r);
+        let k = route(r);
         for (t, row) in heads.iter().enumerate() {
             for (l, c) in row[k].costs(r).iter().enumerate() {
                 bits[t][l] += c;
@@ -320,7 +360,7 @@ fn select(
     // Admission per expert at the chosen (tau, lambda).
     let (mut a0, mut head, mut n) = ([0.0; EXPERTS], [0.0; EXPERTS], [0u64; EXPERTS]);
     pair.all(sel, |r| {
-        let k = routing.route(r);
+        let k = route(r);
         a0[k] += a0_cost(&r.record);
         head[k] += heads[k].cost(r, eighths);
         n[k] += 1;
@@ -335,15 +375,13 @@ fn select(
         admitted[k] = n[k] > 0 && gains[k] >= ADMIT_BPC;
         total += if admitted[k] { head[k] } else { a0[k] };
     }
-    Ok(Arm {
-        routing,
+    Ok(Selected {
         heads,
         admitted,
         gains,
         tau: TAUS[t],
         eighths,
         sel_bpc: bpc(total, sel_records),
-        snapshots,
     })
 }
 
@@ -926,6 +964,372 @@ fn write_smoke(root: &Path, signal: u64) -> Result<()> {
     Ok(())
 }
 
+// ---- HYB H-2t: template feasibility diagnostic (CAL only) ----------------
+//
+// Protocol: docs/HYB-H2T-TEMPLATE-FEASIBILITY.md. Reads only `trace-cal.bin`
+// and its sidecar (CAL-FIT and CAL-SEL) and the A1d heads; never EVAL4,
+// the S5h DEV or TEST. Writes `h2t.tsv`, labelled DIAGNOSTIC: it decides
+// whether a template-routing H-2b is worth preregistering, nothing else.
+
+/// Every `TEMPLATE_SAMPLE_STRIDE`-th CAL-FIT byte feeds the clustering.
+const TEMPLATE_SAMPLE_STRIDE: u64 = 64;
+const TEMPLATE_ROUNDS: usize = 8;
+/// Template counts whose stability is reported; experts use `EXPERTS`.
+const TEMPLATE_COUNTS: [usize; 2] = [EXPERTS, 16];
+/// Feasibility: CAL-SEL gain of template-routed experts over A1d, both
+/// seeds (the H-2 gate)...
+const TEMPLATE_GAIN_BPC: f64 = CAL_GATE_BPC;
+/// ... and agreement of the two seeds' `EXPERTS`-template clusterings.
+const TEMPLATE_MIN_AGREEMENT: f64 = 0.8;
+/// Within-document match model table size.
+const DOC_MATCH_BITS: u32 = 16;
+
+/// Template id of every CAL record, looked up by document and position.
+struct TemplateIds {
+    docs: std::collections::HashMap<u32, (u32, usize)>,
+    ids: Vec<u8>,
+}
+
+impl TemplateIds {
+    #[inline]
+    fn id(&self, r: &BankRecord) -> usize {
+        let (first, offset) = self.docs[&r.record.doc_index];
+        usize::from(self.ids[offset + (r.record.position - first) as usize])
+    }
+}
+
+/// Replays `spans` document by document with a fresh `ShapeState` each,
+/// calling `each(record, signature before the byte)`. Positions must be
+/// contiguous inside a document.
+fn shapes(
+    pair: &mut Pair,
+    spans: &[Span],
+    mut each: impl FnMut(&BankRecord, &Shape),
+) -> Result<()> {
+    for &span in spans {
+        let mut state = ShapeState::new();
+        let mut next: Option<u32> = None;
+        let mut gap = false;
+        pair.each(span, |r| {
+            if next.is_some_and(|p| p != r.record.position) {
+                gap = true;
+            }
+            next = Some(r.record.position + 1);
+            each(r, &state.signature());
+            state.push(r.record.target);
+        })?;
+        if gap {
+            return Err(format!("CAL doc {}: positions are not contiguous", span.doc).into());
+        }
+    }
+    Ok(())
+}
+
+fn template_ids(pair: &mut Pair, spans: &[Span], centres: &[Shape]) -> Result<TemplateIds> {
+    let mut docs = std::collections::HashMap::new();
+    let mut ids = Vec::new();
+    for &span in spans {
+        let mut first = None;
+        shapes(pair, &[span], |r, s| {
+            first.get_or_insert(r.record.position);
+            ids.push(nearest(centres, s) as u8);
+        })?;
+        let first = first.ok_or("empty CAL document")?;
+        docs.insert(span.doc, (first, ids.len() - span.count as usize));
+    }
+    Ok(TemplateIds { docs, ids })
+}
+
+fn shapes_hex(centres: &[Shape]) -> String {
+    centres
+        .iter()
+        .map(|c| format!("{:016x}{:016x}", c[0], c[1]))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Mean length of the runs of equal ids inside documents.
+fn mean_run(t: &TemplateIds, spans: &[Span]) -> f64 {
+    let (mut runs, mut bytes) = (0u64, 0u64);
+    for span in spans {
+        let (_, offset) = t.docs[&span.doc];
+        let ids = &t.ids[offset..offset + span.count as usize];
+        runs += 1 + ids.windows(2).filter(|w| w[0] != w[1]).count() as u64;
+        bytes += span.count;
+    }
+    bytes as f64 / runs.max(1) as f64
+}
+
+struct TemplateSeed {
+    centres: Vec<Shape>,
+    selected: Selected,
+    counts: [u64; EXPERTS],
+    p1_bpc: [f64; EXPERTS],
+    a1d_gain: [f64; EXPERTS],
+    oracle_bpc: f64,
+    snapshots: u64,
+}
+
+/// One seed: templates from CAL-FIT shapes, one H-1d-shaped expert per
+/// template trained on CAL-FIT, selected and admitted on CAL-SEL.
+fn template_seed(
+    dir: &Path,
+    seed: u64,
+    samples: &[Shape],
+    fit: &[Span],
+    sel: &[Span],
+    sel_records: u64,
+    a1d: &(BankHead, i32),
+) -> Result<(TemplateSeed, TemplateIds)> {
+    let mut pair = Pair::open(dir, "trace-cal")?;
+    let centres = cluster(samples, EXPERTS, seed, TEMPLATE_ROUNDS);
+    let all: Vec<Span> = fit.iter().chain(sel).copied().collect();
+    let ids = template_ids(&mut pair, &all, &centres)?;
+    let docs: Vec<(u32, Span)> = fit.iter().map(|s| (s.doc, *s)).collect();
+    let (masters, snapshots) = train_routed(
+        seed,
+        &docs,
+        |r| ids.id(r),
+        |span, train| pair.each(span, |r| train(r)),
+    )?
+    .ok_or("no averaged snapshot")?;
+    let selected = select_by(&mut pair, &masters, |r| ids.id(r), sel, sel_records)?;
+    let (mut counts, mut p1, mut head) = ([0u64; EXPERTS], [0.0; EXPERTS], [0.0; EXPERTS]);
+    let mut oracle = 0.0;
+    pair.all(sel, |r| {
+        let k = ids.id(r);
+        counts[k] += 1;
+        p1[k] += a0_cost(&r.record);
+        head[k] += a1d.0.cost(r, a1d.1);
+        oracle += selected
+            .heads
+            .iter()
+            .map(|h| h.cost(r, selected.eighths))
+            .fold(a0_cost(&r.record), f64::min);
+    })?;
+    let per = |b: f64, n: u64| if n == 0 { 0.0 } else { b / n as f64 };
+    Ok((
+        TemplateSeed {
+            centres,
+            counts,
+            p1_bpc: std::array::from_fn(|k| per(p1[k], counts[k])),
+            a1d_gain: std::array::from_fn(|k| per(p1[k] - head[k], counts[k])),
+            oracle_bpc: bpc(oracle, sel_records),
+            snapshots,
+            selected,
+        },
+        ids,
+    ))
+}
+
+/// Match-model estimate: per length bucket, the CAL-FIT hit rate `p`; on
+/// CAL-SEL a covered byte costs `-log2 p` on a hit and `-log2(1 - p)`
+/// plus its P1 cost on a miss, or its P1 cost if that is smaller.
+/// Returns report lines for one variant (`cross` over the CAL stream,
+/// `doc` within each document).
+fn match_report(pair: &mut Pair, fit: &[Span], sel: &[Span], variant: &str) -> Result<String> {
+    let cross = variant == "cross";
+    let mut model = MatchModel::new();
+    let mut seen = [[0u64; 2]; 4];
+    for &span in fit {
+        if !cross {
+            model = MatchModel::with_bits(DOC_MATCH_BITS);
+        }
+        pair.each(span, |r| {
+            let p = model.predict();
+            let b = length_bucket(p);
+            seen[b][0] += 1;
+            seen[b][1] += u64::from(p.is_some_and(|(q, _)| q == r.record.target));
+            model.push(r.record.target);
+        })?;
+    }
+    let rate: [f64; 4] = std::array::from_fn(|b| {
+        ((seen[b][1] as f64 + 0.5) / (seen[b][0] as f64 + 1.0)).clamp(1e-6, 1.0 - 1e-6)
+    });
+    let (mut n, mut covered, mut hits, mut p1_all, mut p1_cov, mut est) =
+        (0u64, 0u64, 0u64, 0.0, 0.0, 0.0);
+    for &span in sel {
+        if !cross {
+            model = MatchModel::with_bits(DOC_MATCH_BITS);
+        }
+        pair.each(span, |r| {
+            let c = a0_cost(&r.record);
+            let p = model.predict();
+            n += 1;
+            p1_all += c;
+            if let Some((q, _)) = p {
+                let rb = rate[length_bucket(p)];
+                covered += 1;
+                p1_cov += c;
+                let cost = if q == r.record.target {
+                    hits += 1;
+                    -rb.log2()
+                } else {
+                    -(1.0 - rb).log2() + c
+                };
+                est += cost.min(c);
+            } else {
+                est += c;
+            }
+            model.push(r.record.target);
+        })?;
+    }
+    let gain = (p1_all - est) / n.max(1) as f64;
+    Ok(format!(
+        "{BASE}_match_{variant}_fit_hit_rate_by_bucket\t{}\n\
+         {BASE}_match_{variant}_sel_coverage\t{:.6}\n{BASE}_match_{variant}_sel_hit_rate\t{:.6}\n\
+         {BASE}_match_{variant}_sel_p1_bpc_on_covered\t{:.6}\n\
+         {BASE}_match_{variant}_sel_gain_estimate_bpc\t{gain:.6}\n",
+        rate.iter()
+            .map(|r| format!("{r:.4}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        covered as f64 / n.max(1) as f64,
+        hits as f64 / covered.max(1) as f64,
+        p1_cov / covered.max(1) as f64,
+    ))
+}
+
+fn templates(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
+    fs::create_dir(out)?;
+    let dir = p1.join(BASE);
+    let json = fs::read_to_string(dir.join("trace.json"))?;
+    let weights = json_str(&json, "weights_sha256")?;
+    if label == "PREREGISTERED" && weights != P1_WEIGHTS_SHA256 {
+        return Err(format!("P1 weights {weights} are not the H-1d bytes_q4 weights").into());
+    }
+    let a1d_heads = h1d_heads(h1d, label, weights)?;
+    let cal = scan(
+        &dir.join("trace-cal.bin"),
+        &dir.join("trace-cal.banks.bin"),
+        2,
+    )?;
+    check_reported(&json, "cal_trace", bpc(cal.bits, cal.records))?;
+    let (mut fit, mut sel) = (Vec::new(), Vec::new());
+    for span in &cal.spans {
+        match span.doc % 32 {
+            CAL_FIT => fit.push(*span),
+            CAL_SEL => sel.push(*span),
+            _ => return Err(format!("CAL doc {} outside CAL-FIT/CAL-SEL", span.doc).into()),
+        }
+    }
+    if fit.is_empty() || sel.is_empty() {
+        return Err("CAL-FIT and CAL-SEL must both be non-empty".into());
+    }
+    let sel_records: u64 = sel.iter().map(|s| s.count).sum();
+    let mut pair = Pair::open(&dir, "trace-cal")?;
+    let (mut a0_sel, mut a1d_sel) = (0.0, [0.0; SEEDS.len()]);
+    pair.all(&sel, |r| {
+        a0_sel += a0_cost(&r.record);
+        for (k, (head, eighths)) in a1d_heads.iter().enumerate() {
+            a1d_sel[k] += head.cost(r, *eighths);
+        }
+    })?;
+    let a1d_sel = a1d_sel.map(|b| bpc(b, sel_records));
+    let mut samples = Vec::new();
+    let mut index = 0u64;
+    shapes(&mut pair, &fit, |_, s| {
+        if index % TEMPLATE_SAMPLE_STRIDE == 0 {
+            samples.push(*s);
+        }
+        index += 1;
+    })?;
+    let seeds: Vec<Result<(TemplateSeed, TemplateIds)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = SEEDS
+            .iter()
+            .enumerate()
+            .map(|(k, &seed)| {
+                let (samples, fit, sel, dir, head) = (&samples, &fit, &sel, &dir, &a1d_heads[k]);
+                scope.spawn(move || template_seed(dir, seed, samples, fit, sel, sel_records, head))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("seed thread"))
+            .collect()
+    });
+    let mut arms = Vec::new();
+    for s in seeds {
+        arms.push(s?);
+    }
+    let mut report = format!(
+        "label\t{label}\nstage\ttemplates\nschema\tSML_HYB_H2T_TEMPLATES_V1\n\
+         {BASE}_p1_weights_sha256\t{weights}\n{BASE}_dev_read\tfalse\n{BASE}_eval4_read\tfalse\n\
+         {BASE}_cal_sel_records\t{sel_records}\n{BASE}_a0_sel_bpc\t{:.9}\n\
+         {BASE}_template_samples\t{}\n{BASE}_template_rounds\t{TEMPLATE_ROUNDS}\n",
+        bpc(a0_sel, sel_records),
+        samples.len(),
+    );
+    // Stability: the two seeds' clusterings on CAL-SEL, at each count.
+    let mut agreement_experts = 0.0;
+    for &k in &TEMPLATE_COUNTS {
+        let labels: Vec<Vec<u8>> = SEEDS
+            .iter()
+            .map(|&seed| {
+                let centres = cluster(&samples, k, seed, TEMPLATE_ROUNDS);
+                let mut ids = Vec::with_capacity(sel_records as usize);
+                shapes(&mut pair, &sel, |_, s| ids.push(nearest(&centres, s) as u8))?;
+                Ok(ids)
+            })
+            .collect::<Result<_>>()?;
+        let a = agreement(&labels[0], &labels[1], k);
+        if k == EXPERTS {
+            agreement_experts = a;
+        }
+        report += &format!("{BASE}_templates{k}_seed_agreement\t{a:.6}\n");
+    }
+    let mut feasible = agreement_experts >= TEMPLATE_MIN_AGREEMENT;
+    for (k, (a, ids)) in arms.iter().enumerate() {
+        let seed = SEEDS[k];
+        let gain = a1d_sel[k] - a.selected.sel_bpc;
+        feasible &= gain >= TEMPLATE_GAIN_BPC;
+        let list = |v: &[f64; EXPERTS]| {
+            v.iter()
+                .map(|x| format!("{x:.6}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        report += &format!(
+            "{BASE}_a1d_seed{seed}_sel_bpc\t{:.9}\n{BASE}_t_seed{seed}_sel_bpc\t{:.9}\n\
+             {BASE}_t_seed{seed}_sel_gain_over_a1d\t{gain:.9}\n\
+             {BASE}_t_seed{seed}_oracle_sel_bpc\t{:.9}\n{BASE}_t_seed{seed}_tau\t{}\n\
+             {BASE}_t_seed{seed}_lambda_eighths\t{}\n{BASE}_t_seed{seed}_snapshots\t{}\n\
+             {BASE}_t_seed{seed}_admitted\t{:?}\n{BASE}_t_seed{seed}_expert_sel_gains\t{}\n\
+             {BASE}_t_seed{seed}_sel_bytes\t{:?}\n{BASE}_t_seed{seed}_sel_p1_bpc\t{}\n\
+             {BASE}_t_seed{seed}_sel_a1d_gain\t{}\n{BASE}_t_seed{seed}_sel_mean_run\t{:.2}\n\
+             {BASE}_t_seed{seed}_centres\t{}\n",
+            a1d_sel[k],
+            a.selected.sel_bpc,
+            a.oracle_bpc,
+            a.selected.tau,
+            a.selected.eighths,
+            a.snapshots,
+            a.selected.admitted,
+            gains_text(&a.selected.gains),
+            a.counts,
+            list(&a.p1_bpc),
+            list(&a.a1d_gain),
+            mean_run(ids, &sel),
+            shapes_hex(&a.centres),
+        );
+    }
+    for variant in ["cross", "doc"] {
+        report += &match_report(&mut pair, &fit, &sel, variant)?;
+    }
+    report += &format!(
+        "{BASE}_template_gain_bpc\t{TEMPLATE_GAIN_BPC}\n\
+         {BASE}_template_min_agreement\t{TEMPLATE_MIN_AGREEMENT}\nverdict\t{}\n",
+        if feasible {
+            "TEMPLATES_FEASIBLE"
+        } else {
+            "TEMPLATES_NOT_FEASIBLE"
+        }
+    );
+    fs::write(out.join("h2t.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
         Some(mode @ ("gate" | "run")) if args.len() == 5 => run(
@@ -935,6 +1339,22 @@ fn cli(args: &[String]) -> Result<()> {
             "PREREGISTERED",
             mode == "run",
         ),
+        Some("templates") if args.len() == 5 => templates(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+            "PREREGISTERED",
+        ),
+        Some("smoke-templates") if args.len() == 3 => {
+            let root = Path::new(&args[2]);
+            write_smoke(root, 14)?;
+            templates(
+                &root.join("p1"),
+                &root.join("h1d"),
+                &root.join("out"),
+                "SMOKE",
+            )
+        }
         Some("replay") if args.len() == 3 => {
             let exported = parse_experts(&fs::read_to_string(&args[2])?)?;
             println!("replay_sha256\t{}", replay_digest(&exported)?);
@@ -952,7 +1372,8 @@ fn cli(args: &[String]) -> Result<()> {
             )
         }
         _ => Err(
-            "usage: (gate|run) P1_H1D_OUT H1D_OUT NEW_OUT | replay EXPERTS.tsv | smoke NEW_DIR"
+            "usage: (gate|run|templates) P1_H1D_OUT H1D_OUT NEW_OUT | replay EXPERTS.tsv | \
+             (smoke|smoke-templates) NEW_DIR"
                 .into(),
         ),
     }
@@ -1031,6 +1452,79 @@ mod tests {
         )
         .is_err());
         assert!(run(&p1, &root.join("h1d"), &root.join("out"), "SMOKE", false).is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_template_diagnostic_reads_cal_only_and_reports_every_field() {
+        let root = temp("templates");
+        let _ = fs::remove_dir_all(&root);
+        write_smoke(&root, 14).unwrap();
+        // EVAL4 is never needed: hide it.
+        let dir = root.join("p1").join(BASE);
+        for f in ["trace-eval4.bin", "trace-eval4.banks.bin", "eval4.json"] {
+            fs::remove_file(dir.join(f)).unwrap();
+        }
+        templates(
+            &root.join("p1"),
+            &root.join("h1d"),
+            &root.join("out"),
+            "SMOKE",
+        )
+        .unwrap();
+        let report = fs::read_to_string(root.join("out/h2t.tsv")).unwrap();
+        assert_eq!(value(&report, "label"), "SMOKE");
+        assert_eq!(value(&report, "bytes_q4_eval4_read"), "false");
+        assert_eq!(value(&report, "bytes_q4_dev_read"), "false");
+        for k in TEMPLATE_COUNTS {
+            let a = num(&report, &format!("bytes_q4_templates{k}_seed_agreement"));
+            assert!((0.0..=1.0).contains(&a));
+        }
+        for seed in SEEDS {
+            let t = num(&report, &format!("bytes_q4_t_seed{seed}_sel_bpc"));
+            let oracle = num(&report, &format!("bytes_q4_t_seed{seed}_oracle_sel_bpc"));
+            assert!(oracle <= t + 1e-9, "the oracle bound is a lower bound");
+            let bytes = value(&report, &format!("bytes_q4_t_seed{seed}_sel_bytes"));
+            let total: u64 = bytes
+                .trim_matches(['[', ']'])
+                .split(", ")
+                .map(|n| n.parse::<u64>().unwrap())
+                .sum();
+            assert_eq!(total, num(&report, "bytes_q4_cal_sel_records") as u64);
+        }
+        for variant in ["cross", "doc"] {
+            let c = num(&report, &format!("bytes_q4_match_{variant}_sel_coverage"));
+            assert!((0.0..=1.0).contains(&c));
+        }
+        assert!(["TEMPLATES_FEASIBLE", "TEMPLATES_NOT_FEASIBLE"]
+            .contains(&value(&report, "verdict").as_str()));
+        // Deterministic, never overwrites, and refuses smoke weights when
+        // preregistered.
+        templates(
+            &root.join("p1"),
+            &root.join("h1d"),
+            &root.join("again"),
+            "SMOKE",
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(root.join("again/h2t.tsv")).unwrap(),
+            fs::read(root.join("out/h2t.tsv")).unwrap()
+        );
+        assert!(templates(
+            &root.join("p1"),
+            &root.join("h1d"),
+            &root.join("out"),
+            "SMOKE"
+        )
+        .is_err());
+        assert!(templates(
+            &root.join("p1"),
+            &root.join("h1d"),
+            &root.join("pre"),
+            "PREREGISTERED"
+        )
+        .is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 
