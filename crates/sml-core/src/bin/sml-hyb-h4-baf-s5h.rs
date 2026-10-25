@@ -156,7 +156,11 @@ fn apply_gate(p1_dir: &Path, h1d_dir: &Path, out: &Path) -> Result<()> {
     let mut all_pass = true;
     for (i, &seed) in HEAD_SEEDS.iter().enumerate() {
         let fit = fit_head_gate(&train[i], &validation[i], HeadGatePolicy::default())?;
-        let null_fit = fit_head_gate(&null_train[i], &null_validation[i], HeadGatePolicy::default())?;
+        let null_fit = fit_head_gate(
+            &null_train[i],
+            &null_validation[i],
+            HeadGatePolicy::default(),
+        )?;
         let hash_threshold = train[i].match_hash_activity(fit.train_selected);
         let (cal_hash, _) = validation[i].hashed_microbits_and_selected(hash_threshold);
         let train_baf = train[i].routed_microbits(&fit.gate);
