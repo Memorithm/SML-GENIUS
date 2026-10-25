@@ -9,8 +9,7 @@ use crate::hyb_h1d_copy::{CopyExpert, COPY_MAX_SUFFIX};
 
 /// Gaussian kernel, Q1024, mu=4 matching bytes, sigma=1.5 bytes.
 /// Values are rounded once in the preregistered design.
-pub const GAUSSIAN_KERNEL_Q1024: [u16; COPY_MAX_SUFFIX + 1] =
-    [0, 139, 421, 820, 1024];
+pub const GAUSSIAN_KERNEL_Q1024: [u16; COPY_MAX_SUFFIX + 1] = [0, 139, 421, 820, 1024];
 pub const MIX_DENOMINATOR: u16 = 10_240;
 pub const FIXED_COPY_EXPOSURE: u16 = 2_048;
 /// A difference ≤0.5 percentage point per active bit is allowed.
@@ -103,8 +102,7 @@ impl GaussianCopyProfile {
         for amplitude in 0..=MIX_DENOMINATOR {
             let effective = (1..=COPY_MAX_SUFFIX)
                 .map(|length| {
-                    u128::from(counts[length])
-                        * u128::from(weight_at_amplitude(length, amplitude))
+                    u128::from(counts[length]) * u128::from(weight_at_amplitude(length, amplitude))
                 })
                 .sum::<u128>();
             let error = effective.abs_diff(target);
@@ -113,9 +111,7 @@ impl GaussianCopyProfile {
                 smallest_error = error;
             }
         }
-        let maximum_allowed = active
-            * u128::from(MIX_DENOMINATOR)
-            * MAX_MATCH_ERROR_NUMERATOR
+        let maximum_allowed = active * u128::from(MIX_DENOMINATOR) * MAX_MATCH_ERROR_NUMERATOR
             / MAX_MATCH_ERROR_DENOMINATOR;
         if smallest_error > maximum_allowed {
             return Err(GaussianCalibrationError::ActivityMismatch);
@@ -157,8 +153,7 @@ impl GaussianCopyProfile {
 }
 
 fn weight_at_amplitude(length: usize, amplitude: u16) -> u16 {
-    let numerator =
-        u32::from(GAUSSIAN_KERNEL_Q1024[length]) * u32::from(amplitude) + 512;
+    let numerator = u32::from(GAUSSIAN_KERNEL_Q1024[length]) * u32::from(amplitude) + 512;
     (numerator / 1024).min(u32::from(MIX_DENOMINATOR)) as u16
 }
 
@@ -176,15 +171,16 @@ pub fn mix_gaussian_probability(neural: u32, copy: Option<u32>, copy_weight: u16
     let numerator = u64::from(neural) * u64::from(MIX_DENOMINATOR - copy_weight)
         + u64::from(copy) * u64::from(copy_weight)
         + u64::from(MIX_DENOMINATOR / 2);
-    (numerator / u64::from(MIX_DENOMINATOR))
-        .clamp(1, u64::from(u32::MAX) - 1) as u32
+    (numerator / u64::from(MIX_DENOMINATOR)).clamp(1, u64::from(u32::MAX) - 1) as u32
 }
 
 /// Independent oracle: derive length from previous bytes, without a
 /// CopyExpert ring or the cached candidate selection.
 #[must_use]
 pub fn oracle_longest_match(history: &[u8]) -> usize {
-    let retained = &history[history.len().saturating_sub(crate::hyb_h1d_copy::COPY_WINDOW)..];
+    let retained = &history[history
+        .len()
+        .saturating_sub(crate::hyb_h1d_copy::COPY_WINDOW)..];
     let mut best = 0;
     for end in 1..retained.len() {
         let mut matched = 0;
@@ -257,11 +253,15 @@ mod tests {
     #[test]
     fn gaussian_probability_mixing_is_bounded_and_changes_with_length() {
         let mut hist = CopyActivityHistogram::default();
-        hist.observe_train_document(&b"abababab".repeat(100)).unwrap();
+        hist.observe_train_document(&b"abababab".repeat(100))
+            .unwrap();
         let profile = GaussianCopyProfile::fit_train_only(&hist).unwrap();
         let neural = 2_000_000_000;
         let copy = 3_000_000_000;
-        assert_eq!(mix_gaussian_probability(neural, None, profile.weight_for_match(4)), neural);
+        assert_eq!(
+            mix_gaussian_probability(neural, None, profile.weight_for_match(4)),
+            neural
+        );
         assert_eq!(mix_gaussian_probability(neural, Some(copy), 0), neural);
         assert_eq!(mix_gaussian_probability(neural, Some(copy), 10_240), copy);
         assert!(
@@ -291,7 +291,11 @@ mod tests {
                 x as u8
             };
             for depth in 0..8 {
-                let known = if depth == 0 { 0 } else { byte & (0xff << (8 - depth)) };
+                let known = if depth == 0 {
+                    0
+                } else {
+                    byte & (0xff << (8 - depth))
+                };
                 assert_eq!(
                     copy.probability(depth, known),
                     oracle_probability(&history, depth, known),
