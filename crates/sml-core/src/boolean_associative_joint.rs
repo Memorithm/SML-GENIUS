@@ -38,6 +38,13 @@ pub struct JointFocusPolicy {
     /// pair count exceeds this bound the fit fails closed (CandidateBudget).
     /// Pair evaluations also count against `max_candidate_evaluations`.
     pub max_pair_flips: u64,
+    /// Bounded triple-flip escape (BAF-PARITY3): every round, after singles
+    /// and pairs, enumerate same-page triples of degree-1 monomial flips
+    /// (i < j < k, page IDs ascending). A triple wins only if it STRICTLY
+    /// beats the best single/pair. Per-round all-pages ceiling: C(n,3)*pages
+    /// must fit or the fit fails closed (CandidateBudget). 0 disables.
+    /// Triple evaluations count against `max_candidate_evaluations`.
+    pub max_triple_flips: u64,
 }
 
 impl Default for JointFocusPolicy {
@@ -47,6 +54,7 @@ impl Default for JointFocusPolicy {
             max_editable_pages: 4,
             max_candidate_evaluations: 5_000,
             max_pair_flips: 256,
+            max_triple_flips: 128,
         }
     }
 }
@@ -195,8 +203,21 @@ pub fn fit_joint_focus(
         }
         pairs
     };
+    let triples_per_round = if policy.max_triple_flips == 0 {
+        0
+    } else {
+        let n = atoms.len() as u64;
+        let triples = (n * n.saturating_sub(1) * n.saturating_sub(2) / 6)
+            .checked_mul(ids.len() as u64)
+            .ok_or(JointFocusError::CandidateBudget)?;
+        if triples > policy.max_triple_flips {
+            return Err(JointFocusError::CandidateBudget);
+        }
+        triples
+    };
     let worst_case = pairs_per_round
-        .checked_mul(local.max_rounds as u64)
+        .checked_add(triples_per_round)
+        .and_then(|p| p.checked_mul(local.max_rounds as u64))
         .and_then(|p| p.checked_add(worst_case))
         .ok_or(JointFocusError::CandidateBudget)?;
     if worst_case > policy.max_candidate_evaluations {
@@ -279,12 +300,59 @@ pub fn fit_joint_focus(
                 }
             }
         }
+        let mut best_triple = None;
+        if triples_per_round > 0 {
+            // Escape: same-page degree-1 triples (i < j < k); must strictly
+            // beat the best single/pair (ties keep the smaller move).
+            for (id, index) in indices.iter().copied() {
+                for i in 0..atoms.len() {
+                    for j in (i + 1)..atoms.len() {
+                        for k in (j + 1)..atoms.len() {
+                            let mut trial = candidate_pages.clone();
+                            let activation = &mut trial[index].activation;
+                            let mut ok = true;
+                            for term in [atoms[i], atoms[j], atoms[k]] {
+                                if let Some(pos) = activation.terms.iter().position(|x| *x == term)
+                                {
+                                    activation.terms.remove(pos);
+                                } else if activation.terms.len() >= local.max_terms {
+                                    ok = false;
+                                } else {
+                                    activation.terms.push(term);
+                                }
+                            }
+                            if !ok {
+                                continue;
+                            }
+                            let engine = BooleanAssociativeFocus::new(config, trial.clone())
+                                .map_err(JointFocusError::Engine)?;
+                            let loss =
+                                error_bits(&engine, train).map_err(JointFocusError::Split)?;
+                            evaluated += 1;
+                            if loss < best_error {
+                                best_error = loss;
+                                best_triple = Some((id, [atoms[i], atoms[j], atoms[k]]));
+                                best_pages = Some(trial);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let Some(winner) = best_pages else {
             break;
         };
         candidate_pages = winner;
         train_error = best_error;
-        if let Some((id, a, b)) = best_pair {
+        if let Some((id, terms)) = best_triple {
+            for term in terms {
+                accepted.push(JointFocusAcceptedFlip {
+                    page: id,
+                    term: Some(term),
+                    train_errors_after: best_error,
+                });
+            }
+        } else if let Some((id, a, b)) = best_pair {
             for term in [a, b] {
                 accepted.push(JointFocusAcceptedFlip {
                     page: id,

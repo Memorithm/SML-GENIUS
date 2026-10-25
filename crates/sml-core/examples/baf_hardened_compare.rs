@@ -268,6 +268,7 @@ fn fit_anf(
         validation,
         degree,
         JointFocusPolicy::default().max_pair_flips,
+        JointFocusPolicy::default().max_triple_flips,
     )
 }
 
@@ -277,9 +278,11 @@ fn fit_anf_with(
     validation: &[FocusTransition],
     degree: usize,
     max_pair_flips: u64,
+    max_triple_flips: u64,
 ) -> (BooleanAssociativeFocus, bool) {
     let policy = JointFocusPolicy {
         max_pair_flips,
+        max_triple_flips,
         local: FocusFitPolicy {
             max_degree: degree,
             ..FocusFitPolicy::default()
@@ -461,7 +464,7 @@ mod tests {
             for rows in &data {
                 assert_eq!(errors(rows, baf(&model)), 0, "seed {seed}: oracle exact");
             }
-            let (single, _) = fit_anf_with(&pages(), &data[0], &data[1], 1, 0);
+            let (single, _) = fit_anf_with(&pages(), &data[0], &data[1], 1, 0, 0);
             assert!(
                 errors(&data[0], baf(&single)) > 0,
                 "seed {seed}: single-flip-only now solves xor2; update docs"
@@ -472,5 +475,29 @@ mod tests {
                 assert_eq!(errors(rows, baf(&paired)), 0, "seed {seed}: pair escape");
             }
         }
+    }
+
+    /// BAF-PARITY3: 3-bit parity needs three simultaneous degree-1 atoms.
+    /// Pairs-only (`max_triple_flips = 0`) stays partial on some seed; the
+    /// bounded same-page triple escape (default) is exact on all splits.
+    #[test]
+    fn parity3_degree1_triple_escape_recovers() {
+        let mut pair_only_residual = 0;
+        for seed in 0..SEEDS {
+            let target = Target::new(Family::Parity3, seed);
+            let data = panels(&target, seed);
+            let pair_max = JointFocusPolicy::default().max_pair_flips;
+            let (pairs, _) = fit_anf_with(&pages(), &data[0], &data[1], 1, pair_max, 0);
+            pair_only_residual += errors(&data[0], baf(&pairs));
+            let (model, admitted) = fit_anf(&pages(), &data[0], &data[1], 1);
+            assert!(admitted, "seed {seed}: triple escape not admitted");
+            for rows in &data {
+                assert_eq!(errors(rows, baf(&model)), 0, "seed {seed}: triple escape");
+            }
+        }
+        assert!(
+            pair_only_residual > 0,
+            "pairs alone now solve parity3; update docs"
+        );
     }
 }
