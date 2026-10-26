@@ -47,4 +47,32 @@ shift, reported as such.
 `cargo test --locked -p sml-core --example grok_icm_stream_recall`
 
 ## Results
-(Filled only from executed runs.)
+Local execution, first and only TEST evaluation, byte-identical replay:
+
+```
+GROK-ICM-3 report v1
+k0 SHIFT75: correct 1168016 erasure 0 wrong 0
+k0 SHIFT75+ICM: correct 1168016 erasure 0 wrong 0
+k0 ALT_RULE90: correct 582985 erasure 0 wrong 585031
+k1 SHIFT75: correct 1148267 erasure 0 wrong 19749
+k1 SHIFT75+ICM: correct 1168016 erasure 0 wrong 0
+k1 ALT_RULE90: correct 587685 erasure 0 wrong 580331
+k2 SHIFT75: correct 1130507 erasure 0 wrong 37509
+k2 SHIFT75+ICM: correct 533301 erasure 634715 wrong 0
+k2 ALT_RULE90: correct 582587 erasure 0 wrong 585429
+verdict SHIFT75+ICM NEGATIVE
+fnv1a64 f60ccefd2f5f1c2e
+```
+
+**Verdict by the frozen rule: NEGATIVE** (kept, not retuned).
+- k=1: SHIFT75+ICM meets every gate (0 wrong, 0 erasure vs 19,749 wrong for
+  naked SHIFT75 and ~50 % wrong for ALT_RULE90).
+- k=2: 0 silent errors (gate met) but **54.3 % ERASURE** (> 5 % gate): two flips
+  in the same SECDED word are detected-uncorrectable, the state is dropped,
+  and at 1/32 faults per step the 75-step refill rarely completes.
+- ALT_RULE90 reproduces SKY-R4 (#739): ~50 % wrong in stream even with no
+  faults; rank 75 for both phases independently confirmed (test passes).
+- Lesson for ICM-4: zero silent errors is achievable, availability is not with
+  per-word SECDED + drop-on-detect at this fault rate. A future slice would
+  need finer correction granularity or partial-validity tracking, preregistered
+  separately.
