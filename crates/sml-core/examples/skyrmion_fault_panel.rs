@@ -68,12 +68,8 @@ impl Arm {
                     .fold(0_u8, |crc, (position, bit)| crc | (*bit << position));
                 (observed == crc8(bits[0])).then_some(bits[0])
             }
-            Self::Repetition3 if bits.len() == 3 => {
-                Some(u8::from(bits.iter().sum::<u8>() >= 2))
-            }
-            Self::Repetition75 if bits.len() == 75 => {
-                Some(u8::from(bits.iter().sum::<u8>() >= 38))
-            }
+            Self::Repetition3 if bits.len() == 3 => Some(u8::from(bits.iter().sum::<u8>() >= 2)),
+            Self::Repetition75 if bits.len() == 75 => Some(u8::from(bits.iter().sum::<u8>() >= 38)),
             Self::Sky if bits.len() == 75 => reference::decode_reference_texture(bits),
             _ => None,
         }
