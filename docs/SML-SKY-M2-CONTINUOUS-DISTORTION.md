@@ -90,3 +90,10 @@ approved by this research reference.
 
 No change to SciRust or FLAT-ATTENTION; these remain independently
 maintained projects. RemoteOps remains the sole remote control plane.
+
+## Implementation acceptance criteria
+
+The mathematical reference is acceptable only if its frozen Rust tests pass
+on the head SHA and the entire Rust workspace CI remains green. Geometry
+fixtures do not authorize an end-to-end model architecture change. The
+separate SKY-R1 causal-memory measurements are not part of the SKY-M2 claim.
