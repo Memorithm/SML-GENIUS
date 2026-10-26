@@ -1,0 +1,49 @@
+name: SKY-R4 stream recall reference
+on:
+  pull_request:
+    branches:
+      - main
+      - research/sky-r3-gf2-local-observability-20261027
+    paths:
+      - "crates/sml-core/examples/skyrmion_stream_recall.rs"
+      - "crates/sml-core/Cargo.toml"
+      - ".github/workflows/sky-r4-recall.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/sml-core/examples/skyrmion_stream_recall.rs"
+      - ".github/workflows/sky-r4-recall.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-recall:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: "-D warnings"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Exact read-only checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Qualified stream recall tests
+        run: cargo test --locked -p sml-core --example skyrmion_stream_recall
+      - name: Reproduce reset vs stream results
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p sml-core --example skyrmion_stream_recall > "$RUNNER_TEMP/r4-first.csv"
+          cargo run --locked -p sml-core --example skyrmion_stream_recall > "$RUNNER_TEMP/r4-second.csv"
+          cmp "$RUNNER_TEMP/r4-first.csv" "$RUNNER_TEMP/r4-second.csv"
+          cat "$RUNNER_TEMP/r4-first.csv"
