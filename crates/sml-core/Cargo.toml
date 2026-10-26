@@ -15,3 +15,7 @@ test = true
 [[example]]
 name = "skyrmion_octahedron"
 test = true
+
+[[example]]
+name = "skyrmion_fault_panel"
+test = true
