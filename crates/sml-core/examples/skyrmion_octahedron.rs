@@ -180,6 +180,43 @@ fn reference_texture(reverse_chirality: bool) -> OctahedralField {
     OctahedralField::new(5, 5, spins).expect("known reference shape")
 }
 
+/// Hypothetical three-bit serialized representation of each six-state spin.
+/// Reference Vec<u8> storage is NOT 75 actual packed bytes or a device model.
+pub(crate) fn encoded_reference_texture(reverse_chirality: bool) -> Vec<u8> {
+    reference_texture(reverse_chirality)
+        .spins
+        .iter()
+        .flat_map(|spin| (0..3).map(move |bit| ((*spin as u8) >> bit) & 1))
+        .collect()
+}
+
+/// Returns the useful payload (0 for Q=-1, 1 for Q=+1), or an erasure.
+/// This is a policy decoder: it does not restore an altered lattice state.
+pub(crate) fn decode_reference_texture(bits: &[u8]) -> Option<u8> {
+    if bits.len() != 75 || bits.iter().any(|bit| *bit > 1) {
+        return None;
+    }
+    let mut spins = Vec::with_capacity(25);
+    for chunk in bits.chunks_exact(3) {
+        let code = chunk[0] | (chunk[1] << 1) | (chunk[2] << 2);
+        spins.push(match code {
+            0 => Spin::Px,
+            1 => Spin::Nx,
+            2 => Spin::Py,
+            3 => Spin::Ny,
+            4 => Spin::Pz,
+            5 => Spin::Nz,
+            _ => return None,
+        });
+    }
+    let field = OctahedralField::new(5, 5, spins).ok()?;
+    match field.charge().ok()? {
+        -1 => Some(0),
+        1 => Some(1),
+        _ => None,
+    }
+}
+
 fn main() {
     let mut texture = reference_texture(false);
     let charge = texture.charge().expect("known reference configuration");
@@ -199,6 +236,14 @@ fn main() {
         })
     );
     println!("SKY-M0 guarded rewrite: preserved sector and rejected forbidden change.");
+    assert_eq!(
+        decode_reference_texture(&encoded_reference_texture(false)),
+        Some(0)
+    );
+    assert_eq!(
+        decode_reference_texture(&encoded_reference_texture(true)),
+        Some(1)
+    );
     println!("Reference-only: not a skyrmion device, bit-encoding, or model benchmark.");
 }
 
