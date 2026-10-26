@@ -23,3 +23,7 @@ test = true
 [[example]]
 name = "skyrmion_smooth_panel"
 test = true
+
+[[example]]
+name = "skyrmion_recurrent_panel"
+test = true

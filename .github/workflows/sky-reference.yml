@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - research/sky-m1-exhaustive-corruption-20261026
+      - research/sky-m2-continuous-distortion-oracle-20261026
     paths:
       - "crates/sml-core/examples/skyrmion_*.rs"
       - "crates/sml-core/Cargo.toml"
@@ -46,6 +47,16 @@ jobs:
         run: cargo test --locked -p sml-core --example skyrmion_fault_panel
       - name: SKY-M2 continuous-spin local distortion
         run: cargo test --locked -p sml-core --example skyrmion_smooth_panel
+      - name: SKY-R1 heldout local recurrence and fixed-sector negative controls
+        run: cargo test --locked -p sml-core --example skyrmion_recurrent_panel
+      - name: SKY-R1 deterministic train/heldout report replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p sml-core --example skyrmion_recurrent_panel > "$RUNNER_TEMP/sky-r1-a.csv"
+          cargo run --locked -p sml-core --example skyrmion_recurrent_panel > "$RUNNER_TEMP/sky-r1-b.csv"
+          cmp "$RUNNER_TEMP/sky-r1-a.csv" "$RUNNER_TEMP/sky-r1-b.csv"
+          cat "$RUNNER_TEMP/sky-r1-a.csv"
       - name: SKY-M2 deterministic report replay
         shell: bash
         run: |
