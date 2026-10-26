@@ -132,6 +132,91 @@ impl OctahedralField {
     }
 }
 
+/// O(1)-neighborhood, allocation-free update oracle with a cached global charge.
+///
+/// The cache is admitted only after one complete O(width*height) charge scan.
+/// Subsequent individual interior-spin rewrites recompute at most four grid
+/// squares (eight triangles before + eight after), independent of grid area.
+/// This does NOT protect the microstate bit itself against silent corruption.
+#[derive(Clone)]
+struct CachedChargeField {
+    field: OctahedralField,
+    signed_octants: i64,
+}
+
+impl CachedChargeField {
+    fn new(field: OctahedralField) -> Result<Self, ChargeError> {
+        let signed_octants = field.signed_octants()?;
+        if signed_octants % 8 != 0 {
+            return Err(ChargeError::NonIntegralCharge);
+        }
+        i32::try_from(signed_octants / 8).map_err(|_| ChargeError::ChargeOverflow)?;
+        Ok(Self {
+            field,
+            signed_octants,
+        })
+    }
+
+    fn try_sector_preserving_write(
+        &mut self,
+        x: usize,
+        y: usize,
+        replacement: Spin,
+    ) -> Result<i32, ChargeError> {
+        if x >= self.field.width || y >= self.field.height {
+            return Err(ChargeError::OutOfBounds);
+        }
+        let before =
+            i32::try_from(self.signed_octants / 8).map_err(|_| ChargeError::ChargeOverflow)?;
+        if self.field.at(x, y) == replacement {
+            return Ok(before);
+        }
+        if x == 0 || y == 0 || x + 1 == self.field.width || y + 1 == self.field.height {
+            // A single boundary spin cannot change without invalidating the
+            // uniform reference boundary of the initial admissible field.
+            return Err(ChargeError::NonUniformBoundary);
+        }
+
+        let mut delta = 0_i64;
+        // Exactly the grid squares incident to the edited vertex.
+        for cy in (y - 1)..=y {
+            for cx in (x - 1)..=x {
+                let locations = [(cx, cy), (cx + 1, cy), (cx, cy + 1), (cx + 1, cy + 1)];
+                let before_corners = locations.map(|(px, py)| self.field.at(px, py));
+                let mut after_corners = before_corners;
+                for (corner, (px, py)) in locations.iter().copied().enumerate() {
+                    if px == x && py == y {
+                        after_corners[corner] = replacement;
+                    }
+                }
+                for (a, b, c) in [(0, 1, 3), (0, 3, 2)] {
+                    let before_octant =
+                        oriented_octant(before_corners[a], before_corners[b], before_corners[c])?;
+                    let after_octant =
+                        oriented_octant(after_corners[a], after_corners[b], after_corners[c])?;
+                    delta += i64::from(after_octant) - i64::from(before_octant);
+                }
+            }
+        }
+
+        let updated_octants = self
+            .signed_octants
+            .checked_add(delta)
+            .ok_or(ChargeError::ChargeOverflow)?;
+        if updated_octants % 8 != 0 {
+            return Err(ChargeError::NonIntegralCharge);
+        }
+        let after = i32::try_from(updated_octants / 8).map_err(|_| ChargeError::ChargeOverflow)?;
+        if before != after {
+            return Err(ChargeError::SectorChanged { before, after });
+        }
+        // Atomic admission: neither field nor cache changed before here.
+        self.field.spins[y * self.field.width + x] = replacement;
+        self.signed_octants = updated_octants;
+        Ok(after)
+    }
+}
+
 /// Berg-Luescher oriented spherical-triangle area divided by pi/2.
 ///
 /// For axis-aligned unit spins, non-antipodal triangles with three different
@@ -244,12 +329,69 @@ fn main() {
         decode_reference_texture(&encoded_reference_texture(true)),
         Some(1)
     );
+    let mut cached =
+        CachedChargeField::new(reference_texture(false)).expect("known initial cached texture");
+    assert_eq!(cached.try_sector_preserving_write(1, 1, Spin::Ny), Ok(-1));
+    assert_eq!(
+        cached.try_sector_preserving_write(2, 2, Spin::Pz),
+        Err(ChargeError::SectorChanged {
+            before: -1,
+            after: 0
+        })
+    );
+    println!("SKY-M3 local cached-charge guard: same admission as full scan.");
     println!("Reference-only: not a skyrmion device, bit-encoding, or model benchmark.");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_delta_matches_full_scan_exhaustively_across_spins_and_sites() {
+        let choices = [Spin::Px, Spin::Nx, Spin::Py, Spin::Ny, Spin::Pz, Spin::Nz];
+        for reverse in [false, true] {
+            for y in 0..5 {
+                for x in 0..5 {
+                    for replacement in choices {
+                        let mut original = reference_texture(reverse);
+                        let mut cached = CachedChargeField::new(original.clone()).unwrap();
+                        let expected = original.try_sector_preserving_write(x, y, replacement);
+                        let actual = cached.try_sector_preserving_write(x, y, replacement);
+                        assert_eq!(
+                            actual, expected,
+                            "reverse={reverse} x={x} y={y} spin={replacement:?}"
+                        );
+                        assert_eq!(cached.field.spins, original.spins);
+                        assert_eq!(
+                            cached.signed_octants,
+                            cached.field.signed_octants().unwrap()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cached_guard_is_constant_neighborhood_on_large_grids() {
+        let large = OctahedralField::new(129, 129, vec![Spin::Pz; 129 * 129]).unwrap();
+        let mut cached = CachedChargeField::new(large).unwrap();
+        assert_eq!(cached.signed_octants, 0);
+        assert_eq!(cached.try_sector_preserving_write(64, 64, Spin::Nx), Ok(0));
+        assert_eq!(
+            cached.signed_octants,
+            cached.field.signed_octants().unwrap()
+        );
+        assert_eq!(
+            cached.try_sector_preserving_write(64, 64, Spin::Nz),
+            Err(ChargeError::AntipodalTriangle)
+        );
+        assert_eq!(
+            cached.signed_octants,
+            cached.field.signed_octants().unwrap()
+        );
+    }
 
     #[test]
     fn uniform_field_has_zero_charge() {
