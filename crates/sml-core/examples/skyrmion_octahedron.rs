@@ -236,8 +236,14 @@ fn main() {
         })
     );
     println!("SKY-M0 guarded rewrite: preserved sector and rejected forbidden change.");
-    assert_eq!(decode_reference_texture(&encoded_reference_texture(false)), Some(0));
-    assert_eq!(decode_reference_texture(&encoded_reference_texture(true)), Some(1));
+    assert_eq!(
+        decode_reference_texture(&encoded_reference_texture(false)),
+        Some(0)
+    );
+    assert_eq!(
+        decode_reference_texture(&encoded_reference_texture(true)),
+        Some(1)
+    );
     println!("Reference-only: not a skyrmion device, bit-encoding, or model benchmark.");
 }
 
