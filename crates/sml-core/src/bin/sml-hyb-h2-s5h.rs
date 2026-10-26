@@ -1384,8 +1384,11 @@ const COPY_TABLE_BITS: u32 = 18;
 const COPY_GAIN_BPC: f64 = CAL_GATE_BPC;
 /// The null control must stay within this.
 const COPY_NULL_BPC: f64 = 0.002;
-/// The donor and lag controls must stay under this share of the gain.
+/// The lag control must stay under this share of the gain.
 const COPY_CONTROL_SHARE: f64 = 0.1;
+/// The chosen context must beat the donor by this much, on the whole of
+/// CAL-SEL and at the 2.5 % quantile of the document bootstrap.
+const COPY_BEYOND_DONOR_BPC: f64 = CAL_GATE_BPC;
 /// With CAL-FIT and CAL-SEL swapped, the gain must keep this share.
 const COPY_SWAP_SHARE: f64 = 0.5;
 /// The lag control uses the prediction made this many bytes earlier.
@@ -1653,13 +1656,20 @@ fn copy_poison(sel: &[Span], sel_bytes: &[Vec<u8>]) -> (u64, u64) {
     (checked, mismatches)
 }
 
-/// Gain of `mixed` over `base` in bits per byte for the documents `pick`.
-fn doc_gain(docs: &[DocBits], k: usize, v: usize, pick: impl Iterator<Item = usize>) -> f64 {
+/// Gain of variant `v` in bits per byte for the documents `pick`, over
+/// the base or, with `over`, over another variant.
+fn doc_gain(
+    docs: &[DocBits],
+    k: usize,
+    v: usize,
+    over: Option<usize>,
+    pick: impl Iterator<Item = usize>,
+) -> f64 {
     let (mut n, mut gain) = (0u64, 0.0);
     for i in pick {
         let (count, base, mixed) = &docs[i];
         n += count;
-        gain += base[k] - mixed[k][v];
+        gain += over.map_or(base[k], |o| mixed[k][o]) - mixed[k][v];
     }
     gain / n.max(1) as f64
 }
@@ -1694,7 +1704,7 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     let p1_base = seeds;
     let gain = |k: usize, v: usize| bpc(m.base[k] - m.mixed[k][v], n);
     let mut report = format!(
-        "label\t{label}\nstage\tcopy\nschema\tSML_HYB_H2C_COPY_V2\n\
+        "label\t{label}\nstage\tcopy\nschema\tSML_HYB_H2C_COPY_V3\n\
          {BASE}_p1_weights_sha256\t{}\n{BASE}_dev_read\tfalse\n{BASE}_eval4_read\tfalse\n\
          {BASE}_cal_sel_records\t{n}\n{BASE}_a0_sel_bpc\t{:.9}\n\
          {BASE}_copy_table_bits\t{COPY_TABLE_BITS}\n",
@@ -1775,12 +1785,13 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
         let g = gain(k, chosen);
         gate &= g >= COPY_GAIN_BPC;
         null &= gain(k, COPY_NULL).abs() < COPY_NULL_BPC;
-        donor &= gain(k, COPY_DONOR) < COPY_CONTROL_SHARE * g;
+        let beyond = g - gain(k, COPY_DONOR);
+        donor &= beyond >= COPY_BEYOND_DONOR_BPC;
         lag &= gain(k, COPY_LAGGED) < COPY_CONTROL_SHARE * g;
         // Document bootstrap of the chosen context's gain.
         let docs = &m.docs;
         let mut state = 0x5eed_0000 ^ *seed;
-        let mut draws: Vec<f64> = (0..COPY_BOOTSTRAP)
+        let mut draws: Vec<(f64, f64)> = (0..COPY_BOOTSTRAP)
             .map(|_| {
                 let pick: Vec<usize> = (0..docs.len())
                     .map(|_| {
@@ -1788,15 +1799,21 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
                         (state % docs.len() as u64) as usize
                     })
                     .collect();
-                doc_gain(docs, k, chosen, pick.into_iter())
+                (
+                    doc_gain(docs, k, chosen, None, pick.iter().copied()),
+                    doc_gain(docs, k, chosen, Some(COPY_DONOR), pick.into_iter()),
+                )
             })
             .collect();
-        draws.sort_by(f64::total_cmp);
-        let low = draws[COPY_BOOTSTRAP / 40];
-        let high = draws[COPY_BOOTSTRAP - 1 - COPY_BOOTSTRAP / 40];
+        draws.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let low = draws[COPY_BOOTSTRAP / 40].0;
+        let high = draws[COPY_BOOTSTRAP - 1 - COPY_BOOTSTRAP / 40].0;
         bootstrap &= low >= COPY_GAIN_BPC;
+        draws.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let beyond_low = draws[COPY_BOOTSTRAP / 40].1;
+        donor &= beyond_low >= COPY_BEYOND_DONOR_BPC;
         let mut per_doc: Vec<f64> = (0..docs.len())
-            .map(|i| doc_gain(docs, k, chosen, std::iter::once(i)))
+            .map(|i| doc_gain(docs, k, chosen, None, std::iter::once(i)))
             .collect();
         per_doc.sort_by(f64::total_cmp);
         let positive =
@@ -1806,6 +1823,8 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
         swap &= swap_gain >= COPY_SWAP_SHARE * g && swap_null.abs() < COPY_NULL_BPC;
         report += &format!(
             "{BASE}_copy_seed{seed}_bootstrap_low\t{low:.9}\n{BASE}_copy_seed{seed}_bootstrap_high\t{high:.9}\n\
+             {BASE}_copy_seed{seed}_beyond_donor\t{beyond:.9}\n\
+             {BASE}_copy_seed{seed}_beyond_donor_bootstrap_low\t{beyond_low:.9}\n\
              {BASE}_copy_seed{seed}_docs\t{}\n{BASE}_copy_seed{seed}_docs_gaining\t{positive:.6}\n\
              {BASE}_copy_seed{seed}_doc_gain_p10\t{:.9}\n{BASE}_copy_seed{seed}_doc_gain_median\t{:.9}\n\
              {BASE}_copy_seed{seed}_swap_gain_over_a1d\t{swap_gain:.9}\n\
@@ -1820,6 +1839,7 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
         "{BASE}_copy_poison_positions\t{poison_checked}\n{BASE}_copy_poison_mismatches\t{poison_mismatches}\n\
          {BASE}_copy_chosen_min\t{}\n{BASE}_copy_gain_bpc\t{COPY_GAIN_BPC}\n\
          {BASE}_copy_null_bpc\t{COPY_NULL_BPC}\n{BASE}_copy_control_share\t{COPY_CONTROL_SHARE}\n\
+         {BASE}_copy_beyond_donor_bpc\t{COPY_BEYOND_DONOR_BPC}\n\
          {BASE}_copy_swap_share\t{COPY_SWAP_SHARE}\n\
          {BASE}_copy_pass_gate\t{gate}\n{BASE}_copy_pass_null\t{null}\n{BASE}_copy_pass_donor\t{donor}\n\
          {BASE}_copy_pass_lag\t{lag}\n{BASE}_copy_pass_bootstrap\t{bootstrap}\n\
@@ -2007,14 +2027,21 @@ mod tests {
                     shifts.split(',').count(),
                     sml_core::hyb_h2c_copy::COPY_CELLS
                 );
-                // Random smoke bytes leave every cell under the minimum
-                // count, so nothing is learned and nothing is gained.
-                assert!(shifts.split(',').all(|w| w == "0"));
+                // Random smoke bytes leave every copy cell under the
+                // minimum count, so nothing is learned and nothing is
+                // gained; only the null, active everywhere, fits noise.
+                if v != COPY_NULL {
+                    assert!(shifts.split(',').all(|w| w == "0"));
+                }
                 let g = num(
                     &report,
                     &format!("bytes_q4_copy_{name}_seed{seed}_sel_gain_over_a1d"),
                 );
-                assert!(g.abs() < 1e-9);
+                if v == COPY_NULL {
+                    assert!(g.abs() < COPY_NULL_BPC, "{g}");
+                } else {
+                    assert!(g.abs() < 1e-9);
+                }
             }
         }
         assert!(COPY_MINS.contains(&(num(&report, "bytes_q4_copy_chosen_min") as usize)));
@@ -2022,7 +2049,13 @@ mod tests {
         assert!(num(&report, "bytes_q4_copy_poison_positions") > 0.0);
         assert_eq!(value(&report, "bytes_q4_copy_pass_causality"), "true");
         for seed in SEEDS {
-            for key in ["bootstrap_low", "doc_gain_median", "swap_gain_over_a1d"] {
+            for key in [
+                "bootstrap_low",
+                "beyond_donor",
+                "beyond_donor_bootstrap_low",
+                "doc_gain_median",
+                "swap_gain_over_a1d",
+            ] {
                 let g = num(&report, &format!("bytes_q4_copy_seed{seed}_{key}"));
                 assert!(g.abs() < 1e-9, "{key}");
             }

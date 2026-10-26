@@ -58,11 +58,32 @@ Sur décision du propriétaire, l'étude est refaite sur la calibration avec le 
 
 **Publiés sans seuil** :
 - **Rythme** (`timing`, l'ancien nul) : ce que vaut le seul fait de savoir où le texte se répète.
-- **Décalage unique** : un seul décalage pour les 96 cases, appris sur CAL-FIT.
+- **Décalage unique** : un seul décalage pour toutes les cases, appris sur CAL-FIT.
 - **Recopie sur P1 seul**, sans la tête H-1d, pour mesurer la complémentarité.
 - **COPY-1** (GPT/Grok, SML #725) : fenêtre de 256 octets, suffixe de 4 octets au plus, mélange fixe de 20 % en probabilité. Il est évalué sur les mêmes octets et avec les mêmes têtes. La probabilité H-1d est prise au 16 bits de `squash_value`, ce qui en fait une évaluation hors moteur.
 
 Limite connue : le mélangeur distingue les cas où la tête penche vers le bit attendu ou non. Un nul aléatoire peut donc en tirer un léger recalibrage de la tête par profondeur, si elle est mal calibrée. Le critère 2 le mesurera tel quel.
+
+## Troisième conception (26 octobre, après le second run)
+
+Second run : RemoteOps #861, SML `286478f0`, `h2c.tsv` sha256 `08e07c7fd45983f9649e336915a44f3fa57507595c061c834a69391bd1ce9286`. Le gain tient (0,54 / 0,56) et la causalité aussi, mais le nul aléatoire (0,004 / 0,006), le nul de l'échange (0,005) et le donneur (0,17 / 0,19) échouent. Sur décision du propriétaire, on refait l'étude sur la calibration avec un mélangeur qui ne peut plus recalibrer la tête, et en jugeant la recopie sur ce qu'elle gagne au-delà du donneur. Tout ce qui suit est figé avant le troisième run.
+
+**Mélangeur.** Deux changements, et rien d'autre :
+1. **Plus de case « accord ».** Le décalage ne dépend que de la longueur de la correspondance et de la profondeur, soit 48 décalages au lieu de 96.
+2. **Décalage coupé avant la saturation.** Le décalage est réduit à la marge qui reste entre le stretch de la tête et la limite du codeur (±2047), et c'est la même marge vers les deux bits. Sans cette coupe, le codeur sature d'un seul côté. Un test l'a montré : sans case « accord », un signal aléatoire apprenait encore un décalage de 1 280 sur une tête trop confiante, parce qu'une erreur poussée au-delà de la limite ne coûte pas plus cher. Avec la coupe, la longueur de code est convexe sur tout l'intervalle atteint, donc un décalage vers un bit tiré au hasard coûte en moyenne. Le prix est qu'une tête très sûre d'elle ne peut plus être corrigée qu'en partie par la recopie.
+
+L'expert, les contextes (6, 8, 12), la table, l'apprentissage exact sur CAL-FIT, le seuil de 1 000 décisions par case et tous les contrôles sont inchangés.
+
+**Critères** (tous requis, pour les deux graines). Ce sont ceux du second run, sauf le critère 3 :
+1. **Gain** : au moins 0,01 BPC sur A1d, au contexte retenu sur CAL-SEL.
+2. **Nul aléatoire** : à moins de 0,002 BPC de A1d.
+3. **Au-delà du donneur** : le gain du contexte retenu moins celui du donneur doit atteindre 0,01 BPC sur tout CAL-SEL. La borne à 2,5 % de cette différence, dans le bootstrap par article (les mêmes tirages que le critère 5), doit aussi atteindre 0,01 BPC. Le gain du donneur est publié tel quel : le vocabulaire partagé entre articles est un gain de compression légitime, mais ce n'est pas de la recopie interne.
+4. **Retard** : sous 10 % du gain retenu.
+5. **Bootstrap par article** : la borne à 2,5 % du gain doit atteindre 0,01 BPC.
+6. **Échange** : au moins la moitié du gain retenu, et nul sous 0,002 BPC.
+7. **Causalité** : aucun écart, sinon `COPY_CAUSALITY_FAIL`.
+
+Schéma de sortie : `SML_HYB_H2C_COPY_V3`, avec en plus `beyond_donor` et `beyond_donor_bootstrap_low` par graine. Les publiés sans seuil restent les mêmes (rythme, décalage unique, recopie sur P1 seul, COPY-1).
 
 ## Ce qui suit
 
