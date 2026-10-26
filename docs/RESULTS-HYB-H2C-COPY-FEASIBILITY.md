@@ -53,4 +53,31 @@ Mesures rapportées sans critère :
 - **Le gain est causal et robuste.** Rien ne vient du futur, il tient sur tous les documents, avec l'échange des rôles et le retard.
 - **COPY-1 nuit.** Un mélange linéaire fixe, sans tenir compte de la longueur de la correspondance, coûte plus qu'il ne rapporte.
 
+## Troisième run : `COPY_FEASIBLE`
+
+Run : [RemoteOps #864](https://github.com/Memorithm/RemoteOps/pull/864), SML `a0b83756` (SML #730), Dell, 26 octobre 2026. `h2c.tsv` : sha256 `4644dca13d6b6c35f100ea1b48c95d9a7ee5c12b11203bbba42fe1330af09fe8`. Seuls CAL-FIT et CAL-SEL ont été lus.
+
+Le mélangeur n'a plus de case « accord » (48 décalages), et le décalage est coupé à la marge qui reste avant la saturation. Les critères étaient figés avant le run (troisième conception dans `HYB-H2C-COPY-FEASIBILITY.md`).
+
+| Critère | Mesure (graine 11 / 23) | Seuil | Résultat |
+|---|---|---|---|
+| Gain (contexte 6 retenu) | 0,5221 / 0,5507 | ≥ 0,01 | passe |
+| Nul aléatoire | −0,000002 / −0,0000005 | < 0,002 | passe |
+| Au-delà du donneur (donneur : 0,165 / 0,183) | 0,357 / 0,367 ; borne basse 0,323 / 0,336 | ≥ 0,01 | passe |
+| Retard de 4 096 octets | 0,0030 / 0,0047 | < 10 % du gain | passe |
+| Bootstrap par article (IC 95 %) | [0,499 ; 0,551] / [0,530 ; 0,580] | borne basse ≥ 0,01 | passe |
+| Échange | gain 0,556 / 0,584 ; nul −0,0000007 / −0,0000003 | gain ≥ moitié, nul < 0,002 | passe |
+| Causalité | 0 écart sur 1 129 099 positions | 0 | passe |
+
+CAL-SEL passe de 2,5540 / 2,5584 BPC (A1d) à **2,0320 / 2,0076**. Contextes 8 et 12 : +0,441 / +0,459 et +0,314 / +0,323. Les 1530 articles gagnent tous (médiane 0,180 / 0,186, 10e centile 0,144 / 0,148). Le contrôle de rythme vaut 0 lui aussi.
+
+**Lecture.**
+
+- La coupe avant la saturation a fait disparaître les gains des nuls : ils passent de 0,004–0,006 à moins d'un millionième. Le second run mesurait donc bien un recalibrage de la tête, et non de la recopie.
+- La recopie perd peu à la nouvelle conception : 0,522 / 0,551 au lieu de 0,543 / 0,563.
+- Le vocabulaire partagé entre articles (le donneur) vaut 0,17–0,18. La recopie interne à l'article ajoute 0,36 au-delà.
+- Recopie sur P1 seul : 0,642. COPY-1 (SML #725) : −0,224 / −0,244, inchangé.
+
+Suite : un préenregistrement H-2c pour EVAL4 (peS2o-0004), soumis à l'accord du propriétaire avant toute lecture.
+
 Research only. DEV non lu. EVAL4 non lu. TEST fermé. NOT_PROMOTED.
