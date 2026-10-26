@@ -166,8 +166,8 @@ impl CachedChargeField {
         if x >= self.field.width || y >= self.field.height {
             return Err(ChargeError::OutOfBounds);
         }
-        let before = i32::try_from(self.signed_octants / 8)
-            .map_err(|_| ChargeError::ChargeOverflow)?;
+        let before =
+            i32::try_from(self.signed_octants / 8).map_err(|_| ChargeError::ChargeOverflow)?;
         if self.field.at(x, y) == replacement {
             return Ok(before);
         }
@@ -190,16 +190,10 @@ impl CachedChargeField {
                     }
                 }
                 for (a, b, c) in [(0, 1, 3), (0, 3, 2)] {
-                    let before_octant = oriented_octant(
-                        before_corners[a],
-                        before_corners[b],
-                        before_corners[c],
-                    )?;
-                    let after_octant = oriented_octant(
-                        after_corners[a],
-                        after_corners[b],
-                        after_corners[c],
-                    )?;
+                    let before_octant =
+                        oriented_octant(before_corners[a], before_corners[b], before_corners[c])?;
+                    let after_octant =
+                        oriented_octant(after_corners[a], after_corners[b], after_corners[c])?;
                     delta += i64::from(after_octant) - i64::from(before_octant);
                 }
             }
@@ -212,8 +206,7 @@ impl CachedChargeField {
         if updated_octants % 8 != 0 {
             return Err(ChargeError::NonIntegralCharge);
         }
-        let after = i32::try_from(updated_octants / 8)
-            .map_err(|_| ChargeError::ChargeOverflow)?;
+        let after = i32::try_from(updated_octants / 8).map_err(|_| ChargeError::ChargeOverflow)?;
         if before != after {
             return Err(ChargeError::SectorChanged { before, after });
         }
@@ -336,8 +329,8 @@ fn main() {
         decode_reference_texture(&encoded_reference_texture(true)),
         Some(1)
     );
-    let mut cached = CachedChargeField::new(reference_texture(false))
-        .expect("known initial cached texture");
+    let mut cached =
+        CachedChargeField::new(reference_texture(false)).expect("known initial cached texture");
     assert_eq!(cached.try_sector_preserving_write(1, 1, Spin::Ny), Ok(-1));
     assert_eq!(
         cached.try_sector_preserving_write(2, 2, Spin::Pz),
@@ -365,7 +358,10 @@ mod tests {
                         let mut cached = CachedChargeField::new(original.clone()).unwrap();
                         let expected = original.try_sector_preserving_write(x, y, replacement);
                         let actual = cached.try_sector_preserving_write(x, y, replacement);
-                        assert_eq!(actual, expected, "reverse={reverse} x={x} y={y} spin={replacement:?}");
+                        assert_eq!(
+                            actual, expected,
+                            "reverse={reverse} x={x} y={y} spin={replacement:?}"
+                        );
                         assert_eq!(cached.field.spins, original.spins);
                         assert_eq!(
                             cached.signed_octants,
@@ -383,12 +379,18 @@ mod tests {
         let mut cached = CachedChargeField::new(large).unwrap();
         assert_eq!(cached.signed_octants, 0);
         assert_eq!(cached.try_sector_preserving_write(64, 64, Spin::Nx), Ok(0));
-        assert_eq!(cached.signed_octants, cached.field.signed_octants().unwrap());
+        assert_eq!(
+            cached.signed_octants,
+            cached.field.signed_octants().unwrap()
+        );
         assert_eq!(
             cached.try_sector_preserving_write(64, 64, Spin::Nz),
             Err(ChargeError::AntipodalTriangle)
         );
-        assert_eq!(cached.signed_octants, cached.field.signed_octants().unwrap());
+        assert_eq!(
+            cached.signed_octants,
+            cached.field.signed_octants().unwrap()
+        );
     }
 
     #[test]
