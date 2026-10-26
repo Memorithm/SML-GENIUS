@@ -45,4 +45,35 @@ latency does it add?
 Negatives are kept; no retuning after the TEST run.
 
 ## Results
-(Filled only from executed runs.)
+Local execution (x86_64 box, release), first TEST run, deterministic part replays byte-identically:
+
+```
+GROK-ICM-4 report v1
+k0 NONE: correct 2048 erasure 0 silent 0 bit_loss 0
+k0 ICM: correct 2048 erasure 0 silent 0 bit_loss 0
+k1 NONE: correct 0 erasure 0 silent 2048 bit_loss 273551
+k1 ICM: correct 2048 erasure 0 silent 0 bit_loss 0
+k2 NONE: correct 0 erasure 0 silent 2048 bit_loss 469124
+k2 ICM: correct 2008 erasure 40 silent 0 bit_loss 0
+k3 NONE: correct 0 erasure 0 silent 2048 bit_loss 664110
+k3 ICM: correct 1957 erasure 91 silent 0 bit_loss 0
+verdict PASS
+fnv1a64 0d38df7a09da440f
+latency_ns (host-dependent, not hashed): eval 560174 scrub+eval 771071 scrub_only 200645 overhead 37.6%
+```
+
+Per k: 64 trials × 32 gates = 2048 gate-pages; outputs = 4096 queries per gate.
+
+| Gate | Result |
+|---|---|
+| 1 k=0 both 100 %, 0 false rejects | PASS |
+| 2 ICM silent = 0, bit-loss = 0 (k=1,2,3) | PASS |
+| 3 ICM k=1 100 % correct | PASS (2048/2048) |
+| 4 NONE silent > 0 for k ≥ 1 | PASS (every faulted gate corrupted) |
+| 5 default build (no feature) clippy clean | PASS locally; CI `rust` job authoritative |
+
+**Verdict: PASS.** Cost: ICM erases 2.0 % (k=2) and 4.4 % (k=3) of gates
+(refused, never wrong). Scrub latency is about +38 % over a full 4096-query bank
+evaluation on this host. That figure is host-dependent and has no gate. Scrub
+can be amortised by running it once per load instead of once per evaluation;
+that was not measured.
