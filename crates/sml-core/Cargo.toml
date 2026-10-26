@@ -43,3 +43,7 @@ test = true
 [[example]]
 name = "grok_icm_real_pages"
 test = true
+
+[[example]]
+name = "grok_icm_stream_recall"
+test = true
