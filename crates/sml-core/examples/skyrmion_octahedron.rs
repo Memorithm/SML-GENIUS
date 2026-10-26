@@ -181,12 +181,24 @@ fn reference_texture(reverse_chirality: bool) -> OctahedralField {
 }
 
 fn main() {
-    let texture = reference_texture(false);
+    let mut texture = reference_texture(false);
     let charge = texture.charge().expect("known reference configuration");
     println!(
         "SKY-M0 octahedral lattice: charge={charge}, octants={}",
         texture.signed_octants().expect("known texture")
     );
+    let preserved = texture
+        .try_sector_preserving_write(1, 1, Spin::Ny)
+        .expect("admissible sector-preserving rewrite");
+    assert_eq!(preserved, charge);
+    assert_eq!(
+        texture.try_sector_preserving_write(2, 2, Spin::Pz),
+        Err(ChargeError::SectorChanged {
+            before: -1,
+            after: 0
+        })
+    );
+    println!("SKY-M0 guarded rewrite: preserved sector and rejected forbidden change.");
     println!("Reference-only: not a skyrmion device, bit-encoding, or model benchmark.");
 }
 
