@@ -414,7 +414,7 @@ mod tests {
         let row = evaluate(Arm::Rule90, Task::Delay7);
         assert_eq!(row.train_total, TRAIN_SEEDS.len() * (TRAIN_STEPS - WARMUP));
         assert_eq!(row.test_total, TEST_SEEDS.len() * (TEST_STEPS - WARMUP));
-        assert_eq!(row.test_correct <= row.test_total, true);
+        assert!(row.test_correct <= row.test_total);
     }
 
     #[test]
