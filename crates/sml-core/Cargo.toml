@@ -11,3 +11,7 @@ workspace = true
 [[example]]
 name = "baf_focus_compare"
 test = true
+
+[[example]]
+name = "skyrmion_octahedron"
+test = true
