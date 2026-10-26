@@ -10,6 +10,7 @@
 //! antipodal pairs, for which the shortest geodesic is ambiguous.
 //! A uniform boundary closes the grid topologically.
 
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Spin {
     Px,
@@ -57,7 +58,11 @@ impl OctahedralField {
         if width < 2 || height < 2 || width.checked_mul(height) != Some(spins.len()) {
             return Err(ChargeError::InvalidShape);
         }
-        Ok(Self { width, height, spins })
+        Ok(Self {
+            width,
+            height,
+            spins,
+        })
     }
 
     fn at(&self, x: usize, y: usize) -> Spin {
@@ -87,7 +92,8 @@ impl OctahedralField {
                 let d = self.at(x + 1, y + 1);
                 for triangle in [(a, b, d), (a, d, c)] {
                     let octant = oriented_octant(triangle.0, triangle.1, triangle.2)?;
-                    count = count.checked_add(i64::from(octant))
+                    count = count
+                        .checked_add(i64::from(octant))
                         .ok_or(ChargeError::ChargeOverflow)?;
                 }
             }
@@ -161,11 +167,7 @@ fn oriented_octant(a: Spin, b: Spin, c: Spin) -> Result<i8, ChargeError> {
 fn reference_texture(reverse_chirality: bool) -> OctahedralField {
     use Spin::{Nx, Ny, Nz, Px, Py, Pz};
     let mut spins = vec![Pz; 25];
-    let mut equator = [
-        [Nx, Ny, Px],
-        [Nx, Nz, Px],
-        [Nx, Py, Px],
-    ];
+    let mut equator = [[Nx, Ny, Px], [Nx, Nz, Px], [Nx, Py, Px]];
     if reverse_chirality {
         equator[0][1] = Py;
         equator[2][1] = Ny;
@@ -181,7 +183,10 @@ fn reference_texture(reverse_chirality: bool) -> OctahedralField {
 fn main() {
     let texture = reference_texture(false);
     let charge = texture.charge().expect("known reference configuration");
-    println!("SKY-M0 octahedral lattice: charge={charge}, octants={}", texture.signed_octants().expect("known texture"));
+    println!(
+        "SKY-M0 octahedral lattice: charge={charge}, octants={}",
+        texture.signed_octants().expect("known texture")
+    );
     println!("Reference-only: not a skyrmion device, bit-encoding, or model benchmark.");
 }
 
@@ -201,7 +206,10 @@ mod tests {
         assert_eq!(oriented_octant(Spin::Px, Spin::Py, Spin::Pz), Ok(1));
         assert_eq!(oriented_octant(Spin::Py, Spin::Px, Spin::Pz), Ok(-1));
         assert_eq!(oriented_octant(Spin::Px, Spin::Px, Spin::Pz), Ok(0));
-        assert_eq!(oriented_octant(Spin::Px, Spin::Nx, Spin::Pz), Err(ChargeError::AntipodalTriangle));
+        assert_eq!(
+            oriented_octant(Spin::Px, Spin::Nx, Spin::Pz),
+            Err(ChargeError::AntipodalTriangle)
+        );
     }
 
     #[test]
@@ -222,18 +230,32 @@ mod tests {
     #[test]
     fn sector_changing_mutation_is_refused_atomically() {
         let mut texture = reference_texture(false);
-        assert_eq!(texture.try_sector_preserving_write(2, 2, Spin::Pz),
-            Err(ChargeError::SectorChanged { before: -1, after: 0 }));
+        assert_eq!(
+            texture.try_sector_preserving_write(2, 2, Spin::Pz),
+            Err(ChargeError::SectorChanged {
+                before: -1,
+                after: 0
+            })
+        );
         assert_eq!(texture.charge(), Ok(-1));
         assert_eq!(texture.at(2, 2), Spin::Nz);
     }
 
     #[test]
     fn invalid_boundaries_shapes_and_antipodal_edges_fail_closed() {
-        assert!(matches!(OctahedralField::new(5, 5, vec![Spin::Pz; 3]), Err(ChargeError::InvalidShape)));
+        assert!(matches!(
+            OctahedralField::new(5, 5, vec![Spin::Pz; 3]),
+            Err(ChargeError::InvalidShape)
+        ));
         let mut texture = reference_texture(false);
-        assert_eq!(texture.try_sector_preserving_write(5, 0, Spin::Pz), Err(ChargeError::OutOfBounds));
-        assert_eq!(texture.try_sector_preserving_write(0, 0, Spin::Nx), Err(ChargeError::NonUniformBoundary));
+        assert_eq!(
+            texture.try_sector_preserving_write(5, 0, Spin::Pz),
+            Err(ChargeError::OutOfBounds)
+        );
+        assert_eq!(
+            texture.try_sector_preserving_write(0, 0, Spin::Nx),
+            Err(ChargeError::NonUniformBoundary)
+        );
         assert_eq!(texture.charge(), Ok(-1));
 
         let mut uniform = OctahedralField::new(3, 3, vec![Spin::Pz; 9]).unwrap();
