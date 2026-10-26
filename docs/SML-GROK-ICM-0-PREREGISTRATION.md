@@ -78,4 +78,32 @@ cargo run --locked -p sml-core --example grok_icm_syndrome
 
 ## Results
 
-(To be filled only from executed runs.)
+Local execution only (box, cargo 1.89.0, not CI). `cargo test` 8/8 pass;
+`cargo clippy -p sml-core --all-targets -D warnings` clean; `cargo fmt --check`
+clean; two consecutive `cargo run --release` outputs byte-identical (`cmp`).
+
+```
+GROK-ICM-0 report v1
+PARITY: delta64 10000/10000 delta4096 10000/10000 verify_full_clean true
+  1bit@64: trials 65 recovered 0 corrected 0 erasure 65 silent 0
+  2bit@64: trials 2080 recovered 0 corrected 0 erasure 0 silent 2080
+  1bit@4096: trials 4097 recovered 0 corrected 0 erasure 4097 silent 0
+CRC32: delta64 10000/10000 delta4096 10000/10000 verify_full_clean true
+  1bit@64: trials 96 recovered 0 corrected 0 erasure 96 silent 0
+  2bit@64: trials 4560 recovered 0 corrected 0 erasure 4560 silent 0
+  1bit@4096: trials 4128 recovered 0 corrected 0 erasure 4128 silent 0
+SECDED72_64: delta64 10000/10000 delta4096 10000/10000 verify_full_clean true
+  1bit@64: trials 72 recovered 0 corrected 72 erasure 0 silent 0
+  2bit@64: trials 2556 recovered 0 corrected 0 erasure 2556 silent 0
+  1bit@4096: trials 4608 recovered 0 corrected 4608 erasure 0 silent 0
+fnv1a64 3d5484f4472e5e0d
+```
+
+Every frozen expectation held. Note on Parity 2-bit: the frozen expectation
+said SILENT "if both flips hit data bits"; executed result is that ALL 2080
+pairs are SILENT, including data+parity-bit pairs (flipping the parity bit
+and one data bit leaves the parity consistent). This is the stronger,
+mathematically expected outcome, recorded here rather than silently edited.
+
+Status: LOCAL GREEN. Not qualified until full workspace CI passes on the exact
+head. No push, no PR.
