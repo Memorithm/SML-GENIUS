@@ -39,6 +39,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Qualified stream recall tests
         run: cargo test --locked -p sml-core --example skyrmion_stream_recall
+      - name: Strict Clippy on SKY-R4 example
+        run: cargo clippy --locked -p sml-core --example skyrmion_stream_recall -- -D warnings
       - name: Reproduce reset vs stream results
         shell: bash
         run: |
