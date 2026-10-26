@@ -45,4 +45,28 @@ No Pvp6Bank evaluation path is modified.
 `cargo test --locked -p sml-core --example grok_icm_real_pages`
 
 ## Results
-(Filled only from executed runs.)
+Local execution, first and only TEST evaluation, byte-identical replay:
+
+```
+GROK-ICM-2 report v1
+CAL Pvp6 NONE: clean 7000 false_reject 0 | k1 0/330 silent 330 | k2 0/347 silent 347 | k3 0/323 silent 323 | gate FAIL
+CAL Pvp6 SECDED72_64: clean 7000 false_reject 0 | k1 330/330 silent 0 | k2 347/347 silent 0 | k3 69/323 silent 254 | gate PASS
+CAL Pvp6 CRC32: clean 7000 false_reject 0 | k1 330/330 silent 0 | k2 347/347 silent 0 | k3 323/323 silent 0 | gate PASS
+CAL Dkv NONE: clean 7041 false_reject 0 | k1 0/309 silent 309 | k2 0/326 silent 326 | k3 0/324 silent 324 | gate FAIL
+CAL Dkv SECDED72_64: clean 7041 false_reject 0 | k1 309/309 silent 0 | k2 326/326 silent 0 | k3 79/324 silent 245 | gate PASS
+CAL Dkv CRC32: clean 7041 false_reject 0 | k1 309/309 silent 0 | k2 326/326 silent 0 | k3 324/324 silent 0 | gate PASS
+TEST Pvp6 NONE: clean 28059 false_reject 0 | k1 0/1304 silent 1304 | k2 0/1301 silent 1301 | k3 0/1336 silent 1336 | gate FAIL
+TEST Pvp6 SECDED72_64: clean 28059 false_reject 0 | k1 1304/1304 silent 0 | k2 1301/1301 silent 0 | k3 298/1336 silent 1038 | gate PASS
+TEST Pvp6 CRC32: clean 28059 false_reject 0 | k1 1304/1304 silent 0 | k2 1301/1301 silent 0 | k3 1336/1336 silent 0 | gate PASS
+TEST Dkv NONE: clean 27935 false_reject 0 | k1 0/1378 silent 1378 | k2 0/1357 silent 1357 | k3 0/1330 silent 1330 | gate FAIL
+TEST Dkv SECDED72_64: clean 27935 false_reject 0 | k1 1378/1378 silent 0 | k2 1357/1357 silent 0 | k3 322/1330 silent 1008 | gate PASS
+TEST Dkv CRC32: clean 27935 false_reject 0 | k1 1378/1378 silent 0 | k2 1357/1357 silent 0 | k3 1330/1330 silent 0 | gate PASS
+fnv1a64 6c8b25a206397890
+```
+
+All frozen expectations held: NONE FAIL (negative control, every fault silent);
+SECDED72_64 and CRC32 PASS on both real layouts (100 % k≤2, 0 false rejects).
+Negative kept: **SECDED is silent on ~77 % of weight-3 faults** (1038/1336
+PVP6, 1008/1330 DKV, miscorrection); CRC32 detected 100 % of k=3 but corrects
+nothing. Consequence for ICM-3/ICM-4: a correcting arm must be paired with a
+detecting arm (SECDED+CRC32 composite) to avoid silent miscorrection.
