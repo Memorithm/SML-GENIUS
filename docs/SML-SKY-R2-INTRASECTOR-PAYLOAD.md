@@ -87,3 +87,13 @@ Workflow `40415248006`, implementation head
 All 512 immediate write/read trials succeeded. The deliberate data-bit
 fault was not caught by Q but decoded as the opposite payload. These are
 software-lattice results only, without device-equivalent cost matching.
+
+## Main-base qualification after stacked-PR isolation
+
+After SKY-R1 was integrated, SKY-R2 was rebuilt as a **four-file delta**
+rooted directly at current `main`. Its independent targeted oracle has
+passed on the rebased head; the earlier stacked-head CI cannot be used as
+an approval for this new commit. The complete `CI` workflow, including
+strict workspace Clippy and tests, must pass on the actual rebased head
+before the PR is eligible for squash-merge. No change to the research
+negative result or its interpretation is implied by this rebase.
