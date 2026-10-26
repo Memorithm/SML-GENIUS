@@ -1,0 +1,56 @@
+name: SKY research reference
+on:
+  pull_request:
+    branches:
+      - main
+      - research/sky-m1-exhaustive-corruption-20261026
+    paths:
+      - "crates/sml-core/examples/skyrmion_*.rs"
+      - "crates/sml-core/Cargo.toml"
+      - ".github/workflows/sky-reference.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/sml-core/examples/skyrmion_*.rs"
+      - "crates/sml-core/Cargo.toml"
+      - ".github/workflows/sky-reference.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  mathematical-oracles:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact source revision without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: SKY-M0 exact discrete oracle
+        run: cargo test --locked -p sml-core --example skyrmion_octahedron
+      - name: SKY-M1 exhaustive serialized single-bit faults
+        run: cargo test --locked -p sml-core --example skyrmion_fault_panel
+      - name: SKY-M2 continuous-spin local distortion
+        run: cargo test --locked -p sml-core --example skyrmion_smooth_panel
+      - name: SKY-M2 deterministic report replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p sml-core --example skyrmion_smooth_panel > "$RUNNER_TEMP/sky-m2-a.csv"
+          cargo run --locked -p sml-core --example skyrmion_smooth_panel > "$RUNNER_TEMP/sky-m2-b.csv"
+          cmp "$RUNNER_TEMP/sky-m2-a.csv" "$RUNNER_TEMP/sky-m2-b.csv"
+          cat "$RUNNER_TEMP/sky-m2-a.csv"
