@@ -45,4 +45,55 @@ No timing/energy; no physical noise model; burst model is serialized-order only.
 `cargo test --locked -p sml-core --example grok_icm_codes`
 
 ## Results
-(Filled only from executed runs.)
+Local execution (cargo 1.89.0), byte-identical replay:
+
+```
+GROK-ICM-1 report v1
+SECDED72_64 check_bits 8
+  1bit: trials 144 recovered 0 corrected 144 erasure 0 silent 0
+  2bit: trials 5112 recovered 0 corrected 0 erasure 5112 silent 0
+  3bit: trials 119280 recovered 0 corrected 0 erasure 28672 silent 90608
+  burst2-8: trials 952 recovered 0 corrected 0 erasure 482 silent 470
+CRC8 check_bits 8
+  1bit: trials 144 recovered 0 corrected 0 erasure 144 silent 0
+  2bit: trials 5112 recovered 0 corrected 0 erasure 5112 silent 0
+  3bit: trials 119280 recovered 0 corrected 0 erasure 119280 silent 0
+  burst2-8: trials 952 recovered 0 corrected 0 erasure 952 silent 0
+INTERLEAVE8 check_bits 8
+  1bit: trials 144 recovered 0 corrected 0 erasure 144 silent 0
+  2bit: trials 5112 recovered 0 corrected 0 erasure 4536 silent 576
+  3bit: trials 119280 recovered 0 corrected 0 erasure 119280 silent 0
+  burst2-8: trials 952 recovered 0 corrected 0 erasure 952 silent 0
+PRODUCT8X8 check_bits 16
+  1bit: trials 160 recovered 0 corrected 160 erasure 0 silent 0
+  2bit: trials 6320 recovered 0 corrected 0 erasure 5936 silent 384
+  3bit: trials 164320 recovered 0 corrected 0 erasure 154336 silent 9984
+  burst2-8: trials 1064 recovered 0 corrected 0 erasure 1062 silent 2
+CRC16 check_bits 16
+  1bit: trials 160 recovered 0 corrected 0 erasure 160 silent 0
+  2bit: trials 6320 recovered 0 corrected 0 erasure 6320 silent 0
+  3bit: trials 164320 recovered 0 corrected 0 erasure 164320 silent 0
+  burst2-8: trials 1064 recovered 0 corrected 0 erasure 1064 silent 0
+REP3 check_bits 128
+  1bit: trials 384 recovered 0 corrected 384 erasure 0 silent 0
+  2bit: trials 36672 recovered 0 corrected 36288 erasure 0 silent 384
+  3bit: trials 2322560 recovered 0 corrected 2249856 erasure 0 silent 72704
+  burst2-8: trials 2632 recovered 0 corrected 2632 erasure 0 silent 0
+verdict INTERLEAVE8 NEGATIVE
+verdict PRODUCT8X8 NEGATIVE
+fnv1a64 2a16dc134771dbd3
+```
+
+### Verdicts (by the frozen rule)
+- INTERLEAVE8: NEGATIVE (576 silent 2-bit, same-lane pairs) — as expected.
+- PRODUCT8X8: NEGATIVE. **Frozen expectation "SILENT=0 on 2-bit" is FALSIFIED**:
+  384 silent 2-bit cases = one row-check bit + one column-check bit flipped,
+  which the decoder miscorrects as a data flip. Without a corner/overall check
+  the 8×8 product code has distance 3 on the full codeword. Kept as a negative.
+- No local arm is promoted. By the frozen fallback, **SECDED72_64** is carried
+  into ICM-2.
+- Additional observations (not promotions): SECDED is SILENT on 470/952 bursts
+  and 90,608/119,280 3-bit sets (miscorrection); CRC8 and CRC16 have SILENT=0
+  on every panel here but correct nothing. ICM-2 must therefore keep CRC as a
+  detection baseline next to SECDED. REP3 (200 % overhead) still has silent
+  2-bit cases (same bit in two copies).
