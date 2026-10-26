@@ -27,3 +27,7 @@ test = true
 [[example]]
 name = "skyrmion_recurrent_panel"
 test = true
+
+[[example]]
+name = "skyrmion_intrasector_panel"
+test = true
