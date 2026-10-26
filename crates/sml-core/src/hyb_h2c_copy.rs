@@ -5,9 +5,13 @@
 //! already coded of the current byte agree with that prediction, the
 //! prediction gives an expected bit for the next decision, and the mixer
 //! moves the head's stretch towards (or away from) it by a learned shift.
-//! The shift depends on the match length bucket, the decision depth and
-//! whether the head already leans the same way. Everything it reads is
-//! known to a decoder before the decision. Research only. NOT_PROMOTED.
+//! The shift depends on the match length bucket and the decision depth
+//! only, never on the head, and it is cut to the room the head stretch
+//! leaves before the coder's limit, the same towards either bit. The code
+//! length is convex over that range, so a shift towards a bit drawn at
+//! random costs bits on average: a null signal cannot recalibrate the head.
+//! Everything it reads is known to a decoder before the decision.
+//! Research only. NOT_PROMOTED.
 
 use crate::{
     gb11_p1_stream::STRETCH_LIMIT,
@@ -16,11 +20,10 @@ use crate::{
 
 /// Match length buckets: 0, 1..=3, 4..=15, 16..=63, 64..=255, 256+.
 pub const COPY_BUCKETS: usize = 6;
-/// One shift per bucket, depth and agreement with the head.
-pub const COPY_CELLS: usize = COPY_BUCKETS * DEPTHS * 2;
-/// Aligned stretches are kept exactly over this range; beyond it, every
-/// candidate shift leaves the decision saturated.
-const SPAN: i32 = 2 * STRETCH_LIMIT + 1;
+/// One shift per bucket and depth.
+pub const COPY_CELLS: usize = COPY_BUCKETS * DEPTHS;
+/// Aligned stretches lie in the coder's range.
+const SPAN: i32 = STRETCH_LIMIT;
 const BINS: usize = 2 * SPAN as usize + 1;
 /// Candidate shifts, in stretch units.
 pub const SHIFT_MIN: i32 = -1024;
@@ -54,19 +57,28 @@ pub fn expected_bit(predicted: u8, target: u8, depth: usize) -> Option<bool> {
 }
 
 #[inline]
-fn cell(bucket: usize, depth: usize, agree: bool) -> usize {
-    (bucket * DEPTHS + depth) * 2 + usize::from(agree)
+fn cell(bucket: usize, depth: usize) -> usize {
+    bucket * DEPTHS + depth
 }
 
-/// The head stretch seen from the copy prediction: positive when the
-/// head leans towards the expected bit.
+/// The head stretch seen from the copy prediction, clamped to the coder's
+/// range: positive when the head leans towards the expected bit.
 #[inline]
 fn aligned(stretch: i32, expected: bool) -> i32 {
+    let s = stretch.clamp(-STRETCH_LIMIT, STRETCH_LIMIT);
     if expected {
-        stretch
+        s
     } else {
-        stretch.saturating_neg()
+        -s
     }
+}
+
+/// Shift `w` cut to the room left on either side of aligned stretch `a`,
+/// so that neither direction reaches the clamp.
+#[inline]
+fn room(a: i32, w: i32) -> i32 {
+    let room = STRETCH_LIMIT - a.abs();
+    w.clamp(-room, room)
 }
 
 /// Learned shifts of the copy mixer.
@@ -88,11 +100,11 @@ impl CopyMixer {
     #[must_use]
     pub fn stretch(&self, stretch: i32, expected: bool, bucket: usize, depth: usize) -> i32 {
         let a = aligned(stretch, expected);
-        let w = self.shifts[cell(bucket, depth, a > 0)];
+        let w = room(a, self.shifts[cell(bucket, depth)]);
         if expected {
-            stretch.saturating_add(w)
+            a + w
         } else {
-            stretch.saturating_sub(w)
+            -(a + w)
         }
     }
 
@@ -133,7 +145,7 @@ impl CopyFit {
     /// Records one decision with an expected bit.
     pub fn add(&mut self, stretch: i32, expected: bool, bit: bool, bucket: usize, depth: usize) {
         let a = aligned(stretch, expected);
-        let h = &mut self.hist[cell(bucket, depth, a > 0)];
+        let h = &mut self.hist[cell(bucket, depth)];
         if h.is_empty() {
             h.resize(2 * BINS, 0);
         }
@@ -171,7 +183,7 @@ impl CopyFit {
             let cost = |w: i32| -> f64 {
                 filled
                     .iter()
-                    .map(|&(a, right, n)| n * lookup(a + w, right))
+                    .map(|&(a, right, n)| n * lookup(a + room(a, w), right))
                     .sum()
             };
             let mut best = (cost(0), 0i32);
@@ -267,7 +279,7 @@ impl DonorModel {
 
 impl CopyFit {
     /// One shift for every cell: the candidate with the lowest code length
-    /// over all recorded decisions (control for the 96 learned shifts).
+    /// over all recorded decisions (control for the 48 learned shifts).
     #[must_use]
     pub fn fit_single(&self) -> CopyMixer {
         let mut merged = Self::new();
@@ -332,17 +344,56 @@ mod tests {
             fit.add(0, expected, (state >> 7) & 1 != 0, 0, 3);
         }
         let mixer = fit.fit();
-        let strong = mixer.shifts[cell(5, 3, false)];
+        let strong = mixer.shifts[cell(5, 3)];
         assert!(strong > 1000, "{strong}");
-        assert!(mixer.shifts[cell(0, 3, false)].abs() <= 16);
-        // Fitted at stretch 0, i.e. in the cell where the head does not
-        // lean towards the copy; the head leaning away lands there too.
-        assert_eq!(mixer.stretch(-100, true, 5, 3), -100 + strong);
-        assert_eq!(mixer.stretch(100, false, 5, 3), 100 - strong);
-        // The cell where the head already agrees saw nothing: no shift.
-        assert_eq!(mixer.stretch(100, true, 5, 3), 100);
+        assert!(mixer.shifts[cell(0, 3)].abs() <= 16);
+        // The shift does not depend on which way the head leans, and it
+        // is cut to the room left before the clamp, alike on both sides.
+        let cut = strong.min(STRETCH_LIMIT - 100);
+        assert_eq!(mixer.stretch(-100, true, 5, 3), -100 + cut);
+        assert_eq!(mixer.stretch(100, true, 5, 3), 100 + cut);
+        assert_eq!(mixer.stretch(100, false, 5, 3), 100 - cut);
+        let near = STRETCH_LIMIT - 40;
+        assert_eq!(mixer.stretch(near, true, 5, 3), STRETCH_LIMIT);
+        assert_eq!(mixer.stretch(near, false, 5, 3), near - 40);
+        assert_eq!(mixer.stretch(-near, true, 5, 3), -near + 40);
         assert!(fit.seen[5][1] > 19_700 && fit.seen[0][0] == 20_000);
         assert_eq!(CopyMixer::zero().stretch(5, true, 2, 1), 5);
+    }
+
+    /// A random expected bit learns no shift, even when the head is badly
+    /// overconfident: without a cell per head direction, the mixer cannot
+    /// recalibrate the head.
+    #[test]
+    fn a_random_signal_cannot_recalibrate_an_overconfident_head() {
+        // The head is right 70 % of the time at stretch ±1500.
+        let draw = |state: u64| {
+            let bit = state & 1 != 0;
+            let right = (state >> 8 & 0xffff) % 10 < 7;
+            let stretch = if bit == right { 1500 } else { -1500 };
+            (stretch, state >> 63 != 0, bit)
+        };
+        let mut fit = CopyFit::new();
+        for i in 0..200_000u64 {
+            let (stretch, expected, bit) = draw(splitmix(11 ^ i));
+            fit.add(stretch, expected, bit, 2, 4);
+        }
+        let mixer = fit.fit();
+        // Fitted on noise, the shift is small, and on fresh decisions it
+        // gains nothing beyond sampling noise (about 0.001 bit a decision
+        // here), where recalibrating this head would gain about 1.6.
+        assert!(
+            mixer.shifts[cell(2, 4)].abs() <= 160,
+            "{}",
+            mixer.shifts[cell(2, 4)]
+        );
+        let (mut plain, mut mixed) = (0.0, 0.0);
+        for i in 0..200_000u64 {
+            let (stretch, expected, bit) = draw(splitmix(0xfeed ^ i));
+            plain += decision_cost(stretch, bit);
+            mixed += decision_cost(mixer.stretch(stretch, expected, 2, 4), bit);
+        }
+        assert!(plain - mixed < 0.003 * 200_000.0, "{}", plain - mixed);
     }
 
     #[test]
