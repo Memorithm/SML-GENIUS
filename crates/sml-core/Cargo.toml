@@ -33,5 +33,9 @@ name = "skyrmion_intrasector_panel"
 test = true
 
 [[example]]
+name = "grok_icm_syndrome"
+test = true
+
+[[example]]
 name = "skyrmion_observability"
 test = true
