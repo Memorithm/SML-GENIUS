@@ -214,6 +214,9 @@ impl PtxOperation {
 #[cfg(all(target_os = "linux", feature = "cuda-driver"))]
 pub mod cuda_driver;
 
+#[cfg(feature = "portable-gpu")]
+pub mod portable_gpu;
+
 #[cfg(test)]
 mod tests {
     use super::*;
