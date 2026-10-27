@@ -1,0 +1,48 @@
+name: Native A2 CUDA resident buffer and event contracts
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-asm-a2.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-asm-a2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-contract:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Exact PR SHA on isolated hosted VM
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: "1.89.0"
+          components: rustfmt, clippy
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+      - name: All-target CUDA FFI compilation (does not emulate GPU)
+        run: cargo check --locked -p sml-native-kernels --all-features --all-targets
+      - name: Strict Clippy, including resident code
+        run: cargo clippy --locked -p sml-native-kernels --all-features --all-targets -- -D warnings
+      - name: CPU exactness and resident shape-contract tests
+        run: cargo test --locked -p sml-native-kernels --all-features -- --nocapture
+      - name: Reject PR access to persistent GPU runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = pull_request || test "$GITHUB_EVENT_NAME" = push
+          ! grep -Eq '^[[:space:]]+runs-on:[[:space:]]*\[self-hosted' .github/workflows/native-asm-a2.yml

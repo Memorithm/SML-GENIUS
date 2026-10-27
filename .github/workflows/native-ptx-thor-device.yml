@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD:crates/sml-native-kernels/ptx/boolean_words.ptx)" = '12e7715c92caac7ad21deb361c6aa474b00df535'
-          test "$(git rev-parse HEAD:crates/sml-native-kernels/src/cuda_driver.rs)" = '38b5c052f8ae7dfa3a7de8486f2205d9a9898d64'
+          test "$(git rev-parse HEAD:crates/sml-native-kernels/src/cuda_driver.rs)" = '323745d01571b6d3ced09c0d939ba9f141142f7d'
           test "$(git rev-parse HEAD:crates/sml-native-kernels/src/lib.rs)" = '27bec7b79ef703f01c3aaeaa6bb272e39d1ec014'
           echo "SML_NATIVE_GPU_SOURCE_SHA=$GITHUB_SHA"
           echo 'SML_NATIVE_GPU_FROZEN_PTX_BLOB=12e7715c92caac7ad21deb361c6aa474b00df535'
@@ -167,6 +167,23 @@ jobs:
           grep -Eq 'gpu_roundtrip,operation=TernaryPartial,words=1031,nanos_total=[0-9]+,exact=true' "$RUNNER_TEMP/sml-native-thor-results.txt"
           echo "SML_NATIVE_THOR_PTX_ALL_3_OPERATIONS=PASS"
 
+      - name: Resident CUDA context and device-event measurement (real GPU)
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SML_NATIVE_GPU_TEST" = '1'
+          cargo +1.89.0 run --locked --release -p sml-native-kernels --features cuda-driver --example native_resident_gpu \
+            | tee "$RUNNER_TEMP/sml-native-thor-resident-results.txt"
+          grep -qx 'SML_NATIVE_RESIDENT_THOR_ALL_OPERATIONS=PASS' "$RUNNER_TEMP/sml-native-thor-resident-results.txt"
+          for words in 1031 65536; do
+            for operation in Xor3 Hamming TernaryPartial; do
+              grep -Eq "^SML_NATIVE_RESIDENT,operation=${operation},words=${words},.*exact=true$" "$RUNNER_TEMP/sml-native-thor-resident-results.txt"
+            done
+          done
+          test "$(grep -c '^SML_NATIVE_RESIDENT,operation=' "$RUNNER_TEMP/sml-native-thor-resident-results.txt")" = 6
+          echo 'SML_NATIVE_THOR_RESIDENT_DEVICE_EVENTS=PASS'
+
       - name: Publish trustworthy source-bound device evidence
         if: always()
         shell: bash
@@ -179,6 +196,7 @@ jobs:
             echo "Kernel: $(uname -r)"
             echo "Explicit GPU test enabled: $SML_NATIVE_GPU_TEST"
             cat "$RUNNER_TEMP/sml-native-thor-results.txt" 2>/dev/null || true
+            cat "$RUNNER_TEMP/sml-native-thor-resident-results.txt" 2>/dev/null || true
             echo 'PTX device tests must pass before promotion; no inference integration.'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -190,5 +208,6 @@ jobs:
           path: |
             ${{ runner.temp }}/sml-native-thor-results.txt
             ${{ runner.temp }}/sml-native-thor-jit.txt
+            ${{ runner.temp }}/sml-native-thor-resident-results.txt
           if-no-files-found: warn
           retention-days: 30
