@@ -90,6 +90,62 @@ jobs:
           rustc +1.89.0 -vV
           cargo +1.89.0 build --locked --release -p sml-native-kernels --features cuda-driver
 
+      - name: Diagnose actual CUDA-driver PTX JIT compiler messages
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$RUNNER_TEMP/sml-native-thor-jit.txt"
+          import ctypes
+          from pathlib import Path
+
+          cuda = ctypes.CDLL("libcuda.so.1")
+          cuda.cuInit.argtypes = [ctypes.c_uint]
+          cuda.cuDeviceGet.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_int]
+          cuda.cuCtxCreate_v2.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint, ctypes.c_int]
+          cuda.cuCtxDestroy_v2.argtypes = [ctypes.c_void_p]
+          cuda.cuModuleLoadDataEx.argtypes = [
+              ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p,
+              ctypes.c_uint, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_void_p),
+          ]
+          cuda.cuModuleUnload.argtypes = [ctypes.c_void_p]
+          status = cuda.cuInit(0)
+          print(f"PTX_JIT_DRIVER_INIT={status}")
+          if status != 0: raise SystemExit(0)
+          device = ctypes.c_int()
+          status = cuda.cuDeviceGet(ctypes.byref(device), 0)
+          print(f"PTX_JIT_DEVICE_GET={status},device={device.value}")
+          if status != 0: raise SystemExit(0)
+          context = ctypes.c_void_p()
+          status = cuda.cuCtxCreate_v2(ctypes.byref(context), 0, device.value)
+          print(f"PTX_JIT_CONTEXT_CREATE={status}")
+          if status != 0: raise SystemExit(0)
+          try:
+              source = Path("crates/sml-native-kernels/ptx/boolean_words.ptx").read_bytes()
+              ptx = ctypes.create_string_buffer(source + b"\\0")
+              err = ctypes.create_string_buffer(8192)
+              info = ctypes.create_string_buffer(8192)
+              # CUDA CUjit_option enum: error log 5, error size 6,
+              # info log 3, info size 4. Sizes are pointer-valued scalars.
+              options = (ctypes.c_int * 4)(5, 6, 3, 4)
+              values = (ctypes.c_void_p * 4)(
+                  ctypes.cast(err, ctypes.c_void_p).value, 8192,
+                  ctypes.cast(info, ctypes.c_void_p).value, 8192,
+              )
+              module = ctypes.c_void_p()
+              status = cuda.cuModuleLoadDataEx(
+                  ctypes.byref(module), ctypes.cast(ptx, ctypes.c_void_p),
+                  4, options, values,
+              )
+              print(f"PTX_JIT_MODULE_LOAD_EX={status}")
+              print("PTX_JIT_ERROR_LOG=" + err.value.decode("utf-8", "replace"))
+              print("PTX_JIT_INFO_LOG=" + info.value.decode("utf-8", "replace"))
+              if status == 0 and module.value:
+                  cuda.cuModuleUnload(module)
+          finally:
+              cuda.cuCtxDestroy_v2(context)
+          PY
+
       - name: Execute PTX on real NVIDIA GPU and compare against exact Rust oracle
         working-directory: sml-genius
         shell: bash
@@ -131,6 +187,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sml-native-thor-ptx-${{ github.sha }}
-          path: ${{ runner.temp }}/sml-native-thor-results.txt
+          path: |
+            ${{ runner.temp }}/sml-native-thor-results.txt
+            ${{ runner.temp }}/sml-native-thor-jit.txt
           if-no-files-found: warn
           retention-days: 30
