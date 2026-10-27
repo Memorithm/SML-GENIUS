@@ -1,0 +1,112 @@
+// SML-GENIUS direct NVIDIA PTX (virtual ISA, not SASS).
+// No CUDA Runtime or cuBLAS required by the source. A separate optional
+// host-side CUDA Driver API adapter performs JIT, allocation and launching.
+// All kernels: (const u32* a, const u32* b, const u32* c, u32* out, u32 len).
+// Padding beyond len is neither read nor written. No atomics or shared memory.
+// All words are little-endian bitplanes in their native u32 register layout.
+.version 7.0
+.target sm_50
+.address_size 64
+
+.visible .entry sml_xor3_u32(
+    .param .u64 xa,
+    .param .u64 xb,
+    .param .u64 xc,
+    .param .u64 xo,
+    .param .u32 xn
+)
+{
+    .reg .pred %p<2>;
+    .reg .b32 %r<9>;
+    .reg .b64 %rd<11>;
+    ld.param.u64 %rd1, [xa];
+    ld.param.u64 %rd2, [xb];
+    ld.param.u64 %rd3, [xc];
+    ld.param.u64 %rd4, [xo];
+    ld.param.u32 %r1, [xn];
+    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    setp.ge.u32 %p1, %r2, %r1;
+    @%p1 bra XOR_DONE;
+    mul.wide.u32 %rd5, %r2, 4;
+    add.u64 %rd6, %rd1, %rd5;
+    add.u64 %rd7, %rd2, %rd5;
+    add.u64 %rd8, %rd3, %rd5;
+    add.u64 %rd9, %rd4, %rd5;
+    ld.global.u32 %r3, [%rd6];
+    ld.global.u32 %r4, [%rd7];
+    ld.global.u32 %r5, [%rd8];
+    // GF(2) XOR of three 32-bit packed words in one LOP3 instruction.
+    lop3.b32 %r6, %r3, %r4, %r5, 0x96;
+    st.global.u32 [%rd9], %r6;
+XOR_DONE:
+    ret;
+}
+
+.visible .entry sml_hamming_u32(
+    .param .u64 ha,
+    .param .u64 hb,
+    .param .u64 hc,
+    .param .u64 ho,
+    .param .u32 hn
+)
+{
+    .reg .pred %p<2>;
+    .reg .b32 %r<9>;
+    .reg .b64 %rd<11>;
+    ld.param.u64 %rd1, [ha];
+    ld.param.u64 %rd2, [hb];
+    ld.param.u64 %rd3, [hc];
+    ld.param.u64 %rd4, [ho];
+    ld.param.u32 %r1, [hn];
+    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    setp.ge.u32 %p1, %r2, %r1;
+    @%p1 bra HAM_DONE;
+    mul.wide.u32 %rd5, %r2, 4;
+    add.u64 %rd6, %rd1, %rd5;
+    add.u64 %rd7, %rd2, %rd5;
+    add.u64 %rd9, %rd4, %rd5;
+    ld.global.u32 %r3, [%rd6];
+    ld.global.u32 %r4, [%rd7];
+    xor.b32 %r5, %r3, %r4;
+    popc.b32 %r6, %r5;
+    st.global.u32 [%rd9], %r6;
+HAM_DONE:
+    ret;
+}
+
+.visible .entry sml_ternary_partial_u32(
+    .param .u64 ta,
+    .param .u64 tb,
+    .param .u64 tc,
+    .param .u64 to,
+    .param .u32 tn
+)
+{
+    .reg .pred %p<2>;
+    .reg .b32 %r<11>;
+    .reg .b64 %rd<11>;
+    ld.param.u64 %rd1, [ta];
+    ld.param.u64 %rd2, [tb];
+    ld.param.u64 %rd3, [tc];
+    ld.param.u64 %rd4, [to];
+    ld.param.u32 %r1, [tn];
+    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    setp.ge.u32 %p1, %r2, %r1;
+    @%p1 bra TERN_DONE;
+    mul.wide.u32 %rd5, %r2, 4;
+    add.u64 %rd6, %rd1, %rd5;
+    add.u64 %rd7, %rd2, %rd5;
+    add.u64 %rd8, %rd3, %rd5;
+    add.u64 %rd9, %rd4, %rd5;
+    ld.global.u32 %r3, [%rd6];
+    ld.global.u32 %r4, [%rd7];
+    ld.global.u32 %r5, [%rd8];
+    and.b32 %r6, %r3, %r4;
+    and.b32 %r7, %r3, %r5;
+    popc.b32 %r8, %r6;
+    popc.b32 %r9, %r7;
+    sub.s32 %r10, %r8, %r9;
+    st.global.u32 [%rd9], %r10;
+TERN_DONE:
+    ret;
+}
