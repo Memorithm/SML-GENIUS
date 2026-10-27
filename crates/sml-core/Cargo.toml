@@ -8,6 +8,11 @@ authors.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+default = []
+# GROK-ICM guarded pages (opt-in). See docs/SML-GROK-ICM-4-*.
+icm = []
 [[example]]
 name = "baf_focus_compare"
 test = true
@@ -50,4 +55,9 @@ test = true
 
 [[example]]
 name = "skyrmion_observability"
+test = true
+
+[[example]]
+name = "grok_icm_bench"
+required-features = ["icm"]
 test = true

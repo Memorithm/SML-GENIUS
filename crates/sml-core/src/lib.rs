@@ -119,6 +119,8 @@ pub mod hyb_h2c_copy;
 pub mod hyb_h2t_templates;
 pub mod hyb_h3_engine;
 pub mod hybrid_logic_engine;
+#[cfg(feature = "icm")]
+pub mod icm_guard;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;
