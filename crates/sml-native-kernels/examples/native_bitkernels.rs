@@ -16,7 +16,8 @@ fn benchmark(label: &str, size: usize, iterations: usize, kernels: CpuKernels) -
     let mut checksum = 0_u64;
     for _ in 0..iterations {
         for (&a, &b) in left.iter().zip(&right) {
-            checksum = checksum.wrapping_add(u64::from(kernels.hamming(black_box(a), black_box(b))));
+            checksum =
+                checksum.wrapping_add(u64::from(kernels.hamming(black_box(a), black_box(b))));
         }
     }
     let nanos = start.elapsed().as_nanos();
@@ -52,15 +53,24 @@ fn main() {
     {
         if std::env::var_os("SML_NATIVE_GPU_TEST").is_some() {
             let size = 1031;
-            let a: Vec<u32> = (0..size).map(|i| (i as u32).wrapping_mul(0x9e37_79b9)).collect();
+            let a: Vec<u32> = (0..size)
+                .map(|i| (i as u32).wrapping_mul(0x9e37_79b9))
+                .collect();
             let b: Vec<u32> = (0..size).map(|i| (i as u32).rotate_left(11)).collect();
             let c: Vec<u32> = (0..size).map(|i| !(i as u32)).collect();
-            for op in [PtxOperation::Xor3, PtxOperation::Hamming, PtxOperation::TernaryPartial] {
+            for op in [
+                PtxOperation::Xor3,
+                PtxOperation::Hamming,
+                PtxOperation::TernaryPartial,
+            ] {
                 let start = Instant::now();
                 let gpu = sml_native_kernels::cuda_driver::execute(op, &a, &b, &c)
                     .expect("opted into real NVIDIA GPU validation");
                 let nanos = start.elapsed().as_nanos();
-                let oracle: Vec<_> = a.iter().zip(&b).zip(&c)
+                let oracle: Vec<_> = a
+                    .iter()
+                    .zip(&b)
+                    .zip(&c)
                     .map(|((&x, &y), &z)| sml_native_kernels::ptx_word_oracle(op, x, y, z))
                     .collect();
                 assert_eq!(gpu, oracle, "gpu={op:?}");
