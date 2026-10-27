@@ -485,6 +485,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sml-native-kernels"
+version = "0.1.0"
+
+[[package]]
 name = "sml-publication"
 version = "0.1.0"
 dependencies = [
