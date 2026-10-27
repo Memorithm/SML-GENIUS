@@ -314,7 +314,7 @@ mod tests {
             for b in 0_u32..256 {
                 let c = (!b) & 255;
                 assert_eq!(
-                    ptx_word_oracle(PtxOperation::Hamming, a, b),
+                    ptx_word_oracle(PtxOperation::Hamming, a, b, c),
                     (a ^ b).count_ones()
                 );
                 let signed = (a & b).count_ones() as i32 - (a & c).count_ones() as i32;
