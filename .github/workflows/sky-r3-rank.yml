@@ -1,0 +1,48 @@
+name: SKY-R3 GF2 controllability reference
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/sml-core/examples/skyrmion_observability.rs"
+      - "crates/sml-core/Cargo.toml"
+      - ".github/workflows/sky-r3-rank.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/sml-core/examples/skyrmion_observability.rs"
+      - "crates/sml-core/Cargo.toml"
+      - ".github/workflows/sky-r3-rank.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-gf2-rank:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: "-D warnings"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Read-only checkout exact revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Exhaustive exact GF2 rank invariants
+        run: cargo test --locked -p sml-core --example skyrmion_observability
+      - name: Identical reports on consecutive runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p sml-core --example skyrmion_observability > "$RUNNER_TEMP/sky-r3-a.csv"
+          cargo run --locked -p sml-core --example skyrmion_observability > "$RUNNER_TEMP/sky-r3-b.csv"
+          cmp "$RUNNER_TEMP/sky-r3-a.csv" "$RUNNER_TEMP/sky-r3-b.csv"
+          cat "$RUNNER_TEMP/sky-r3-a.csv"
