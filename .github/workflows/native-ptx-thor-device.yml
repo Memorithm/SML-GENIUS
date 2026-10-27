@@ -63,11 +63,11 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD:crates/sml-native-kernels/ptx/boolean_words.ptx)" = '961a12bc5104908c6bd6ca395792132c813502ac'
+          test "$(git rev-parse HEAD:crates/sml-native-kernels/ptx/boolean_words.ptx)" = '12e7715c92caac7ad21deb361c6aa474b00df535'
           test "$(git rev-parse HEAD:crates/sml-native-kernels/src/cuda_driver.rs)" = '38b5c052f8ae7dfa3a7de8486f2205d9a9898d64'
           test "$(git rev-parse HEAD:crates/sml-native-kernels/src/lib.rs)" = '27bec7b79ef703f01c3aaeaa6bb272e39d1ec014'
           echo "SML_NATIVE_GPU_SOURCE_SHA=$GITHUB_SHA"
-          echo 'SML_NATIVE_GPU_FROZEN_PTX_BLOB=961a12bc5104908c6bd6ca395792132c813502ac'
+          echo 'SML_NATIVE_GPU_FROZEN_PTX_BLOB=12e7715c92caac7ad21deb361c6aa474b00df535'
 
       - name: Isolate Cargo and Rust caches for reproducible device qualification
         shell: bash
@@ -122,7 +122,7 @@ jobs:
           if status != 0: raise SystemExit(0)
           try:
               source = Path("crates/sml-native-kernels/ptx/boolean_words.ptx").read_bytes()
-              ptx = ctypes.create_string_buffer(source + b"\\0")
+              ptx = ctypes.create_string_buffer(source + bytes([0]))
               err = ctypes.create_string_buffer(8192)
               info = ctypes.create_string_buffer(8192)
               # CUDA CUjit_option enum: error log 5, error size 6,
