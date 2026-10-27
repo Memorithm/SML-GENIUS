@@ -1,0 +1,54 @@
+name: Native A1 CPU/GPU ISA research
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-asm-a1.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-asm-a1.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-and-gpu-contract:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only exact source checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 (native and cross-target)
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Build CPU and Linux CUDA driver FFI without any CUDA Toolkit
+        run: cargo check --locked -p sml-native-kernels --all-targets --all-features
+      - name: Strict Clippy on isolated unsafe boundary
+        run: cargo clippy --locked -p sml-native-kernels --all-targets --all-features -- -D warnings
+      - name: Exact CPU/oracle and PTX truth-table contracts
+        run: cargo test --locked -p sml-native-kernels --all-features -- --nocapture
+      - name: Cross-check AArch64 assembly syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-unknown-linux-gnu
+          cargo check --locked -p sml-native-kernels --all-targets --all-features --target aarch64-unknown-linux-gnu
+      - name: Physical CPU comparison, no GPU simulation
+        run: cargo run --locked --release -p sml-native-kernels --example native_bitkernels
