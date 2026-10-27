@@ -1,0 +1,35 @@
+name: grok-icm
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  icm-feature:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.89.0
+          components: clippy
+      - name: Clippy with icm
+        run: cargo clippy --locked -p sml-core --features icm --all-targets -- -D warnings
+      - name: Tests with icm (lib module + e2e bench gates)
+        run: cargo test --locked --release -p sml-core --features icm --lib icm_guard
+      - name: E2E bench test
+        run: cargo test --locked --release -p sml-core --features icm --example grok_icm_bench
+      - name: E2E bench report
+        run: cargo run --locked --release -p sml-core --features icm --example grok_icm_bench
