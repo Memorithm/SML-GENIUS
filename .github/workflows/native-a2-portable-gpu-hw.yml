@@ -1,0 +1,91 @@
+name: Native A2 portable-gpu hardware qualification (Thor / Dell)
+
+# Prereg: docs/SML-NATIVE-A2-HW-GPU-QUAL.md. Trusted main only; never PR code
+# on persistent self-hosted hosts. Vulkan via vendor ICD; no NVIDIA SDK installed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/native-a2-portable-gpu-hw.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sml-native-a2-portable-gpu-hw
+  cancel-in-progress: false
+
+jobs:
+  portable-gpu-hw:
+    if: >-
+      github.repository == 'Memorithm/SML-GENIUS' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: thor
+            labels: [self-hosted, Linux, ARM64, remoteops, thor]
+          - host: dell-t430
+            labels: [self-hosted, Linux, X64, remoteops, dell-t430]
+    runs-on: ${{ matrix.labels }}
+    timeout-minutes: 40
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+      SML_PORTABLE_GPU_REQUIRED: "1"
+      SML_PORTABLE_GPU_REQUIRE_HARDWARE: "1"
+    steps:
+      - name: Record host and GPU environment (diagnostic only)
+        shell: bash
+        run: |
+          echo "SML_A2HW_HOST=$(hostname) ARCH=$(uname -m) KERNEL=$(uname -r) MATRIX=${{ matrix.host }}"
+          (command -v nvidia-smi >/dev/null && nvidia-smi -L) || echo "nvidia-smi: absent"
+          (command -v vulkaninfo >/dev/null && vulkaninfo --summary) || echo "vulkaninfo: absent"
+          ls /usr/share/vulkan/icd.d /etc/vulkan/icd.d 2>/dev/null || echo "no Vulkan ICD dirs"
+          ldconfig -p 2>/dev/null | grep -E 'libvulkan|nvidia_icd|GLX_nvidia' || echo "no libvulkan in ldconfig"
+      - name: Checkout exact integrated main without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: sml-genius
+      - name: Isolate Cargo and Rust caches
+        shell: bash
+        run: |
+          echo "RUSTUP_HOME=$RUNNER_TEMP/sml-a2hw-rustup" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$RUNNER_TEMP/sml-a2hw-cargo" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/sml-a2hw-target" >> "$GITHUB_ENV"
+      - name: Install pinned Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Default build must not pull wgpu
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          if cargo +1.89.0 tree --locked -p sml-native-kernels -e normal | grep -q wgpu; then
+            echo "wgpu leaked into default build"; exit 1
+          fi
+      - name: Three-way oracle on hardware adapter (REQUIRED + REQUIRE_HARDWARE)
+        working-directory: sml-genius
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.89.0 test --locked -p sml-native-kernels --features portable-gpu -- --nocapture 2>&1 | tee "$RUNNER_TEMP/a2hw.txt"
+          grep 'portable GPU adapter' "$RUNNER_TEMP/a2hw.txt"
+          echo "SML_A2HW_${{ matrix.host }}=PASS"
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### A2 portable-gpu hardware: ${{ matrix.host }}"
+            echo "Source: $GITHUB_SHA"
+            grep -E 'portable GPU adapter|SKIPPED|panicked|test result' "$RUNNER_TEMP/a2hw.txt" 2>/dev/null || echo "no test log"
+            echo "Correctness only; no performance claim."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -273,6 +273,14 @@ mod tests {
             }
         };
         eprintln!("portable GPU adapter: {:?}", gpu.identity());
+        if std::env::var_os("SML_PORTABLE_GPU_REQUIRE_HARDWARE").is_some() {
+            assert_ne!(
+                gpu.identity().kind,
+                "SOFTWARE_RASTERIZER",
+                "hardware adapter required, got software adapter {:?}",
+                gpu.identity()
+            );
+        }
         let (a, b, c) = lanes();
         for op in [
             PtxOperation::Xor3,
