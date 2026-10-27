@@ -42,3 +42,14 @@ No NVIDIA SDK/toolkit is installed or required by the workflow; if no Vulkan ICD
 
 ## Results
 (pending execution)
+
+### Deviation 1 (recorded before any device result)
+Run [40499157718](https://github.com/Memorithm/SML-GENIUS/actions/runs/40499157718) (merge `1ba478e`)
+stayed queued ~1h and was cancelled by us, with all four RemoteOps runners idle. Jobs: Thor 122172173346
+(`self-hosted,Linux,ARM64,remoteops,thor`), Dell 122172173738 (`self-hosted,Linux,X64,remoteops,dell-t430`).
+Cause: the `remoteops`-labelled runners are RemoteOps-repo control runners (per RemoteOps
+`docs/runner-fleet-architecture.md` they must never run general repository code). The documented build plane is
+the org runner groups `Thor-General` (`memorithm-thor-heavy-01`, labels `memorithm-ci,thor-general,ci-heavy,trusted-main`,
+host `tarek`) and `Dell-General` (`memorithm-dell-heavy-*`, labels `memorithm-ci,dell-general,ci-heavy,trusted-main`,
+host `debian`), both `restricted_to_workflows`. Change: target those labels with a hostname guard, and admit this
+workflow in the groups via RemoteOps PR #883. Method/criteria otherwise unchanged.
