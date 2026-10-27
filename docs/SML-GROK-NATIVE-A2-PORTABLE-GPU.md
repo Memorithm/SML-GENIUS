@@ -65,4 +65,4 @@ Executed locally (box, Rust 1.89, wgpu 25.0.2):
 
 Negative kept: first run FAILED validation (`create_bind_group`: 4 bindings vs 3 in layout) because
 auto-derived pipeline layouts drop the unused `c` binding for Hamming. Fixed with an explicit
-bind group layout; no semantics changed. Hardware-GPU adapters (AMD/Intel/NVIDIA/Apple) not yet executed: UNTESTED.
+bind group layout; no semantics changed. Lavapipe CI evidence: job 121954525450. Hardware follow-up: NVIDIA RTX 4060 and Jetson Thor PASS via Vulkan, see `SML-NATIVE-A2-HW-GPU-QUAL.md` (run 40510929412). AMD/Intel/Apple: UNTESTED.
