@@ -41,7 +41,21 @@ No NVIDIA SDK/toolkit is installed or required by the workflow; if no Vulkan ICD
 - Lavapipe CI (job 121954525450 on PR #748) remains correctness-on-software only.
 
 ## Results
-(pending execution)
+Run [40510929412](https://github.com/Memorithm/SML-GENIUS/actions/runs/40510929412), source `f5918f9`
+(main, merge of #751), trusted-main push, `SML_PORTABLE_GPU_REQUIRED=1` + `SML_PORTABLE_GPU_REQUIRE_HARDWARE=1`.
+Runner groups admitted by RemoteOps PR #883 (Thor-General bootstrap run 40510611861, Dell-General run 40510745878).
+
+| Host | Job | Driver evidence | wgpu adapter (name / backend / kind) | Oracle 65,537 lanes x 3 ops | Verdict |
+|---|---|---|---|---|---|
+| Dell T430 (`debian`, x86_64, 6.12.88+deb13) | [122212323680](https://github.com/Memorithm/SML-GENIUS/actions/runs/40510929412/job/122212323680) | `nvidia-smi`: GPU 0 NVIDIA GeForce RTX 4060; Vulkan 1.4.329, DISCRETE_GPU, NVIDIA 595.45.04 | `NVIDIA GeForce RTX 4060` / Vulkan / DiscreteGpu | bit-exact; 7/7 crate tests | **PASS** |
+| Jetson Thor (`tarek`, aarch64, 6.8.12-tegra) | [122212324623](https://github.com/Memorithm/SML-GENIUS/actions/runs/40510929412/job/122212324623) | `nvidia-smi`: GPU 0 NVIDIA Thor; Vulkan 1.4.315, INTEGRATED_GPU, NVIDIA 580.00 | `NVIDIA Tegra NVIDIA Thor` / Vulkan / IntegratedGpu | bit-exact; 7/7 crate tests | **PASS** |
+
+Both hosts also expose llvmpipe; the hardware gate confirms wgpu selected the NVIDIA device, not the software adapter.
+Default build had no wgpu on both hosts. No NVIDIA SDK installed by the workflow (vendor driver Vulkan ICD only).
+H1 supported on 2 NVIDIA devices (Vulkan). **Not claimed:** performance; Metal/DX12; AMD/Intel/Apple GPUs (UNTESTED).
+Negatives kept: Deviation 1 (run 40499157718 never scheduled, cancelled); PR #751 cloud checks did not start (GitHub
+billing message, not code failures) and were merged per owner instruction to rely on self-hosted RemoteOps runners.
+Software baseline: lavapipe CI job 121954525450 (PR #748), correctness only.
 
 ### Deviation 1 (recorded before any device result)
 Run [40499157718](https://github.com/Memorithm/SML-GENIUS/actions/runs/40499157718) (merge `1ba478e`)
