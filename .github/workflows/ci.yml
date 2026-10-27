@@ -26,7 +26,7 @@ jobs:
   fmt:
     # Fast, isolated formatting gate: a rustfmt failure is reported in ~1 min
     # under its own check name, before any build/clippy/test work starts.
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, memorithm-ci, dell-general, ci-light, trusted-main]
     steps:
       - name: Checkout exact source revision without persistent credentials
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
