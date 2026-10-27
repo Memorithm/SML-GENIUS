@@ -29,8 +29,17 @@ type FnH2D = unsafe extern "C" fn(DevicePtr, *const c_void, usize) -> i32;
 type FnD2H = unsafe extern "C" fn(*mut c_void, DevicePtr, usize) -> i32;
 type FnSync = unsafe extern "C" fn() -> i32;
 type FnLaunch = unsafe extern "C" fn(
-    Function, u32, u32, u32, u32, u32, u32, u32,
-    *mut c_void, *mut *mut c_void, *mut *mut c_void
+    Function,
+    u32,
+    u32,
+    u32,
+    u32,
+    u32,
+    u32,
+    u32,
+    *mut c_void,
+    *mut *mut c_void,
+    *mut *mut c_void,
 ) -> i32;
 
 /// An explicit GPU request fails closed if the driver or input contract fails.
@@ -47,14 +56,20 @@ pub enum GpuError {
 }
 
 fn check(name: &'static str, result: i32) -> Result<(), GpuError> {
-    if result == 0 { Ok(()) } else { Err(GpuError::Driver(name, result)) }
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(GpuError::Driver(name, result))
+    }
 }
 
 /// # Safety
 /// Caller guarantees the C ABI type corresponds to this fixed CUDA symbol,
 /// and keeps the library loaded until all uses of the returned pointer end.
 unsafe fn load<T: Copy>(
-    library: *mut c_void, name: &std::ffi::CStr, label: &'static str
+    library: *mut c_void,
+    name: &std::ffi::CStr,
+    label: &'static str,
 ) -> Result<T, GpuError> {
     // SAFETY: dlopen handle and NUL-terminated constant are valid.
     let pointer = unsafe { dlsym(library, name.as_ptr()) };
@@ -145,7 +160,10 @@ impl Session {
             check("cuInit", (session.driver.init)(0))?;
             let mut device = 0_i32;
             check("cuDeviceGet", (session.driver.device)(&mut device, 0))?;
-            check("cuCtxCreate_v2", (session.driver.ctx_create)(&mut session.context, 0, device))?;
+            check(
+                "cuCtxCreate_v2",
+                (session.driver.ctx_create)(&mut session.context, 0, device),
+            )?;
             let ptx = CString::new(NVIDIA_PTX).map_err(|_| GpuError::Unavailable("PTX NUL"))?;
             check(
                 "cuModuleLoadData",
@@ -179,9 +197,15 @@ impl Drop for Session {
         // SAFETY: all device buffers, module and context are uniquely owned
         // and freed before libcuda is closed by the Driver field destructor.
         unsafe {
-            for device in self.buffers.drain(..) { (self.driver.free)(device); }
-            if !self.module.is_null() { (self.driver.module_unload)(self.module); }
-            if !self.context.is_null() { (self.driver.ctx_destroy)(self.context); }
+            for device in self.buffers.drain(..) {
+                (self.driver.free)(device);
+            }
+            if !self.module.is_null() {
+                (self.driver.module_unload)(self.module);
+            }
+            if !self.context.is_null() {
+                (self.driver.ctx_destroy)(self.context);
+            }
         }
     }
 }
@@ -194,13 +218,20 @@ impl Drop for Session {
 /// Returns shape, size, symbol, JIT or CUDA driver errors; never a fake GPU
 /// result. Signed ternary partials are encoded as two's-complement u32.
 pub fn execute(
-    operation: PtxOperation, a: &[u32], b: &[u32], c: &[u32]
+    operation: PtxOperation,
+    a: &[u32],
+    b: &[u32],
+    c: &[u32],
 ) -> Result<Vec<u32>, GpuError> {
     if a.len() != b.len() || a.len() != c.len() {
         return Err(GpuError::Shape(a.len(), b.len(), c.len()));
     }
-    if a.len() > (1 << 24) { return Err(GpuError::Oversize(a.len())); }
-    if a.is_empty() { return Ok(Vec::new()); }
+    if a.len() > (1 << 24) {
+        return Err(GpuError::Oversize(a.len()));
+    }
+    if a.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let mut session = Session::new()?;
     let mut input_a = session.allocate(Some(a), a.len())?;
@@ -209,13 +240,15 @@ pub fn execute(
     let mut output = session.allocate(None, a.len())?;
     let mut length = a.len() as u32;
     let mut function: Function = ptr::null_mut();
-    let symbol = CString::new(operation.symbol()).map_err(|_| GpuError::Unavailable("symbol NUL"))?;
+    let symbol =
+        CString::new(operation.symbol()).map_err(|_| GpuError::Unavailable("symbol NUL"))?;
     // SAFETY: live module/function; each pointer points to a live CUDA
     // kernel parameter for the full duration of the synchronous launch.
     unsafe {
-        check("cuModuleGetFunction", (session.driver.function)(
-            &mut function, session.module, symbol.as_ptr()
-        ))?;
+        check(
+            "cuModuleGetFunction",
+            (session.driver.function)(&mut function, session.module, symbol.as_ptr()),
+        )?;
         let mut parameters = [
             (&mut input_a as *mut DevicePtr).cast::<c_void>(),
             (&mut input_b as *mut DevicePtr).cast::<c_void>(),
@@ -223,19 +256,36 @@ pub fn execute(
             (&mut output as *mut DevicePtr).cast::<c_void>(),
             (&mut length as *mut u32).cast::<c_void>(),
         ];
-        check("cuLaunchKernel", (session.driver.launch)(
-            function, length.div_ceil(256), 1, 1, 256, 1, 1,
-            0, ptr::null_mut(), parameters.as_mut_ptr(), ptr::null_mut()
-        ))?;
+        check(
+            "cuLaunchKernel",
+            (session.driver.launch)(
+                function,
+                length.div_ceil(256),
+                1,
+                1,
+                256,
+                1,
+                1,
+                0,
+                ptr::null_mut(),
+                parameters.as_mut_ptr(),
+                ptr::null_mut(),
+            ),
+        )?;
         check("cuCtxSynchronize", (session.driver.sync)())?;
     }
     let mut result = vec![0_u32; a.len()];
     // SAFETY: GPU kernel has completed, destination is an initialized,
     // exclusively owned Vec of a.len() elements and allocation matches size.
     unsafe {
-        check("cuMemcpyDtoH_v2", (session.driver.d2h)(
-            result.as_mut_ptr().cast(), output, mem::size_of_val(result.as_slice())
-        ))?;
+        check(
+            "cuMemcpyDtoH_v2",
+            (session.driver.d2h)(
+                result.as_mut_ptr().cast(),
+                output,
+                mem::size_of_val(result.as_slice()),
+            ),
+        )?;
     }
     Ok(result)
 }
@@ -247,22 +297,36 @@ mod tests {
 
     #[test]
     fn rejects_invalid_lengths_without_cuda_or_allocation() {
-        assert_eq!(execute(PtxOperation::Hamming, &[1, 2], &[0], &[1, 2]),
-            Err(GpuError::Shape(2, 1, 2)));
+        assert_eq!(
+            execute(PtxOperation::Hamming, &[1, 2], &[0], &[1, 2]),
+            Err(GpuError::Shape(2, 1, 2))
+        );
         assert_eq!(execute(PtxOperation::Xor3, &[], &[], &[]), Ok(Vec::new()));
     }
 
     #[test]
     fn exact_real_gpu_vectors_only_when_requested() {
-        if std::env::var_os("SML_NATIVE_GPU_TEST").is_none() { return; }
+        if std::env::var_os("SML_NATIVE_GPU_TEST").is_none() {
+            return;
+        }
         let n = 1031;
-        let a: Vec<u32> = (0..n).map(|x| (x as u32).wrapping_mul(0x9e37_79b9)).collect();
+        let a: Vec<u32> = (0..n)
+            .map(|x| (x as u32).wrapping_mul(0x9e37_79b9))
+            .collect();
         let b: Vec<u32> = (0..n).map(|x| !(x as u32).rotate_left(7)).collect();
         let c: Vec<u32> = (0..n).map(|x| (x as u32).rotate_right(13)).collect();
-        for op in [PtxOperation::Xor3, PtxOperation::Hamming, PtxOperation::TernaryPartial] {
+        for op in [
+            PtxOperation::Xor3,
+            PtxOperation::Hamming,
+            PtxOperation::TernaryPartial,
+        ] {
             let observed = execute(op, &a, &b, &c).expect("GPU required by SML_NATIVE_GPU_TEST");
-            let expected: Vec<_> = a.iter().zip(&b).zip(&c)
-                .map(|((&x, &y), &z)| ptx_word_oracle(op, x, y, z)).collect();
+            let expected: Vec<_> = a
+                .iter()
+                .zip(&b)
+                .zip(&c)
+                .map(|((&x, &y), &z)| ptx_word_oracle(op, x, y, z))
+                .collect();
             assert_eq!(observed, expected, "operation={op:?}");
         }
     }
