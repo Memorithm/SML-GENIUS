@@ -348,7 +348,6 @@ mod tests {
     }
 }
 
-
 /// Driver-managed CUDA events with lifetime bounded by the owning session.
 /// Drop cleans up both events even if any measurement operation fails.
 struct TimedEvents<'a> {
@@ -367,8 +366,14 @@ impl<'a> TimedEvents<'a> {
         // SAFETY: CUDA current context belongs to the live calling thread,
         // and the two event output pointers are valid owned fields.
         unsafe {
-            check("cuEventCreate:first", (events.driver.event_create)(&mut events.first, 0))?;
-            check("cuEventCreate:last", (events.driver.event_create)(&mut events.last, 0))?;
+            check(
+                "cuEventCreate:first",
+                (events.driver.event_create)(&mut events.first, 0),
+            )?;
+            check(
+                "cuEventCreate:last",
+                (events.driver.event_create)(&mut events.last, 0),
+            )?;
         }
         Ok(events)
     }
@@ -376,7 +381,12 @@ impl<'a> TimedEvents<'a> {
     fn mark(&self, event: Event) -> Result<(), GpuError> {
         // SAFETY: both events were initialized within this live context.
         // NULL stream means the legacy default CUDA stream.
-        unsafe { check("cuEventRecord", (self.driver.event_record)(event, ptr::null_mut())) }
+        unsafe {
+            check(
+                "cuEventRecord",
+                (self.driver.event_record)(event, ptr::null_mut()),
+            )
+        }
     }
 
     fn elapsed_ms(&self) -> Result<f32, GpuError> {
@@ -461,7 +471,8 @@ impl ResidentGpu {
         .into_iter()
         .enumerate()
         {
-            let symbol = CString::new(op.symbol()).map_err(|_| GpuError::Unavailable("PTX symbol"))?;
+            let symbol =
+                CString::new(op.symbol()).map_err(|_| GpuError::Unavailable("PTX symbol"))?;
             // SAFETY: session owns the compiled module; CUDA writes one
             // function handle into the indexed element.
             unsafe {
@@ -509,11 +520,7 @@ impl ResidentGpu {
             unsafe {
                 check(
                     "cuMemcpyHtoD_v2",
-                    (self.session.driver.h2d)(
-                        device,
-                        host.as_ptr().cast(),
-                        mem::size_of_val(host),
-                    ),
+                    (self.session.driver.h2d)(device, host.as_ptr().cast(), mem::size_of_val(host)),
                 )?;
             }
         }
@@ -599,7 +606,11 @@ impl ResidentGpu {
     ///
     /// # Errors
     /// Native CUDA failures propagate to the caller.
-    pub fn execute(&self, operation: PtxOperation, used_words: usize) -> Result<Vec<u32>, GpuError> {
+    pub fn execute(
+        &self,
+        operation: PtxOperation,
+        used_words: usize,
+    ) -> Result<Vec<u32>, GpuError> {
         self.launch(operation, used_words)?;
         self.read_output(used_words)
     }
@@ -664,12 +675,8 @@ mod resident_tests {
             let a: Vec<u32> = (0..words)
                 .map(|i| (i as u32).wrapping_mul(0x9e37_79b9))
                 .collect();
-            let b: Vec<u32> = (0..words)
-                .map(|i| !(i as u32).rotate_left(7))
-                .collect();
-            let c: Vec<u32> = (0..words)
-                .map(|i| (i as u32).rotate_right(13))
-                .collect();
+            let b: Vec<u32> = (0..words).map(|i| !(i as u32).rotate_left(7)).collect();
+            let c: Vec<u32> = (0..words).map(|i| (i as u32).rotate_right(13)).collect();
             gpu.upload(&a, &b, &c).expect("write buffers");
             for op in [
                 PtxOperation::Xor3,
