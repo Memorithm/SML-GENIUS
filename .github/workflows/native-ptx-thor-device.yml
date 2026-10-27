@@ -65,7 +65,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD:crates/sml-native-kernels/ptx/boolean_words.ptx)" = '12e7715c92caac7ad21deb361c6aa474b00df535'
           test "$(git rev-parse HEAD:crates/sml-native-kernels/src/cuda_driver.rs)" = '323745d01571b6d3ced09c0d939ba9f141142f7d'
-          test "$(git rev-parse HEAD:crates/sml-native-kernels/src/lib.rs)" = '27bec7b79ef703f01c3aaeaa6bb272e39d1ec014'
+          test "$(git rev-parse HEAD:crates/sml-native-kernels/src/lib.rs)" = '64875c559112fee2eb8603206fa27a3afbf4b825'
           echo "SML_NATIVE_GPU_SOURCE_SHA=$GITHUB_SHA"
           echo 'SML_NATIVE_GPU_FROZEN_PTX_BLOB=12e7715c92caac7ad21deb361c6aa474b00df535'
 
