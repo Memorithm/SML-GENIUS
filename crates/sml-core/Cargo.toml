@@ -37,5 +37,9 @@ name = "grok_icm_syndrome"
 test = true
 
 [[example]]
+name = "grok_icm_codes"
+test = true
+
+[[example]]
 name = "skyrmion_observability"
 test = true
