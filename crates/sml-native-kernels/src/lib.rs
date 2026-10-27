@@ -223,8 +223,13 @@ mod tests {
         let active = CpuKernels::detect();
         let reference = CpuKernels::portable();
         let words = [
-            0, u64::MAX, 1, 1 << 63, 0x5555_5555_5555_5555,
-            0xaaaa_aaaa_aaaa_aaaa, 0x0123_4567_89ab_cdef,
+            0,
+            u64::MAX,
+            1,
+            1 << 63,
+            0x5555_5555_5555_5555,
+            0xaaaa_aaaa_aaaa_aaaa,
+            0x0123_4567_89ab_cdef,
             0xffff_0000_ffff_0000,
         ];
         for a in words {
@@ -233,7 +238,10 @@ mod tests {
                 assert_eq!(active.hamming(a, b), reference.hamming(a, b));
                 assert_eq!(active.gf2_dot_parity(a, b), reference.gf2_dot_parity(a, b));
                 for c in words {
-                    assert_eq!(active.ternary_partial(a, b, c), reference.ternary_partial(a, b, c));
+                    assert_eq!(
+                        active.ternary_partial(a, b, c),
+                        reference.ternary_partial(a, b, c)
+                    );
                 }
             }
         }
@@ -257,7 +265,10 @@ mod tests {
                 active.ternary_partial(a, b, c),
                 (a & b).count_ones() as i32 - (a & c).count_ones() as i32
             );
-            assert_eq!(ptx_word_oracle(PtxOperation::Xor3, a as u32, b as u32, c as u32), (a ^ b ^ c) as u32);
+            assert_eq!(
+                ptx_word_oracle(PtxOperation::Xor3, a as u32, b as u32, c as u32),
+                (a ^ b ^ c) as u32
+            );
         }
     }
 
@@ -266,7 +277,14 @@ mod tests {
         let k = CpuKernels::detect();
         let mut out = [999_u32; 2];
         let invalid = k.hamming_into(&[0, 1], &[0], &mut out);
-        assert_eq!(invalid, Err(LengthMismatch {left: 2, right: 1, output: 2}));
+        assert_eq!(
+            invalid,
+            Err(LengthMismatch {
+                left: 2,
+                right: 1,
+                output: 2
+            })
+        );
         assert_eq!(out, [999, 999]);
         k.hamming_into(&[0, u64::MAX], &[0, 0], &mut out).unwrap();
         assert_eq!(out, [0, 64]);
@@ -295,9 +313,15 @@ mod tests {
         for a in 0_u32..256 {
             for b in 0_u32..256 {
                 let c = (!b) & 255;
-                assert_eq!(ptx_word_oracle(PtxOperation::Hamming, a, b), (a ^ b).count_ones());
+                assert_eq!(
+                    ptx_word_oracle(PtxOperation::Hamming, a, b),
+                    (a ^ b).count_ones()
+                );
                 let signed = (a & b).count_ones() as i32 - (a & c).count_ones() as i32;
-                assert_eq!(ptx_word_oracle(PtxOperation::TernaryPartial, a, b, c) as i32, signed);
+                assert_eq!(
+                    ptx_word_oracle(PtxOperation::TernaryPartial, a, b, c) as i32,
+                    signed
+                );
             }
         }
     }
