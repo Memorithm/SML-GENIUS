@@ -24,7 +24,10 @@
     ld.param.u64 %rd3, [xc];
     ld.param.u64 %rd4, [xo];
     ld.param.u32 %r1, [xn];
-    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    mov.u32 %r6, %ctaid.x;
+    mov.u32 %r7, %ntid.x;
+    mov.u32 %r8, %tid.x;
+    mad.lo.u32 %r2, %r6, %r7, %r8;
     setp.ge.u32 %p1, %r2, %r1;
     @%p1 bra XOR_DONE;
     mul.wide.u32 %rd5, %r2, 4;
@@ -58,7 +61,10 @@ XOR_DONE:
     ld.param.u64 %rd3, [hc];
     ld.param.u64 %rd4, [ho];
     ld.param.u32 %r1, [hn];
-    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    mov.u32 %r6, %ctaid.x;
+    mov.u32 %r7, %ntid.x;
+    mov.u32 %r8, %tid.x;
+    mad.lo.u32 %r2, %r6, %r7, %r8;
     setp.ge.u32 %p1, %r2, %r1;
     @%p1 bra HAM_DONE;
     mul.wide.u32 %rd5, %r2, 4;
@@ -90,7 +96,10 @@ HAM_DONE:
     ld.param.u64 %rd3, [tc];
     ld.param.u64 %rd4, [to];
     ld.param.u32 %r1, [tn];
-    mad.lo.u32 %r2, %ctaid.x, %ntid.x, %tid.x;
+    mov.u32 %r6, %ctaid.x;
+    mov.u32 %r7, %ntid.x;
+    mov.u32 %r8, %tid.x;
+    mad.lo.u32 %r2, %r6, %r7, %r8;
     setp.ge.u32 %p1, %r2, %r1;
     @%p1 bra TERN_DONE;
     mul.wide.u32 %rd5, %r2, 4;
