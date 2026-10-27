@@ -1,0 +1,20 @@
+[package]
+name = "sml-native-kernels"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Isolated, auditable CPU assembly and optional GPU PTX kernels for SML-GENIUS"
+
+# This is the ONLY deliberately low-level workspace crate. It does not opt
+# into the workspace's unsafe_code=forbid reference-crate lint, because
+# inline CPU assembly and the opt-in CUDA driver adapter require unsafe.
+# All reference and inference crates keep their existing forbid(unsafe_code).
+[features]
+default = []
+cuda-driver = []
+
+[[example]]
+name = "native_bitkernels"
+test = false
