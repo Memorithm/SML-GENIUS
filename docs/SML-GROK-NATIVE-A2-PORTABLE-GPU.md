@@ -55,4 +55,14 @@ Vulkan/Metal/DX12. Must it be bit-exact with the A1 CPU oracle
   kept.
 
 ## Results
-(Filled only from executed runs.)
+Executed locally (box, Rust 1.89, wgpu 25.0.2):
+
+- Adapter: `llvmpipe (LLVM 19.1.7, 256 bits)`, backend Vulkan, kind `SOFTWARE_RASTERIZER` (Mesa lavapipe). Correctness evidence only; **no performance claim**.
+- Gate 1: PASS. 65,537 lanes x {Xor3, Hamming, TernaryPartial} bit-exact vs `ptx_word_oracle`; `CpuKernels::detect()` == `portable()` on u64 packing.
+- Gate 2: PASS locally with `SML_PORTABLE_GPU_REQUIRED=1`; CI job `native-a2-portable-gpu.yml` installs lavapipe and enforces it.
+- Gate 3: PASS. `cargo tree -e normal` on default build: 0 wgpu entries.
+- Gate 4: A1 commands (`--all-features` check/clippy/test, aarch64 lib build) pass locally.
+
+Negative kept: first run FAILED validation (`create_bind_group`: 4 bindings vs 3 in layout) because
+auto-derived pipeline layouts drop the unused `c` binding for Hamming. Fixed with an explicit
+bind group layout; no semantics changed. Hardware-GPU adapters (AMD/Intel/NVIDIA/Apple) not yet executed: UNTESTED.
