@@ -54,6 +54,10 @@ name = "grok_icm_stream_recall"
 test = true
 
 [[example]]
+name = "skyrmion_observability"
+test = true
+
+[[example]]
 name = "grok_icm_bench"
 required-features = ["icm"]
 test = true
