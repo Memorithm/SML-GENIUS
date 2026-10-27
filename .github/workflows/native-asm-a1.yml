@@ -49,6 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           rustup target add aarch64-unknown-linux-gnu
-          cargo check --locked -p sml-native-kernels --all-targets --all-features --target aarch64-unknown-linux-gnu
+          # cargo check does not assemble inline asm. Build an ARM64 rlib to codegen/validate NEON.
+          cargo build --locked -p sml-native-kernels --all-features --lib --target aarch64-unknown-linux-gnu
       - name: Physical CPU comparison, no GPU simulation
         run: cargo run --locked --release -p sml-native-kernels --example native_bitkernels
