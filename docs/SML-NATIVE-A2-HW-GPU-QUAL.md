@@ -42,3 +42,13 @@ No NVIDIA SDK/toolkit is installed or required by the workflow; if no Vulkan ICD
 
 ## Results
 (pending execution)
+
+### Deviation 1 (recorded before any device result)
+Run [40499157718](https://github.com/Memorithm/SML-GENIUS/actions/runs/40499157718) (merge `1ba478e`)
+stayed queued ~1h and was cancelled by us, with all four RemoteOps runners idle. Jobs: Thor 122172173346
+(`self-hosted,Linux,ARM64,remoteops,thor`), Dell 122172173738 (`self-hosted,Linux,X64,remoteops,dell-t430`).
+Cause: the `remoteops`-labelled runners are scoped to Memorithm/RemoteOps and are not available to SML-GENIUS. The
+only runner SML-GENIUS uses is `tarek-scirust-arm64-01` (labels `self-hosted,Linux,ARM64`, host `tarek` = Thor;
+e.g. run 40467876591). Change: Thor job uses those labels + hostname guard; Dell is dropped.
+**Dell RTX 4060 = BLOCKED** (no SML-GENIUS runner). To enable: register a Dell runner for SML-GENIUS
+or grant the RemoteOps runner group access to SML-GENIUS. Method/criteria otherwise unchanged.

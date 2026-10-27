@@ -26,10 +26,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Only runner reachable from SML-GENIUS: tarek-scirust-arm64-01 (Thor
+          # host `tarek`). RemoteOps-labelled runners are scoped to RemoteOps.
           - host: thor
-            labels: [self-hosted, Linux, ARM64, remoteops, thor]
-          - host: dell-t430
-            labels: [self-hosted, Linux, X64, remoteops, dell-t430]
+            labels: [self-hosted, Linux, ARM64]
     runs-on: ${{ matrix.labels }}
     timeout-minutes: 40
     env:
@@ -42,6 +42,7 @@ jobs:
       - name: Record host and GPU environment (diagnostic only)
         shell: bash
         run: |
+          if [ "${{ matrix.host }}" = thor ]; then test "$(hostname)" = tarek; test "$(uname -m)" = aarch64; fi
           echo "SML_A2HW_HOST=$(hostname) ARCH=$(uname -m) KERNEL=$(uname -r) MATRIX=${{ matrix.host }}"
           (command -v nvidia-smi >/dev/null && nvidia-smi -L) || echo "nvidia-smi: absent"
           (command -v vulkaninfo >/dev/null && vulkaninfo --summary) || echo "vulkaninfo: absent"
