@@ -1,0 +1,50 @@
+name: Native A2 portable GPU (Vulkan/SPIR-V, no vendor SDK)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-a2-portable-gpu.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches: [main]
+    paths:
+      - "crates/sml-native-kernels/**"
+      - ".github/workflows/native-a2-portable-gpu.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  portable-gpu-oracle:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Read-only exact source checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Mesa lavapipe (software Vulkan; correctness only, not performance)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+      - name: Default build must not pull wgpu
+        shell: bash
+        run: |
+          set -euo pipefail
+          if cargo tree --locked -p sml-native-kernels -e normal | grep -q wgpu; then
+            echo "wgpu leaked into default build"; exit 1
+          fi
+      - name: Three-way oracle (CPU-ref / asm / portable GPU), adapter REQUIRED
+        env:
+          SML_PORTABLE_GPU_REQUIRED: "1"
+        run: cargo test --locked -p sml-native-kernels --features portable-gpu -- --nocapture
