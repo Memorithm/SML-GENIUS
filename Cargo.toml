@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/sml-core",
+    "crates/sml-native-kernels",
     "crates/sml-cli",
     "crates/sml-store",
     "crates/sml-decision",
