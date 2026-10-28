@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   publish-and-consume:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, memorithm-ci, dell-general, ci-light, trusted-main]
     timeout-minutes: 20
     steps:
       - name: Checkout exact SML revision
