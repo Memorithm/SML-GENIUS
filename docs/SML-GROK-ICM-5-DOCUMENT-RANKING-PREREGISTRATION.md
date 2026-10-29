@@ -79,5 +79,19 @@ consigné comme NEGATIVE et non oublié.
 - Merge uniquement avec CI verte sur le SHA exact de la tête de PR
   (`gh pr merge --squash --match-head-commit`).
 
-## Résultats
-Aucun. (Section remplie par PR3.)
+## Résultats (PR3, 2026-10-29) — **NEGATIVE**
+Harness et sorties brutes: CCOS-Enterprise #243
+(`docs/campaigns/2026-10-29-sml-icm5-results.md`, `crates/ccos-enterprise-sml-retrieval/examples/beir_sml_icm5.rs`).
+Ranker `SignaturePageRanker` @ `538d17da`, **aucun tuning** (pas de DEV). BM25 = #217
+(per-query identique bit-à-bit aux sorties publiées v3/v4); fused = per-query publiés (#230, v4).
+Bootstrap apparié 10 000, seed 20261029. Run1 = run2 (sha256 stdout identiques). CPU x86_64,
+≤ 36 s mur, ≤ 41 MiB RSS.
+
+| dataset | bm25 | sml seed0/1/2 (min) | fused | Δ vs bm25 (IC95, 3 seeds) | Δ vs fused | verdict |
+|---|---|---|---|---|---|---|
+| SciFact test (primaire) | 0.6617 | 0.4174/0.4136/0.4061 (0.4061) | 0.7137 | −0.2443 [−0.2838,−0.2055] / −0.2481 [−0.2888,−0.2084] / −0.2556 [−0.2960,−0.2161] | −0.2963 / −0.3001 / −0.3077 (bornes hautes ≤ −0.2534) | **NEGATIVE** (H1, H2) |
+| NFCorpus test | 0.3069 | 0.1925/0.1835/0.1814 (0.1814) | 0.3423 | −0.1145 [−0.1349,−0.0957] / −0.1235 [−0.1433,−0.1049] / −0.1256 [−0.1471,−0.1050] | −0.1498 / −0.1588 / −0.1609 (bornes hautes ≤ −0.1259) | **NEGATIVE** |
+| FiQA test | — | — | — | — | — | **NOT RUN** (import strict: doc vide l.742; ce prereg ne définit pas de règle blank-docs) |
+
+Conséquences: GENERALISES non réclamable; CCOS reste sur `UnavailableSmlRetrieval` par défaut;
+`superiority_claim: false`. Tout successeur de sigpage-v0 exige un nouveau prereg.
