@@ -121,6 +121,8 @@ pub mod hyb_h3_engine;
 pub mod hybrid_logic_engine;
 #[cfg(feature = "icm")]
 pub mod icm_guard;
+#[cfg(feature = "icm-rank")]
+pub mod icm_rank;
 pub mod large_anf_delta_kv;
 pub mod large_anf_routed;
 pub mod large_anf_selected_pages;

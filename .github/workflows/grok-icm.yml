@@ -33,3 +33,7 @@ jobs:
         run: cargo test --locked --release -p sml-core --features icm --example grok_icm_bench
       - name: E2E bench report
         run: cargo run --locked --release -p sml-core --features icm --example grok_icm_bench
+      - name: Clippy with icm-rank (experimental, not BEIR-validated)
+        run: cargo clippy --locked -p sml-core --features icm-rank --all-targets -- -D warnings
+      - name: Tests with icm-rank (contract + oracle fixtures, no BEIR)
+        run: cargo test --locked --release -p sml-core --features icm-rank --lib icm_rank
