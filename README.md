@@ -30,7 +30,12 @@ Freeze baselines, task metrics, non-inferiority margins, seeds, independent
 evaluation splits, hardware, complete cost boundaries and decision rules
 **before** held-out evaluation. Both conditions must hold on the same qualified
 integrated architecture. Prototype-only, synthetic-only or compression-only
-results cannot substitute for these gates. See
+results cannot substitute for these gates.
+
+**Continuation rule:** verified parity is a positive `RETAIN_AND_DEVELOP`
+outcome, not a reason to terminate SML. It warrants continued, evidence-gated
+research into new topology, learning rules and integration opportunities; it
+does not itself establish architectural novelty or justify unqualified scaling. See
 [docs/ROADMAP.md](docs/ROADMAP.md#programme-level-success-criterion).
 
 
