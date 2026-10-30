@@ -131,6 +131,15 @@ Current reference ablations do not establish a learned-routing advantage: learne
 
 ## Stop conditions
 
+**A stop on a particular scale-up or candidate is not a decision to end the
+SML research programme.** Demonstrated parity with the competitive reference
+architectures is an affirmative `RETAIN_AND_DEVELOP` decision: continue
+bounded, hypothesis-driven research and test new architecture variants without
+requiring immediate superiority. A non-conclusive result means `INVESTIGATE`,
+not proven parity; sustained inferiority on a specific approach triggers its
+review, redesign or retirement rather than an automatic project shutdown.
+Architecture novelty remains a separate claim requiring prior-art assessment.
+
 Scaling stops if any of the following persists after a bounded research iteration:
 
 - quality fails to improve with scale under a controlled training budget;
