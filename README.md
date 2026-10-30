@@ -7,6 +7,34 @@ The long-range target is a 25-billion-parameter model with a storage-backed circ
 These are engineering targets. No trained 25B SML model, throughput result, quality result or architectural-novelty claim exists yet.
 
 
+## Programme success: measured parity is sufficient
+
+SML does **not** need to outperform a reference architecture to be a success.
+Success requires evidence on a **fully integrated, trained SML model** that
+**both** conditions hold against preregistered competitive baselines:
+
+1. **Learning non-inferiority:** learning effectiveness is equivalent or better,
+   evaluated on matched data/splits and training budgets using held-out
+   learning curves, predictive loss and task quality. Equivalence must be
+   supported by a preregistered practical margin and uncertainty interval;
+   an inconclusive difference is not proof of equivalence.
+2. **Quality/cost non-inferiority:** the measured end-to-end quality/cost
+   tradeoff is equivalent or better. Parity in quality **and** cost qualifies;
+   higher quality is not mandatory. Compare matched quality and/or matched
+   resource budgets on a preregistered frontier, reporting total training
+   cost and inference cost separately (including actual residency, memory
+   traffic and latency; energy only when reliably measured). An apparent
+   kernel-only gain cannot establish system-level success.
+
+Freeze baselines, task metrics, non-inferiority margins, seeds, independent
+evaluation splits, hardware, complete cost boundaries and decision rules
+**before** held-out evaluation. Both conditions must hold on the same qualified
+integrated architecture. Prototype-only, synthetic-only or compression-only
+results cannot substitute for these gates. See
+[docs/ROADMAP.md](docs/ROADMAP.md#programme-level-success-criterion).
+
+
+
 ## Model and Harness boundary
 
 `SML-GENIUS` is the model programme. The **Model** is the learned artifact plus
