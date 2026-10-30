@@ -6,6 +6,38 @@ Detailed [evidence-gated spectral discovery roadmap](SML-FOURIER-WALSH-ANF-ROADM
 
 Progression is evidence-gated. Model size does not advance because a calendar milestone elapsed.
 
+
+## Programme-level success criterion
+
+**Competitiveness at parity is success.** The fully integrated, actually
+trained SML architecture need not beat conventional reference architectures.
+It must demonstrate **both**:
+
+- **Learning at least as well:** preregistered non-inferiority or superiority
+  on held-out learning and capability metrics, comparing matched training
+  data, data splits, tokenizer/task protocol, training budgets and seeds.
+- **Quality/cost tradeoff at least as good:** preregistered non-inferiority or
+  superiority of an end-to-end quality/resource frontier or task-specific
+  utility. Equality in both quality and cost counts as success. For each
+  comparator, report matched-quality and/or matched-resource operating
+  points and separately account for training compute/time, inference latency
+  and throughput, RAM/VRAM residency, mapped storage, page/parameter traffic
+  and energy only if measured with a valid meter.
+
+Register the competitive baselines, quality/cost definitions, practical
+non-inferiority margins, uncertainty intervals, stopping rules and untouched
+evaluation split **before** running the decisive tests. Use paired estimates
+and uncertainty to distinguish evidence of non-inferiority from merely
+failing to detect a difference. Require complete model integration (native
+SBG/MOR, learned expert/circuit selection, recurrent memory/state and
+output/decision path) and end-to-end measurement; a component microbenchmark,
+synthetic success or standalone compressor does not close this gate.
+
+This is a **programme-level cross-architecture success criterion**, not a
+waiver of the distinct within-SML scaling, safety and reproducibility gates
+below. No current experiment is claimed to have satisfied it.
+
+
 | Gate | Approximate scale | Primary question | Required evidence before progression |
 |---|---:|---|---|
 | SML-0 | reference primitives | Is the architecture contract executable and auditable? | deterministic oracles, exact accounting, recurrent-depth runner, direct routing |
