@@ -230,6 +230,7 @@ The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md
 - [ ] CONTEXT-5 recurrent historical refinement and adaptive halting;
 - [ ] CONTEXT-6 long-range learning curriculum with protected holdouts;
 - [ ] CONTEXT-7 evidence-gated span ladder: 4k -> 16k -> 64k -> 256k -> 1M tokenizer-token dependency spans.
+  - [ ] LONGCTX-B1 preregistered (Voie B, not executed): [`SML-LONGCTX-B1-PREREGISTRATION.md`](SML-LONGCTX-B1-PREREGISTRATION.md).
 
 Do not report an N-token effective context because N tokens fit on disk or were ingested. Admission requires a frozen task whose dependency spans that distance plus quality, RAM, traffic and latency evidence.
 
