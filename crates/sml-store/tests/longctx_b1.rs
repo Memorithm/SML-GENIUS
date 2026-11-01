@@ -118,3 +118,37 @@ fn b1_fixture_filler_is_never_campaign_pinned() {
         Err(B1Error::FillerNotPinned)
     );
 }
+
+#[test]
+fn b1_task1_generator_is_deterministic_and_well_formed() {
+    let f = filler();
+    let a = generate_task1(&f, 0xB100_0003, 4096, 250, 0).unwrap();
+    let b = generate_task1(&f, 0xB100_0003, 4096, 250, 0).unwrap();
+    assert_eq!(a, b);
+    assert_eq!(a.split, B1Split::Test);
+    assert_eq!(a.haystack.len(), 4096);
+    assert_eq!(a.insertions.len(), 1 + TASK1_DISTRACTORS);
+    assert_eq!((a.query_key.len(), a.answer.len()), (16, 32));
+    let needle = needle_line(&a.query_key, &a.answer);
+    let hits = a
+        .haystack
+        .windows(needle.len())
+        .filter(|w| *w == needle.as_slice())
+        .count();
+    assert_eq!(hits, 1);
+    let key_line = [b"KEY=".as_slice(), &a.query_key, b" "].concat();
+    let key_hits = a
+        .haystack
+        .windows(key_line.len())
+        .filter(|w| *w == key_line.as_slice())
+        .count();
+    assert_eq!(
+        key_hits, 1,
+        "near-miss distractors must not equal the query key"
+    );
+    assert_ne!(a, generate_task1(&f, 0xB100_0003, 4096, 250, 1).unwrap());
+    assert_eq!(
+        generate_task1(&f, 0xB100_0003, 4096, 300, 0).unwrap_err(),
+        B1Error::InvalidDepth(300)
+    );
+}

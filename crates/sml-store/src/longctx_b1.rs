@@ -287,3 +287,68 @@ pub fn splice_haystack(
     debug_assert_eq!(out.len() as u64, span);
     Ok((out, insertions))
 }
+
+/// `KEY=<16 hex> VALUE=<32 hex>\n` (prereg §5 task 1).
+#[must_use]
+pub fn needle_line(key: &[u8], value: &[u8]) -> Vec<u8> {
+    let mut line = Vec::with_capacity(4 + key.len() + 7 + value.len() + 1);
+    line.extend_from_slice(b"KEY=");
+    line.extend_from_slice(key);
+    line.extend_from_slice(b" VALUE=");
+    line.extend_from_slice(value);
+    line.push(b'\n');
+    line
+}
+
+/// Exact-needle instance (task 1). `answer` is the exact value bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Task1Instance {
+    pub seed: u64,
+    pub split: B1Split,
+    pub span: u64,
+    pub depth_permille: u16,
+    pub haystack: Vec<u8>,
+    pub query_key: Vec<u8>,
+    pub answer: Vec<u8>,
+    pub insertions: Vec<Insertion>,
+}
+
+/// Generates one task-1 instance. Distractors get uniform random depths.
+/// `span` is not ladder-checked here so fixtures can use small spans; the
+/// campaign entry point must call [`validate_span`].
+pub fn generate_task1(
+    source: &dyn B1FillerSource,
+    seed: u64,
+    span: u64,
+    depth_permille: u16,
+    instance: u64,
+) -> Result<Task1Instance, B1Error> {
+    let split = B1Split::for_seed(seed)?;
+    if !TASK1_DEPTHS_PERMILLE.contains(&depth_permille) {
+        return Err(B1Error::InvalidDepth(depth_permille));
+    }
+    let mut rng = B1Rng::new(seed ^ (1 << 56) ^ (u64::from(depth_permille) << 32) ^ instance);
+    let key = hex_in_namespace(&mut rng, 16, split);
+    let value = hex_in_namespace(&mut rng, 32, split);
+    let mut lines = vec![(depth_permille, needle_line(&key, &value))];
+    for i in 0..TASK1_DISTRACTORS {
+        let mut near = near_miss_key(&mut rng, &key, 1 + i % 2);
+        while near == key {
+            near = near_miss_key(&mut rng, &key, 1 + i % 2);
+        }
+        let other = hex_in_namespace(&mut rng, 32, split);
+        let depth = rng.below(1001) as u16;
+        lines.push((depth, needle_line(&near, &other)));
+    }
+    let (haystack, insertions) = splice_haystack(source, seed, split, span, lines)?;
+    Ok(Task1Instance {
+        seed,
+        split,
+        span,
+        depth_permille,
+        haystack,
+        query_key: key,
+        answer: value,
+        insertions,
+    })
+}
