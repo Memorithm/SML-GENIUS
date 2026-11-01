@@ -226,6 +226,7 @@ The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md
   - [ ] CONTEXT-1b bounded streaming ingest + separate semantic-index emission;
 - [ ] CONTEXT-2 bounded recurrent semantic working context with matched fixed/expanding controls;
 - [ ] CONTEXT-3 hierarchical SBG/MOR top-k context retrieval with exhaustive-scan controls;
+  - [ ] design frozen, not implemented: [`SML-CONTEXT-3-RETRIEVAL.md`](SML-CONTEXT-3-RETRIEVAL.md);
 - [ ] CONTEXT-4 hot/warm/cold retention and optional lossy compaction with raw provenance preserved;
 - [ ] CONTEXT-5 recurrent historical refinement and adaptive halting;
 - [ ] CONTEXT-6 long-range learning curriculum with protected holdouts;

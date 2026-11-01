@@ -184,6 +184,8 @@ CONTEXT-1c adds synchronized semantic/provenance emission: each segment publishe
 
 ### CONTEXT-3 — hierarchical retrieval
 
+Design frozen, not implemented: [`SML-CONTEXT-3-RETRIEVAL.md`](SML-CONTEXT-3-RETRIEVAL.md).
+
 - SBG/MOR top-k context shortlist;
 - bounded associative lookup;
 - exact raw-segment reread when required;
