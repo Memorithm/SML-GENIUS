@@ -389,3 +389,87 @@ fn context3_t12_determinism_across_two_runs() {
         );
     }
 }
+
+#[test]
+fn context3_t02_exact_needle_hit_only_after_sha256_verification() {
+    let fixture = Fixture::build(32, 64);
+    let retriever = fixture.open_all();
+    let needle = 37;
+    let (hits, accounting) = retriever
+        .retrieve(&exact_query(needle), &policy(16, 1))
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    let hit = &hits[0];
+    assert_eq!(hit.segment, fixture.segment(needle));
+    assert!(hit.source_exact);
+    assert_eq!(hit.raw_bytes, raw_bytes_for_order(needle - 1));
+    let provenance =
+        parse_provenance_artifact(&fs::read(retriever.provenance_path(needle)).unwrap()).unwrap();
+    assert_eq!(
+        sha256_raw_bytes(&hit.raw_bytes).unwrap(),
+        provenance.content_hash
+    );
+    assert_eq!(hit.content_hash, provenance.content_hash);
+    assert_eq!(accounting.raw_reread_bytes, SEGMENT_BYTES as u64);
+
+    tamper_provenance_hash(&retriever, needle);
+    assert!(matches!(
+        retriever.retrieve(&exact_query(needle), &policy(16, 1)),
+        Err(ContextRetrieveError::HashMismatch)
+    ));
+}
+
+#[test]
+fn context3_t04_hash_mismatch_or_truncated_raw_segment_aborts() {
+    let fixture = Fixture::build(34, 64);
+    let retriever = fixture.open_all();
+
+    tamper_provenance_hash(&retriever, 10);
+    assert!(matches!(
+        retriever.retrieve(&exact_query(10), &policy(16, 1)),
+        Err(ContextRetrieveError::HashMismatch)
+    ));
+
+    let corrupted = retriever.raw_path(20);
+    let mut bytes = fs::read(&corrupted).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0x01;
+    fs::remove_file(&corrupted).unwrap();
+    fs::write(&corrupted, &bytes).unwrap();
+    assert!(matches!(
+        retriever.retrieve(&exact_query(20), &policy(16, 1)),
+        Err(ContextRetrieveError::HashMismatch)
+    ));
+
+    let truncated = retriever.raw_path(30);
+    let bytes = fs::read(&truncated).unwrap();
+    fs::remove_file(&truncated).unwrap();
+    fs::write(&truncated, &bytes[..bytes.len() - 1]).unwrap();
+    assert!(matches!(
+        retriever.retrieve(&exact_query(30), &policy(16, 1)),
+        Err(ContextRetrieveError::HashMismatch)
+    ));
+}
+
+#[test]
+fn context3_t05_missing_raw_segment_or_provenance_returns_error() {
+    let fixture = Fixture::build(35, 64);
+    let retriever = fixture.open_all();
+
+    fs::remove_file(retriever.raw_path(11)).unwrap();
+    assert!(matches!(
+        retriever.retrieve(&exact_query(11), &policy(16, 1)),
+        Err(ContextRetrieveError::MissingRaw)
+    ));
+
+    fs::remove_file(retriever.provenance_path(12)).unwrap();
+    assert!(matches!(
+        retriever.retrieve(&exact_query(12), &policy(16, 1)),
+        Err(ContextRetrieveError::MissingProvenance)
+    ));
+
+    assert!(matches!(
+        ContextRetriever::<BITS>::open(&fixture.temp.path, fixture.stream, 64, config()),
+        Err(ContextRetrieveError::MissingProvenance)
+    ));
+}

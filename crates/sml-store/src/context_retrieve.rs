@@ -336,6 +336,10 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         rank: usize,
         candidate: ContextCandidate,
     ) -> Result<RetrieveHit, ContextRetrieveError> {
+        let manifest = self.load_manifest(candidate.segment.segment_id)?;
+        if manifest.content_hash != candidate.content_hash {
+            return Err(ContextRetrieveError::HashMismatch);
+        }
         let raw = load_raw_segment(
             self.raw_path(candidate.segment.segment_id),
             self.config.raw_limits,
