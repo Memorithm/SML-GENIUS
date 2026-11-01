@@ -264,8 +264,96 @@ mod tests {
             assert_eq!(result.edges, edges);
             assert_eq!(result.counters.boolean_ops, edges);
             assert_eq!(result.counters.pairwise_comparisons, 0);
+            assert_eq!(result.counters.recurrent_cycles, 1);
             assert_eq!(result.source_bits_examined, 6);
+            assert_eq!(result.active_sources, u64::from((mask as u32).count_ones()));
+            let expected_contacts = [5_u64, 5, 7]
+                .into_iter()
+                .enumerate()
+                .filter(|(node, _)| bits[*node])
+                .map(|(_, contacts)| contacts)
+                .sum();
+            assert_eq!(result.contacts, expected_contacts);
+            assert_eq!(result.loops, u64::from(bits[0]));
         }
+    }
+
+    #[test]
+    fn structural_corruption_and_contact_overflow_fail_closed() {
+        fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
+            bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        }
+
+        fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+
+        let original = fixture();
+        let mut corruptions = Vec::new();
+
+        let mut zero_root = original.clone();
+        put_u64(&mut zero_root, 24, 0);
+        corruptions.push(zero_root);
+
+        let mut duplicate_root = original.clone();
+        put_u64(&mut duplicate_root, 32, 10);
+        corruptions.push(duplicate_root);
+
+        let mut unsorted_root = original.clone();
+        put_u64(&mut unsorted_root, 40, 15);
+        corruptions.push(unsorted_root);
+
+        for (offset, value) in [(48, 1), (56, 5), (64, 1), (72, 3)] {
+            let mut bad_offsets = original.clone();
+            put_u64(&mut bad_offsets, offset, value);
+            corruptions.push(bad_offsets);
+        }
+
+        let mut out_of_range_target = original.clone();
+        put_u32(&mut out_of_range_target, 80, 3);
+        corruptions.push(out_of_range_target);
+
+        let mut duplicate_target = original.clone();
+        put_u32(&mut duplicate_target, 84, 0);
+        corruptions.push(duplicate_target);
+
+        let mut zero_contacts = original.clone();
+        put_u64(&mut zero_contacts, 96, 0);
+        corruptions.push(zero_contacts);
+
+        let mut overflowing_contacts = original.clone();
+        put_u64(&mut overflowing_contacts, 96, u64::MAX);
+        corruptions.push(overflowing_contacts);
+
+        for (case, bytes) in corruptions.iter().enumerate() {
+            assert!(
+                Graph::read(bytes).is_err(),
+                "malformed CSR case {case} was admitted"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_edge_graph_accepts_zero_budget_without_activation() {
+        let mut bytes = b"V8CSR002".to_vec();
+        for value in [1_u64, 0, 7, 0, 0] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        let graph = Graph::read(&bytes).unwrap();
+        assert_eq!(graph.contacts, 0);
+        assert_eq!(graph.loops, 0);
+
+        let step = graph
+            .step(&BooleanWorkspace::from_bits(&[true]), 0)
+            .unwrap();
+        assert_eq!(step.output, BooleanWorkspace::from_bits(&[false]));
+        assert_eq!(step.active_sources, 1);
+        assert_eq!(step.source_bits_examined, 2);
+        assert_eq!(step.edges, 0);
+        assert_eq!(step.contacts, 0);
+        assert_eq!(step.loops, 0);
+        assert_eq!(step.counters.boolean_ops, 0);
+        assert_eq!(step.counters.recurrent_cycles, 1);
     }
 
     #[test]
