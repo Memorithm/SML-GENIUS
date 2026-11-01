@@ -400,7 +400,10 @@ mod tests {
             );
             assert_eq!(
                 graph.loops,
-                edges.iter().filter(|(source, target)| source == target).count() as u64
+                edges
+                    .iter()
+                    .filter(|(source, target)| source == target)
+                    .count() as u64
             );
 
             for stimulus in 0_u8..(1_u8 << N) {
@@ -433,7 +436,10 @@ mod tests {
                 );
                 assert_eq!(
                     step.loops,
-                    active_edges.iter().filter(|(source, target)| source == target).count() as u64
+                    active_edges
+                        .iter()
+                        .filter(|(source, target)| source == target)
+                        .count() as u64
                 );
                 assert_eq!(
                     step.active_sources,
