@@ -93,3 +93,79 @@ pub fn validate_span(span: u64) -> Result<u64, B1Error> {
         Err(B1Error::SpanNotOnLadder(span))
     }
 }
+
+/// Deterministic SplitMix64 stream; the only randomness source of the generator.
+#[derive(Debug, Clone)]
+pub struct B1Rng {
+    state: u64,
+}
+
+impl B1Rng {
+    #[must_use]
+    pub const fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    pub fn next_u64(&mut self) -> u64 {
+        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    /// Uniform in `0..bound` (bound > 0) by rejection, no modulo bias.
+    pub fn below(&mut self, bound: u64) -> u64 {
+        assert!(bound > 0, "below(0)");
+        let zone = u64::MAX - (u64::MAX % bound);
+        loop {
+            let v = self.next_u64();
+            if v < zone {
+                return v % bound;
+            }
+        }
+    }
+}
+
+const HEX: &[u8; 16] = b"0123456789abcdef";
+
+/// `n` lowercase hex digits; the first nibble is forced into the split namespace.
+pub fn hex_in_namespace(rng: &mut B1Rng, n: usize, split: B1Split) -> Vec<u8> {
+    let (lo, hi) = split.first_nibble_range();
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let nibble = if i == 0 {
+            lo + rng.below(u64::from(hi - lo) + 1) as u8
+        } else {
+            rng.below(16) as u8
+        };
+        out.push(HEX[usize::from(nibble)]);
+    }
+    out
+}
+
+/// Near-miss key at hex Hamming distance `distance` (1 or 2); nibble 0 is kept
+/// so the near-miss stays in the same namespace.
+pub fn near_miss_key(rng: &mut B1Rng, key: &[u8], distance: usize) -> Vec<u8> {
+    assert!((1..=2).contains(&distance) && key.len() >= 3);
+    let mut out = key.to_vec();
+    let first = 1 + rng.below(key.len() as u64 - 1) as usize;
+    let mut positions = vec![first];
+    while positions.len() < distance {
+        let p = 1 + rng.below(key.len() as u64 - 1) as usize;
+        if !positions.contains(&p) {
+            positions.push(p);
+        }
+    }
+    for p in positions {
+        let old = out[p];
+        loop {
+            let c = HEX[rng.below(16) as usize];
+            if c != old {
+                out[p] = c;
+                break;
+            }
+        }
+    }
+    out
+}

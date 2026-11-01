@@ -34,3 +34,32 @@ fn b1_seeds_splits_and_ladder_are_frozen() {
         Err(B1Error::SpanNotOnLadder(1_000_000))
     );
 }
+
+#[test]
+fn b1_rng_is_deterministic_and_namespaces_are_disjoint() {
+    let mut a = B1Rng::new(0xB100_0001);
+    let mut b = B1Rng::new(0xB100_0001);
+    assert_eq!((a.next_u64(), a.next_u64()), (b.next_u64(), b.next_u64()));
+    let mut rng = B1Rng::new(7);
+    for _ in 0..256 {
+        let dev = hex_in_namespace(&mut rng, 16, B1Split::Dev);
+        let test = hex_in_namespace(&mut rng, 16, B1Split::Test);
+        assert!(b"01234567".contains(&dev[0]), "{dev:?}");
+        assert!(b"89abcdef".contains(&test[0]), "{test:?}");
+        assert!(dev.iter().chain(&test).all(|c| c.is_ascii_hexdigit()));
+    }
+}
+
+#[test]
+fn b1_near_miss_has_exact_hamming_distance_and_keeps_namespace() {
+    let key = b"3a5f00112233c0de".to_vec();
+    let mut rng = B1Rng::new(9);
+    for distance in [1usize, 2] {
+        for _ in 0..64 {
+            let near = near_miss_key(&mut rng, &key, distance);
+            let diff = key.iter().zip(&near).filter(|(x, y)| x != y).count();
+            assert_eq!(diff, distance);
+            assert_eq!(near[0], key[0]);
+        }
+    }
+}
