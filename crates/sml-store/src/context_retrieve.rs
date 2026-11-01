@@ -17,8 +17,9 @@ use std::{
 
 use sml_core::{
     context_ledger::{ContextContentHash, ContextSegmentId, ContextStreamId},
-    memory::{BoundedAssociativeMemory, ReplacementPolicy},
+    memory::{BoundedAssociativeMemory, ReadOutcome, ReplacementPolicy, WriteOutcome},
     semantic::{hamming_distance, SemanticBitField, SemanticMorTopK, SemanticStoreView},
+    BooleanWorkspace, ExecutionCounters,
 };
 
 use crate::{
@@ -259,6 +260,38 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             .join(base_name(self.stream_id, segment_id) + ".smlprov")
     }
 
+    /// Binds `key` to an indexed segment in the bounded associative memory.
+    /// Collisions are rejected, never silently replaced.
+    pub fn remember(
+        &mut self,
+        key: u64,
+        segment: ContextSegmentId,
+    ) -> Result<(), ContextRetrieveError> {
+        if segment.stream_id != self.stream_id
+            || segment.segment_id == 0
+            || segment.segment_id > self.entries.len() as u64
+        {
+            return Err(ContextRetrieveError::AssociativeDenied);
+        }
+        let memory = self
+            .memory
+            .as_mut()
+            .ok_or(ContextRetrieveError::AssociativeDenied)?;
+        let bits: Vec<bool> = (0..ASSOCIATIVE_VALUE_BITS)
+            .map(|bit| (segment.segment_id >> bit) & 1 == 1)
+            .collect();
+        let mut counters = ExecutionCounters::default();
+        match memory
+            .write(key, BooleanWorkspace::from_bits(&bits), &mut counters)
+            .map_err(|_| ContextRetrieveError::AssociativeDenied)?
+        {
+            WriteOutcome::Inserted { .. }
+            | WriteOutcome::Updated { .. }
+            | WriteOutcome::Replaced { .. } => Ok(()),
+            WriteOutcome::CollisionRejected { .. } => Err(ContextRetrieveError::AssociativeDenied),
+        }
+    }
+
     /// Bounded retrieval: shortlist -> MOR top-k -> verified raw reread.
     pub fn retrieve(
         &self,
@@ -271,9 +304,10 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         }
         let mut accounting = RetrieveAccounting::default();
         let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
-        if query.associative_key.is_some() {
-            // Fail closed until Task 4 wires the bounded associative memory.
-            return Err(ContextRetrieveError::AssociativeDenied);
+        if let Some(key) = query.associative_key {
+            if let Some(index) = self.associative_lookup(key, &policy, &mut accounting)? {
+                shortlist.push(index);
+            }
         }
         let key = bucket_key(&query.bitfield, self.config.bucket_prefix_bits);
         if let Some(bucket) = self.buckets.get(&key) {
@@ -289,6 +323,41 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         accounting.shortlisted = shortlist.len() as u64;
         let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
         self.reread(candidates, accounting)
+    }
+
+    fn associative_lookup(
+        &self,
+        key: u64,
+        policy: &ContextRetrievePolicy,
+        accounting: &mut RetrieveAccounting,
+    ) -> Result<Option<usize>, ContextRetrieveError> {
+        let memory = self
+            .memory
+            .as_ref()
+            .ok_or(ContextRetrieveError::AssociativeDenied)?;
+        if policy.associative_slots == 0 || policy.associative_slots > memory.capacity() {
+            return Err(ContextRetrieveError::AssociativeDenied);
+        }
+        let mut counters = ExecutionCounters::default();
+        match memory.read(key, &mut counters) {
+            ReadOutcome::Hit { value, .. } => {
+                let mut segment_id = 0_u64;
+                for bit in 0..ASSOCIATIVE_VALUE_BITS {
+                    if value.get(bit) == Some(true) {
+                        segment_id |= 1_u64 << bit;
+                    }
+                }
+                if segment_id == 0 || segment_id > self.entries.len() as u64 {
+                    return Err(ContextRetrieveError::AssociativeDenied);
+                }
+                accounting.associative_hits += 1;
+                Ok(Some((segment_id - 1) as usize))
+            }
+            ReadOutcome::EmptyMiss { .. } | ReadOutcome::KeyMismatch { .. } => {
+                accounting.associative_misses += 1;
+                Ok(None)
+            }
+        }
     }
 
     fn rank(

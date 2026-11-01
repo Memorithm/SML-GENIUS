@@ -473,3 +473,83 @@ fn context3_t05_missing_raw_segment_or_provenance_returns_error() {
         Err(ContextRetrieveError::MissingProvenance)
     ));
 }
+
+#[test]
+fn context3_t06_associative_hit_miss_and_full_capacity() {
+    let fixture = Fixture::build(36, 64);
+    let mut retriever = fixture.open(
+        64,
+        ContextRetrieverConfig {
+            associative_capacity: 1,
+            ..config()
+        },
+    );
+    let needle = 44;
+    retriever.remember(7, fixture.segment(needle)).unwrap();
+
+    let mut far = signature_for_segment(needle);
+    far.not_assign();
+    let one_slot = ContextRetrievePolicy {
+        associative_slots: 1,
+        ..policy(4, 4)
+    };
+
+    let hit_query = RetrieveQuery {
+        bitfield: far.clone(),
+        associative_key: Some(7),
+    };
+    let (hits, accounting) = retriever.retrieve(&hit_query, &one_slot).unwrap();
+    assert_eq!(accounting.associative_hits, 1);
+    assert_eq!(accounting.associative_misses, 0);
+    assert!(hits
+        .iter()
+        .any(|hit| hit.segment == fixture.segment(needle)));
+
+    let miss_query = RetrieveQuery {
+        bitfield: far.clone(),
+        associative_key: Some(8),
+    };
+    let (_, accounting) = retriever.retrieve(&miss_query, &one_slot).unwrap();
+    assert_eq!(accounting.associative_hits, 0);
+    assert_eq!(accounting.associative_misses, 1);
+
+    assert!(matches!(
+        retriever.remember(8, fixture.segment(1)),
+        Err(ContextRetrieveError::AssociativeDenied)
+    ));
+    assert!(matches!(
+        retriever.remember(9, ContextSegmentId::new(fixture.stream, 65).unwrap()),
+        Err(ContextRetrieveError::AssociativeDenied)
+    ));
+    for denied in [
+        ContextRetrievePolicy {
+            associative_slots: 0,
+            ..policy(4, 4)
+        },
+        ContextRetrievePolicy {
+            associative_slots: 2,
+            ..policy(4, 4)
+        },
+    ] {
+        assert!(matches!(
+            retriever.retrieve(&hit_query, &denied),
+            Err(ContextRetrieveError::AssociativeDenied)
+        ));
+    }
+
+    let mut disabled = fixture.open(
+        64,
+        ContextRetrieverConfig {
+            associative_capacity: 0,
+            ..config()
+        },
+    );
+    assert!(matches!(
+        disabled.remember(7, fixture.segment(needle)),
+        Err(ContextRetrieveError::AssociativeDenied)
+    ));
+    assert!(matches!(
+        disabled.retrieve(&hit_query, &one_slot),
+        Err(ContextRetrieveError::AssociativeDenied)
+    ));
+}
