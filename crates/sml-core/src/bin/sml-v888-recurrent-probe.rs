@@ -461,15 +461,12 @@ mod tests {
                     let next_expected: Vec<bool> = (0..N)
                         .map(|target| {
                             (0..N).any(|source| {
-                                state[source]
-                                    && adjacency & (1 << (source * N + target)) != 0
+                                state[source] && adjacency & (1 << (source * N + target)) != 0
                             })
                         })
                         .collect();
-                    let active_count = edges
-                        .iter()
-                        .filter(|(source, _)| state[*source])
-                        .count() as u64;
+                    let active_count =
+                        edges.iter().filter(|(source, _)| state[*source]).count() as u64;
                     let next = graph.step(&workspace, active_count).unwrap();
                     assert_eq!(
                         next.output,
