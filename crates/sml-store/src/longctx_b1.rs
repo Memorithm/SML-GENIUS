@@ -6,6 +6,10 @@
 
 use std::fmt;
 
+use sml_core::context_ledger::ContextContentHash;
+
+use crate::raw_context::sha256_raw_bytes;
+
 /// Frozen B1 tokenizer identifier (prereg §2).
 pub const SML_BYTE_V0: &str = "sml-byte-v0";
 
@@ -168,4 +172,118 @@ pub fn near_miss_key(rng: &mut B1Rng, key: &[u8], distance: usize) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Filler hook (prereg §5). The open-license corpus pin is a later PR; until a
+/// source returns a pinned SHA-256, generated instances are fixture-only.
+pub trait B1FillerSource {
+    /// Stable identifier recorded in every cell.
+    fn id(&self) -> &str;
+    /// SHA-256 pinned by the fixture-freeze note, `None` while unpinned.
+    fn pinned_sha256(&self) -> Option<ContextContentHash>;
+    /// Exactly `len` deterministic filler bytes for `(seed, split)`.
+    fn fill(&self, seed: u64, split: B1Split, len: usize) -> Vec<u8>;
+}
+
+/// Hand-written fixture filler for unit tests only. Never campaign-admissible.
+#[derive(Debug, Clone)]
+pub struct FixtureFiller {
+    pub text: &'static [u8],
+}
+
+impl B1FillerSource for FixtureFiller {
+    fn id(&self) -> &str {
+        "fixture-filler-unpinned"
+    }
+
+    fn pinned_sha256(&self) -> Option<ContextContentHash> {
+        None
+    }
+
+    fn fill(&self, _seed: u64, _split: B1Split, len: usize) -> Vec<u8> {
+        self.text.iter().copied().cycle().take(len).collect()
+    }
+}
+
+/// Campaign gate: the filler must be pinned and its corpus bytes must hash to the pin.
+pub fn verify_filler_pin(
+    source: &dyn B1FillerSource,
+    corpus_bytes: &[u8],
+) -> Result<ContextContentHash, B1Error> {
+    let pin = source.pinned_sha256().ok_or(B1Error::FillerNotPinned)?;
+    let actual = sha256_raw_bytes(corpus_bytes).map_err(|_| B1Error::Hash)?;
+    if actual == pin {
+        Ok(pin)
+    } else {
+        Err(B1Error::FillerShaMismatch)
+    }
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Prereg §9: needle strings never appear in filler; exact scan, abort on hit.
+pub fn ensure_absent_from_filler(filler: &[u8], needles: &[&[u8]]) -> Result<(), B1Error> {
+    for needle in needles {
+        if let Some(offset) = find(filler, needle) {
+            return Err(B1Error::NeedleInFiller { offset });
+        }
+    }
+    Ok(())
+}
+
+/// One inserted line and its byte offset in the final haystack.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Insertion {
+    pub depth_permille: u16,
+    pub line: Vec<u8>,
+    pub offset: u64,
+}
+
+/// Splices `lines` into filler so the haystack is exactly `span` byte-tokens.
+/// Depth `d` maps to filler position `d * filler_len / 1000`; ties keep input order.
+pub fn splice_haystack(
+    source: &dyn B1FillerSource,
+    seed: u64,
+    split: B1Split,
+    span: u64,
+    lines: Vec<(u16, Vec<u8>)>,
+) -> Result<(Vec<u8>, Vec<Insertion>), B1Error> {
+    let inserted: u64 = lines.iter().map(|(_, l)| l.len() as u64).sum();
+    if inserted >= span {
+        return Err(B1Error::SpanTooSmall { span, inserted });
+    }
+    let filler_len = (span - inserted) as usize;
+    let filler = source.fill(seed, split, filler_len);
+    let mut planned: Vec<(usize, usize, u16, Vec<u8>)> = Vec::with_capacity(lines.len());
+    for (order, (depth, line)) in lines.into_iter().enumerate() {
+        if depth > 1000 {
+            return Err(B1Error::InvalidDepth(depth));
+        }
+        let at = usize::from(depth) * filler_len / 1000;
+        planned.push((at, order, depth, line));
+    }
+    let needle_refs: Vec<&[u8]> = planned.iter().map(|p| p.3.as_slice()).collect();
+    ensure_absent_from_filler(&filler, &needle_refs)?;
+    planned.sort_by_key(|p| (p.0, p.1));
+    let mut out = Vec::with_capacity(span as usize);
+    let mut cursor = 0usize;
+    let mut insertions = Vec::with_capacity(planned.len());
+    for (at, _, depth, line) in planned {
+        out.extend_from_slice(&filler[cursor..at]);
+        cursor = at;
+        insertions.push(Insertion {
+            depth_permille: depth,
+            offset: out.len() as u64,
+            line: line.clone(),
+        });
+        out.extend_from_slice(&line);
+    }
+    out.extend_from_slice(&filler[cursor..]);
+    debug_assert_eq!(out.len() as u64, span);
+    Ok((out, insertions))
 }

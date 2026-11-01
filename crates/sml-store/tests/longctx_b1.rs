@@ -63,3 +63,58 @@ fn b1_near_miss_has_exact_hamming_distance_and_keeps_namespace() {
         }
     }
 }
+
+/// Hand-written fixture filler: lowercase words and spaces only, so no 8-hex
+/// run can occur.
+const FILLER: &[u8] = b"the slow river runs past quiet hills and old stone walls ";
+
+fn filler() -> FixtureFiller {
+    FixtureFiller { text: FILLER }
+}
+
+#[test]
+fn b1_abort_when_needle_appears_in_filler() {
+    let poisoned = b"prefix KEY=3a5f00112233c0de suffix";
+    assert_eq!(
+        ensure_absent_from_filler(poisoned, &[b"3a5f00112233c0de"]),
+        Err(B1Error::NeedleInFiller { offset: 11 })
+    );
+    assert_eq!(
+        ensure_absent_from_filler(FILLER, &[b"3a5f00112233c0de"]),
+        Ok(())
+    );
+}
+
+#[test]
+fn b1_splice_hits_exact_span_and_reports_offsets() {
+    let line = b"KEY=0000000000000000 VALUE=11111111111111111111111111111111\n".to_vec();
+    let (hay, ins) = splice_haystack(
+        &filler(),
+        0xB100_0001,
+        B1Split::Dev,
+        1000,
+        vec![(500, line.clone())],
+    )
+    .unwrap();
+    assert_eq!(hay.len(), 1000);
+    assert_eq!(ins.len(), 1);
+    let off = ins[0].offset as usize;
+    assert_eq!(off, 500 * (1000 - line.len()) / 1000);
+    assert_eq!(&hay[off..off + line.len()], line.as_slice());
+    assert_eq!(
+        splice_haystack(&filler(), 0xB100_0001, B1Split::Dev, 10, vec![(0, line)]),
+        Err(B1Error::SpanTooSmall {
+            span: 10,
+            inserted: 60
+        })
+    );
+}
+
+#[test]
+fn b1_fixture_filler_is_never_campaign_pinned() {
+    assert_eq!(filler().pinned_sha256(), None);
+    assert_eq!(
+        verify_filler_pin(&filler(), FILLER),
+        Err(B1Error::FillerNotPinned)
+    );
+}
