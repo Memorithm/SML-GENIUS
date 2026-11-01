@@ -186,3 +186,27 @@ fn b1_task2_generator_has_half_absent_membership_keys() {
         B1Error::InvalidK(3)
     );
 }
+
+#[test]
+fn b1_task3_hops_are_at_least_half_span_apart() {
+    assert!(task3_depth_pairs()
+        .iter()
+        .all(|(a, b)| a.abs_diff(*b) >= 500));
+    let f = filler();
+    for i in 0..8 {
+        let inst = generate_task3(&f, 0xB100_0002, 4096, i).unwrap();
+        assert_eq!(inst.haystack.len(), 4096);
+        assert!(inst.d1_permille.abs_diff(inst.d2_permille) >= 500);
+        let first = inst
+            .insertions
+            .iter()
+            .find(|x| x.line.starts_with(b"LINK=") && x.line[5..21] == inst.start_key[..])
+            .unwrap();
+        let second = inst
+            .insertions
+            .iter()
+            .find(|x| x.line.ends_with(&[inst.answer.as_slice(), b"\n"].concat()))
+            .unwrap();
+        assert!(first.offset.abs_diff(second.offset) * 2 >= 4096 - 4 * 60);
+    }
+}

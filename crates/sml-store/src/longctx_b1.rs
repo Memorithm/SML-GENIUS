@@ -439,3 +439,87 @@ pub fn generate_task2(
         insertions,
     })
 }
+
+/// `LINK=<16 hex> NEXT=<16 hex>\n`, the first hop of task 3.
+#[must_use]
+pub fn link_line(from: &[u8], to: &[u8]) -> Vec<u8> {
+    let mut line = Vec::with_capacity(5 + from.len() + 6 + to.len() + 1);
+    line.extend_from_slice(b"LINK=");
+    line.extend_from_slice(from);
+    line.extend_from_slice(b" NEXT=");
+    line.extend_from_slice(to);
+    line.push(b'\n');
+    line
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Task3Instance {
+    pub seed: u64,
+    pub split: B1Split,
+    pub span: u64,
+    pub d1_permille: u16,
+    pub d2_permille: u16,
+    pub haystack: Vec<u8>,
+    pub start_key: Vec<u8>,
+    pub answer: Vec<u8>,
+    pub insertions: Vec<Insertion>,
+}
+
+/// Frozen depth pairs with |d1 − d2| ≥ 500 permille (prereg: hops ≥ L/2 apart).
+#[must_use]
+pub fn task3_depth_pairs() -> Vec<(u16, u16)> {
+    let mut pairs = Vec::new();
+    for d1 in TASK1_DEPTHS_PERMILLE {
+        for d2 in TASK1_DEPTHS_PERMILLE {
+            if d1.abs_diff(d2) >= 500 {
+                pairs.push((d1, d2));
+            }
+        }
+    }
+    pairs
+}
+
+/// Generates one task-3 instance: `LINK=A NEXT=B` at d1, `KEY=B VALUE=C` at d2,
+/// plus one distractor chain whose keys share the first 8 hex digits of A and B.
+pub fn generate_task3(
+    source: &dyn B1FillerSource,
+    seed: u64,
+    span: u64,
+    instance: u64,
+) -> Result<Task3Instance, B1Error> {
+    let split = B1Split::for_seed(seed)?;
+    let pairs = task3_depth_pairs();
+    let mut rng = B1Rng::new(seed ^ (3 << 56) ^ instance);
+    let (d1, d2) = pairs[rng.below(pairs.len() as u64) as usize];
+    let a = hex_in_namespace(&mut rng, 16, split);
+    let b = hex_in_namespace(&mut rng, 16, split);
+    let c = hex_in_namespace(&mut rng, 32, split);
+    let mut a2 = a[..8].to_vec();
+    a2.extend(hex_in_namespace(&mut rng, 8, split));
+    let mut b2 = b[..8].to_vec();
+    b2.extend(hex_in_namespace(&mut rng, 8, split));
+    if a2 == a || b2 == b {
+        return Err(B1Error::AccountingInvariant(
+            "distractor chain collided with target chain",
+        ));
+    }
+    let c2 = hex_in_namespace(&mut rng, 32, split);
+    let lines = vec![
+        (d1, link_line(&a, &b)),
+        (d2, needle_line(&b, &c)),
+        (d2, link_line(&a2, &b2)),
+        (d1, needle_line(&b2, &c2)),
+    ];
+    let (haystack, insertions) = splice_haystack(source, seed, split, span, lines)?;
+    Ok(Task3Instance {
+        seed,
+        split,
+        span,
+        d1_permille: d1,
+        d2_permille: d2,
+        haystack,
+        start_key: a,
+        answer: c,
+        insertions,
+    })
+}
