@@ -2,7 +2,7 @@
 
 ## Status
 
-**DESIGN FROZEN, NOT IMPLEMENTED.** This document freezes the CONTEXT-3 tranche B design. It contains no measured numbers. No code ships with it, and no LONGCTX-B1 campaign is started or authorized by it.
+**IMPLEMENTED (design frozen).** `crates/sml-store/src/context_retrieve.rs` implements this design and `crates/sml-store/tests/context_retrieve.rs` carries the 12 mandatory tests on declared synthetic fixtures. This document still contains no measured numbers, and no LONGCTX-B1 campaign is started or authorized by it. Filler SHA, B-lex, B-attn and the B1 harness remain separate prerequisites.
 
 ## Track
 
