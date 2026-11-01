@@ -152,3 +152,37 @@ fn b1_task1_generator_is_deterministic_and_well_formed() {
         B1Error::InvalidDepth(300)
     );
 }
+
+#[test]
+fn b1_task2_generator_has_half_absent_membership_keys() {
+    let f = filler();
+    for k in TASK2_K_VALUES {
+        let inst = generate_task2(&f, 0xB100_0001, 4096, k, 0).unwrap();
+        assert_eq!(inst, generate_task2(&f, 0xB100_0001, 4096, k, 0).unwrap());
+        assert_eq!(inst.haystack.len(), 4096);
+        assert_eq!(inst.insertions.len(), k);
+        let values = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::ValueOf { .. }))
+            .count();
+        let absent = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::IsPresent { present: false, .. }))
+            .count();
+        let present = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::IsPresent { present: true, .. }))
+            .count();
+        assert_eq!((values, present + absent), (k, k));
+        assert_eq!(absent, k / 2);
+    }
+    assert_eq!(stratified_depth(0, 2), 250);
+    assert_eq!(stratified_depth(1, 2), 750);
+    assert_eq!(
+        generate_task2(&f, 0xB100_0001, 4096, 3, 0).unwrap_err(),
+        B1Error::InvalidK(3)
+    );
+}

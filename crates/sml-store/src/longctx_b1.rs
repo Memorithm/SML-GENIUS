@@ -352,3 +352,90 @@ pub fn generate_task1(
         insertions,
     })
 }
+
+/// Task-2 query: value lookup or membership (prereg §5 task 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Task2Query {
+    ValueOf { key: Vec<u8>, answer: Vec<u8> },
+    IsPresent { key: Vec<u8>, present: bool },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Task2Instance {
+    pub seed: u64,
+    pub split: B1Split,
+    pub span: u64,
+    pub k: usize,
+    pub haystack: Vec<u8>,
+    pub queries: Vec<Task2Query>,
+    pub insertions: Vec<Insertion>,
+}
+
+/// Stratified depth of needle `i` among `k`: centre of the i-th of k strata.
+#[must_use]
+pub fn stratified_depth(i: usize, k: usize) -> u16 {
+    ((2 * i + 1) * 1000 / (2 * k)) as u16
+}
+
+/// Generates one task-2 instance: k value queries plus k membership queries,
+/// exactly half of the membership keys absent (prereg: 50% absent).
+pub fn generate_task2(
+    source: &dyn B1FillerSource,
+    seed: u64,
+    span: u64,
+    k: usize,
+    instance: u64,
+) -> Result<Task2Instance, B1Error> {
+    let split = B1Split::for_seed(seed)?;
+    if !TASK2_K_VALUES.contains(&k) {
+        return Err(B1Error::InvalidK(k));
+    }
+    let mut rng = B1Rng::new(seed ^ (2 << 56) ^ ((k as u64) << 32) ^ instance);
+    let mut keys: Vec<Vec<u8>> = Vec::with_capacity(k);
+    let mut lines = Vec::with_capacity(k);
+    let mut queries = Vec::with_capacity(2 * k);
+    for i in 0..k {
+        let mut key = hex_in_namespace(&mut rng, 16, split);
+        while keys.contains(&key) {
+            key = hex_in_namespace(&mut rng, 16, split);
+        }
+        let value = hex_in_namespace(&mut rng, 32, split);
+        lines.push((stratified_depth(i, k), needle_line(&key, &value)));
+        queries.push(Task2Query::ValueOf {
+            key: key.clone(),
+            answer: value,
+        });
+        keys.push(key);
+    }
+    let mut absent: Vec<Vec<u8>> = Vec::with_capacity(k / 2);
+    while absent.len() < k / 2 {
+        let key = hex_in_namespace(&mut rng, 16, split);
+        if !keys.contains(&key) && !absent.contains(&key) {
+            absent.push(key);
+        }
+    }
+    for key in keys.iter().take(k - k / 2) {
+        queries.push(Task2Query::IsPresent {
+            key: key.clone(),
+            present: true,
+        });
+    }
+    let (haystack, insertions) = splice_haystack(source, seed, split, span, lines)?;
+    let absent_refs: Vec<&[u8]> = absent.iter().map(Vec::as_slice).collect();
+    ensure_absent_from_filler(&haystack, &absent_refs)?;
+    for key in absent {
+        queries.push(Task2Query::IsPresent {
+            key,
+            present: false,
+        });
+    }
+    Ok(Task2Instance {
+        seed,
+        split,
+        span,
+        k,
+        haystack,
+        queries,
+        insertions,
+    })
+}
