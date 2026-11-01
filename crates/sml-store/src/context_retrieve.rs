@@ -18,12 +18,14 @@ use std::{
 use sml_core::{
     context_ledger::{ContextContentHash, ContextSegmentId, ContextStreamId},
     memory::{BoundedAssociativeMemory, ReplacementPolicy},
-    semantic::{SemanticBitField, SemanticMorTopK, SemanticStoreView},
+    semantic::{hamming_distance, SemanticBitField, SemanticMorTopK, SemanticStoreView},
 };
 
 use crate::{
     context_semantic_ingest::{parse_provenance_artifact, ContextProvenanceManifest},
-    raw_context::RawContextStoreLimits,
+    raw_context::{
+        load_raw_segment, sha256_raw_bytes, RawContextStoreError, RawContextStoreLimits,
+    },
 };
 
 /// Width of the associative value: one stable `segment_id` (u64).
@@ -257,6 +259,108 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             .join(base_name(self.stream_id, segment_id) + ".smlprov")
     }
 
+    /// Bounded retrieval: shortlist -> MOR top-k -> verified raw reread.
+    pub fn retrieve(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        if self.entries.is_empty() {
+            return Err(ContextRetrieveError::EmptyIndex);
+        }
+        let mut accounting = RetrieveAccounting::default();
+        let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
+        if query.associative_key.is_some() {
+            // Fail closed until Task 4 wires the bounded associative memory.
+            return Err(ContextRetrieveError::AssociativeDenied);
+        }
+        let key = bucket_key(&query.bitfield, self.config.bucket_prefix_bits);
+        if let Some(bucket) = self.buckets.get(&key) {
+            for &index in bucket {
+                if shortlist.len() == policy.max_shortlist {
+                    break;
+                }
+                if !shortlist.contains(&index) {
+                    shortlist.push(index);
+                }
+            }
+        }
+        accounting.shortlisted = shortlist.len() as u64;
+        let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
+        self.reread(candidates, accounting)
+    }
+
+    fn rank(
+        &self,
+        shortlist: &[usize],
+        query: &SemanticBitField<BITS>,
+        top_k: usize,
+    ) -> Result<Vec<ContextCandidate>, ContextRetrieveError> {
+        let fanout = mor_top_k(top_k)?.as_usize();
+        let mut candidates: Vec<ContextCandidate> = shortlist
+            .iter()
+            .map(|&index| {
+                let entry = &self.entries[index];
+                ContextCandidate {
+                    segment: entry.segment,
+                    hamming_distance: hamming_distance(&entry.signature, query),
+                    content_hash: entry.content_hash,
+                }
+            })
+            .collect();
+        candidates
+            .sort_by_key(|candidate| (candidate.hamming_distance, candidate.segment.segment_id));
+        candidates.truncate(fanout);
+        Ok(candidates)
+    }
+
+    fn reread(
+        &self,
+        candidates: Vec<ContextCandidate>,
+        mut accounting: RetrieveAccounting,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        accounting.decoded = candidates.len() as u64;
+        let mut hits = Vec::with_capacity(candidates.len());
+        for (rank, candidate) in candidates.into_iter().enumerate() {
+            let hit = self.reread_segment(rank, candidate)?;
+            accounting.raw_reread_segments += 1;
+            accounting.raw_reread_bytes += hit.byte_len;
+            hits.push(hit);
+        }
+        Ok((hits, accounting))
+    }
+
+    fn reread_segment(
+        &self,
+        rank: usize,
+        candidate: ContextCandidate,
+    ) -> Result<RetrieveHit, ContextRetrieveError> {
+        let raw = load_raw_segment(
+            self.raw_path(candidate.segment.segment_id),
+            self.config.raw_limits,
+        )
+        .map_err(map_raw_error)?;
+        if raw.reference.identity != candidate.segment {
+            return Err(ContextRetrieveError::MissingRaw);
+        }
+        let actual = sha256_raw_bytes(&raw.raw_bytes).map_err(map_raw_error)?;
+        if actual != candidate.content_hash || raw.reference.content_hash != candidate.content_hash
+        {
+            return Err(ContextRetrieveError::HashMismatch);
+        }
+        Ok(RetrieveHit {
+            segment: candidate.segment,
+            rank,
+            hamming_distance: candidate.hamming_distance,
+            source_exact: candidate.hamming_distance == 0,
+            byte_start: raw.reference.byte_start,
+            byte_len: raw.reference.byte_len,
+            content_hash: actual,
+            raw_bytes: raw.raw_bytes,
+        })
+    }
+
     fn load_manifest(
         &self,
         segment_id: u64,
@@ -335,5 +439,18 @@ fn read_bounded(path: &Path, maximum: u64) -> Result<Option<Vec<u8>>, ContextRet
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
+    }
+}
+
+fn map_raw_error(error: RawContextStoreError) -> ContextRetrieveError {
+    match error {
+        RawContextStoreError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
+            ContextRetrieveError::MissingRaw
+        }
+        RawContextStoreError::Io(error) => ContextRetrieveError::Io(error),
+        RawContextStoreError::FileLimit { .. } | RawContextStoreError::RawLimit { .. } => {
+            ContextRetrieveError::BudgetOverflow
+        }
+        _ => ContextRetrieveError::HashMismatch,
     }
 }

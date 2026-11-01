@@ -269,11 +269,123 @@ fn context3_t08_empty_index_or_zero_budget_fails_validation() {
             ..policy(8, 1)
         },
     ];
+    let retriever = fixture.open_all();
     for candidate in invalid {
         assert!(matches!(
             candidate.validate(),
             Err(ContextRetrieveError::BudgetOverflow)
         ));
+        assert!(matches!(
+            retriever.retrieve(&exact_query(1), &candidate),
+            Err(ContextRetrieveError::BudgetOverflow)
+        ));
     }
     assert!(policy(8, 4).validate().is_ok());
+}
+
+#[test]
+fn context3_t01_shortlist_and_top_k_budgets_respected_with_stable_sort() {
+    let fixture = Fixture::build(31, 64);
+    let wide_buckets = ContextRetrieverConfig {
+        bucket_prefix_bits: 1,
+        ..config()
+    };
+    let retriever = fixture.open(64, wide_buckets);
+    for segment_id in [1, 17, 40, 64] {
+        let (hits, accounting) = retriever
+            .retrieve(&exact_query(segment_id), &policy(8, 4))
+            .unwrap();
+        assert_eq!(accounting.shortlisted, 8);
+        assert_eq!(accounting.decoded, 4);
+        assert_eq!(hits.len(), 4);
+        for (rank, hit) in hits.iter().enumerate() {
+            assert_eq!(hit.rank, rank);
+        }
+        for pair in hits.windows(2) {
+            let left = (pair[0].hamming_distance, pair[0].segment.segment_id);
+            let right = (pair[1].hamming_distance, pair[1].segment.segment_id);
+            assert!(left < right, "stable (distance, segment_id) order violated");
+        }
+    }
+}
+
+#[test]
+fn context3_t03_hamming_near_miss_is_not_a_source_exact_hit() {
+    let fixture = Fixture::build(33, 64);
+    let retriever = fixture.open_all();
+    let needle = 23;
+    let mut near_miss = signature_for_segment(needle);
+    let flipped = !near_miss.get(40).unwrap();
+    near_miss.set(40, flipped).unwrap();
+    let query = RetrieveQuery {
+        bitfield: near_miss,
+        associative_key: None,
+    };
+    let (hits, _) = retriever.retrieve(&query, &policy(16, 4)).unwrap();
+    assert_eq!(hits[0].segment, fixture.segment(needle));
+    assert_eq!(hits[0].hamming_distance, 1);
+    assert!(hits.iter().all(|hit| !hit.source_exact));
+}
+
+#[test]
+fn context3_t09_multi_query_independence() {
+    let fixture = Fixture::build(39, 64);
+    let retriever = fixture.open_all();
+    let first = exact_query(5);
+    let second = exact_query(50);
+    let alone_first = retriever.retrieve(&first, &policy(16, 2)).unwrap();
+    let alone_second = retriever.retrieve(&second, &policy(16, 2)).unwrap();
+    for _ in 0..3 {
+        assert_eq!(
+            retriever.retrieve(&second, &policy(16, 2)).unwrap(),
+            alone_second
+        );
+        assert_eq!(
+            retriever.retrieve(&first, &policy(16, 2)).unwrap(),
+            alone_first
+        );
+    }
+    assert_ne!(alone_first.0[0].segment, alone_second.0[0].segment);
+}
+
+#[test]
+fn context3_t11_accounting_invariant_holds() {
+    let fixture = Fixture::build(41, 64);
+    let retriever = fixture.open(
+        64,
+        ContextRetrieverConfig {
+            bucket_prefix_bits: 2,
+            ..config()
+        },
+    );
+    for segment_id in 1..=64 {
+        for top_k in [1, 2, 4] {
+            let (hits, accounting) = retriever
+                .retrieve(&exact_query(segment_id), &policy(4, top_k))
+                .unwrap();
+            assert!(accounting.invariant_holds(), "{accounting:?}");
+            assert!(accounting.shortlisted <= 4);
+            assert_eq!(accounting.raw_reread_segments, hits.len() as u64);
+            assert_eq!(
+                accounting.raw_reread_bytes,
+                hits.iter().map(|hit| hit.byte_len).sum::<u64>()
+            );
+        }
+    }
+}
+
+#[test]
+fn context3_t12_determinism_across_two_runs() {
+    let left = Fixture::build(42, 64);
+    let right = Fixture::build(42, 64);
+    let a = left.open_all();
+    let b = right.open_all();
+    for segment_id in [1, 9, 33, 64] {
+        assert_eq!(
+            a.retrieve(&exact_query(segment_id), &policy(16, 4))
+                .unwrap(),
+            b.retrieve(&exact_query(segment_id), &policy(16, 4))
+                .unwrap()
+        );
+    }
 }
