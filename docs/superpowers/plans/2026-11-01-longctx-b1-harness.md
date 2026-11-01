@@ -88,11 +88,6 @@ Create `crates/sml-store/tests/longctx_b1.rs` with exactly:
 use sml_store::longctx_b1::*;
 
 /// Hand-written filler: lowercase words and spaces, so no 8-hex run can occur.
-const FILLER: &[u8] = b"the slow river runs past quiet hills and old stone walls ";
-
-fn filler() -> FixtureFiller {
-    FixtureFiller { text: FILLER }
-}
 
 #[test]
 fn b1_tokenizer_is_one_byte_one_token() {
@@ -416,6 +411,19 @@ git commit -m "feat(longctx-b1): deterministic rng and split key namespaces"
 ---
 
 ## Task 3: Filler hook, filler-pin gate, needle-in-filler abort, exact-span splice
+
+**Plan amendment (2026-11-01):** `FILLER` + `filler()` live in the test file starting here (not Task 1), because `FixtureFiller` is defined in this task.
+
+**Test helpers (moved from Task 1):** add to `crates/sml-store/tests/longctx_b1.rs` before the Task 3 tests:
+
+```rust
+const FILLER: &[u8] = b"the slow river runs past quiet hills and old stone walls ";
+
+fn filler() -> FixtureFiller {
+    FixtureFiller { text: FILLER }
+}
+```
+
 
 `B1FillerSource` is the hook where the pinned open-license corpus plugs in later. `FixtureFiller` always returns `pinned_sha256() == None`, so it can never pass the campaign gate. `splice_haystack` runs the §9 exact scan and aborts with `NeedleInFiller` on any hit, before anything is spliced.
 
