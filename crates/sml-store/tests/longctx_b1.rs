@@ -210,3 +210,71 @@ fn b1_task3_hops_are_at_least_half_span_apart() {
         assert!(first.offset.abs_diff(second.offset) * 2 >= 4096 - 4 * 60);
     }
 }
+
+#[test]
+fn b1_scorers_on_handwritten_answers() {
+    assert!(exact_match(Some(b"abc"), b"abc"));
+    assert!(!exact_match(Some(b"abd"), b"abc"));
+    assert!(!exact_match(None, b"abc"));
+
+    let mut h1 = H1Tally::default();
+    for _ in 0..19 {
+        h1.record(0, true);
+    }
+    h1.record(0, false);
+    for _ in 0..20 {
+        h1.record(500, true);
+    }
+    assert_eq!(h1.passes(), Some(true)); // mean 0.975, min bucket 0.95
+    let mut low = H1Tally::default();
+    for _ in 0..16 {
+        low.record(0, true);
+    }
+    for _ in 0..4 {
+        low.record(0, false);
+    }
+    for _ in 0..20 {
+        low.record(500, true);
+    }
+    assert_eq!(low.passes(), Some(false)); // bucket 0 = 0.80 < 0.85
+    assert_eq!(H1Tally::default().passes(), None);
+
+    let mut h2 = H2Tally::default();
+    let v = Task2Query::ValueOf {
+        key: b"k".to_vec(),
+        answer: b"v".to_vec(),
+    };
+    let absent = Task2Query::IsPresent {
+        key: b"z".to_vec(),
+        present: false,
+    };
+    h2.record(2, &v, &Task2Answer::Value(Some(b"v".to_vec())));
+    h2.record(2, &v, &Task2Answer::Value(None));
+    h2.record(2, &absent, &Task2Answer::Present(true));
+    h2.record(2, &absent, &Task2Answer::Present(false));
+    assert_eq!(
+        h2.per_k[&2],
+        Confusion {
+            tp: 1,
+            fp: 0,
+            tn: 0,
+            fn_: 1
+        }
+    );
+    assert_eq!(
+        h2.membership_negatives,
+        Confusion {
+            tp: 0,
+            fp: 1,
+            tn: 1,
+            fn_: 0
+        }
+    );
+
+    let mut h3 = H3Tally::default();
+    for _ in 0..4 {
+        h3.record(true);
+    }
+    h3.record(false);
+    assert_eq!(h3.passes(), Some(true)); // 4/5 = 0.80
+}

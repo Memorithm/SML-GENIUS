@@ -523,3 +523,176 @@ pub fn generate_task3(
         insertions,
     })
 }
+
+/// Frozen gate thresholds (prereg §4) as exact rationals (numerator, denominator).
+pub const H1_MEAN_MIN: (u64, u64) = (95, 100);
+pub const H1_BUCKET_MIN: (u64, u64) = (85, 100);
+pub const H2_F1_MIN: (u64, u64) = (90, 100);
+pub const H2_FPR_MAX: (u64, u64) = (2, 100);
+pub const H3_ACC_MIN: (u64, u64) = (80, 100);
+pub const H4_EXPONENT_MAX: (u64, u64) = (75, 100);
+
+/// Source-exact scoring: byte-for-byte equality, no normalisation.
+#[must_use]
+pub fn exact_match(predicted: Option<&[u8]>, gold: &[u8]) -> bool {
+    predicted == Some(gold)
+}
+
+/// Per-depth exact-match counts for H1.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct H1Tally {
+    /// depth_permille -> (correct, total)
+    pub buckets: std::collections::BTreeMap<u16, (u64, u64)>,
+}
+
+impl H1Tally {
+    pub fn record(&mut self, depth_permille: u16, correct: bool) {
+        let e = self.buckets.entry(depth_permille).or_insert((0, 0));
+        e.0 += u64::from(correct);
+        e.1 += 1;
+    }
+
+    /// Mean over depth buckets of bucket accuracy, as f64 for reports only.
+    #[must_use]
+    pub fn mean_over_depths(&self) -> Option<f64> {
+        if self.buckets.is_empty() {
+            return None;
+        }
+        let sum: f64 = self
+            .buckets
+            .values()
+            .map(|(c, t)| *c as f64 / *t as f64)
+            .sum();
+        Some(sum / self.buckets.len() as f64)
+    }
+
+    /// H1 verdict: mean ≥ 0.95 and every bucket ≥ 0.85; `None` with no data.
+    #[must_use]
+    pub fn passes(&self) -> Option<bool> {
+        if self.buckets.is_empty() {
+            return None;
+        }
+        let n = self.buckets.len() as u128;
+        let bucket_ok = self.buckets.values().all(|(c, t)| {
+            u128::from(*c) * u128::from(H1_BUCKET_MIN.1)
+                >= u128::from(*t) * u128::from(H1_BUCKET_MIN.0)
+        });
+        // mean_i(c_i/t_i) >= p/q  <=>  sum_i c_i * (L/t_i) * q >= p * n * L, L = prod t_i.
+        let l: u128 = self.buckets.values().map(|(_, t)| u128::from(*t)).product();
+        let lhs: u128 = self
+            .buckets
+            .values()
+            .map(|(c, t)| u128::from(*c) * (l / u128::from(*t)))
+            .sum::<u128>()
+            * u128::from(H1_MEAN_MIN.1);
+        let rhs = u128::from(H1_MEAN_MIN.0) * n * l;
+        Some(bucket_ok && lhs >= rhs)
+    }
+}
+
+/// Binary confusion counts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Confusion {
+    pub tp: u64,
+    pub fp: u64,
+    pub tn: u64,
+    pub fn_: u64,
+}
+
+impl Confusion {
+    pub fn record(&mut self, predicted: bool, gold: bool) {
+        match (predicted, gold) {
+            (true, true) => self.tp += 1,
+            (true, false) => self.fp += 1,
+            (false, false) => self.tn += 1,
+            (false, true) => self.fn_ += 1,
+        }
+    }
+
+    /// F1 = 2tp / (2tp + fp + fn); `None` when undefined.
+    #[must_use]
+    pub fn f1(&self) -> Option<f64> {
+        let d = 2 * self.tp + self.fp + self.fn_;
+        (d > 0).then(|| (2 * self.tp) as f64 / d as f64)
+    }
+
+    /// FPR on membership negatives = fp / (fp + tn); `None` with no negatives.
+    #[must_use]
+    pub fn fpr(&self) -> Option<f64> {
+        let d = self.fp + self.tn;
+        (d > 0).then(|| self.fp as f64 / d as f64)
+    }
+}
+
+/// Task-2 scorer per instance: a value query is a positive answered correctly
+/// (tp) or not (fn; a wrong value also counts fp); membership feeds `membership`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct H2Tally {
+    /// k -> confusion over value + present-membership answers
+    pub per_k: std::collections::BTreeMap<usize, Confusion>,
+    /// absent-key membership negatives across all k
+    pub membership_negatives: Confusion,
+}
+
+/// Arm answer for one task-2 query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Task2Answer {
+    Value(Option<Vec<u8>>),
+    Present(bool),
+}
+
+impl H2Tally {
+    pub fn record(&mut self, k: usize, query: &Task2Query, answer: &Task2Answer) {
+        let c = self.per_k.entry(k).or_default();
+        match (query, answer) {
+            (Task2Query::ValueOf { answer: gold, .. }, Task2Answer::Value(pred)) => match pred {
+                Some(p) if p == gold => c.tp += 1,
+                Some(_) => {
+                    c.fn_ += 1;
+                    c.fp += 1;
+                }
+                None => c.fn_ += 1,
+            },
+            (Task2Query::IsPresent { present: true, .. }, Task2Answer::Present(p)) => {
+                c.record(*p, true);
+            }
+            (Task2Query::IsPresent { present: false, .. }, Task2Answer::Present(p)) => {
+                self.membership_negatives.record(*p, false);
+            }
+            // Mismatched answer kind counts as a miss on a positive / fp on a negative.
+            (Task2Query::IsPresent { present: false, .. }, Task2Answer::Value(_)) => {
+                self.membership_negatives.record(true, false);
+            }
+            (_, _) => c.fn_ += 1,
+        }
+    }
+
+    /// Macro-F1 over k values present in the tally.
+    #[must_use]
+    pub fn macro_f1(&self) -> Option<f64> {
+        let f: Vec<f64> = self.per_k.values().filter_map(Confusion::f1).collect();
+        (!f.is_empty()).then(|| f.iter().sum::<f64>() / f.len() as f64)
+    }
+}
+
+/// Task-3 scorer: exact match on the final value C.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct H3Tally {
+    pub correct: u64,
+    pub total: u64,
+}
+
+impl H3Tally {
+    pub fn record(&mut self, correct: bool) {
+        self.correct += u64::from(correct);
+        self.total += 1;
+    }
+
+    #[must_use]
+    pub fn passes(&self) -> Option<bool> {
+        (self.total > 0).then(|| {
+            u128::from(self.correct) * u128::from(H3_ACC_MIN.1)
+                >= u128::from(self.total) * u128::from(H3_ACC_MIN.0)
+        })
+    }
+}
