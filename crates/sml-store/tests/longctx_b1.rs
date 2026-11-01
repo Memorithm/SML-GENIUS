@@ -1,0 +1,363 @@
+//! LONGCTX-B1 harness tests. Hand-written fixtures only; no campaign, no metric.
+
+use sml_store::longctx_b1::*;
+
+#[test]
+fn b1_tokenizer_is_one_byte_one_token() {
+    assert_eq!(SML_BYTE_V0, "sml-byte-v0");
+    assert_eq!(sml_byte_v0_token_count(b""), 0);
+    assert_eq!(sml_byte_v0_token_count("é".as_bytes()), 2);
+    assert_eq!(sml_byte_v0_token_count(b"KEY=0"), 5);
+}
+
+#[test]
+fn b1_seeds_splits_and_ladder_are_frozen() {
+    assert_eq!(
+        B1_SEEDS,
+        [
+            0xB100_0001,
+            0xB100_0002,
+            0xB100_0003,
+            0xB100_0004,
+            0xB100_0005
+        ]
+    );
+    assert_eq!(B1Split::for_seed(0xB100_0001), Ok(B1Split::Dev));
+    assert_eq!(B1Split::for_seed(0xB100_0002), Ok(B1Split::Dev));
+    for s in [0xB100_0003, 0xB100_0004, 0xB100_0005] {
+        assert_eq!(B1Split::for_seed(s), Ok(B1Split::Test));
+    }
+    assert_eq!(B1Split::for_seed(42), Err(B1Error::UnknownSeed(42)));
+    assert_eq!(validate_span(1_048_576), Ok(1_048_576));
+    assert_eq!(
+        validate_span(1_000_000),
+        Err(B1Error::SpanNotOnLadder(1_000_000))
+    );
+}
+
+#[test]
+fn b1_rng_is_deterministic_and_namespaces_are_disjoint() {
+    let mut a = B1Rng::new(0xB100_0001);
+    let mut b = B1Rng::new(0xB100_0001);
+    assert_eq!((a.next_u64(), a.next_u64()), (b.next_u64(), b.next_u64()));
+    let mut rng = B1Rng::new(7);
+    for _ in 0..256 {
+        let dev = hex_in_namespace(&mut rng, 16, B1Split::Dev);
+        let test = hex_in_namespace(&mut rng, 16, B1Split::Test);
+        assert!(b"01234567".contains(&dev[0]), "{dev:?}");
+        assert!(b"89abcdef".contains(&test[0]), "{test:?}");
+        assert!(dev.iter().chain(&test).all(|c| c.is_ascii_hexdigit()));
+    }
+}
+
+#[test]
+fn b1_near_miss_has_exact_hamming_distance_and_keeps_namespace() {
+    let key = b"3a5f00112233c0de".to_vec();
+    let mut rng = B1Rng::new(9);
+    for distance in [1usize, 2] {
+        for _ in 0..64 {
+            let near = near_miss_key(&mut rng, &key, distance);
+            let diff = key.iter().zip(&near).filter(|(x, y)| x != y).count();
+            assert_eq!(diff, distance);
+            assert_eq!(near[0], key[0]);
+        }
+    }
+}
+
+/// Hand-written fixture filler: lowercase words and spaces only, so no 8-hex
+/// run can occur.
+const FILLER: &[u8] = b"the slow river runs past quiet hills and old stone walls ";
+
+fn filler() -> FixtureFiller {
+    FixtureFiller { text: FILLER }
+}
+
+#[test]
+fn b1_abort_when_needle_appears_in_filler() {
+    let poisoned = b"prefix KEY=3a5f00112233c0de suffix";
+    assert_eq!(
+        ensure_absent_from_filler(poisoned, &[b"3a5f00112233c0de"]),
+        Err(B1Error::NeedleInFiller { offset: 11 })
+    );
+    assert_eq!(
+        ensure_absent_from_filler(FILLER, &[b"3a5f00112233c0de"]),
+        Ok(())
+    );
+}
+
+#[test]
+fn b1_splice_hits_exact_span_and_reports_offsets() {
+    let line = b"KEY=0000000000000000 VALUE=11111111111111111111111111111111\n".to_vec();
+    let (hay, ins) = splice_haystack(
+        &filler(),
+        0xB100_0001,
+        B1Split::Dev,
+        1000,
+        vec![(500, line.clone())],
+    )
+    .unwrap();
+    assert_eq!(hay.len(), 1000);
+    assert_eq!(ins.len(), 1);
+    let off = ins[0].offset as usize;
+    assert_eq!(off, 500 * (1000 - line.len()) / 1000);
+    assert_eq!(&hay[off..off + line.len()], line.as_slice());
+    assert_eq!(
+        splice_haystack(&filler(), 0xB100_0001, B1Split::Dev, 10, vec![(0, line)]),
+        Err(B1Error::SpanTooSmall {
+            span: 10,
+            inserted: 60
+        })
+    );
+}
+
+#[test]
+fn b1_fixture_filler_is_never_campaign_pinned() {
+    assert_eq!(filler().pinned_sha256(), None);
+    assert_eq!(
+        verify_filler_pin(&filler(), FILLER),
+        Err(B1Error::FillerNotPinned)
+    );
+}
+
+#[test]
+fn b1_task1_generator_is_deterministic_and_well_formed() {
+    let f = filler();
+    let a = generate_task1(&f, 0xB100_0003, 4096, 250, 0).unwrap();
+    let b = generate_task1(&f, 0xB100_0003, 4096, 250, 0).unwrap();
+    assert_eq!(a, b);
+    assert_eq!(a.split, B1Split::Test);
+    assert_eq!(a.haystack.len(), 4096);
+    assert_eq!(a.insertions.len(), 1 + TASK1_DISTRACTORS);
+    assert_eq!((a.query_key.len(), a.answer.len()), (16, 32));
+    let needle = needle_line(&a.query_key, &a.answer);
+    let hits = a
+        .haystack
+        .windows(needle.len())
+        .filter(|w| *w == needle.as_slice())
+        .count();
+    assert_eq!(hits, 1);
+    let key_line = [b"KEY=".as_slice(), &a.query_key, b" "].concat();
+    let key_hits = a
+        .haystack
+        .windows(key_line.len())
+        .filter(|w| *w == key_line.as_slice())
+        .count();
+    assert_eq!(
+        key_hits, 1,
+        "near-miss distractors must not equal the query key"
+    );
+    assert_ne!(a, generate_task1(&f, 0xB100_0003, 4096, 250, 1).unwrap());
+    assert_eq!(
+        generate_task1(&f, 0xB100_0003, 4096, 300, 0).unwrap_err(),
+        B1Error::InvalidDepth(300)
+    );
+}
+
+#[test]
+fn b1_task2_generator_has_half_absent_membership_keys() {
+    let f = filler();
+    for k in TASK2_K_VALUES {
+        let inst = generate_task2(&f, 0xB100_0001, 4096, k, 0).unwrap();
+        assert_eq!(inst, generate_task2(&f, 0xB100_0001, 4096, k, 0).unwrap());
+        assert_eq!(inst.haystack.len(), 4096);
+        assert_eq!(inst.insertions.len(), k);
+        let values = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::ValueOf { .. }))
+            .count();
+        let absent = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::IsPresent { present: false, .. }))
+            .count();
+        let present = inst
+            .queries
+            .iter()
+            .filter(|q| matches!(q, Task2Query::IsPresent { present: true, .. }))
+            .count();
+        assert_eq!((values, present + absent), (k, k));
+        assert_eq!(absent, k / 2);
+    }
+    assert_eq!(stratified_depth(0, 2), 250);
+    assert_eq!(stratified_depth(1, 2), 750);
+    assert_eq!(
+        generate_task2(&f, 0xB100_0001, 4096, 3, 0).unwrap_err(),
+        B1Error::InvalidK(3)
+    );
+}
+
+#[test]
+fn b1_task3_hops_are_at_least_half_span_apart() {
+    assert!(task3_depth_pairs()
+        .iter()
+        .all(|(a, b)| a.abs_diff(*b) >= 500));
+    let f = filler();
+    for i in 0..8 {
+        let inst = generate_task3(&f, 0xB100_0002, 4096, i).unwrap();
+        assert_eq!(inst.haystack.len(), 4096);
+        assert!(inst.d1_permille.abs_diff(inst.d2_permille) >= 500);
+        let first = inst
+            .insertions
+            .iter()
+            .find(|x| x.line.starts_with(b"LINK=") && x.line[5..21] == inst.start_key[..])
+            .unwrap();
+        let second = inst
+            .insertions
+            .iter()
+            .find(|x| x.line.ends_with(&[inst.answer.as_slice(), b"\n"].concat()))
+            .unwrap();
+        assert!(first.offset.abs_diff(second.offset) * 2 >= 4096 - 4 * 60);
+    }
+}
+
+#[test]
+fn b1_scorers_on_handwritten_answers() {
+    assert!(exact_match(Some(b"abc"), b"abc"));
+    assert!(!exact_match(Some(b"abd"), b"abc"));
+    assert!(!exact_match(None, b"abc"));
+
+    let mut h1 = H1Tally::default();
+    for _ in 0..19 {
+        h1.record(0, true);
+    }
+    h1.record(0, false);
+    for _ in 0..20 {
+        h1.record(500, true);
+    }
+    assert_eq!(h1.passes(), Some(true)); // mean 0.975, min bucket 0.95
+    let mut low = H1Tally::default();
+    for _ in 0..16 {
+        low.record(0, true);
+    }
+    for _ in 0..4 {
+        low.record(0, false);
+    }
+    for _ in 0..20 {
+        low.record(500, true);
+    }
+    assert_eq!(low.passes(), Some(false)); // bucket 0 = 0.80 < 0.85
+    assert_eq!(H1Tally::default().passes(), None);
+
+    let mut h2 = H2Tally::default();
+    let v = Task2Query::ValueOf {
+        key: b"k".to_vec(),
+        answer: b"v".to_vec(),
+    };
+    let absent = Task2Query::IsPresent {
+        key: b"z".to_vec(),
+        present: false,
+    };
+    h2.record(2, &v, &Task2Answer::Value(Some(b"v".to_vec())));
+    h2.record(2, &v, &Task2Answer::Value(None));
+    h2.record(2, &absent, &Task2Answer::Present(true));
+    h2.record(2, &absent, &Task2Answer::Present(false));
+    assert_eq!(
+        h2.per_k[&2],
+        Confusion {
+            tp: 1,
+            fp: 0,
+            tn: 0,
+            fn_: 1
+        }
+    );
+    assert_eq!(
+        h2.membership_negatives,
+        Confusion {
+            tp: 0,
+            fp: 1,
+            tn: 1,
+            fn_: 0
+        }
+    );
+
+    let mut h3 = H3Tally::default();
+    for _ in 0..4 {
+        h3.record(true);
+    }
+    h3.record(false);
+    assert_eq!(h3.passes(), Some(true)); // 4/5 = 0.80
+}
+
+fn record() -> CellRecord {
+    CellRecord {
+        tokenizer: SML_BYTE_V0,
+        rung: 4096,
+        arm: B1ArmId::SmlCtxRawScan,
+        seed: 0xB100_0001,
+        split: B1Split::Dev,
+        filler_id: "fixture-filler-unpinned".into(),
+        filler_sha256: None,
+        bytes_ingested: 4096,
+        byte_tokens: 4096,
+        resident_c0_bytes: None,
+        segments_shortlisted: 4,
+        segments_decoded: 2,
+        raw_bytes_reread: 32,
+        rss_peak_bytes: None,
+        mapped_bytes: None,
+        disk_bytes: None,
+        vram_peak_bytes: None,
+        latency_p50_us: None,
+        latency_p95_us: None,
+        latency_p99_us: None,
+        host: "fixture".into(),
+        commit_sha: "0000000".into(),
+        outcome: CellOutcome::Completed,
+    }
+}
+
+#[test]
+fn b1_cell_record_invariants_and_campaign_gate() {
+    assert_eq!(record().validate(), Ok(()));
+    assert_eq!(
+        record().campaign_admissible(),
+        Err(B1Error::FillerNotPinned)
+    );
+    let mut r = record();
+    r.byte_tokens = 4095;
+    assert!(r.validate().is_err());
+    let mut r = record();
+    r.segments_decoded = 5;
+    assert!(r.validate().is_err());
+    let mut r = record();
+    r.split = B1Split::Test;
+    assert!(r.validate().is_err());
+    assert_eq!(
+        apply_caps(60_001, None),
+        CellOutcome::BudgetFail("per-query wall clock > 60 s")
+    );
+    assert_eq!(
+        apply_caps(10, Some(CAP_PROCESS_RSS_BYTES + 1)),
+        CellOutcome::BudgetFail("process RSS > 16 GiB")
+    );
+    assert_eq!(apply_caps(10, Some(1)), CellOutcome::Completed);
+}
+
+#[test]
+fn b1_exact_scan_smoke_arm_answers_generated_fixtures() {
+    let f = filler();
+    let mut arm = ExactScanSmokeArm;
+    let t1 = generate_task1(&f, 0xB100_0001, 4096, 900, 0).unwrap();
+    assert!(exact_match(
+        arm.lookup_value(&t1.haystack, &t1.query_key).as_deref(),
+        &t1.answer
+    ));
+    let t2 = generate_task2(&f, 0xB100_0001, 4096, 4, 0).unwrap();
+    for q in &t2.queries {
+        match q {
+            Task2Query::ValueOf { key, answer } => {
+                assert_eq!(arm.lookup_value(&t2.haystack, key).as_ref(), Some(answer))
+            }
+            Task2Query::IsPresent { key, present } => {
+                assert_eq!(arm.contains_key(&t2.haystack, key), *present)
+            }
+        }
+    }
+    let t3 = generate_task3(&f, 0xB100_0001, 4096, 0).unwrap();
+    let b = arm.follow_link(&t3.haystack, &t3.start_key).unwrap();
+    assert!(exact_match(
+        arm.lookup_value(&t3.haystack, &b).as_deref(),
+        &t3.answer
+    ));
+}
