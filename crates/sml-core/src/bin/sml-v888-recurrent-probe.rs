@@ -357,6 +357,106 @@ mod tests {
     }
 
     #[test]
+    fn exhaustive_three_node_csr_matches_dense_oracle_and_exact_budget() {
+        const N: usize = 3;
+        for adjacency in 0_u16..(1_u16 << (N * N)) {
+            let mut edges = Vec::new();
+            for source in 0..N {
+                for target in 0..N {
+                    if adjacency & (1 << (source * N + target)) != 0 {
+                        edges.push((source, target));
+                    }
+                }
+            }
+
+            let mut bytes = b"V8CSR002".to_vec();
+            bytes.extend_from_slice(&(N as u64).to_le_bytes());
+            bytes.extend_from_slice(&(edges.len() as u64).to_le_bytes());
+            for root in 0..N {
+                bytes.extend_from_slice(&(10 + root as u64).to_le_bytes());
+            }
+            let mut offset = 0_u64;
+            bytes.extend_from_slice(&offset.to_le_bytes());
+            for source in 0..N {
+                offset += edges.iter().filter(|(from, _)| *from == source).count() as u64;
+                bytes.extend_from_slice(&offset.to_le_bytes());
+            }
+            for &(_, target) in &edges {
+                bytes.extend_from_slice(&(target as u32).to_le_bytes());
+            }
+            for &(source, target) in &edges {
+                let contacts = 1 + (source * N + target) as u64;
+                bytes.extend_from_slice(&contacts.to_le_bytes());
+            }
+
+            let graph = Graph::read(&bytes).unwrap();
+            assert_eq!(graph.edges, edges.len());
+            assert_eq!(
+                graph.contacts,
+                edges
+                    .iter()
+                    .map(|&(source, target)| 1 + (source * N + target) as u64)
+                    .sum::<u64>()
+            );
+            assert_eq!(
+                graph.loops,
+                edges
+                    .iter()
+                    .filter(|(source, target)| source == target)
+                    .count() as u64
+            );
+
+            for stimulus in 0_u8..(1_u8 << N) {
+                let input_bits: Vec<bool> =
+                    (0..N).map(|node| stimulus & (1 << node) != 0).collect();
+                let active_edges: Vec<(usize, usize)> = edges
+                    .iter()
+                    .copied()
+                    .filter(|(source, _)| input_bits[*source])
+                    .collect();
+                let expected: Vec<bool> = (0..N)
+                    .map(|target| active_edges.iter().any(|&(_, to)| to == target))
+                    .collect();
+                let input = BooleanWorkspace::from_bits(&input_bits);
+                let budget = active_edges.len() as u64;
+                let step = graph.step(&input, budget).unwrap();
+
+                assert_eq!(
+                    step.output,
+                    BooleanWorkspace::from_bits(&expected),
+                    "adjacency={adjacency} stimulus={stimulus}"
+                );
+                assert_eq!(step.edges, budget);
+                assert_eq!(
+                    step.contacts,
+                    active_edges
+                        .iter()
+                        .map(|&(source, target)| 1 + (source * N + target) as u64)
+                        .sum::<u64>()
+                );
+                assert_eq!(
+                    step.loops,
+                    active_edges
+                        .iter()
+                        .filter(|(source, target)| source == target)
+                        .count() as u64
+                );
+                assert_eq!(
+                    step.active_sources,
+                    input_bits.iter().filter(|&&active| active).count() as u64
+                );
+                assert_eq!(step.source_bits_examined, (2 * N) as u64);
+                assert_eq!(step.counters.boolean_ops, budget);
+                assert_eq!(step.counters.recurrent_cycles, 1);
+                assert_eq!(step.counters.pairwise_comparisons, 0);
+                if budget > 0 {
+                    assert!(graph.step(&input, budget - 1).is_err());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn malformed_inputs_and_work_budget_fail_closed() {
         let bytes = fixture();
         for length in 0..bytes.len() {
