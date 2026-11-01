@@ -218,21 +218,25 @@ The existing Forge `sml-topology/v1` contract was inspected for reuse; its singl
 The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md). SML context is not defined as one permanently resident token buffer. It uses a bounded active working state plus immutable raw segments, associative memory and mapped SBG/raw indexes with provenance.
 
 - [x] CONTEXT-0 exact byte/token/span accounting, stable segment IDs and raw/SBG provenance contract (merged PR #89);
-- [ ] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
+- [x] CONTEXT-1 bounded streaming ingest into immutable raw segment store plus SBG index;
   - [x] CONTEXT-1a immutable SHA-256 raw segment persistence (merged PR #90);
-  - [ ] CONTEXT-1b bounded stream-to-segment ingest with constant-in-total-length working payload bound (active stacked slice);
-  - [ ] CONTEXT-1c synchronized streaming SBG store + raw/SBG provenance manifest emission with bounded per-segment budgets (active slice);
-  - [ ] CONTEXT-1a immutable SHA-256-verified raw segment artifact store (current PR);
-  - [ ] CONTEXT-1b bounded streaming ingest + separate semantic-index emission;
+  - [x] CONTEXT-1b bounded stream-to-segment ingest with constant-in-total-length working payload bound (merged PR #91);
+  - [x] CONTEXT-1c synchronized streaming SBG store + raw/SBG provenance manifest emission with bounded per-segment budgets (merged PR #92; crash-durable multi-file atomicity remains open);
 - [ ] CONTEXT-2 bounded recurrent semantic working context with matched fixed/expanding controls;
-- [ ] CONTEXT-3 hierarchical SBG/MOR top-k context retrieval with exhaustive-scan controls;
-  - [x] design frozen: [`SML-CONTEXT-3-RETRIEVAL.md`](SML-CONTEXT-3-RETRIEVAL.md);
-  - [x] `context_retrieve` + 12 mandatory fixture-only tests (implementation PR; check after merge with green required CI);
+- [x] CONTEXT-3 hierarchical SBG/MOR top-k context retrieval with exhaustive-scan controls (fixture-only tests; no B1 measurement);
+  - [x] design frozen: [`SML-CONTEXT-3-RETRIEVAL.md`](SML-CONTEXT-3-RETRIEVAL.md) (merged PR #766);
+  - [x] `context_retrieve` + 12 mandatory fixture-only tests (merged PR #768, `327a4e57`);
 - [ ] CONTEXT-4 hot/warm/cold retention and optional lossy compaction with raw provenance preserved;
 - [ ] CONTEXT-5 recurrent historical refinement and adaptive halting;
 - [ ] CONTEXT-6 long-range learning curriculum with protected holdouts;
 - [ ] CONTEXT-7 evidence-gated span ladder: 4k -> 16k -> 64k -> 256k -> 1M tokenizer-token dependency spans.
   - [ ] LONGCTX-B1 preregistered (Voie B, not executed): [`SML-LONGCTX-B1-PREREGISTRATION.md`](SML-LONGCTX-B1-PREREGISTRATION.md).
+    - B1 prerequisites (prereg #765 §12; all must close before any campaign run; primary arm CONTEXT-3 closed by #768):
+      - [ ] filler corpus SHA-256 fixture-freeze note;
+      - [ ] B-lex reference implementation pinned (CCOS #217 BM25 read-only vs native: undecided);
+      - [ ] B-attn model, weights SHA and runtime/context setting selected;
+      - [ ] B1 harness (generator + scorer + §8 accounting) merged with hand-written-fixture tests (plan: [`superpowers/plans/2026-11-01-longctx-b1-harness.md`](superpowers/plans/2026-11-01-longctx-b1-harness.md));
+      - [ ] `sml-byte-v0` tokenizer code constant on `main` (delivered by the harness PR);
 
 Do not report an N-token effective context because N tokens fit on disk or were ingested. Admission requires a frozen task whose dependency spans that distance plus quality, RAM, traffic and latency evidence.
 
