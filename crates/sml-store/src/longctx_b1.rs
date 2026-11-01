@@ -696,3 +696,162 @@ impl H3Tally {
         })
     }
 }
+
+/// Frozen caps (prereg §8).
+pub const CAP_QUERY_WALL_CLOCK_MS: u64 = 60_000;
+pub const CAP_PROCESS_RSS_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+pub const CAP_RUNG_WALL_CLOCK_MS: u64 = 6 * 60 * 60 * 1000;
+
+/// Arms and baselines (prereg §6–§7). `BHybCompetitor` is a competitor only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum B1ArmId {
+    SmlCtxRawScan,
+    SmlCtxSbgMorTopK,
+    SmlCtxRecurrent,
+    SmlCtxCompacted,
+    BLex,
+    BAttn,
+    BHybCompetitor,
+}
+
+/// Fail-closed cell outcome (prereg §8): no silent retry with a larger budget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CellOutcome {
+    Completed,
+    BudgetFail(&'static str),
+    ProvenanceMismatch,
+    HashMismatch,
+    Oom,
+    Timeout,
+    NotApplicable(&'static str),
+}
+
+/// Per-cell accounting record; fields mirror prereg §8 exactly.
+/// `None` = not measured by this harness (e.g. RSS without a host probe).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CellRecord {
+    pub tokenizer: &'static str,
+    pub rung: u64,
+    pub arm: B1ArmId,
+    pub seed: u64,
+    pub split: B1Split,
+    pub filler_id: String,
+    pub filler_sha256: Option<ContextContentHash>,
+    pub bytes_ingested: u64,
+    pub byte_tokens: u64,
+    pub resident_c0_bytes: Option<u64>,
+    pub segments_shortlisted: u64,
+    pub segments_decoded: u64,
+    pub raw_bytes_reread: u64,
+    pub rss_peak_bytes: Option<u64>,
+    pub mapped_bytes: Option<u64>,
+    pub disk_bytes: Option<u64>,
+    pub vram_peak_bytes: Option<u64>,
+    pub latency_p50_us: Option<u64>,
+    pub latency_p95_us: Option<u64>,
+    pub latency_p99_us: Option<u64>,
+    pub host: String,
+    pub commit_sha: String,
+    pub outcome: CellOutcome,
+}
+
+impl CellRecord {
+    /// Structural invariants that hold for fixtures and campaigns alike.
+    pub fn validate(&self) -> Result<(), B1Error> {
+        if self.tokenizer != SML_BYTE_V0 {
+            return Err(B1Error::AccountingInvariant(
+                "tokenizer must be sml-byte-v0",
+            ));
+        }
+        if self.byte_tokens != self.bytes_ingested {
+            return Err(B1Error::AccountingInvariant(
+                "sml-byte-v0 requires byte_tokens == bytes_ingested",
+            ));
+        }
+        if self.segments_shortlisted < self.segments_decoded {
+            return Err(B1Error::AccountingInvariant("shortlisted >= decoded"));
+        }
+        if B1Split::for_seed(self.seed)? != self.split {
+            return Err(B1Error::AccountingInvariant("split does not match seed"));
+        }
+        if let (Some(p50), Some(p95), Some(p99)) = (
+            self.latency_p50_us,
+            self.latency_p95_us,
+            self.latency_p99_us,
+        ) {
+            if !(p50 <= p95 && p95 <= p99) {
+                return Err(B1Error::AccountingInvariant("p50 <= p95 <= p99"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Campaign admission: structural validity, ladder rung and a pinned filler.
+    pub fn campaign_admissible(&self) -> Result<(), B1Error> {
+        self.validate()?;
+        validate_span(self.rung)?;
+        if self.filler_sha256.is_none() {
+            return Err(B1Error::FillerNotPinned);
+        }
+        Ok(())
+    }
+}
+
+/// Applies frozen caps to observed values; any excess is `budget-fail`.
+#[must_use]
+pub fn apply_caps(max_query_ms: u64, rss_peak_bytes: Option<u64>) -> CellOutcome {
+    if max_query_ms > CAP_QUERY_WALL_CLOCK_MS {
+        return CellOutcome::BudgetFail("per-query wall clock > 60 s");
+    }
+    if rss_peak_bytes.is_some_and(|r| r > CAP_PROCESS_RSS_BYTES) {
+        return CellOutcome::BudgetFail("process RSS > 16 GiB");
+    }
+    CellOutcome::Completed
+}
+
+/// Arm hook: later PRs implement this for CONTEXT-3, B-lex and B-attn.
+pub trait B1Arm {
+    fn id(&self) -> B1ArmId;
+    /// Exact value bytes for `key`, or `None` to abstain.
+    fn lookup_value(&mut self, haystack: &[u8], key: &[u8]) -> Option<Vec<u8>>;
+    /// Membership answer for `key`.
+    fn contains_key(&mut self, haystack: &[u8], key: &[u8]) -> bool;
+    /// `NEXT=` target of `LINK=<from>`, or `None`.
+    fn follow_link(&mut self, haystack: &[u8], from: &[u8]) -> Option<Vec<u8>>;
+}
+
+/// Harness smoke arm: exhaustive exact scan. Not a B1 result (prereg §6).
+#[derive(Debug, Default)]
+pub struct ExactScanSmokeArm;
+
+fn value_after(haystack: &[u8], prefix: &[u8], width: usize) -> Option<Vec<u8>> {
+    let at = find(haystack, prefix)? + prefix.len();
+    haystack.get(at..at + width).map(<[u8]>::to_vec)
+}
+
+impl B1Arm for ExactScanSmokeArm {
+    fn id(&self) -> B1ArmId {
+        B1ArmId::SmlCtxRawScan
+    }
+
+    fn lookup_value(&mut self, haystack: &[u8], key: &[u8]) -> Option<Vec<u8>> {
+        let mut prefix = b"KEY=".to_vec();
+        prefix.extend_from_slice(key);
+        prefix.extend_from_slice(b" VALUE=");
+        value_after(haystack, &prefix, 32)
+    }
+
+    fn contains_key(&mut self, haystack: &[u8], key: &[u8]) -> bool {
+        let mut prefix = b"KEY=".to_vec();
+        prefix.extend_from_slice(key);
+        prefix.push(b' ');
+        find(haystack, &prefix).is_some()
+    }
+
+    fn follow_link(&mut self, haystack: &[u8], from: &[u8]) -> Option<Vec<u8>> {
+        let mut prefix = b"LINK=".to_vec();
+        prefix.extend_from_slice(from);
+        prefix.extend_from_slice(b" NEXT=");
+        value_after(haystack, &prefix, 16)
+    }
+}

@@ -278,3 +278,86 @@ fn b1_scorers_on_handwritten_answers() {
     h3.record(false);
     assert_eq!(h3.passes(), Some(true)); // 4/5 = 0.80
 }
+
+fn record() -> CellRecord {
+    CellRecord {
+        tokenizer: SML_BYTE_V0,
+        rung: 4096,
+        arm: B1ArmId::SmlCtxRawScan,
+        seed: 0xB100_0001,
+        split: B1Split::Dev,
+        filler_id: "fixture-filler-unpinned".into(),
+        filler_sha256: None,
+        bytes_ingested: 4096,
+        byte_tokens: 4096,
+        resident_c0_bytes: None,
+        segments_shortlisted: 4,
+        segments_decoded: 2,
+        raw_bytes_reread: 32,
+        rss_peak_bytes: None,
+        mapped_bytes: None,
+        disk_bytes: None,
+        vram_peak_bytes: None,
+        latency_p50_us: None,
+        latency_p95_us: None,
+        latency_p99_us: None,
+        host: "fixture".into(),
+        commit_sha: "0000000".into(),
+        outcome: CellOutcome::Completed,
+    }
+}
+
+#[test]
+fn b1_cell_record_invariants_and_campaign_gate() {
+    assert_eq!(record().validate(), Ok(()));
+    assert_eq!(
+        record().campaign_admissible(),
+        Err(B1Error::FillerNotPinned)
+    );
+    let mut r = record();
+    r.byte_tokens = 4095;
+    assert!(r.validate().is_err());
+    let mut r = record();
+    r.segments_decoded = 5;
+    assert!(r.validate().is_err());
+    let mut r = record();
+    r.split = B1Split::Test;
+    assert!(r.validate().is_err());
+    assert_eq!(
+        apply_caps(60_001, None),
+        CellOutcome::BudgetFail("per-query wall clock > 60 s")
+    );
+    assert_eq!(
+        apply_caps(10, Some(CAP_PROCESS_RSS_BYTES + 1)),
+        CellOutcome::BudgetFail("process RSS > 16 GiB")
+    );
+    assert_eq!(apply_caps(10, Some(1)), CellOutcome::Completed);
+}
+
+#[test]
+fn b1_exact_scan_smoke_arm_answers_generated_fixtures() {
+    let f = filler();
+    let mut arm = ExactScanSmokeArm;
+    let t1 = generate_task1(&f, 0xB100_0001, 4096, 900, 0).unwrap();
+    assert!(exact_match(
+        arm.lookup_value(&t1.haystack, &t1.query_key).as_deref(),
+        &t1.answer
+    ));
+    let t2 = generate_task2(&f, 0xB100_0001, 4096, 4, 0).unwrap();
+    for q in &t2.queries {
+        match q {
+            Task2Query::ValueOf { key, answer } => {
+                assert_eq!(arm.lookup_value(&t2.haystack, key).as_ref(), Some(answer))
+            }
+            Task2Query::IsPresent { key, present } => {
+                assert_eq!(arm.contains_key(&t2.haystack, key), *present)
+            }
+        }
+    }
+    let t3 = generate_task3(&f, 0xB100_0001, 4096, 0).unwrap();
+    let b = arm.follow_link(&t3.haystack, &t3.start_key).unwrap();
+    assert!(exact_match(
+        arm.lookup_value(&t3.haystack, &b).as_deref(),
+        &t3.answer
+    ));
+}
