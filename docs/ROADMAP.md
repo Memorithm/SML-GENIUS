@@ -235,8 +235,8 @@ The durable protocol is in [`SML-CONTEXT-BOOTSTRAP.md`](SML-CONTEXT-BOOTSTRAP.md
       - [ ] filler corpus SHA-256 fixture-freeze note;
       - [ ] B-lex reference implementation pinned (CCOS #217 BM25 read-only vs native: undecided);
       - [ ] B-attn model, weights SHA and runtime/context setting selected;
-      - [ ] B1 harness (generator + scorer + §8 accounting) merged with hand-written-fixture tests (plan: [`superpowers/plans/2026-11-01-longctx-b1-harness.md`](superpowers/plans/2026-11-01-longctx-b1-harness.md));
-      - [ ] `sml-byte-v0` tokenizer code constant on `main` (delivered by the harness PR);
+      - [x] B1 harness (generator + scorer + §8 accounting) merged with hand-written-fixture tests (merged PR #772, `620b0d73`; plan: [`superpowers/plans/2026-11-01-longctx-b1-harness.md`](superpowers/plans/2026-11-01-longctx-b1-harness.md));
+      - [x] `sml-byte-v0` tokenizer code constant on `main` (delivered by harness PR #772, `620b0d73`);
 
 Do not report an N-token effective context because N tokens fit on disk or were ingested. Admission requires a frozen task whose dependency spans that distance plus quality, RAM, traffic and latency evidence.
 
