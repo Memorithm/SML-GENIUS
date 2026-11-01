@@ -2,8 +2,6 @@
 
 use sml_store::longctx_b1::*;
 
-/// Hand-written filler: lowercase words and spaces, so no 8-hex run can occur.
-
 #[test]
 fn b1_tokenizer_is_one_byte_one_token() {
     assert_eq!(SML_BYTE_V0, "sml-byte-v0");

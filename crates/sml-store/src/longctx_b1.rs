@@ -6,10 +6,6 @@
 
 use std::fmt;
 
-use sml_core::context_ledger::ContextContentHash;
-
-use crate::raw_context::sha256_raw_bytes;
-
 /// Frozen B1 tokenizer identifier (prereg §2).
 pub const SML_BYTE_V0: &str = "sml-byte-v0";
 
