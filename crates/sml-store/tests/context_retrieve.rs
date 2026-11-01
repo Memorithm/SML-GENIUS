@@ -16,8 +16,8 @@ use sml_core::{
 use sml_store::{
     context_ingest::{ContextIngestError, SegmentTokenCounter, StreamingIngestPolicy},
     context_retrieve::{
-        ContextRetrieveError, ContextRetrievePolicy, ContextRetriever, ContextRetrieverConfig,
-        RetrieveQuery,
+        exhaustive_semantic_scan, ContextRetrieveError, ContextRetrievePolicy, ContextRetriever,
+        ContextRetrieverConfig, RetrieveQuery,
     },
     context_semantic_ingest::{
         build_provenance_artifact, parse_provenance_artifact, ContextSemanticIngestError,
@@ -552,4 +552,64 @@ fn context3_t06_associative_hit_miss_and_full_capacity() {
         disabled.retrieve(&hit_query, &one_slot),
         Err(ContextRetrieveError::AssociativeDenied)
     ));
+}
+
+#[test]
+fn context3_t07_exhaustive_scan_and_shortlist_agree_with_few_reads() {
+    let fixture = Fixture::build(37, 256);
+    let retriever = fixture.open_all();
+    for needle in [1, 64, 128, 200, 256] {
+        let (short_hits, short_accounting) = retriever
+            .retrieve(&exact_query(needle), &policy(16, 1))
+            .unwrap();
+        let (scan_hits, scan_accounting) =
+            exhaustive_semantic_scan(&retriever, &signature_for_segment(needle), &policy(16, 1))
+                .unwrap();
+        assert_eq!(short_hits, scan_hits);
+        assert_eq!(short_hits[0].segment, fixture.segment(needle));
+        assert_eq!(scan_accounting.shortlisted, 256);
+        assert!(short_accounting.shortlisted <= 16);
+        assert!(short_accounting.shortlisted * 8 < scan_accounting.shortlisted);
+    }
+}
+
+/// Fixture-only sublinear-work check. Does NOT satisfy LONGCTX-B1 H4 nor any
+/// wording gate, and supports no scale claim.
+#[test]
+fn context3_t10_sublinear_fit_on_declared_fixture_with_exhaustive_negative_control() {
+    const LENGTHS: [u64; 5] = [256, 512, 1024, 2048, 4096];
+    const QUERIES: u64 = 32;
+    let fixture = Fixture::build(40, 4096);
+    let mut shortlist_points = Vec::new();
+    let mut scan_points = Vec::new();
+    for length in LENGTHS {
+        let retriever = fixture.open(length, config());
+        let mut shortlist_work = 0_u64;
+        let mut scan_work = 0_u64;
+        for query_index in 0..QUERIES {
+            let needle = 1 + query_index * length / QUERIES;
+            let (hits, accounting) = retriever
+                .retrieve(&exact_query(needle), &policy(16, 1))
+                .unwrap();
+            assert_eq!(hits[0].segment, fixture.segment(needle));
+            assert!(hits[0].source_exact);
+            shortlist_work += accounting.shortlisted;
+            let (_, scan) = exhaustive_semantic_scan(
+                &retriever,
+                &signature_for_segment(needle),
+                &policy(16, 1),
+            )
+            .unwrap();
+            scan_work += scan.shortlisted;
+        }
+        shortlist_points.push((length as f64, shortlist_work as f64 / QUERIES as f64));
+        scan_points.push((length as f64, scan_work as f64 / QUERIES as f64));
+    }
+    let alpha_shortlist = fit_exponent(&shortlist_points);
+    let alpha_scan = fit_exponent(&scan_points);
+    assert!(alpha_shortlist < 0.75, "shortlist alpha {alpha_shortlist}");
+    assert!(
+        (alpha_scan - 1.0).abs() < 0.05,
+        "exhaustive alpha {alpha_scan}"
+    );
 }

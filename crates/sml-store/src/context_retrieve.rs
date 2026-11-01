@@ -474,6 +474,29 @@ impl<const BITS: usize> ContextRetriever<BITS> {
     }
 }
 
+/// Control only: exhaustive semantic scan over all indexed segments.
+///
+/// Scores every segment (`shortlisted == len`), then applies the same
+/// stable MOR top-k and verified raw reread as [`ContextRetriever::retrieve`].
+/// `policy.max_shortlist` is intentionally ignored by this control.
+pub fn exhaustive_semantic_scan<const BITS: usize>(
+    retriever: &ContextRetriever<BITS>,
+    query: &SemanticBitField<BITS>,
+    policy: &ContextRetrievePolicy,
+) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+    let policy = policy.validate()?;
+    if retriever.entries.is_empty() {
+        return Err(ContextRetrieveError::EmptyIndex);
+    }
+    let all: Vec<usize> = (0..retriever.entries.len()).collect();
+    let accounting = RetrieveAccounting {
+        shortlisted: all.len() as u64,
+        ..RetrieveAccounting::default()
+    };
+    let candidates = retriever.rank(&all, query, policy.top_k)?;
+    retriever.reread(candidates, accounting)
+}
+
 fn mor_top_k(top_k: usize) -> Result<SemanticMorTopK, ContextRetrieveError> {
     match top_k {
         1 => Ok(SemanticMorTopK::One),
