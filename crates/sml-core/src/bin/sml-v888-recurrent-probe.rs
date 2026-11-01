@@ -452,6 +452,34 @@ mod tests {
                 if budget > 0 {
                     assert!(graph.step(&input, budget - 1).is_err());
                 }
+
+                // Reuse the same parsed graph for three more synchronous cycles.
+                // The oracle uses the dense adjacency mask, not the CSR reader.
+                let mut state = expected;
+                let mut workspace = step.output;
+                for cycle in 2..=4 {
+                    let next_expected: Vec<bool> = (0..N)
+                        .map(|target| {
+                            (0..N).any(|source| {
+                                state[source] && adjacency & (1 << (source * N + target)) != 0
+                            })
+                        })
+                        .collect();
+                    let active_count =
+                        edges.iter().filter(|(source, _)| state[*source]).count() as u64;
+                    let next = graph.step(&workspace, active_count).unwrap();
+                    assert_eq!(
+                        next.output,
+                        BooleanWorkspace::from_bits(&next_expected),
+                        "adjacency={adjacency} stimulus={stimulus} cycle={cycle}"
+                    );
+                    assert_eq!(next.edges, active_count);
+                    assert_eq!(next.counters.boolean_ops, active_count);
+                    assert_eq!(next.counters.recurrent_cycles, 1);
+                    assert_eq!(workspace, BooleanWorkspace::from_bits(&state));
+                    state = next_expected;
+                    workspace = next.output;
+                }
             }
         }
     }
