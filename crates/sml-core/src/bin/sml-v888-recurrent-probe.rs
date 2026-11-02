@@ -598,4 +598,204 @@ mod tests {
             assert_eq!(step.counters.pairwise_comparisons, 0);
         }
     }
+
+    #[test]
+    fn recurrence_crosses_second_word_boundary_and_partial_tail() {
+        const N: usize = 129;
+        let arcs = [
+            (0_usize, 64_usize, 2_u64),
+            (63, 64, 3),
+            (64, 127, 5),
+            (64, 128, 7),
+            (127, 128, 11),
+            (128, 0, 13),
+            (128, 128, 17),
+        ];
+        let mut bytes = b"V8CSR002".to_vec();
+        bytes.extend_from_slice(&(N as u64).to_le_bytes());
+        bytes.extend_from_slice(&(arcs.len() as u64).to_le_bytes());
+        for root in 1..=N {
+            bytes.extend_from_slice(&(root as u64).to_le_bytes());
+        }
+        let mut offset = 0_u64;
+        bytes.extend_from_slice(&offset.to_le_bytes());
+        for source in 0..N {
+            offset += arcs.iter().filter(|arc| arc.0 == source).count() as u64;
+            bytes.extend_from_slice(&offset.to_le_bytes());
+        }
+        for &(_, target, _) in &arcs {
+            bytes.extend_from_slice(&(target as u32).to_le_bytes());
+        }
+        for &(_, _, count) in &arcs {
+            bytes.extend_from_slice(&count.to_le_bytes());
+        }
+
+        assert_eq!(bytes.len(), 32 + 16 * N + 12 * arcs.len());
+        let graph = Graph::read(&bytes).unwrap();
+        assert_eq!(graph.edges, arcs.len());
+        assert_eq!(graph.contacts, 58);
+        assert_eq!(graph.loops, 1);
+        assert!(graph.step(&BooleanWorkspace::from_bits(&[false; N - 1]), 0).is_err());
+        assert!(graph.step(&BooleanWorkspace::from_bits(&[false; N + 1]), 0).is_err());
+        let state_sets: [&[usize]; 4] = [
+            &[0, 63, 127],
+            &[64, 128],
+            &[0, 127, 128],
+            &[0, 64, 128],
+        ];
+        let expected_edges = [3_u64, 4, 4];
+        let expected_contacts = [16_u64, 42, 43];
+        let expected_loops = [0_u64, 1, 1];
+        let expected_active_sources = [3_u64, 2, 3];
+        let mut bits = vec![false; N];
+        for &source in state_sets[0] {
+            bits[source] = true;
+        }
+        let mut workspace = BooleanWorkspace::from_bits(&bits);
+        for cycle in 0..3 {
+            let budget = expected_edges[cycle];
+            assert!(graph.step(&workspace, budget - 1).is_err());
+            let result = graph.step(&workspace, budget).unwrap();
+            let mut expected = vec![false; N];
+            for &target in state_sets[cycle + 1] {
+                expected[target] = true;
+            }
+            assert_eq!(result.output, BooleanWorkspace::from_bits(&expected));
+            assert_eq!(result.output.len(), N);
+            assert_eq!(result.output.get(128), Some(expected[128]));
+            assert_eq!(result.output.get(N), None);
+            assert_eq!(result.edges, budget);
+            assert_eq!(result.contacts, expected_contacts[cycle]);
+            assert_eq!(result.loops, expected_loops[cycle]);
+            assert_eq!(result.active_sources, expected_active_sources[cycle]);
+            assert_eq!(result.source_bits_examined, 258);
+            assert_eq!(result.counters.boolean_ops, budget);
+            assert_eq!(result.counters.recurrent_cycles, 1);
+            assert_eq!(result.counters.pairwise_comparisons, 0);
+            let mut original = vec![false; N];
+            for &source in state_sets[cycle] {
+                original[source] = true;
+            }
+            assert_eq!(workspace, BooleanWorkspace::from_bits(&original));
+            workspace = result.output;
+        }
+
+        // No active sources must not activate a tail bit or consume a budget.
+        let zero = graph
+            .step(&BooleanWorkspace::from_bits(&[false; N]), 0)
+            .unwrap();
+        assert_eq!(zero.output, BooleanWorkspace::from_bits(&[false; N]));
+        assert_eq!(zero.edges, 0);
+        assert_eq!(zero.contacts, 0);
+        assert_eq!(zero.loops, 0);
+        assert_eq!(zero.active_sources, 0);
+
+        // The final meaningful bit (128) is in a one-bit partial u64 word.
+        let mut tail_only = vec![false; N];
+        tail_only[128] = true;
+        let tail_input = BooleanWorkspace::from_bits(&tail_only);
+        assert!(graph.step(&tail_input, 1).is_err());
+        let tail_step = graph.step(&tail_input, 2).unwrap();
+        let mut tail_expected = vec![false; N];
+        tail_expected[0] = true;
+        tail_expected[128] = true;
+        assert_eq!(tail_step.output, BooleanWorkspace::from_bits(&tail_expected));
+        assert_eq!(tail_step.edges, 2);
+        assert_eq!(tail_step.contacts, 30);
+        assert_eq!(tail_step.loops, 1);
+        assert_eq!(tail_step.active_sources, 1);
+        assert_eq!(tail_step.counters.boolean_ops, 2);
+        assert_eq!(tail_input, BooleanWorkspace::from_bits(&tail_only));
+
+        // Cross-check every one-hot seed for three cycles against an edge-list
+        // oracle, without reusing the CSR offsets or target decoder.
+        for seed in 0..N {
+            let mut state = vec![false; N];
+            state[seed] = true;
+            for cycle in 0..3 {
+                let mut expected = vec![false; N];
+                let mut edges = 0_u64;
+                let mut contacts = 0_u64;
+                let mut loops = 0_u64;
+                for &(source, target, count) in &arcs {
+                    if state[source] {
+                        expected[target] = true;
+                        edges += 1;
+                        contacts += count;
+                        loops += u64::from(source == target);
+                    }
+                }
+                let input = BooleanWorkspace::from_bits(&state);
+                let step = graph.step(&input, edges).unwrap();
+                assert_eq!(
+                    step.output,
+                    BooleanWorkspace::from_bits(&expected),
+                    "seed={seed} cycle={cycle}"
+                );
+                assert_eq!(step.edges, edges);
+                assert_eq!(step.contacts, contacts);
+                assert_eq!(step.loops, loops);
+                assert_eq!(
+                    step.active_sources,
+                    state.iter().filter(|&&bit| bit).count() as u64
+                );
+                assert_eq!(step.source_bits_examined, (2 * N) as u64);
+                assert_eq!(step.counters.boolean_ops, edges);
+                assert_eq!(step.counters.recurrent_cycles, 1);
+                assert_eq!(step.counters.pairwise_comparisons, 0);
+                assert_eq!(input, BooleanWorkspace::from_bits(&state));
+                if edges > 0 {
+                    assert!(graph.step(&input, edges - 1).is_err());
+                }
+                state = expected;
+            }
+        }
+
+        // Exhaust all 32 combinations of the five sources with outgoing arcs.
+        // This checks simultaneous activation and OR fan-in at both word edges.
+        let relevant = [0_usize, 63, 64, 127, 128];
+        for mask in 0_u8..(1 << relevant.len()) {
+            let mut state = vec![false; N];
+            for (index, &source) in relevant.iter().enumerate() {
+                state[source] = mask & (1 << index) != 0;
+            }
+            for cycle in 0..3 {
+                let mut expected = vec![false; N];
+                let mut edges = 0_u64;
+                let mut contacts = 0_u64;
+                let mut loops = 0_u64;
+                for &(source, target, count) in &arcs {
+                    if state[source] {
+                        expected[target] = true;
+                        edges += 1;
+                        contacts += count;
+                        loops += u64::from(source == target);
+                    }
+                }
+                let input = BooleanWorkspace::from_bits(&state);
+                if edges > 0 {
+                    assert!(graph.step(&input, edges - 1).is_err());
+                }
+                let step = graph.step(&input, edges).unwrap();
+                assert_eq!(
+                    step.output,
+                    BooleanWorkspace::from_bits(&expected),
+                    "mask={mask} cycle={cycle}"
+                );
+                assert_eq!(step.edges, edges);
+                assert_eq!(step.contacts, contacts);
+                assert_eq!(step.loops, loops);
+                assert_eq!(
+                    step.active_sources,
+                    state.iter().filter(|&&bit| bit).count() as u64
+                );
+                assert_eq!(step.source_bits_examined, (2 * N) as u64);
+                assert_eq!(step.counters.boolean_ops, edges);
+                assert_eq!(step.counters.recurrent_cycles, 1);
+                assert_eq!(step.counters.pairwise_comparisons, 0);
+                assert_eq!(input, BooleanWorkspace::from_bits(&state));
+                state = expected;
+            }
+        }
+    }
 }
