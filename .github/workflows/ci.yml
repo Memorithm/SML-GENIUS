@@ -73,6 +73,13 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked --workspace
+      - name: BDE-0 supervised learning measurement evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p sml-core --lib boolean_delta_engine::learning_tests::measured_quality_work_and_cpu_time_against_full_circuit -- --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/bde0-measurement.log"
+          printf 'BDE-0 exact source: `%s`\n\n' "${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          grep -F 'BDE0_LEARNING_MEASURE_V1 ' "$RUNNER_TEMP/bde0-measurement.log" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: PGF2 K2048 correctness evidence
         if: startsWith(github.head_ref, 'research/pgf2-k2048-')
         shell: bash
