@@ -217,7 +217,15 @@ impl PackedBooleanPage {
                 actual: group.page_id,
             });
         }
-        if group.end_exclusive() > self.parameter_count {
+        // BooleanPageGroup has public fields: callers can bypass its checked
+        // constructor. Reject zero-width and overflowing ranges before any
+        // view can call the unchecked end_exclusive() accessor.
+        if group.len == 0
+            || !matches!(
+                group.start.checked_add(group.len),
+                Some(end) if end <= self.parameter_count
+            )
+        {
             return Err(BooleanPageError::GroupOutsidePage {
                 group,
                 parameter_count: self.parameter_count,
