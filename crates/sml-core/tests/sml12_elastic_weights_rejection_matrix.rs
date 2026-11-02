@@ -766,13 +766,13 @@ fn commit_rejects_plans_whose_limits_exceed_planner_policy() {
     );
 }
 
-/// NEGATIVE FINDING (documented, not fixed in this tests-only PR):
-/// `ElasticWeightPlanner::commit` is documented as atomic, but for plans whose
-/// own limits exceed the planner policy it applies every transition and bumps
-/// the generation *before* `validate_current_budgets` fails, so the planner is
-/// left mutated (over budget, generation 1) even though `Err` is returned.
+/// Regression guard for the negative finding reported in #792:
+/// `ElasticWeightPlanner::commit` used to apply every transition and bump the
+/// generation *before* the post-apply budget check rejected a plan whose own
+/// limits exceed the planner policy. `commit` now checks the plan totals
+/// against the planner policy before mutating, so rejection leaves the planner
+/// untouched.
 #[test]
-#[ignore = "negative finding: commit mutates planner state before the post-apply budget check rejects an over-policy plan; fix belongs in a separate production PR"]
 fn commit_is_atomic_for_plans_whose_limits_exceed_planner_policy() {
     for (label, forged, _) in over_policy_plans() {
         let mut planner = planner();
