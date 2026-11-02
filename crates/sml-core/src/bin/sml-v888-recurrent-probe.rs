@@ -467,6 +467,18 @@ mod tests {
                         .collect();
                     let active_count =
                         edges.iter().filter(|(source, _)| state[*source]).count() as u64;
+                    let expected_contacts: u64 = edges
+                        .iter()
+                        .filter(|(source, _)| state[*source])
+                        .map(|&(source, target)| 1 + (source * N + target) as u64)
+                        .sum();
+                    let expected_loops = edges
+                        .iter()
+                        .filter(|(source, target)| source == target && state[*source])
+                        .count() as u64;
+                    if active_count > 0 {
+                        assert!(graph.step(&workspace, active_count - 1).is_err());
+                    }
                     let next = graph.step(&workspace, active_count).unwrap();
                     assert_eq!(
                         next.output,
@@ -474,8 +486,16 @@ mod tests {
                         "adjacency={adjacency} stimulus={stimulus} cycle={cycle}"
                     );
                     assert_eq!(next.edges, active_count);
+                    assert_eq!(next.contacts, expected_contacts);
+                    assert_eq!(next.loops, expected_loops);
+                    assert_eq!(
+                        next.active_sources,
+                        state.iter().filter(|&&bit| bit).count() as u64
+                    );
+                    assert_eq!(next.source_bits_examined, (2 * N) as u64);
                     assert_eq!(next.counters.boolean_ops, active_count);
                     assert_eq!(next.counters.recurrent_cycles, 1);
+                    assert_eq!(next.counters.pairwise_comparisons, 0);
                     assert_eq!(workspace, BooleanWorkspace::from_bits(&state));
                     state = next_expected;
                     workspace = next.output;
