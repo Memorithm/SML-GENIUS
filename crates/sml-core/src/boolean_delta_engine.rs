@@ -552,6 +552,38 @@ mod learning_tests {
         assert_eq!(heldout_errors(&mut model), 0);
     }
 
+    // Negative control: a signature absent from TRAIN has no learned votes.
+    // Distinct full assignments alone do not establish feature-level generalization.
+    fn unseen_positive_signature_errors(model: &mut BooleanDeltaLearner) -> usize {
+        [5usize, 6]
+            .into_iter()
+            .filter(|&bits| {
+                let (inputs, label) = sample(bits, true);
+                debug_assert!(label);
+                model.predict(&inputs).unwrap().0 != label
+            })
+            .count()
+    }
+
+    #[test]
+    fn unseen_readout_signature_negative_control_and_one_shot_recovery() {
+        let mut model = learner(7);
+        // Omit the only positive feature signature from the six TRAIN examples.
+        for bits in 0..8 {
+            let (inputs, label) = sample(bits, false);
+            if !label {
+                model.train(&inputs, label).unwrap();
+            }
+        }
+        assert_eq!(model.examples_seen(), 6);
+        assert_eq!(unseen_positive_signature_errors(&mut model), 2);
+
+        // One labelled positive example updates the shared Boolean signature.
+        let (inputs, label) = sample(5, false);
+        assert!(model.train(&inputs, label).unwrap().mistake_before_update);
+        assert_eq!(unseen_positive_signature_errors(&mut model), 0);
+    }
+
     #[test]
     fn training_budget_and_invalid_input_fail_without_mutation() {
         let mut model = learner(1);
@@ -594,6 +626,19 @@ mod learning_tests {
         let after_errors = heldout_errors(&mut model);
         assert_eq!((before_errors, after_errors), (2, 0));
 
+        // Report the feature-level OOD failure separately from the nuisance-bit
+        // heldout result; the latter reuses all learned readout signatures.
+        let mut missing_signature_control = learner(6);
+        for bits in 0..8 {
+            let (inputs, label) = sample(bits, false);
+            if !label {
+                missing_signature_control.train(&inputs, label).unwrap();
+            }
+        }
+        let unseen_signature_errors =
+            unseen_positive_signature_errors(&mut missing_signature_control);
+        assert_eq!(unseen_signature_errors, 2);
+
         let oracle = BooleanCircuit::new(
             4,
             vec![Gate::Xor(Wire::Input(0), Wire::Input(1))],
@@ -624,7 +669,7 @@ mod learning_tests {
         let oracle_ns = oracle_start.elapsed().as_nanos();
         assert_eq!(oracle_errors, 0);
         println!(
-            "BDE0_LEARNING_MEASURE_V1 train_samples=8 heldout_samples=8 before_errors={before_errors} after_errors={after_errors} train_ns={train_ns} infer_samples={iterations} infer_errors={errors} incremental_gate_evaluations={evaluated_gates} incremental_ns={incremental_ns} oracle_ns={oracle_ns} learned_table_bytes={}",
+            "BDE0_LEARNING_MEASURE_V1 train_samples=8 heldout_samples=8 before_errors={before_errors} after_errors={after_errors} train_ns={train_ns} infer_samples={iterations} infer_errors={errors} unseen_signature_samples=2 unseen_signature_errors={unseen_signature_errors} incremental_gate_evaluations={evaluated_gates} incremental_ns={incremental_ns} oracle_ns={oracle_ns} learned_table_bytes={}",
             model.learned_table_bytes()
         );
     }
