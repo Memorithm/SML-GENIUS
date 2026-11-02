@@ -234,17 +234,30 @@ mod tests {
             let (vote_prediction, _) = votes.predict(&inputs(bits)).unwrap();
             vote_errors += usize::from(vote_prediction != label(bits));
         }
-        assert!(vote_errors > 0, "unseen-signature vote baseline must be imperfect");
+        assert!(
+            vote_errors > 0,
+            "unseen-signature vote baseline must be imperfect"
+        );
     }
 
     #[test]
     fn underdetermined_abstains_and_consistent_duplicate_does_not_add_rank() {
         let mut model = BooleanDeltaAffineLearner::new(engine(), 4, 5).unwrap();
         assert_eq!(model.predict(&inputs(0)).unwrap().0, None);
-        assert!(model.train(&inputs(0), label(0)).unwrap().independent_equation);
+        assert!(
+            model
+                .train(&inputs(0), label(0))
+                .unwrap()
+                .independent_equation
+        );
         assert_eq!(model.predict(&inputs(0)).unwrap().0, Some(true));
         assert_eq!(model.predict(&inputs(2)).unwrap().0, None);
-        assert!(!model.train(&inputs(0), label(0)).unwrap().independent_equation);
+        assert!(
+            !model
+                .train(&inputs(0), label(0))
+                .unwrap()
+                .independent_equation
+        );
         assert_eq!(model.rank(), 1);
     }
 
