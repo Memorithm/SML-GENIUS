@@ -49,6 +49,9 @@ impl SourceScope<'_> {
         if self.scope_id.is_empty() {
             return Err(V888ContractError::MissingSourceScope);
         }
+        if self.scope_id.trim() != self.scope_id || self.scope_id.chars().any(char::is_control) {
+            return Err(V888ContractError::InvalidSourceScope);
+        }
         if !is_lower_hex(self.artifact_sha256, 64) {
             return Err(V888ContractError::InvalidSourceArtifactSha256);
         }
@@ -234,6 +237,7 @@ fn is_lower_hex(value: &str, expected_len: usize) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum V888ContractError {
     MissingSourceScope,
+    InvalidSourceScope,
     InvalidSourceArtifactSha256,
     MissingScopedCounts,
     ZeroScopedCount(SourceCountKind),
@@ -365,6 +369,37 @@ mod tests {
                 SourceCountKind::DirectedPairs
             ))
         );
+    }
+
+    #[test]
+    fn source_scope_rejects_noncanonical_identifiers() {
+        let mut missing = source();
+        missing.scope_id = "";
+        assert_eq!(
+            missing.validate(),
+            Err(V888ContractError::MissingSourceScope)
+        );
+
+        let mut internal = source();
+        internal.scope_id = "scope with internal spaces";
+        assert_eq!(internal.validate(), Ok(()));
+
+        for scope_id in [
+            " ",
+            "\t",
+            " leading",
+            "trailing ",
+            "embedded\0control",
+            "line\nbreak",
+        ] {
+            let mut malformed = source();
+            malformed.scope_id = scope_id;
+            assert_eq!(
+                malformed.validate(),
+                Err(V888ContractError::InvalidSourceScope),
+                "{scope_id:?}"
+            );
+        }
     }
 
     #[test]
