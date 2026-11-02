@@ -59,6 +59,7 @@ pub mod boolean_associative_focus;
 pub mod boolean_associative_joint;
 pub mod boolean_associative_search;
 pub mod boolean_associative_train;
+pub mod boolean_delta_engine;
 pub mod boolean_fourier;
 pub mod boolean_hierarchical;
 pub mod boolean_integral;
