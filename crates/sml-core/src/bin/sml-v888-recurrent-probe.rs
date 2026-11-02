@@ -635,14 +635,13 @@ mod tests {
         assert_eq!(graph.edges, arcs.len());
         assert_eq!(graph.contacts, 58);
         assert_eq!(graph.loops, 1);
-        assert!(graph.step(&BooleanWorkspace::from_bits(&[false; N - 1]), 0).is_err());
-        assert!(graph.step(&BooleanWorkspace::from_bits(&[false; N + 1]), 0).is_err());
-        let state_sets: [&[usize]; 4] = [
-            &[0, 63, 127],
-            &[64, 128],
-            &[0, 127, 128],
-            &[0, 64, 128],
-        ];
+        assert!(graph
+            .step(&BooleanWorkspace::from_bits(&[false; N - 1]), 0)
+            .is_err());
+        assert!(graph
+            .step(&BooleanWorkspace::from_bits(&[false; N + 1]), 0)
+            .is_err());
+        let state_sets: [&[usize]; 4] = [&[0, 63, 127], &[64, 128], &[0, 127, 128], &[0, 64, 128]];
         let expected_edges = [3_u64, 4, 4];
         let expected_contacts = [16_u64, 42, 43];
         let expected_loops = [0_u64, 1, 1];
@@ -699,7 +698,10 @@ mod tests {
         let mut tail_expected = vec![false; N];
         tail_expected[0] = true;
         tail_expected[128] = true;
-        assert_eq!(tail_step.output, BooleanWorkspace::from_bits(&tail_expected));
+        assert_eq!(
+            tail_step.output,
+            BooleanWorkspace::from_bits(&tail_expected)
+        );
         assert_eq!(tail_step.edges, 2);
         assert_eq!(tail_step.contacts, 30);
         assert_eq!(tail_step.loops, 1);
