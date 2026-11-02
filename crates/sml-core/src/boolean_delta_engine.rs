@@ -367,7 +367,6 @@ mod tests {
     }
 }
 
-
 /// A bounded supervised Boolean readout trained from the delta engine's
 /// Boolean output features. Each feature signature has two integer vote
 /// counts; inference uses the majority label, with ties predicting false.
