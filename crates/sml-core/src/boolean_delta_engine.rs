@@ -613,15 +613,17 @@ mod learning_tests {
         let incremental_ns = start.elapsed().as_nanos();
         assert_eq!(errors, 0);
 
+        let mut oracle_errors = 0usize;
         let oracle_start = Instant::now();
         for index in 0..iterations {
             let (inputs, label) = sample(index % 8, index & 8 != 0);
             let outputs = oracle
                 .evaluate(&inputs, &mut ExecutionCounters::default())
                 .unwrap();
-            assert_eq!(black_box(outputs[0] & outputs[1]), label);
+            oracle_errors += usize::from(black_box(outputs[0] & outputs[1]) != label);
         }
         let oracle_ns = oracle_start.elapsed().as_nanos();
+        assert_eq!(oracle_errors, 0);
         println!(
             "BDE0_LEARNING_MEASURE_V1 train_samples=8 heldout_samples=8 before_errors={before_errors} after_errors={after_errors} train_ns={train_ns} infer_samples={iterations} infer_errors={errors} incremental_gate_evaluations={evaluated_gates} incremental_ns={incremental_ns} oracle_ns={oracle_ns} learned_table_bytes={}",
             model.learned_table_bytes()
