@@ -366,3 +366,265 @@ mod tests {
         }
     }
 }
+
+
+/// A bounded supervised Boolean readout trained from the delta engine's
+/// Boolean output features. Each feature signature has two integer vote
+/// counts; inference uses the majority label, with ties predicting false.
+/// This is a trainable truth-table baseline, not evidence of generalization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BooleanDeltaLearner {
+    engine: BooleanDeltaEngine,
+    votes: Vec<(u64, u64)>,
+    max_examples: u64,
+    examples_seen: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BooleanDeltaLearningError {
+    Engine(BooleanDeltaError),
+    FeatureBudgetExceeded,
+    TrainingBudgetExceeded,
+}
+
+impl From<BooleanDeltaError> for BooleanDeltaLearningError {
+    fn from(error: BooleanDeltaError) -> Self {
+        Self::Engine(error)
+    }
+}
+
+/// Exact logical work and pre-update mistake for one supervised example.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BooleanDeltaLearningStep {
+    pub work: BooleanDeltaWork,
+    pub mistake_before_update: bool,
+    pub examples_seen: u64,
+}
+
+impl BooleanDeltaLearner {
+    /// Limit the readout to at most 12 Boolean features (4096 vote buckets).
+    /// `max_examples` is an explicit upper bound on all learning updates.
+    pub fn new(
+        engine: BooleanDeltaEngine,
+        max_feature_bits: usize,
+        max_examples: u64,
+    ) -> Result<Self, BooleanDeltaLearningError> {
+        let features = engine.outputs.len();
+        if features > max_feature_bits || features > 12 {
+            return Err(BooleanDeltaLearningError::FeatureBudgetExceeded);
+        }
+        let buckets = 1usize << features;
+        Ok(Self {
+            engine,
+            votes: vec![(0, 0); buckets],
+            max_examples,
+            examples_seen: 0,
+        })
+    }
+
+    fn signature(&self) -> usize {
+        self.engine
+            .outputs
+            .iter()
+            .enumerate()
+            .fold(0usize, |mask, (index, &wire)| {
+                mask | (usize::from(read(wire, &self.engine.inputs, &self.engine.values)) << index)
+            })
+    }
+
+    fn prediction(&self) -> bool {
+        let (negative, positive) = self.votes[self.signature()];
+        positive > negative
+    }
+
+    /// Predict without updating learned vote counts. The engine's execution
+    /// cache may change, but its learned state remains untouched.
+    pub fn predict(
+        &mut self,
+        inputs: &[bool],
+    ) -> Result<(bool, BooleanDeltaWork), BooleanDeltaLearningError> {
+        let work = self.engine.apply(inputs)?;
+        Ok((self.prediction(), work))
+    }
+
+    /// Online supervised learning with deterministic majority-vote updates.
+    /// Rejected input lengths or exhausted training budgets do not mutate state.
+    pub fn train(
+        &mut self,
+        inputs: &[bool],
+        label: bool,
+    ) -> Result<BooleanDeltaLearningStep, BooleanDeltaLearningError> {
+        if inputs.len() != self.engine.inputs.len() {
+            return Err(BooleanDeltaLearningError::Engine(
+                BooleanDeltaError::InputCount {
+                    expected: self.engine.inputs.len(),
+                    actual: inputs.len(),
+                },
+            ));
+        }
+        if self.examples_seen >= self.max_examples {
+            return Err(BooleanDeltaLearningError::TrainingBudgetExceeded);
+        }
+        let work = self.engine.apply(inputs)?;
+        let signature = self.signature();
+        let mistake_before_update = self.prediction() != label;
+        let (negative, positive) = &mut self.votes[signature];
+        if label {
+            *positive += 1;
+        } else {
+            *negative += 1;
+        }
+        self.examples_seen += 1;
+        Ok(BooleanDeltaLearningStep {
+            work,
+            mistake_before_update,
+            examples_seen: self.examples_seen,
+        })
+    }
+
+    #[must_use]
+    pub fn examples_seen(&self) -> u64 {
+        self.examples_seen
+    }
+
+    #[must_use]
+    pub fn learned_table_bytes(&self) -> usize {
+        self.votes.len() * core::mem::size_of::<(u64, u64)>()
+    }
+}
+
+#[cfg(test)]
+mod learning_tests {
+    use super::*;
+    use crate::{BooleanCircuit, ExecutionCounters};
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    fn learner(max_examples: u64) -> BooleanDeltaLearner {
+        let gates = vec![Gate::Xor(Wire::Input(0), Wire::Input(1))];
+        let outputs = vec![Wire::Gate(0), Wire::Input(2)];
+        let engine = BooleanDeltaEngine::new(
+            4,
+            gates,
+            outputs,
+            BooleanDeltaBudget {
+                max_inputs: 4,
+                max_gates: 1,
+                max_edges: 2,
+                max_outputs: 2,
+            },
+        )
+        .unwrap();
+        BooleanDeltaLearner::new(engine, 2, max_examples).unwrap()
+    }
+
+    fn sample(bits: usize, nuisance: bool) -> ([bool; 4], bool) {
+        let a = bits & 1 != 0;
+        let b = bits & 2 != 0;
+        let c = bits & 4 != 0;
+        ([a, b, c, nuisance], (a ^ b) & c)
+    }
+
+    fn heldout_errors(model: &mut BooleanDeltaLearner) -> usize {
+        (0..8)
+            .filter(|&bits| {
+                let (inputs, label) = sample(bits, true);
+                model.predict(&inputs).unwrap().0 != label
+            })
+            .count()
+    }
+
+    #[test]
+    fn supervised_updates_reduce_errors_on_distinct_heldout_inputs() {
+        let mut model = learner(8);
+        // Train and test use distinct full assignments (nuisance bit differs),
+        // but intentionally share readout feature signatures. This establishes
+        // learnability of the readout, not out-of-distribution generalization.
+        assert_eq!(heldout_errors(&mut model), 2);
+        let mut prequential_mistakes = 0;
+        for bits in 0..8 {
+            let (inputs, label) = sample(bits, false);
+            let step = model.train(&inputs, label).unwrap();
+            prequential_mistakes += usize::from(step.mistake_before_update);
+        }
+        assert_eq!(prequential_mistakes, 2);
+        assert_eq!(model.examples_seen(), 8);
+        assert_eq!(model.learned_table_bytes(), 64);
+        assert_eq!(heldout_errors(&mut model), 0);
+    }
+
+    #[test]
+    fn training_budget_and_invalid_input_fail_without_mutation() {
+        let mut model = learner(1);
+        let before = model.clone();
+        assert_eq!(
+            model.train(&[false], true),
+            Err(BooleanDeltaLearningError::Engine(
+                BooleanDeltaError::InputCount {
+                    expected: 4,
+                    actual: 1,
+                }
+            ))
+        );
+        assert_eq!(model, before);
+        model.train(&[true, false, true, false], true).unwrap();
+        let after = model.clone();
+        assert_eq!(
+            model.train(&[false, false, false, false], false),
+            Err(BooleanDeltaLearningError::TrainingBudgetExceeded)
+        );
+        assert_eq!(model, after);
+        assert_eq!(
+            BooleanDeltaLearner::new(model.engine.clone(), 1, 10),
+            Err(BooleanDeltaLearningError::FeatureBudgetExceeded)
+        );
+    }
+
+    #[test]
+    fn measured_quality_work_and_cpu_time_against_full_circuit() {
+        // Synthetic, fixed-order CPU microbenchmark; time is observational.
+        // Do not interpret one CI runner's timings as a speedup or model claim.
+        let mut model = learner(8);
+        let before_errors = heldout_errors(&mut model);
+        let training_start = Instant::now();
+        for bits in 0..8 {
+            let (inputs, label) = sample(bits, false);
+            model.train(&inputs, label).unwrap();
+        }
+        let train_ns = training_start.elapsed().as_nanos();
+        let after_errors = heldout_errors(&mut model);
+        assert_eq!((before_errors, after_errors), (2, 0));
+
+        let oracle = BooleanCircuit::new(
+            4,
+            vec![Gate::Xor(Wire::Input(0), Wire::Input(1))],
+            vec![Wire::Gate(0), Wire::Input(2)],
+        );
+        let iterations = 20_000usize;
+        let mut evaluated_gates = 0usize;
+        let mut errors = 0usize;
+        let start = Instant::now();
+        for index in 0..iterations {
+            let (inputs, label) = sample(index % 8, index & 8 != 0);
+            let (prediction, work) = model.predict(&inputs).unwrap();
+            evaluated_gates += work.evaluated_gates;
+            errors += usize::from(black_box(prediction) != label);
+        }
+        let incremental_ns = start.elapsed().as_nanos();
+        assert_eq!(errors, 0);
+
+        let oracle_start = Instant::now();
+        for index in 0..iterations {
+            let (inputs, label) = sample(index % 8, index & 8 != 0);
+            let outputs = oracle
+                .evaluate(&inputs, &mut ExecutionCounters::default())
+                .unwrap();
+            assert_eq!(black_box(outputs[0] & outputs[1]), label);
+        }
+        let oracle_ns = oracle_start.elapsed().as_nanos();
+        println!(
+            "BDE0_LEARNING_MEASURE_V1 train_samples=8 heldout_samples=8 before_errors={before_errors} after_errors={after_errors} train_ns={train_ns} infer_samples={iterations} infer_errors={errors} incremental_gate_evaluations={evaluated_gates} incremental_ns={incremental_ns} oracle_ns={oracle_ns} learned_table_bytes={}",
+            model.learned_table_bytes()
+        );
+    }
+}
