@@ -25,14 +25,20 @@ generalization mechanism for unseen feature signatures.
 - HELDOUT: the corresponding eight **distinct full input assignments** with
   nuisance=true. Their readout signatures overlap TRAIN by construction.
 - Control: untrained readout, predicting false on all ties.
-- Metrics: mistakes on heldout before and after training; online pre-update
-  mistakes; exact gate evaluations and table bytes; training and inference
-  wall-clock nanoseconds against a full-circuit reference.
+- Feature-level negative control: omit both positive-signature assignments from
+  the six-example TRAIN subset; evaluate the two positive assignments with
+  nuisance=true. Expect 2/2 errors on the unseen signature. Then train one
+  positive example and expect 0/2 errors because both share that signature.
+- Metrics: mistakes on heldout before and after training; errors on genuinely
+  unseen feature signatures; online pre-update mistakes; exact gate evaluations
+  and table bytes; training and inference wall-clock nanoseconds against a
+  full-circuit reference.
 - Reproducibility: fixed example order and no random seeds or data downloads.
 
 The test's fixed quality expectations are 2/8 mistakes before and 0/8 after
-training, and one online pre-update mistake. These are **test oracles**, not
-measured results until a qualifying run actually passes.
+training, and one online pre-update mistake. The feature-level negative control
+expects 2/2 errors before observing the withheld signature. These are **test
+oracles**, not measured results until a qualifying run actually passes.
 
 ## Execution and evidence boundaries
 
