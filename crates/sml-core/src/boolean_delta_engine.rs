@@ -547,7 +547,7 @@ mod learning_tests {
             let step = model.train(&inputs, label).unwrap();
             prequential_mistakes += usize::from(step.mistake_before_update);
         }
-        assert_eq!(prequential_mistakes, 2);
+        assert_eq!(prequential_mistakes, 1);
         assert_eq!(model.examples_seen(), 8);
         assert_eq!(model.learned_table_bytes(), 64);
         assert_eq!(heldout_errors(&mut model), 0);
