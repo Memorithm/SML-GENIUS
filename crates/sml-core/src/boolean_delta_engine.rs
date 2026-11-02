@@ -115,11 +115,14 @@ impl BooleanDeltaEngine {
         for (index, &gate) in gates.iter().enumerate() {
             let (a, b) = sources(gate);
             validate_wire(a, input_count, index).map_err(BooleanDeltaError::InvalidCircuit)?;
-            edges = edges.checked_add(1).ok_or(BooleanDeltaError::EdgeCountOverflow)?;
+            edges = edges
+                .checked_add(1)
+                .ok_or(BooleanDeltaError::EdgeCountOverflow)?;
             if let Some(b) = b {
-                validate_wire(b, input_count, index)
-                    .map_err(BooleanDeltaError::InvalidCircuit)?;
-                edges = edges.checked_add(1).ok_or(BooleanDeltaError::EdgeCountOverflow)?;
+                validate_wire(b, input_count, index).map_err(BooleanDeltaError::InvalidCircuit)?;
+                edges = edges
+                    .checked_add(1)
+                    .ok_or(BooleanDeltaError::EdgeCountOverflow)?;
             }
             if edges > budget.max_edges {
                 return Err(BooleanDeltaError::BudgetExceeded);
@@ -252,14 +255,18 @@ mod tests {
                 delta.reset(&a).unwrap();
                 assert_eq!(
                     delta.outputs(),
-                    oracle.evaluate(&a, &mut ExecutionCounters::default()).unwrap()
+                    oracle
+                        .evaluate(&a, &mut ExecutionCounters::default())
+                        .unwrap()
                 );
                 let work = delta.apply(&b).unwrap();
                 assert!(work.evaluated_gates <= 5);
                 assert!(work.changed_gates <= work.evaluated_gates);
                 assert_eq!(
                     delta.outputs(),
-                    oracle.evaluate(&b, &mut ExecutionCounters::default()).unwrap()
+                    oracle
+                        .evaluate(&b, &mut ExecutionCounters::default())
+                        .unwrap()
                 );
             }
         }
@@ -274,13 +281,19 @@ mod tests {
         ];
         let mut engine = BooleanDeltaEngine::new(3, gates, vec![Wire::Gate(2)], budget()).unwrap();
         // Input 1 stays false, so changing input 0 cannot change the AND.
-        assert_eq!(engine.apply(&[true, false, false]).unwrap(), BooleanDeltaWork {
-            changed_inputs: 1,
-            evaluated_gates: 1,
-            changed_gates: 0,
-        });
+        assert_eq!(
+            engine.apply(&[true, false, false]).unwrap(),
+            BooleanDeltaWork {
+                changed_inputs: 1,
+                evaluated_gates: 1,
+                changed_gates: 0,
+            }
+        );
         assert_eq!(engine.outputs(), vec![true]);
-        assert_eq!(engine.apply(&[true, false, false]).unwrap(), BooleanDeltaWork::default());
+        assert_eq!(
+            engine.apply(&[true, false, false]).unwrap(),
+            BooleanDeltaWork::default()
+        );
         assert_eq!(engine.apply(&[true, true, false]).unwrap().changed_gates, 3);
         assert_eq!(engine.outputs(), vec![false]);
     }
@@ -289,20 +302,38 @@ mod tests {
     fn invalid_circuits_and_budgets_fail_closed() {
         assert!(matches!(
             BooleanDeltaEngine::new(1, vec![Gate::Not(Wire::Gate(0))], vec![], budget()),
-            Err(BooleanDeltaError::InvalidCircuit(CircuitError::ForwardOrCyclicGateReference { .. }))
+            Err(BooleanDeltaError::InvalidCircuit(
+                CircuitError::ForwardOrCyclicGateReference { .. }
+            ))
         ));
         assert!(matches!(
             BooleanDeltaEngine::new(1, vec![], vec![Wire::Input(1)], budget()),
-            Err(BooleanDeltaError::InvalidCircuit(CircuitError::InvalidInputWire(1)))
+            Err(BooleanDeltaError::InvalidCircuit(
+                CircuitError::InvalidInputWire(1)
+            ))
         ));
         assert_eq!(
-            BooleanDeltaEngine::new(1, vec![Gate::Not(Wire::Input(0))], vec![], BooleanDeltaBudget { max_edges: 0, ..budget() }),
+            BooleanDeltaEngine::new(
+                1,
+                vec![Gate::Not(Wire::Input(0))],
+                vec![],
+                BooleanDeltaBudget {
+                    max_edges: 0,
+                    ..budget()
+                }
+            ),
             Err(BooleanDeltaError::BudgetExceeded)
         );
         let (gates, outputs) = circuit();
         let mut engine = BooleanDeltaEngine::new(3, gates, outputs, budget()).unwrap();
         let before = engine.clone();
-        assert_eq!(engine.apply(&[true]), Err(BooleanDeltaError::InputCount { expected: 3, actual: 1 }));
+        assert_eq!(
+            engine.apply(&[true]),
+            Err(BooleanDeltaError::InputCount {
+                expected: 3,
+                actual: 1
+            })
+        );
         assert_eq!(engine, before);
     }
 
@@ -310,14 +341,28 @@ mod tests {
     fn wide_chain_and_reconvergent_fanout_match_full_oracle() {
         let mut gates = vec![Gate::Xor(Wire::Input(0), Wire::Input(1))];
         for index in 1..129 {
-            gates.push(Gate::Xor(Wire::Gate((index - 1) as u32), Wire::Input((index % 2) as u32)));
+            gates.push(Gate::Xor(
+                Wire::Gate((index - 1) as u32),
+                Wire::Input((index % 2) as u32),
+            ));
         }
         let outputs = vec![Wire::Gate(128), Wire::Gate(63), Wire::Gate(64)];
         let oracle = BooleanCircuit::new(2, gates.clone(), outputs.clone());
         let mut delta = BooleanDeltaEngine::new(2, gates, outputs, budget()).unwrap();
-        for bits in [[false, false], [true, false], [true, true], [false, true], [false, false]] {
+        for bits in [
+            [false, false],
+            [true, false],
+            [true, true],
+            [false, true],
+            [false, false],
+        ] {
             delta.apply(&bits).unwrap();
-            assert_eq!(delta.outputs(), oracle.evaluate(&bits, &mut ExecutionCounters::default()).unwrap());
+            assert_eq!(
+                delta.outputs(),
+                oracle
+                    .evaluate(&bits, &mut ExecutionCounters::default())
+                    .unwrap()
+            );
         }
     }
 }
