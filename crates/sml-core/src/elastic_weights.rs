@@ -622,6 +622,12 @@ impl ElasticWeightPlanner {
             }
         }
 
+        // `validate_contract_v1` only checks the plan against the limits
+        // embedded in the plan itself. A forged plan may carry raised limits,
+        // so enforce the planner policy on the (already verified) aggregate
+        // totals before mutating anything to keep `commit` atomic.
+        self.validate_plan_against_policy(plan)?;
+
         for transition in &plan.transitions {
             let page = self.page_mut(transition.page_id)?;
             page.representation_version = transition.to_representation_version;
@@ -704,6 +710,31 @@ impl ElasticWeightPlanner {
     fn page_mut(&mut self, page_id: PageId) -> Result<&mut ElasticWeightPage, ElasticWeightError> {
         let index = self.page_index(page_id)?;
         Ok(&mut self.pages[index])
+    }
+
+    fn validate_plan_against_policy(
+        &self,
+        plan: &ElasticWeightPlan,
+    ) -> Result<(), ElasticWeightError> {
+        if plan.ram_bytes > self.policy.ram_limit_bytes {
+            return Err(ElasticWeightError::RamBudget {
+                actual: plan.ram_bytes,
+                maximum: self.policy.ram_limit_bytes,
+            });
+        }
+        if plan.vram_bytes > self.policy.vram_limit_bytes {
+            return Err(ElasticWeightError::VramBudget {
+                actual: plan.vram_bytes,
+                maximum: self.policy.vram_limit_bytes,
+            });
+        }
+        if plan.active_parameters > self.policy.max_active_parameters {
+            return Err(ElasticWeightError::ActiveParameterBudget {
+                actual: plan.active_parameters,
+                maximum: self.policy.max_active_parameters,
+            });
+        }
+        Ok(())
     }
 
     fn validate_current_budgets(&self) -> Result<(), ElasticWeightError> {
