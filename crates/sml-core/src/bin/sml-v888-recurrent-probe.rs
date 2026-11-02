@@ -526,4 +526,76 @@ mod tests {
         assert_eq!(zero.edges, 0);
         assert_eq!(zero.output, BooleanWorkspace::from_bits(&[false; 3]));
     }
+
+    #[test]
+    fn recurrence_crosses_boolean_workspace_word_boundary() {
+        const N: usize = 65;
+        // Sources 0, 63 and 64 exercise both sides of the 64-bit boundary.
+        let edges = [
+            (0_usize, 64_usize, 2_u64),
+            (63, 64, 3),
+            (64, 0, 5),
+            (64, 64, 7),
+        ];
+        let mut bytes = b"V8CSR002".to_vec();
+        bytes.extend_from_slice(&(N as u64).to_le_bytes());
+        bytes.extend_from_slice(&(edges.len() as u64).to_le_bytes());
+        for root in 1..=N {
+            bytes.extend_from_slice(&(root as u64).to_le_bytes());
+        }
+        let mut offset = 0_u64;
+        bytes.extend_from_slice(&offset.to_le_bytes());
+        for source in 0..N {
+            offset += edges.iter().filter(|edge| edge.0 == source).count() as u64;
+            bytes.extend_from_slice(&offset.to_le_bytes());
+        }
+        for &(_, target, _) in &edges {
+            bytes.extend_from_slice(&(target as u32).to_le_bytes());
+        }
+        for &(_, _, count) in &edges {
+            bytes.extend_from_slice(&count.to_le_bytes());
+        }
+
+        let graph = Graph::read(&bytes).unwrap();
+        assert_eq!(graph.contacts, 17);
+        assert_eq!(graph.loops, 1);
+        let mut initial = vec![false; N];
+        initial[0] = true;
+        initial[63] = true;
+        let input = BooleanWorkspace::from_bits(&initial);
+        assert!(graph.step(&input, 1).is_err());
+        let first = graph.step(&input, 2).unwrap();
+        let mut expected = vec![false; N];
+        expected[64] = true;
+        assert_eq!(first.output, BooleanWorkspace::from_bits(&expected));
+        assert_eq!(first.edges, 2);
+        assert_eq!(first.contacts, 5);
+        assert_eq!(first.loops, 0);
+        assert_eq!(first.active_sources, 2);
+        assert_eq!(first.source_bits_examined, 130);
+
+        assert!(graph.step(&first.output, 1).is_err());
+        let second = graph.step(&first.output, 2).unwrap();
+        expected[0] = true;
+        assert_eq!(second.output, BooleanWorkspace::from_bits(&expected));
+        assert_eq!(second.edges, 2);
+        assert_eq!(second.contacts, 12);
+        assert_eq!(second.loops, 1);
+        assert_eq!(second.active_sources, 1);
+        assert_eq!(second.source_bits_examined, 130);
+
+        assert!(graph.step(&second.output, 2).is_err());
+        let third = graph.step(&second.output, 3).unwrap();
+        assert_eq!(third.output, BooleanWorkspace::from_bits(&expected));
+        assert_eq!(third.edges, 3);
+        assert_eq!(third.contacts, 14);
+        assert_eq!(third.loops, 1);
+        assert_eq!(third.active_sources, 2);
+        assert_eq!(third.source_bits_examined, 130);
+        for step in [&first, &second, &third] {
+            assert_eq!(step.counters.boolean_ops, step.edges);
+            assert_eq!(step.counters.recurrent_cycles, 1);
+            assert_eq!(step.counters.pairwise_comparisons, 0);
+        }
+    }
 }
