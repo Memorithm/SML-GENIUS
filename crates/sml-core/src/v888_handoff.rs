@@ -474,4 +474,349 @@ mod tests {
             Err(V888ContractError::MissingHandoffAblation)
         );
     }
+
+    #[test]
+    fn source_scope_rejects_noncanonical_hashes_and_missing_counts() {
+        for sha in [
+            "",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "gaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            " aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            let mut bad = source();
+            bad.artifact_sha256 = sha;
+            assert_eq!(
+                bad.validate(),
+                Err(V888ContractError::InvalidSourceArtifactSha256),
+                "{sha:?}"
+            );
+        }
+
+        let mut empty = source();
+        empty.counts = &[];
+        assert_eq!(
+            empty.validate(),
+            Err(V888ContractError::MissingScopedCounts)
+        );
+
+        let zero = [
+            SourceCount {
+                kind: SourceCountKind::MetadataNodes,
+                value: 1,
+            },
+            SourceCount {
+                kind: SourceCountKind::Contacts,
+                value: 0,
+            },
+        ];
+        let mut zero_scope = source();
+        zero_scope.counts = &zero;
+        assert_eq!(
+            zero_scope.validate(),
+            Err(V888ContractError::ZeroScopedCount(
+                SourceCountKind::Contacts
+            ))
+        );
+
+        // Contacts and raw records must not substitute for executable graph counts.
+        let no_pairs = [
+            SourceCount {
+                kind: SourceCountKind::MetadataNodes,
+                value: 1,
+            },
+            SourceCount {
+                kind: SourceCountKind::Contacts,
+                value: 2,
+            },
+            SourceCount {
+                kind: SourceCountKind::RawRecords,
+                value: 3,
+            },
+        ];
+        let mut no_pairs_scope = source();
+        no_pairs_scope.counts = &no_pairs;
+        assert_eq!(
+            no_pairs_scope.validate(),
+            Err(V888ContractError::MissingExecutableGraphCounts)
+        );
+        let no_nodes = [SourceCount {
+            kind: SourceCountKind::DirectedPairs,
+            value: 1,
+        }];
+        let mut no_nodes_scope = source();
+        no_nodes_scope.counts = &no_nodes;
+        assert_eq!(
+            no_nodes_scope.validate(),
+            Err(V888ContractError::MissingExecutableGraphCounts)
+        );
+    }
+
+    #[test]
+    fn delayed_xor_rejects_every_missing_bound_control_and_leak() {
+        let ok = DelayedXorProtocol {
+            delay_steps: 1,
+            bounded_readout_bits: 1,
+            fixed_recurrence: true,
+            exact_sequential_logic_control: true,
+            no_reservoir_control: true,
+            topology_matched_control: true,
+            simplified_lif_rail: true,
+            integer_event_rail: true,
+            boolean_recurrent_rail: true,
+            hidden_input_history: false,
+            cross_trial_state_leakage: false,
+        };
+        ok.validate().unwrap();
+        let cases = [
+            (
+                DelayedXorProtocol {
+                    delay_steps: 0,
+                    ..ok
+                },
+                V888ContractError::ZeroDelay,
+            ),
+            (
+                DelayedXorProtocol {
+                    bounded_readout_bits: 0,
+                    ..ok
+                },
+                V888ContractError::UnboundedReadout,
+            ),
+            (
+                DelayedXorProtocol {
+                    fixed_recurrence: false,
+                    ..ok
+                },
+                V888ContractError::RecurrenceNotFrozen,
+            ),
+            (
+                DelayedXorProtocol {
+                    exact_sequential_logic_control: false,
+                    ..ok
+                },
+                V888ContractError::MissingDelayedXorControl,
+            ),
+            (
+                DelayedXorProtocol {
+                    no_reservoir_control: false,
+                    ..ok
+                },
+                V888ContractError::MissingDelayedXorControl,
+            ),
+            (
+                DelayedXorProtocol {
+                    topology_matched_control: false,
+                    ..ok
+                },
+                V888ContractError::MissingDelayedXorControl,
+            ),
+            (
+                DelayedXorProtocol {
+                    simplified_lif_rail: false,
+                    ..ok
+                },
+                V888ContractError::MissingDynamicsRail,
+            ),
+            (
+                DelayedXorProtocol {
+                    integer_event_rail: false,
+                    ..ok
+                },
+                V888ContractError::MissingDynamicsRail,
+            ),
+            (
+                DelayedXorProtocol {
+                    cross_trial_state_leakage: true,
+                    ..ok
+                },
+                V888ContractError::CrossTrialStateLeakage,
+            ),
+        ];
+        for (protocol, expected) in cases {
+            assert_eq!(protocol.validate(), Err(expected), "{protocol:?}");
+        }
+    }
+
+    #[test]
+    fn v888_bool_4_handoff_rejects_every_identity_and_policy_violation() {
+        let h = handoff();
+        let cases = [
+            (
+                V888BoolHandoff {
+                    stage: "V888-BOOL-3.0",
+                    ..h
+                },
+                V888ContractError::WrongHandoffStage,
+            ),
+            (
+                V888BoolHandoff {
+                    strategy_revision: "2026-09-22.2",
+                    ..h
+                },
+                V888ContractError::WrongStrategyIdentity,
+            ),
+            (
+                V888BoolHandoff {
+                    strategy_commit: "7f8f08e764dd5f36688533e9f7e7fb2f290f6e18",
+                    ..h
+                },
+                V888ContractError::WrongStrategyIdentity,
+            ),
+            (
+                V888BoolHandoff {
+                    rust_interface_id: "sml.v888-bool-handoff.v2",
+                    ..h
+                },
+                V888ContractError::WrongRustInterfaceIdentity,
+            ),
+            (
+                V888BoolHandoff {
+                    rust_source_commit: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+                    ..h
+                },
+                V888ContractError::InvalidRustSourceCommit,
+            ),
+            (
+                V888BoolHandoff {
+                    rust_source_commit: "bbbbbbb",
+                    ..h
+                },
+                V888ContractError::InvalidRustSourceCommit,
+            ),
+            (
+                V888BoolHandoff {
+                    graph_artifact_sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    ..h
+                },
+                V888ContractError::InvalidGraphArtifactSha256,
+            ),
+            (
+                V888BoolHandoff {
+                    source: SourceScope {
+                        scope_id: "",
+                        ..h.source
+                    },
+                    ..h
+                },
+                V888ContractError::MissingSourceScope,
+            ),
+            (
+                V888BoolHandoff {
+                    ablations: HandoffAblations {
+                        graph_only: false,
+                        ..h.ablations
+                    },
+                    ..h
+                },
+                V888ContractError::MissingHandoffAblation,
+            ),
+            (
+                V888BoolHandoff {
+                    ablations: HandoffAblations {
+                        existing_router_only: false,
+                        ..h.ablations
+                    },
+                    ..h
+                },
+                V888ContractError::MissingHandoffAblation,
+            ),
+            (
+                V888BoolHandoff {
+                    existing_stack: ExistingStackReuse {
+                        gf2_anf: false,
+                        ..h.existing_stack
+                    },
+                    ..h
+                },
+                V888ContractError::ExistingBooleanStackNotReused,
+            ),
+            (
+                V888BoolHandoff {
+                    existing_stack: ExistingStackReuse {
+                        bounded_memory: false,
+                        ..h.existing_stack
+                    },
+                    ..h
+                },
+                V888ContractError::ExistingBooleanStackNotReused,
+            ),
+            (
+                V888BoolHandoff {
+                    existing_stack: ExistingStackReuse {
+                        routing: false,
+                        ..h.existing_stack
+                    },
+                    ..h
+                },
+                V888ContractError::ExistingBooleanStackNotReused,
+            ),
+            (
+                V888BoolHandoff {
+                    max_memory_bytes: 0,
+                    ..h
+                },
+                V888ContractError::MissingBoundedResources,
+            ),
+            (
+                V888BoolHandoff {
+                    max_readout_bits: 0,
+                    ..h
+                },
+                V888ContractError::MissingBoundedResources,
+            ),
+            (
+                V888BoolHandoff {
+                    hidden_input_history_bypass: true,
+                    ..h
+                },
+                V888ContractError::HiddenInputHistory,
+            ),
+            (
+                V888BoolHandoff {
+                    validation: IndependentValidation {
+                        sml_quality_qualified: false,
+                        ..h.validation
+                    },
+                    ..h
+                },
+                V888ContractError::IndependentSmlValidationMissing,
+            ),
+            (
+                V888BoolHandoff {
+                    validation: IndependentValidation {
+                        sml_resource_qualified: false,
+                        ..h.validation
+                    },
+                    ..h
+                },
+                V888ContractError::IndependentSmlValidationMissing,
+            ),
+            (
+                V888BoolHandoff {
+                    protected_final_access: true,
+                    ..h
+                },
+                V888ContractError::ProtectedFinalAccess,
+            ),
+            (
+                V888BoolHandoff {
+                    model_promotion_requested: true,
+                    ..h
+                },
+                V888ContractError::ModelPromotionRequested,
+            ),
+            (
+                V888BoolHandoff {
+                    default_runtime_policy_change: true,
+                    ..h
+                },
+                V888ContractError::DefaultRuntimePolicyChange,
+            ),
+        ];
+        for (candidate, expected) in cases {
+            assert_eq!(candidate.validate(), Err(expected), "{expected:?}");
+        }
+    }
 }
