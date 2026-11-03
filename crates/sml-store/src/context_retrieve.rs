@@ -444,6 +444,83 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         self.reread(candidates, accounting)
     }
 
+    /// Adaptive-width variant of [`Self::retrieve_two_level`]: same probe
+    /// order and same `max_shortlist` cap; an overflowing bucket is ordered
+    /// by (Hamming distance over the top `secondary_bits` bits of the first
+    /// SBG word, that key, insertion). Keys come from the in-memory index
+    /// signatures, so no extra raw reread happens; each overflowing-bucket
+    /// member costs one key compare, counted in `secondary_keys_scanned`.
+    /// `secondary_bits == bucket_prefix_bits` reproduces the two-level
+    /// shortlist. `secondary_bits` must be in `1..=64`.
+    pub fn retrieve_multi_level(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+        bucket_radius: u32,
+        secondary_bits: u32,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        if bucket_radius > self.config.bucket_prefix_bits
+            || secondary_bits == 0
+            || secondary_bits > 64
+        {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
+        if self.entries.is_empty() {
+            return Err(ContextRetrieveError::EmptyIndex);
+        }
+        let mut accounting = RetrieveAccounting::default();
+        let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
+        if let Some(key) = query.associative_key {
+            if let Some(index) = self.associative_lookup(key, &policy, &mut accounting)? {
+                shortlist.push(index);
+            }
+        }
+        let key = bucket_key(&query.bitfield, self.config.bucket_prefix_bits);
+        let query_secondary = secondary_key(&query.bitfield, secondary_bits);
+        let mut probe: Vec<(u32, u64)> = self
+            .buckets
+            .keys()
+            .map(|&other| ((other ^ key).count_ones(), other))
+            .filter(|&(distance, _)| distance <= bucket_radius)
+            .collect();
+        probe.sort_unstable();
+        'probe: for (_, bucket_key) in probe {
+            let Some(bucket) = self.buckets.get(&bucket_key) else {
+                continue;
+            };
+            let fresh = bucket.iter().filter(|i| !shortlist.contains(i)).count();
+            if fresh <= policy.max_shortlist - shortlist.len() {
+                for &index in bucket {
+                    if !shortlist.contains(&index) {
+                        shortlist.push(index);
+                    }
+                }
+                continue;
+            }
+            accounting.secondary_keys_scanned += bucket.len() as u64;
+            let mut order: Vec<(u32, u64, usize)> = bucket
+                .iter()
+                .map(|&index| {
+                    let sub = secondary_key(&self.entries[index].signature, secondary_bits);
+                    ((sub ^ query_secondary).count_ones(), sub, index)
+                })
+                .collect();
+            order.sort_unstable();
+            for (_, _, index) in order {
+                if shortlist.len() == policy.max_shortlist {
+                    break 'probe;
+                }
+                if !shortlist.contains(&index) {
+                    shortlist.push(index);
+                }
+            }
+        }
+        accounting.shortlisted = shortlist.len() as u64;
+        let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
+        self.reread(candidates, accounting)
+    }
+
     fn associative_lookup(
         &self,
         key: u64,
