@@ -10,7 +10,7 @@
   "head_sha": "c8676e96200bef912d959aafca2253be57ebbd25",
   "head_sha_note": "Tested code commit; the report-only commit on top of it is the PR head.",
   "branch": "feat/g1-context3-two-level-shortlist",
-  "pr_url": "PENDING_SET_AFTER_OPEN",
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/807",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "remoteops_actions_run": "https://github.com/Memorithm/RemoteOps/actions/runs/41701874209",
   "remoteops_wake_outcome": "Wake received ~2026-11-03T19:17:49Z while lease idle (#803 merged 16685549); this cycle started after it; first commit 1463f95b at 2026-11-03T19:20:39Z. Not SKIPPED_LOCKED.",
