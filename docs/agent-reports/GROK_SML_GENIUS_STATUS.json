@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "agent": "grok",
+  "status": "IN_PROGRESS",
+  "timestamp_utc": "2026-11-03T17:50:00Z",
+  "last_report_utc": "2026-11-03T17:50:00Z",
+  "milestone": "G1 CONTEXT-3",
+  "task": "Independent exhaustive retrieval oracle + provenance/tie/abstention/corruption tests",
+  "base_sha": "def58e3e0c3adfd26817473ec11582b7b2cfa709",
+  "head_sha": "e6df80992606afe3869dbfa87e9f6c3ace7d8ec7",
+  "head_sha_note": "Tested code commit; the report-only commit on top of it is the PR head.",
+  "branch": "feat/g1-context3-oracle",
+  "remoteops_wake_task_id": "sml-genius-20261103T174453Z-bb866975",
+  "remoteops_wake_actions_run": "https://github.com/Memorithm/RemoteOps/actions/runs/41687191661",
+  "remoteops_wake_outcome": "SKIPPED_LOCKED (lease held by this active cycle)",
+  "tests": {"fmt": "pass", "clippy_workspace_D_warnings": "pass", "cargo_test_locked_workspace": "2129 passed, 0 failed", "new_tests": 5},
+  "metrics": "NOT_MEASURED (fixture-only correctness tests; no latency/RSS/quality claim)",
+  "blocked_reason": "Webhook wake delivery attested (task sml-genius-20261103T174453Z-bb866975, received 2026-11-03T17:44:54Z) but the half-hour RemoteOps schedule is NOT enabled; end-to-end connection NOT qualified until ChatGPT/operator validates this PR and report evidence."
+}
