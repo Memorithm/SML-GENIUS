@@ -296,6 +296,53 @@ mod tests {
     }
 
     #[test]
+    fn exhaustive_four_feature_affine_truth_tables_match_independent_oracle() {
+        // Enumerate all 2^(4+1) affine label functions, including the
+        // constant functions. Five independent TRAIN rows determine each
+        // function; all eleven HELDOUT signatures must then be predictable.
+        // This is an exact finite-domain correctness oracle, not a claim
+        // about noisy or nonlinear learning.
+        for coefficients in 0u32..32 {
+            let expected = |bits: usize| {
+                let selected = bits & (coefficients as usize & 0b1111);
+                (selected.count_ones() & 1 != 0) ^ (coefficients & 0b10000 != 0)
+            };
+            let mut learner = BooleanDeltaAffineLearner::new(engine(), 4, 5).unwrap();
+            for bits in TRAIN {
+                learner.train(&inputs(bits), expected(bits)).unwrap();
+            }
+            assert_eq!(learner.rank(), 5, "coefficients={coefficients}");
+            for bits in 0..16 {
+                let (actual, _) = learner.predict(&inputs(bits)).unwrap();
+                assert_eq!(
+                    actual,
+                    Some(expected(bits)),
+                    "coefficients={coefficients} signature={bits}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nonlinear_label_conflict_is_rejected_without_state_mutation() {
+        // XOR-affine interpolation cannot fit a nonlinear AND target.
+        // Once all five independent rows are known, a contradictory
+        // sixth row must fail atomically rather than corrupt the basis.
+        let mut learner = BooleanDeltaAffineLearner::new(engine(), 4, 6).unwrap();
+        for bits in TRAIN {
+            learner
+                .train(&inputs(bits), bits & 1 != 0 && bits & 2 != 0)
+                .unwrap();
+        }
+        let before = learner.clone();
+        assert_eq!(
+            learner.train(&inputs(3), true),
+            Err(BooleanAffineError::InconsistentLabels)
+        );
+        assert_eq!(learner, before);
+    }
+
+    #[test]
     fn measured_affine_generalization_against_truth_table() {
         // Fixed TRAIN/HELDOUT with disjoint complete feature signatures.
         // Timings are observational, not speedup or model-quality claims.
