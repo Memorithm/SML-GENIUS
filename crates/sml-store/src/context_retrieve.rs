@@ -293,12 +293,34 @@ impl<const BITS: usize> ContextRetriever<BITS> {
     }
 
     /// Bounded retrieval: shortlist -> MOR top-k -> verified raw reread.
+    ///
+    /// Equivalent to [`Self::retrieve_with_neighbor_radius`] with radius 0
+    /// (only the query's own prefix bucket is probed).
     pub fn retrieve(
         &self,
         query: &RetrieveQuery<BITS>,
         policy: &ContextRetrievePolicy,
     ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        self.retrieve_with_neighbor_radius(query, policy, 0)
+    }
+
+    /// Bounded retrieval that also probes neighbouring prefix buckets whose
+    /// key is within `bucket_radius` Hamming distance of the query's key.
+    ///
+    /// Buckets are visited in deterministic `(key distance, key)` order and
+    /// the shortlist still stops at `policy.max_shortlist`, so the work
+    /// budget is unchanged; only which candidates fill it changes. A radius
+    /// larger than `bucket_prefix_bits` is rejected as `BudgetOverflow`.
+    pub fn retrieve_with_neighbor_radius(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+        bucket_radius: u32,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
         let policy = policy.validate()?;
+        if bucket_radius > self.config.bucket_prefix_bits {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
         if self.entries.is_empty() {
             return Err(ContextRetrieveError::EmptyIndex);
         }
@@ -310,13 +332,25 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             }
         }
         let key = bucket_key(&query.bitfield, self.config.bucket_prefix_bits);
-        if let Some(bucket) = self.buckets.get(&key) {
-            for &index in bucket {
-                if shortlist.len() == policy.max_shortlist {
-                    break;
-                }
-                if !shortlist.contains(&index) {
-                    shortlist.push(index);
+        let mut probe: Vec<(u32, u64)> = if bucket_radius == 0 {
+            vec![(0, key)]
+        } else {
+            self.buckets
+                .keys()
+                .map(|&other| ((other ^ key).count_ones(), other))
+                .filter(|&(distance, _)| distance <= bucket_radius)
+                .collect()
+        };
+        probe.sort_unstable();
+        'probe: for (_, bucket_key) in probe {
+            if let Some(bucket) = self.buckets.get(&bucket_key) {
+                for &index in bucket {
+                    if shortlist.len() == policy.max_shortlist {
+                        break 'probe;
+                    }
+                    if !shortlist.contains(&index) {
+                        shortlist.push(index);
+                    }
                 }
             }
         }
