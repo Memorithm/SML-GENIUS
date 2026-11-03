@@ -453,3 +453,136 @@ fn g1_two_level_corruption_fails_closed() {
         .retrieve_two_level(&query(word), &policy(16, 1), 0)
         .is_err());
 }
+
+// ---- G1 CONTEXT-3 tranche: adaptive secondary width (same cap) ----
+// `retrieve_multi_level(.., secondary_bits)` orders an overflowing bucket by
+// Hamming distance over the TOP `secondary_bits` bits of the first SBG word
+// (computed from the in-memory index signatures; no extra raw reread).
+// secondary_bits == bucket_prefix_bits reproduces `retrieve_two_level`.
+// Width 64 - prefix_bits on BITS=64 is an exact in-bucket ordering by the
+// non-bucket bits: it costs one popcount per overflowing-bucket member
+// (reported as secondary_keys_scanned), NOT a wider cap or extra reread.
+
+fn measure_multi(
+    fixture: &Fixture,
+    retriever: &ContextRetriever<BITS>,
+    radius: u32,
+    cap: usize,
+    queries: u64,
+    width: u32,
+) -> Cell {
+    let mut cell = Cell::default();
+    for seed in 0..queries {
+        let word = fixture.dist.query(fixture.segments, seed);
+        cell.queries += 1;
+        for (slot, &k) in KS.iter().enumerate() {
+            let oracle = oracle_top_k(fixture, word, k);
+            let kth = oracle.last().unwrap().0;
+            let t0 = Instant::now();
+            let (hits, acc) = retriever
+                .retrieve_multi_level(&query(word), &policy(cap, k), radius, width)
+                .unwrap();
+            cell.time += t0.elapsed();
+            check_hits(fixture, word, &hits, &acc);
+            assert!(acc.shortlisted <= cap as u64);
+            cell.secondary += acc.secondary_keys_scanned;
+            cell.recall_sum[slot] += recall_at_k(&hits, &oracle, kth);
+            if hits.is_empty() {
+                cell.abstain += 1;
+            }
+            cell.shortlisted += acc.shortlisted;
+            cell.reread_bytes += acc.raw_reread_bytes;
+        }
+    }
+    cell
+}
+
+#[test]
+fn g1_multi_level_width_equal_prefix_matches_two_level() {
+    let fixture = Fixture::build(2910, 256, Dist::Clustered);
+    for prefix in [4_u32, 8] {
+        let retriever = fixture.open(prefix);
+        for seed in 0..16 {
+            let word = fixture.dist.query(256, seed);
+            for k in KS {
+                for radius in [0_u32, 1] {
+                    let p = policy(32, k);
+                    let (a, aa) = retriever
+                        .retrieve_two_level(&query(word), &p, radius)
+                        .unwrap();
+                    let (b, ba) = retriever
+                        .retrieve_multi_level(&query(word), &p, radius, prefix)
+                        .unwrap();
+                    assert_eq!(a, b);
+                    assert_eq!(aa.shortlisted, ba.shortlisted);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn g1_multi_level_rejects_bad_width_and_radius() {
+    let fixture = Fixture::build(2911, 64, Dist::Clustered);
+    let retriever = fixture.open(8);
+    assert!(retriever
+        .retrieve_multi_level(&query(0), &policy(8, 1), 0, 0)
+        .is_err());
+    assert!(retriever
+        .retrieve_multi_level(&query(0), &policy(8, 1), 0, 65)
+        .is_err());
+    assert!(retriever
+        .retrieve_multi_level(&query(0), &policy(8, 1), 9, 8)
+        .is_err());
+}
+
+#[test]
+fn g1_multi_level_matrix_same_cap() {
+    let mut stream = 2920;
+    println!(
+        "G1_MULTILEVEL dist size prefix_bits radius cap width R@1 R@2 R@4 abstain \
+         mean_shortlisted mean_secondary_scanned mean_reread_bytes us_per_query"
+    );
+    for dist in [Dist::Clustered, Dist::NoisyClustered, Dist::Uniform] {
+        for size in [256_u64, 1024] {
+            let fixture = Fixture::build(stream, size, dist);
+            stream += 1;
+            for prefix in [4_u32, 8] {
+                let retriever = fixture.open(prefix);
+                for radius in [0_u32, 1] {
+                    let cap = 32;
+                    let single = measure(&fixture, &retriever, radius, cap, 48, false);
+                    let mut rows = vec![("single".to_string(), single)];
+                    for width in [prefix, 16, 32, 64 - prefix] {
+                        let c = measure_multi(&fixture, &retriever, radius, cap, 48, width);
+                        rows.push((format!("w{width}"), c));
+                    }
+                    let base_short = rows[0].1.shortlisted;
+                    for (name, cell) in &rows {
+                        let calls = (cell.queries * KS.len() as u64) as f64;
+                        let r: Vec<f64> = cell
+                            .recall_sum
+                            .iter()
+                            .map(|s| s / cell.queries as f64)
+                            .collect();
+                        println!(
+                            "G1_MULTILEVEL {} {size} {prefix} {radius} {cap} {name} {:.3} {:.3} \
+                             {:.3} {:.3} {:.1} {:.1} {:.1} {:.1}",
+                            dist.name(),
+                            r[0],
+                            r[1],
+                            r[2],
+                            cell.abstain as f64 / calls,
+                            cell.shortlisted as f64 / calls,
+                            cell.secondary as f64 / calls,
+                            cell.reread_bytes as f64 / calls,
+                            cell.time.as_secs_f64() * 1e6 / calls,
+                        );
+                        // Same probe set, same cap: identical shortlist size.
+                        assert_eq!(cell.shortlisted, base_short);
+                    }
+                }
+            }
+        }
+    }
+}
