@@ -122,6 +122,9 @@ pub struct RetrieveAccounting {
     pub raw_reread_bytes: u64,
     pub associative_hits: u64,
     pub associative_misses: u64,
+    /// Distinct secondary keys compared by [`ContextRetriever::retrieve_two_level`]
+    /// inside overflowing buckets (zero for single-level retrieval).
+    pub secondary_keys_scanned: u64,
 }
 
 impl RetrieveAccounting {
@@ -178,6 +181,9 @@ pub struct ContextRetriever<const BITS: usize> {
     config: ContextRetrieverConfig,
     entries: Vec<IndexEntry<BITS>>,
     buckets: BTreeMap<u64, Vec<usize>>,
+    /// Per primary bucket: secondary key (top `bucket_prefix_bits` bits of
+    /// the first SBG word) -> entry indices in insertion order.
+    sub_buckets: BTreeMap<u64, BTreeMap<u64, Vec<usize>>>,
     memory: Option<BoundedAssociativeMemory>,
 }
 
@@ -200,6 +206,7 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             config,
             entries: Vec::new(),
             buckets: BTreeMap::new(),
+            sub_buckets: BTreeMap::new(),
             memory: None,
         };
         for segment_id in 1..=segment_count {
@@ -208,9 +215,13 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             let manifest = retriever.load_manifest(segment_id)?;
             let signature = retriever.load_signature(segment_id, &manifest)?;
             let index = retriever.entries.len();
+            let primary = bucket_key(&signature, config.bucket_prefix_bits);
+            retriever.buckets.entry(primary).or_default().push(index);
             retriever
-                .buckets
-                .entry(bucket_key(&signature, config.bucket_prefix_bits))
+                .sub_buckets
+                .entry(primary)
+                .or_default()
+                .entry(secondary_key(&signature, config.bucket_prefix_bits))
                 .or_default()
                 .push(index);
             retriever.entries.push(IndexEntry {
@@ -352,6 +363,217 @@ impl<const BITS: usize> ContextRetriever<BITS> {
                         shortlist.push(index);
                     }
                 }
+            }
+        }
+        accounting.shortlisted = shortlist.len() as u64;
+        let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
+        self.reread(candidates, accounting)
+    }
+
+    /// Two-level variant of [`Self::retrieve_with_neighbor_radius`]: same
+    /// probe order and same `max_shortlist` cap, but when a probed bucket
+    /// does not fit in the remaining cap its members are taken in
+    /// (secondary-key Hamming distance, secondary key, insertion) order
+    /// instead of insertion order. The secondary key is the top
+    /// `bucket_prefix_bits` bits of the first SBG word. Buckets that fit are
+    /// taken whole, so the result equals single-level retrieval whenever no
+    /// probed bucket overflows.
+    pub fn retrieve_two_level(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+        bucket_radius: u32,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        if bucket_radius > self.config.bucket_prefix_bits {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
+        if self.entries.is_empty() {
+            return Err(ContextRetrieveError::EmptyIndex);
+        }
+        let mut accounting = RetrieveAccounting::default();
+        let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
+        if let Some(key) = query.associative_key {
+            if let Some(index) = self.associative_lookup(key, &policy, &mut accounting)? {
+                shortlist.push(index);
+            }
+        }
+        let prefix_bits = self.config.bucket_prefix_bits;
+        let key = bucket_key(&query.bitfield, prefix_bits);
+        let query_secondary = secondary_key(&query.bitfield, prefix_bits);
+        let mut probe: Vec<(u32, u64)> = self
+            .buckets
+            .keys()
+            .map(|&other| ((other ^ key).count_ones(), other))
+            .filter(|&(distance, _)| distance <= bucket_radius)
+            .collect();
+        probe.sort_unstable();
+        'probe: for (_, bucket_key) in probe {
+            let Some(bucket) = self.buckets.get(&bucket_key) else {
+                continue;
+            };
+            let fresh = bucket.iter().filter(|i| !shortlist.contains(i)).count();
+            if fresh <= policy.max_shortlist - shortlist.len() {
+                for &index in bucket {
+                    if !shortlist.contains(&index) {
+                        shortlist.push(index);
+                    }
+                }
+                continue;
+            }
+            let subs = &self.sub_buckets[&bucket_key];
+            accounting.secondary_keys_scanned += subs.len() as u64;
+            let mut order: Vec<(u32, u64)> = subs
+                .keys()
+                .map(|&sub| ((sub ^ query_secondary).count_ones(), sub))
+                .collect();
+            order.sort_unstable();
+            for (_, sub) in order {
+                for &index in &subs[&sub] {
+                    if shortlist.len() == policy.max_shortlist {
+                        break 'probe;
+                    }
+                    if !shortlist.contains(&index) {
+                        shortlist.push(index);
+                    }
+                }
+            }
+        }
+        accounting.shortlisted = shortlist.len() as u64;
+        let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
+        self.reread(candidates, accounting)
+    }
+
+    /// Adaptive-width variant of [`Self::retrieve_two_level`]: same probe
+    /// order and same `max_shortlist` cap; an overflowing bucket is ordered
+    /// by (Hamming distance over the top `secondary_bits` bits of the first
+    /// SBG word, that key, insertion). Keys come from the in-memory index
+    /// signatures, so no extra raw reread happens; each overflowing-bucket
+    /// member costs one key compare, counted in `secondary_keys_scanned`.
+    /// `secondary_bits == bucket_prefix_bits` reproduces the two-level
+    /// shortlist. `secondary_bits` must be in `1..=64`.
+    pub fn retrieve_multi_level(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+        bucket_radius: u32,
+        secondary_bits: u32,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        if bucket_radius > self.config.bucket_prefix_bits
+            || secondary_bits == 0
+            || secondary_bits > 64
+        {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
+        if self.entries.is_empty() {
+            return Err(ContextRetrieveError::EmptyIndex);
+        }
+        let mut accounting = RetrieveAccounting::default();
+        let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
+        if let Some(key) = query.associative_key {
+            if let Some(index) = self.associative_lookup(key, &policy, &mut accounting)? {
+                shortlist.push(index);
+            }
+        }
+        let key = bucket_key(&query.bitfield, self.config.bucket_prefix_bits);
+        let query_secondary = secondary_key(&query.bitfield, secondary_bits);
+        let mut probe: Vec<(u32, u64)> = self
+            .buckets
+            .keys()
+            .map(|&other| ((other ^ key).count_ones(), other))
+            .filter(|&(distance, _)| distance <= bucket_radius)
+            .collect();
+        probe.sort_unstable();
+        'probe: for (_, bucket_key) in probe {
+            let Some(bucket) = self.buckets.get(&bucket_key) else {
+                continue;
+            };
+            let fresh = bucket.iter().filter(|i| !shortlist.contains(i)).count();
+            if fresh <= policy.max_shortlist - shortlist.len() {
+                for &index in bucket {
+                    if !shortlist.contains(&index) {
+                        shortlist.push(index);
+                    }
+                }
+                continue;
+            }
+            accounting.secondary_keys_scanned += bucket.len() as u64;
+            let mut order: Vec<(u32, u64, usize)> = bucket
+                .iter()
+                .map(|&index| {
+                    let sub = secondary_key(&self.entries[index].signature, secondary_bits);
+                    ((sub ^ query_secondary).count_ones(), sub, index)
+                })
+                .collect();
+            order.sort_unstable();
+            for (_, _, index) in order {
+                if shortlist.len() == policy.max_shortlist {
+                    break 'probe;
+                }
+                if !shortlist.contains(&index) {
+                    shortlist.push(index);
+                }
+            }
+        }
+        accounting.shortlisted = shortlist.len() as u64;
+        let candidates = self.rank(&shortlist, &query.bitfield, policy.top_k)?;
+        self.reread(candidates, accounting)
+    }
+
+    /// Global-probe variant of [`Self::retrieve_multi_level`]: pools every
+    /// member of the buckets within `bucket_radius` and fills the same
+    /// `max_shortlist` cap in (bucket-key Hamming distance + Hamming distance
+    /// over the top `secondary_bits` bits of the first SBG word, insertion)
+    /// order, so a wider radius cannot be crowded out by the nearest bucket.
+    /// Keys come from in-memory index signatures (no extra raw reread); each
+    /// probed member costs one compare, counted in `secondary_keys_scanned`.
+    pub fn retrieve_global_probe(
+        &self,
+        query: &RetrieveQuery<BITS>,
+        policy: &ContextRetrievePolicy,
+        bucket_radius: u32,
+        secondary_bits: u32,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        let prefix_bits = self.config.bucket_prefix_bits;
+        if bucket_radius > prefix_bits || secondary_bits == 0 || secondary_bits > 64 {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
+        if self.entries.is_empty() {
+            return Err(ContextRetrieveError::EmptyIndex);
+        }
+        let mut accounting = RetrieveAccounting::default();
+        let mut shortlist: Vec<usize> = Vec::with_capacity(policy.max_shortlist);
+        if let Some(key) = query.associative_key {
+            if let Some(index) = self.associative_lookup(key, &policy, &mut accounting)? {
+                shortlist.push(index);
+            }
+        }
+        let key = bucket_key(&query.bitfield, prefix_bits);
+        let query_secondary = secondary_key(&query.bitfield, secondary_bits);
+        let mut pooled: Vec<(u32, usize)> = Vec::new();
+        for (&other, bucket) in &self.buckets {
+            let bucket_distance = (other ^ key).count_ones();
+            if bucket_distance > bucket_radius {
+                continue;
+            }
+            accounting.secondary_keys_scanned += bucket.len() as u64;
+            for &index in bucket {
+                let sub = secondary_key(&self.entries[index].signature, secondary_bits);
+                pooled.push((
+                    bucket_distance + (sub ^ query_secondary).count_ones(),
+                    index,
+                ));
+            }
+        }
+        pooled.sort_unstable();
+        for (_, index) in pooled {
+            if shortlist.len() == policy.max_shortlist {
+                break;
+            }
+            if !shortlist.contains(&index) {
+                shortlist.push(index);
             }
         }
         accounting.shortlisted = shortlist.len() as u64;
@@ -537,6 +759,15 @@ fn mor_top_k(top_k: usize) -> Result<SemanticMorTopK, ContextRetrieveError> {
         2 => Ok(SemanticMorTopK::Two),
         4 => Ok(SemanticMorTopK::Four),
         _ => Err(ContextRetrieveError::BudgetOverflow),
+    }
+}
+
+fn secondary_key<const BITS: usize>(signature: &SemanticBitField<BITS>, prefix_bits: u32) -> u64 {
+    let word = signature.words()[0];
+    if prefix_bits >= 64 {
+        word
+    } else {
+        word >> (64 - prefix_bits)
     }
 }
 
