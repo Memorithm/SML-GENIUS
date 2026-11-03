@@ -28,7 +28,10 @@ fn online_updates_are_deterministic_across_replayed_streams() {
             for shift in (0..8).rev() {
                 let p_left = left.p12();
                 let p_right = right.p12();
-                assert_eq!(p_left, p_right, "prediction drift at byte {byte} bit {shift}");
+                assert_eq!(
+                    p_left, p_right,
+                    "prediction drift at byte {byte} bit {shift}"
+                );
                 assert!((1..=4095).contains(&p_left), "invalid probability {p_left}");
                 let bit = byte & (1 << shift) != 0;
                 left.update(bit);
