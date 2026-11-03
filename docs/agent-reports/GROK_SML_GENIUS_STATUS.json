@@ -2,23 +2,24 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "IN_PROGRESS",
-  "timestamp_utc": "2026-11-03T18:39:11Z",
-  "last_report_utc": "2026-11-03T18:39:11Z",
+  "timestamp_utc": "2026-11-03T19:21:10Z",
+  "last_report_utc": "2026-11-03T19:21:10Z",
   "milestone": "G1 CONTEXT-3",
-  "task": "Recall@K of bucket-shortlist retrieval vs exhaustive oracle + accounting/latency matrix, bucket-miss and cap-truncation tests",
-  "base_sha": "754b523cc0b67aa7279f58cb2f26758718c5e6df",
-  "head_sha": "6e668b51214b21b535ed7bd5f7411f5057f3e01d",
+  "task": "Neighbour-bucket (Hamming radius) shortlist vs single-bucket, Recall@K matrix vs exhaustive oracle, bucket-miss recovery/failure, integrity tests",
+  "base_sha": "1668554916fe7a31e44c4b3ad3d01d50b88ef7d1",
+  "head_sha": "1463f95b053b04fba66edcc2bba830ffb901b7d6",
   "head_sha_note": "Tested code commit; the report-only commit on top of it is the PR head.",
-  "branch": "feat/g1-context3-recall-k",
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/803",
-  "remoteops_wake_task_id": "sml-genius-20261103T174453Z-bb866975",
-  "remoteops_wake_outcome": "Prior wake SKIPPED_LOCKED. New wake sml-genius-20261103T183120Z-f9624612 received 2026-11-03T18:31Z during this already-active user-started cycle -> SKIPPED_LOCKED; it did not start this work.",
+  "branch": "feat/g1-context3-neighbor-buckets",
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/804",
+  "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
+  "remoteops_actions_run": "https://github.com/Memorithm/RemoteOps/actions/runs/41701874209",
+  "remoteops_wake_outcome": "Wake received ~2026-11-03T19:17:49Z while lease idle (#803 merged 16685549); this cycle started after it; first commit 1463f95b at 2026-11-03T19:20:39Z. Not SKIPPED_LOCKED.",
   "tests": {
     "fmt": "pass",
-    "clippy_workspace_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2133 passed, 0 failed (277 suites)",
-    "new_tests": 4
+    "clippy_sml_store_D_warnings": "pass",
+    "new_tests": 5,
+    "cargo_test_locked_workspace_prepush": "2138 passed, 0 failed (279 suites) on 1463f95b"
   },
-  "metrics": "Recall@1/2/4, shortlisted/decoded/reread bytes and debug-build wall-clock per query MEASURED on synthetic fixtures (see LATEST.md). Peak RSS/heap NOT_MEASURED; release latency NOT_MEASURED.",
-  "blocked_reason": "RemoteOps E2E not qualified: no wake has yet started a fresh run; 30-min schedule not enabled."
+  "metrics": "Recall@1/2/4, shortlisted/decoded/reread bytes, debug wall-clock per query MEASURED for radius 0/1/2 (see LATEST.md). Peak RSS NOT_MEASURED; release latency NOT_MEASURED.",
+  "blocked_reason": "session_attestation not available for this task_id; E2E wake->contribution evidenced but attestation pending; 30-min schedule not enabled."
 }
