@@ -112,7 +112,24 @@ fn raw_bytes_for_order(order_index: u64) -> [u8; SEGMENT_BYTES] {
     bytes
 }
 
-struct Emitter(Dist);
+/// Key source: a synthetic distribution, or explicit precomputed keys
+/// (index = order). Explicit keys are used by the flagged real-text arm.
+#[derive(Clone)]
+pub enum Keys {
+    Dist(Dist),
+    Explicit(Vec<u64>),
+}
+
+impl Keys {
+    fn key(&self, order: u64) -> u64 {
+        match self {
+            Self::Dist(d) => d.signature(order),
+            Self::Explicit(v) => v[order as usize],
+        }
+    }
+}
+
+struct Emitter(Keys);
 
 impl SemanticSegmentEmitter<BITS> for Emitter {
     fn emit_segment(
@@ -122,8 +139,7 @@ impl SemanticSegmentEmitter<BITS> for Emitter {
     ) -> Result<Vec<(u64, SemanticState<BITS>)>, ContextSemanticIngestError> {
         let mut state = SemanticState::<BITS>::zeroed().unwrap();
         state.value =
-            SemanticBitField::<BITS>::from_words(vec![self.0.signature(context.order_index)])
-                .unwrap();
+            SemanticBitField::<BITS>::from_words(vec![self.0.key(context.order_index)]).unwrap();
         state.meaning_mask = SemanticBitField::<BITS>::ones().unwrap();
         Ok(vec![(RECORD_ID_BASE + context.segment_id, state)])
     }
@@ -134,10 +150,21 @@ pub struct Fixture {
     pub stream: ContextStreamId,
     pub segments: u64,
     pub dist: Dist,
+    keys: Keys,
 }
 
 impl Fixture {
     pub fn build(stream: u64, segments: u64, dist: Dist) -> Self {
+        Self::build_keys(stream, segments, dist, Keys::Dist(dist))
+    }
+
+    /// Index explicit keys (one segment per key). `dist` is a label only.
+    pub fn build_explicit(stream: u64, keys: Vec<u64>) -> Self {
+        let n = keys.len() as u64;
+        Self::build_keys(stream, n, Dist::Uniform, Keys::Explicit(keys))
+    }
+
+    fn build_keys(stream: u64, segments: u64, dist: Dist, keys: Keys) -> Self {
         let temp = TempDir::new();
         let stream = ContextStreamId::new(stream).unwrap();
         let ingestor = SemanticStreamingContextIngestor::<BITS>::new(
@@ -160,7 +187,7 @@ impl Fixture {
             corpus.extend_from_slice(&raw_bytes_for_order(order));
         }
         let outcome = ingestor
-            .ingest_reader(&corpus[..], &mut ByteTokens, &mut Emitter(dist))
+            .ingest_reader(&corpus[..], &mut ByteTokens, &mut Emitter(keys.clone()))
             .unwrap();
         assert_eq!(outcome.stats.segments_published, segments);
         Self {
@@ -168,6 +195,7 @@ impl Fixture {
             stream,
             segments,
             dist,
+            keys,
         }
     }
 
@@ -187,7 +215,7 @@ impl Fixture {
     }
 
     pub fn sig(&self, segment_id: u64) -> u64 {
-        self.dist.signature(segment_id - 1)
+        self.keys.key(segment_id - 1)
     }
 
     /// Oracle nearest Hamming distance over all segments.
