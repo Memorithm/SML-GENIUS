@@ -7,6 +7,9 @@
 //! (defaults N=1024, QUERIES=256). Output: one `G1_LAT` row per cell.
 //! `peak_rss_delta_kib` = VmHWM after the cell minus VmRSS before it, with
 //! VmHWM reset per cell via /proc/self/clear_refs; `NOT_MEASURED` otherwise.
+//! `minflt_delta` / `majflt_delta` = process `/proc/self/stat` fault counters
+//! across the timed pass (warmup included) of that cell; `NOT_MEASURED` if
+//! procfs is unavailable. `VmPeak` (not resettable) is process-level only.
 
 #[path = "support/g1_fixture.rs"]
 mod g1_fixture;
@@ -14,7 +17,7 @@ mod g1_fixture;
 use g1_fixture::{policy, query, Dist, Fixture};
 use sml_store::context_retrieve::{exhaustive_semantic_scan, ContextRetrieveError};
 use sml_store::context_retrieve_bench::{
-    current_rss_kib, measure_latency, peak_rss_kib, reset_peak_rss,
+    current_rss_kib, fault_counters, measure_latency, peak_rss_kib, reset_peak_rss, vm_peak_kib,
 };
 
 const PREFIX_BITS: u32 = 8;
@@ -38,13 +41,14 @@ fn main() -> Result<(), ContextRetrieveError> {
     let resettable = reset_peak_rss();
     println!(
         "G1_LAT_META profile={profile} os={} arch={} segments={segments} queries={queries} \
-         warmup={WARMUP} prefix_bits={PREFIX_BITS} top_k=1 hwm_reset={resettable} synthetic=true",
+         warmup={WARMUP} prefix_bits={PREFIX_BITS} top_k=1 hwm_reset={resettable} faults={} synthetic=true",
         std::env::consts::OS,
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        fault_counters().is_some()
     );
     println!(
         "G1_LAT dist N engine radius cap R@1 mean_shortlisted p50_us p95_us max_us \
-         rss_before_kib peak_rss_delta_kib"
+         rss_before_kib peak_rss_delta_kib minflt_delta majflt_delta"
     );
     for (i, dist) in [Dist::Clustered, Dist::NoisyClustered, Dist::Uniform]
         .into_iter()
@@ -90,14 +94,18 @@ fn main() -> Result<(), ContextRetrieveError> {
             }
             let _ = reset_peak_rss();
             let before = current_rss_kib();
+            let faults_before = fault_counters();
             let summary = measure_latency(&words, WARMUP, |&w| run(w).map(|_| ()))?
                 .expect("non-empty query set");
+            let faults = faults_before
+                .zip(fault_counters())
+                .and_then(|(b, a)| a.delta_since(b));
             let delta = match (peak_rss_kib(), before) {
                 (Some(p), Some(b)) if resettable => Some(p.saturating_sub(b)),
                 _ => None,
             };
             println!(
-                "G1_LAT {} {segments} {engine} {radius} {} {:.3} {:.1} {:.1} {:.1} {:.1} {} {}",
+                "G1_LAT {} {segments} {engine} {radius} {} {:.3} {:.1} {:.1} {:.1} {:.1} {} {} {} {}",
                 dist.name(),
                 if cap == 0 {
                     "none".to_owned()
@@ -111,10 +119,16 @@ fn main() -> Result<(), ContextRetrieveError> {
                 summary.max_ns as f64 / 1e3,
                 kib(before),
                 kib(delta),
+                kib(faults.map(|f| f.minor)),
+                kib(faults.map(|f| f.major)),
             );
         }
     }
-    println!("G1_LAT_PROCESS peak_rss_kib={}", kib(peak_rss_kib()));
+    println!(
+        "G1_LAT_PROCESS peak_rss_kib={} vm_peak_kib={}",
+        kib(peak_rss_kib()),
+        kib(vm_peak_kib())
+    );
     Ok(())
 }
 
