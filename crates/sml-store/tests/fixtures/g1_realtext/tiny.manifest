@@ -1,0 +1,9 @@
+G1_REALTEXT_MANIFEST v1
+# Hand-written 8-sentence sample authored for this repo. Not a benchmark corpus.
+corpus_id g1-tiny-handwritten
+source hand-written in-repo test fixture (crates/sml-store/tests/fixtures/g1_realtext/tiny.tsv)
+license same as repository
+sha256 8bf10364c39828101d9716aa7c1097ba9a967b760546ec422e1e99c24c182031
+byte_len 459
+split_mod 4
+eval_residue 1
