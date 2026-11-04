@@ -2,22 +2,23 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-04T02:05:16Z",
-  "last_report_utc": "2026-11-04T02:05:16Z",
+  "timestamp_utc": "2026-11-04T03:00:00Z",
+  "last_report_utc": "2026-11-04T03:00:00Z",
   "last_successful_code_commit_utc": "2026-11-04T00:11:56Z",
-  "run_id": "20261104T020516Z",
-  "runner": "grok-box (authoring); bench target self-hosted memorithm-thor-heavy-01 via GitHub Actions",
+  "run_id": "20261104T030000Z",
+  "runner": "grok-box (authoring); bench target: none available (repo self-hosted runners total_count=0)",
   "milestone": "G1 CONTEXT-3",
-  "task": "Native self-hosted 5-run N=16384 G1 latency/RSS workflow (#810 harness unchanged)",
-  "base_sha": "62819ebb851f4000f5a146508e6a3b0f9861f3a9",
+  "task": "Runner-blocker report + fail-closed G1 cross-run latency aggregator (runner-independent)",
+  "base_sha": "f531f80efe89dc93ea99d2714dd411b8981d93bd",
   "head_sha": "pending",
-  "branch": "g1-ctx3-thor-bench",
+  "branch": "g1-ctx3-runner-blocker",
   "pr_url": "pending",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
-    "workflow_yaml_parse": "pass",
-    "code_changed": false
+    "sml_store_g1_latency_aggregate": "pass",
+    "clippy": "pass",
+    "code_changed": true
   },
-  "metrics": "NOT_MEASURED in this report; pending workflow artifact.",
-  "blocked_reason": "RemoteOps 30-minute loop NOT_CONNECTED: no session_attestation; E2E task 8152791e NOT_QUALIFIED; schedule not enabled."
+  "metrics": "NOT_MEASURED: run 41760808506 queued, no self-hosted runner (repo runners total_count=0).",
+  "blocked_reason": "RemoteOps NOT_CONNECTED (no session_attestation; E2E 8152791e NOT_QUALIFIED). G1 native bench blocked: 0 repo self-hosted runners; run 41760808506 queued."
 }
