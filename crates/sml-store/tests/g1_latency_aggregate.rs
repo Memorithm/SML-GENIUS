@@ -112,3 +112,78 @@ fn refuses_truncated_run_and_cell_mismatch() {
         Err(AggregateError::MalformedRow { .. })
     ));
 }
+
+fn fault_run(faults: &str, mi: &str, ma: &str) -> String {
+    format!(
+        "{} faults={faults}\n{HDR} minflt_delta majflt_delta\n\
+         G1_LAT clustered 16384 exhaustive 0 none 1.000 16384.0 100.0 200.0 900.0 5000 12 {mi} {ma}\n\
+         G1_LAT_PROCESS peak_rss_kib=9000 vm_peak_kib=20000\n",
+        META.replace(" synthetic=true", ""),
+    )
+}
+
+#[test]
+fn fault_columns_aggregate_max_and_never_impute() {
+    let a = fault_run("true", "40", "0");
+    let b = fault_run("true", "55", "1");
+    let agg = aggregate_runs(&[&a, &b], 2);
+    // `synthetic=true` was stripped by the helper above: must refuse.
+    assert!(matches!(agg, Err(AggregateError::BadMeta { .. })));
+    let fix = |s: String| s.replace(" faults=", " synthetic=true faults=");
+    let (a, b) = (fix(a), fix(b));
+    let agg = aggregate_runs(&[&a, &b], 2).unwrap();
+    assert_eq!(
+        (agg.cells[0].minflt_delta_max, agg.cells[0].majflt_delta_max),
+        (Some(55), Some(1))
+    );
+    let c = fix(fault_run("true", "NOT_MEASURED", "0"));
+    let agg = aggregate_runs(&[&a, &c], 2).unwrap();
+    assert_eq!(agg.cells[0].minflt_delta_max, None);
+    assert_eq!(agg.cells[0].majflt_delta_max, Some(0));
+}
+
+#[test]
+fn fault_columns_fail_closed() {
+    let fix = |s: String| s.replace(" faults=", " synthetic=true faults=");
+    let good = fix(fault_run("true", "1", "0"));
+    // faults=false with numbers is contradictory.
+    let lie = fix(fault_run("false", "1", "0"));
+    assert!(matches!(
+        aggregate_runs(&[&lie], 1),
+        Err(AggregateError::MalformedRow { .. })
+    ));
+    let honest_off = fix(fault_run("false", "NOT_MEASURED", "NOT_MEASURED"));
+    assert!(aggregate_runs(&[&honest_off], 1).is_ok());
+    // Mixing instrumented and legacy runs is a meta mismatch.
+    assert_eq!(
+        aggregate_runs(&[&good, &honest_off], 2),
+        Err(AggregateError::MetaMismatch { run: 1 })
+    );
+    // Legacy 12-column rows under a faults meta, and garbage values.
+    let short = good.replace(" 12 1 0\n", " 12\n");
+    assert!(matches!(
+        aggregate_runs(&[&short], 1),
+        Err(AggregateError::MalformedRow { .. })
+    ));
+    let neg = good.replace(" 12 1 0\n", " 12 -1 0\n");
+    assert!(matches!(
+        aggregate_runs(&[&neg], 1),
+        Err(AggregateError::MalformedRow { .. })
+    ));
+    let badflag = good.replace("faults=true", "faults=maybe");
+    assert!(matches!(
+        aggregate_runs(&[&badflag], 1),
+        Err(AggregateError::BadMeta { .. })
+    ));
+    // Legacy meta with 14 columns.
+    let legacy14 = good.replace(" faults=true", "");
+    assert!(matches!(
+        aggregate_runs(&[&legacy14], 1),
+        Err(AggregateError::MalformedRow { .. })
+    ));
+    let twice = format!("{}\n{good}", good.lines().next().unwrap());
+    assert!(matches!(
+        aggregate_runs(&[&twice], 1),
+        Err(AggregateError::BadMeta { .. })
+    ));
+}

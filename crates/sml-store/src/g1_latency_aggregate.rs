@@ -10,6 +10,14 @@
 //! is summarised per cell as min / median / max of each run's p50 and p95, so
 //! cross-run spread is visible rather than hidden. `NOT_MEASURED` RSS stays
 //! `None`; it is never imputed.
+//!
+//! Optional page-fault columns (`minflt_delta majflt_delta`) are accepted only
+//! when the run's meta declares `faults=true|false`; such rows must then have
+//! 14 columns, legacy rows (no `faults` key) exactly 12. A run declaring
+//! `faults=false` must report `NOT_MEASURED` for both. Because meta must be
+//! identical across runs, legacy and fault-instrumented runs never mix. Per
+//! cell the aggregate keeps the max delta across runs, or `None` if any run
+//! did not measure it.
 
 use std::collections::BTreeMap;
 
@@ -56,6 +64,8 @@ struct Row {
     p50_us: f64,
     p95_us: f64,
     peak_rss_delta_kib: Option<u64>,
+    minflt_delta: Option<u64>,
+    majflt_delta: Option<u64>,
 }
 
 /// min / median / max across runs.
@@ -91,6 +101,10 @@ pub struct CellAggregate {
     pub p95_us: Spread,
     /// `None` if any run reported `NOT_MEASURED`.
     pub peak_rss_delta_kib_max: Option<u64>,
+    /// Max minor-fault delta across runs; `None` if any run lacks it.
+    pub minflt_delta_max: Option<u64>,
+    /// Max major-fault delta across runs; `None` if any run lacks it.
+    pub majflt_delta_max: Option<u64>,
 }
 
 /// Aggregate over all runs. `segments`/`queries` come from the shared meta.
@@ -136,7 +150,19 @@ fn parse_meta(run: usize, line: &str) -> Result<BTreeMap<String, String>, Aggreg
     {
         return Err(bad("queries missing or zero"));
     }
+    if let Some(f) = kv.get("faults") {
+        if f != "true" && f != "false" {
+            return Err(bad("faults not true|false"));
+        }
+    }
     Ok(kv)
+}
+
+fn opt_u64(s: &str) -> Result<Option<u64>, ()> {
+    match s {
+        "NOT_MEASURED" => Ok(None),
+        s => s.parse().map(Some).map_err(|_| ()),
+    }
 }
 
 type ParsedRun = (BTreeMap<String, String>, BTreeMap<CellKey, Row>);
@@ -148,6 +174,12 @@ fn parse_run(run: usize, text: &str) -> Result<ParsedRun, AggregateError> {
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with("G1_LAT_META ") {
+            if meta.is_some() || !rows.is_empty() {
+                return Err(AggregateError::BadMeta {
+                    run,
+                    reason: "meta repeated or after rows".to_owned(),
+                });
+            }
             meta = Some(parse_meta(run, line)?);
         } else if line.starts_with("G1_LAT_PROCESS ") {
             process = true;
@@ -160,9 +192,25 @@ fn parse_run(run: usize, text: &str) -> Result<ParsedRun, AggregateError> {
                 run,
                 line: line.to_owned(),
             };
-            if f.len() != 12 {
+            let faults = meta
+                .as_ref()
+                .ok_or(AggregateError::MissingMeta { run })?
+                .get("faults")
+                .cloned();
+            let want = if faults.is_some() { 14 } else { 12 };
+            if f.len() != want {
                 return Err(malformed());
             }
+            let (minflt_delta, majflt_delta) = if want == 14 {
+                let mi = opt_u64(f[12]).map_err(|_| malformed())?;
+                let ma = opt_u64(f[13]).map_err(|_| malformed())?;
+                if faults.as_deref() == Some("false") && (mi.is_some() || ma.is_some()) {
+                    return Err(malformed());
+                }
+                (mi, ma)
+            } else {
+                (None, None)
+            };
             let key = CellKey {
                 dist: f[0].to_owned(),
                 engine: f[2].to_owned(),
@@ -175,10 +223,9 @@ fn parse_run(run: usize, text: &str) -> Result<ParsedRun, AggregateError> {
                 mean_shortlisted: f[6].to_owned(),
                 p50_us: num(f[7]).ok_or_else(malformed)?,
                 p95_us: num(f[8]).ok_or_else(malformed)?,
-                peak_rss_delta_kib: match f[11] {
-                    "NOT_MEASURED" => None,
-                    s => Some(s.parse().map_err(|_| malformed())?),
-                },
+                peak_rss_delta_kib: opt_u64(f[11]).map_err(|_| malformed())?,
+                minflt_delta,
+                majflt_delta,
             };
             if row.p95_us < row.p50_us {
                 return Err(malformed());
@@ -230,18 +277,21 @@ pub fn aggregate_runs(runs: &[&str], min_runs: usize) -> Result<Aggregate, Aggre
         {
             return Err(AggregateError::QualityDiverged { cell: key.label() });
         }
-        let rss = all
-            .iter()
-            .map(|r| r.peak_rss_delta_kib)
-            .collect::<Option<Vec<_>>>()
-            .and_then(|v| v.into_iter().max());
+        let max_all = |get: fn(&Row) -> Option<u64>| {
+            all.iter()
+                .map(|r| get(r))
+                .collect::<Option<Vec<_>>>()
+                .and_then(|v| v.into_iter().max())
+        };
         cells.push(CellAggregate {
             key: key.clone(),
             recall_at_1: r0.recall_at_1.clone(),
             mean_shortlisted: r0.mean_shortlisted.clone(),
             p50_us: spread(all.iter().map(|r| r.p50_us).collect()),
             p95_us: spread(all.iter().map(|r| r.p95_us).collect()),
-            peak_rss_delta_kib_max: rss,
+            peak_rss_delta_kib_max: max_all(|r| r.peak_rss_delta_kib),
+            minflt_delta_max: max_all(|r| r.minflt_delta),
+            majflt_delta_max: max_all(|r| r.majflt_delta),
         });
     }
     Ok(Aggregate {

@@ -7,6 +7,11 @@
 //! `/proc/self/status`; it can be reset between cells by writing `5` to
 //! `/proc/self/clear_refs` (Linux >= 4.0). Where procfs is unavailable the
 //! values are `None` and must be reported as `NOT_MEASURED`, never estimated.
+//!
+//! Page-fault counters are the cumulative `minflt` / `majflt` fields of
+//! `/proc/self/stat` (process-wide, all threads that have been reaped plus the
+//! live ones as reported by the kernel). `VmPeak` is the peak *virtual* size
+//! and, unlike `VmHWM`, cannot be reset; it is a process-level figure only.
 
 use std::{fs, time::Instant};
 
@@ -96,6 +101,50 @@ pub fn reset_peak_rss() -> bool {
     fs::write("/proc/self/clear_refs", "5").is_ok()
 }
 
+/// Cumulative process page-fault counters from `/proc/self/stat`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FaultCounters {
+    pub minor: u64,
+    pub major: u64,
+}
+
+impl FaultCounters {
+    /// `self - earlier`; `None` if a counter went backwards (not comparable).
+    #[must_use]
+    pub fn delta_since(self, earlier: Self) -> Option<Self> {
+        Some(Self {
+            minor: self.minor.checked_sub(earlier.minor)?,
+            major: self.major.checked_sub(earlier.major)?,
+        })
+    }
+}
+
+/// Parses `minflt` (field 10) and `majflt` (field 12) of a `/proc/<pid>/stat`
+/// line. The `comm` field may contain spaces and parentheses, so fields are
+/// counted after the *last* `)`. Returns `None` on any malformed input.
+#[must_use]
+pub fn parse_proc_stat_faults(stat: &str) -> Option<FaultCounters> {
+    let rest = &stat[stat.rfind(')')? + 1..];
+    // After `)`: field 3 (state) is index 0, so field k is index k - 3.
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    Some(FaultCounters {
+        minor: f.get(10 - 3)?.parse().ok()?,
+        major: f.get(12 - 3)?.parse().ok()?,
+    })
+}
+
+/// Current cumulative process fault counters; `None` if unavailable.
+#[must_use]
+pub fn fault_counters() -> Option<FaultCounters> {
+    parse_proc_stat_faults(&fs::read_to_string("/proc/self/stat").ok()?)
+}
+
+/// Process peak virtual size (`VmPeak`, KiB); `None` if unavailable.
+#[must_use]
+pub fn vm_peak_kib() -> Option<u64> {
+    parse_proc_status_kib(&fs::read_to_string("/proc/self/status").ok()?, "VmPeak")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +199,44 @@ mod tests {
         assert_eq!(parse_proc_status_kib(status, "Bad"), None);
         assert_eq!(parse_proc_status_kib(status, "VmH"), None);
         assert_eq!(parse_proc_status_kib(status, "Missing"), None);
+    }
+
+    #[test]
+    fn parses_proc_stat_faults_with_hostile_comm() {
+        // pid (comm) state ppid pgrp session tty tpgid flags minflt cminflt majflt
+        let stat = "42 (a b) c)) S 1 42 42 0 -1 4194560 1234 7 5 0 99";
+        assert_eq!(
+            parse_proc_stat_faults(stat),
+            Some(FaultCounters {
+                minor: 1234,
+                major: 5
+            })
+        );
+        assert_eq!(parse_proc_stat_faults("42 (x) S 1 42"), None);
+        assert_eq!(parse_proc_stat_faults("no paren 1 2 3"), None);
+        assert_eq!(parse_proc_stat_faults("1 (x) S 1 1 1 0 -1 0 abc 0 0"), None);
+    }
+
+    #[test]
+    fn fault_delta_refuses_backwards_counters() {
+        let a = FaultCounters {
+            minor: 10,
+            major: 2,
+        };
+        let b = FaultCounters {
+            minor: 15,
+            major: 2,
+        };
+        assert_eq!(b.delta_since(a), Some(FaultCounters { minor: 5, major: 0 }));
+        assert_eq!(a.delta_since(b), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_faults_and_vmpeak_are_readable() {
+        let f = fault_counters().unwrap();
+        assert!(f.minor > 0);
+        assert!(vm_peak_kib().unwrap() > 0);
     }
 
     #[cfg(target_os = "linux")]
