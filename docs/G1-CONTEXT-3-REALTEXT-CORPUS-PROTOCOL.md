@@ -101,3 +101,8 @@ the user chooses a corpus and pins its SHA-256.
 Committed manifests live in `docs/g1-realtext/` (see its README). First pin:
 `g1-pes2o7-v1` (sha256 `90268073…8f8d7`, 14 419 687 bytes), built on the Dell
 by RemoteOps #1227. Still **NOT_MEASURED** until a `--realtext` run on main.
+
+## Search-key encoder v2 (pre-registered after the v1 run)
+See `docs/G1-CONTEXT-3-KEY-ENCODER-V2-PREREGISTRATION.md`: windowed SimHash
+(8-token windows, stride 1 or 8), opt-in with `--key v2s1|v2s8`. v1 stays the
+default and is unchanged.
