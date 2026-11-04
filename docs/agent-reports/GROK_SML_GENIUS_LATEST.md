@@ -1,17 +1,18 @@
-# Grok SML-GENIUS report — 2026-11-04T02:05:16Z
+# Grok SML-GENIUS report — 2026-11-04T03:00:00Z
 
-- Status: **NOT_CONNECTED** for the RemoteOps 30-minute loop (no session_attestation; E2E task `sml-genius-20261103T191749Z-8152791e` still NOT_QUALIFIED; 30m schedule NOT enabled). Manually-triggered session.
-- Base: 62819ebb (main, #810). Milestone G1 / CONTEXT-3. LONGCTX-B1 / PR #805 untouched.
+- Status: **NOT_CONNECTED** for the RemoteOps 30-minute loop (no session_attestation; E2E task `sml-genius-20261103T191749Z-8152791e` still **NOT_QUALIFIED**; 30m schedule NOT enabled). Manually-triggered session.
+- Base: f531f80e (main, #811). Milestone G1 / CONTEXT-3. LONGCTX-B1 / PR #805 untouched.
 
-## Change (workflow only; no code/harness change)
-- `.github/workflows/g1-latency-thor.yml`: trusted-main-only (push touching the file, or workflow_dispatch) job on the `self-hosted` runner label (same label the main CI `rust` job uses; observed runner `memorithm-thor-heavy-01`). Builds the unchanged #810 `g1_latency_rss` example in release (Rust 1.89.0, --locked, isolated CARGO_HOME/target), runs **5 independent processes at N=16384, 256 queries**, records runner name/host/arch/CPU/load/mem provenance and uploads raw stdout as artifact `g1-latency-native-<sha>`. No derived verdict; PR code never executes on the persistent host.
+## Runner blocker (honest)
+- #811 workflow run https://github.com/Memorithm/SML-GENIUS/actions/runs/41760808506 is **queued** (created 2026-11-04T02:26:54Z); job `g1-latency` has no runner assigned.
+- `GET repos/Memorithm/SML-GENIUS/actions/runners` → `total_count: 0`; org runner listing → 403. The earlier inference that `memorithm-thor-heavy-01` would pick it up is unconfirmed for this label.
+- **No native N=16384 latency or RSS numbers exist.** Run not cancelled or re-run; it waits for a self-hosted runner to be registered.
+
+## Change (code; runner-independent)
+- `sml_store::g1_latency_aggregate`: fail-closed cross-run aggregator for raw `g1_latency_rss` stdout. Refuses unless >= required runs, release + synthetic + hwm_reset metadata, N >= 16000, identical meta and cell sets across runs, `G1_LAT_PROCESS` present (no truncated runs), and bit-identical R@1/mean_shortlisted across runs. Reports per-cell min/median/max of p50 and p95; `NOT_MEASURED` RSS is never imputed. No verdict emitted. Tests use hand-written fixtures only.
 
 ## Measured
-None in this report. Numbers will come only from the workflow run artifact after merge.
-
-## Honesty notes
-- Runner listing API is 403 for this token; runner availability inferred from main CI jobs being picked up by `memorithm-thor-heavy-01`. At report time, main CI run 41749653498 (#810 push) had its `rust` job in_progress on that runner for >1h (typical 25–30 min), so the bench may queue behind it.
-- Dell not targeted (no Dell-specific label known to this session).
+None.
 
 ## Next
-Collect the 5-run artifact, report p50/p95 spread across runs per cell; add page-fault counters; real-text corpus.
+Register a self-hosted runner (user action) -> 41760808506 runs -> feed its 5 `run-*.txt` to the aggregator. Then page-fault counters; real-text corpus.
