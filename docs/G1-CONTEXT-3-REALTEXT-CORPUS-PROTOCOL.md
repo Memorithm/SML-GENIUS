@@ -57,14 +57,39 @@ Frozen before any real-text number is seen. Changing any value is v2.
    (`RealTextEvalSet::meta_fields`). `g1_latency_aggregate` refuses any run
    without `synthetic=true`, so real-text runs never aggregate with synthetic.
 
-### Not yet wired (next hook)
-`g1_latency_rss` still runs the synthetic arm only. The real-text arm needs a
-pre-registered text -> 64-bit retrieval-bitfield encoder (undefined; the
-synthetic fixture draws words directly). Next step: pre-register that encoder,
-then add an opt-in flag that calls `load_pinned` + `build_eval_set` and prints
-the meta above. No corpus is pinned until the user chooses one and its SHA.
+## Search-key encoder v1 (pre-registered; `g1_realtext_key`, `key=simhash64-sha256-v1`)
+Frozen before any real-text number is seen. Changing anything is v2.
+1. Per token `t` (from rule 1 above): `h(t) = u64_be(sha256("g1k-tok|"+t)[0..8])`.
+2. Key of a token list (segment or query) = SimHash over the token
+   **multiset** (repeats count, order ignored): for bit `b` (0 = LSB),
+   `c_b = #{h(t) has bit b} - #{h(t) lacks bit b}`; key bit `b = 1` iff
+   `c_b > 0` (ties -> 0). Empty list => refusal (no zero key).
+3. Segment keys are indexed (one record per segment, segment id = 1-based
+   haystack order); query keys are searched. Raw bytes stored in the bench
+   are placeholders; only keys are retrieved.
+4. Lexical only. No claim that key Hamming distance tracks relevance.
+
+## Flagged real-text arm (`g1_latency_rss --realtext <MANIFEST> <CORPUS>`)
+Opt-in only; no default corpus and no pin in the repo. Missing args, file
+errors, length/SHA mismatch, near-duplicate or zero-query refusal => exit 2
+with `G1_LAT_REFUSE`. Meta: `synthetic=false arm=realtext derivation=v1
+corpus_id=.. sha256=.. key=simhash64-sha256-v1`, refused by
+`g1_latency_aggregate`. Rows: dist `realtext`, same columns plus `gold@1`
+(top-1 segment == derived target). `R@1` remains "top-1 distance == oracle
+nearest key distance". **NOT_MEASURED** until the user pins a corpus + SHA.
 
 ## CI policy
-Only the 459-byte hand-written fixture
-(`crates/sml-store/tests/fixtures/g1_realtext/`) is used in CI. No corpus is
-downloaded in CI.
+Only hand-written in-repo fixtures (`crates/sml-store/tests/fixtures/g1_realtext/`)
+are used in CI. No corpus is downloaded in CI.
+
+- `tiny.tsv` (459 bytes): loader/split tests; yields `NoQueries` under `PARAMS_V1`.
+- `smoke.tsv` (3344 bytes, sha256
+  `6d8212da1faeb7269eaf7caf0ee207cc6653d9a0fa2805cc56d5d45193e15b65`, 8 docs,
+  `split_mod 2 eval_residue 0` -> 5 eval / 3 train): **smoke fixture only**.
+  `tests/g1_realtext_smoke.rs` checks `load_pinned` -> `build_eval_set(PARAMS_V1)`
+  -> `simhash_v1` and that the meta is refused by the synthetic aggregator.
+  `--realtext smoke.manifest smoke.tsv` exits 0 locally. Any numbers it prints
+  (5 segments, 5 queries) are **not measurements** and must not be cited.
+
+Fixture smoke != validation. Every real corpus remains **NOT_MEASURED** until
+the user chooses a corpus and pins its SHA-256.

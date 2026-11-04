@@ -22,6 +22,7 @@ pub mod delta_kv_context;
 pub mod g1_latency_aggregate;
 pub mod g1_realtext_corpus;
 pub mod g1_realtext_eval;
+pub mod g1_realtext_key;
 pub mod longctx_b1;
 pub mod observed_history;
 pub mod raw_context;
