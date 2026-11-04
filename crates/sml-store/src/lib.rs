@@ -16,6 +16,7 @@
 
 pub mod context_ingest;
 pub mod context_retrieve;
+pub mod context_retrieve_bench;
 pub mod context_semantic_ingest;
 pub mod delta_kv_context;
 pub mod longctx_b1;
