@@ -96,3 +96,8 @@ smoke and asserts exit 0 + meta substrings only; CI smoke != validation.
 
 Fixture smoke != validation. Every real corpus remains **NOT_MEASURED** until
 the user chooses a corpus and pins its SHA-256.
+
+## Pinned corpora
+Committed manifests live in `docs/g1-realtext/` (see its README). First pin:
+`g1-pes2o7-v1` (sha256 `90268073…8f8d7`, 14 419 687 bytes), built on the Dell
+by RemoteOps #1227. Still **NOT_MEASURED** until a `--realtext` run on main.

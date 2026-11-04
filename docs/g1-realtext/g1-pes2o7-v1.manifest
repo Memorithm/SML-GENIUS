@@ -1,0 +1,11 @@
+G1_REALTEXT_MANIFEST v1
+# 2400 peS2o-0007 articles (common-pile/peS2o_filtered), CC-BY/CC0 claims under the
+# committed S5h operator review, flattened and cut to 6000 chars. Built by
+# RemoteOps ops/sml/g1_realtext/build_pes2o7_corpus.py. Attribution map: attribution.tsv.
+corpus_id g1-pes2o7-v1
+source common-pile/peS2o_filtered peS2o-0007.json.gz sha256 453b31154a601495c2145d81b0593b5391430bf3d65c25f15e40d9d0e4aab326
+license per-article CC-BY or CC0 claim (see attribution.tsv)
+sha256 90268073e0813929699d6fdac3212666f36989438c98087956abe3f28612f8d7
+byte_len 14419687
+split_mod 2
+eval_residue 0
