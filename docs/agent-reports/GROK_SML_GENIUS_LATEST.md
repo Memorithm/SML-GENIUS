@@ -1,162 +1,153 @@
-# Grok SML-GENIUS report — 2026-11-03T19:21:10Z
+# Grok SML-GENIUS report — 2026-11-04T00:11:56Z
 
-- Status: **IN_PROGRESS** (PR opened with real work; session_attestation NOT available — see RemoteOps)
-- remoteops_wake_task_id: `sml-genius-20261103T191749Z-8152791e` (milestone G1)
-- RemoteOps Actions run: https://github.com/Memorithm/RemoteOps/actions/runs/41701874209
-- Milestone: G1 / CONTEXT-3 neighbour-bucket shortlist (LONGCTX-B1 and BDE-1 untouched)
-- PR: https://github.com/Memorithm/SML-GENIUS/pull/804
-- Base: 1668554916fe7a31e44c4b3ad3d01d50b88ef7d1 (main, #803)
-- Tested code commit: 1463f95b053b04fba66edcc2bba830ffb901b7d6 on `feat/g1-context3-neighbor-buckets` (committed 2026-11-03T19:20:39Z). This report commit sits on top of it as the PR head.
+- Status: **NOT_CONNECTED** for the RemoteOps 30-minute loop (no session_attestation; E2E task `sml-genius-20261103T191749Z-8152791e` still NOT_QUALIFIED; 30m schedule NOT enabled). Code work done in a manually-triggered session.
+- Base: 25794bcb (main, #809). Tested code commit: 19a4b958e4a1e2b4729eca2d3b259a58219f0769 on `feat/g1-context3-latency-rss`. Milestone G1 / CONTEXT-3. LONGCTX-B1 / BDE-1 / PR #805 untouched.
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/810
 
-## Change
-- Minimal src: `ContextRetriever::retrieve_with_neighbor_radius(query, policy, bucket_radius)` in `crates/sml-store/src/context_retrieve.rs`. `retrieve` now delegates with radius 0. The test asserts that radius 0 gives the same hits and accounting as `retrieve`.
-- Bucket keys within Hamming distance `bucket_radius` of the query key are probed in `(key distance, key)` order. The `max_shortlist` cap is unchanged. A radius larger than `bucket_prefix_bits` returns `BudgetOverflow`.
-- Radius choice: **r=1 is primary** (it probes ≤ prefix_bits+1 buckets). r=2 is also measured.
-- Tests: `crates/sml-store/tests/context_retrieve_neighbor_buckets.rs` (5 tests)
-  - matrix r∈{0,1,2}
-  - 1-bit bucket-miss recovery
-  - honest failure beyond the radius
-  - abstention and over-radius rejection
-  - corruption in a neighbour bucket fails closed
+## Change (measurement only; no retrieval behaviour change)
+- `crates/sml-store/src/context_retrieve_bench.rs`: nearest-rank percentiles, `LatencySummary` (p50/p95/max ns), `measure_latency` (warmup + per-call wall clock, fail-closed), Linux `VmHWM`/`VmRSS` parsing and `/proc/self/clear_refs` HWM reset (`None` → NOT_MEASURED). 5 unit tests.
+- `crates/sml-store/examples/g1_latency_rss.rs` + shared `examples/support/g1_fixture.rs` (same declared synthetic distributions as the two-level tests).
+- `crates/sml-store/tests/context_retrieve_latency.rs` (2 tests: harness on capped/uncapped paths, determinism).
 
-## Measured (debug build, single run, --test-threads=1)
-Command: `cargo test -p sml-store --test context_retrieve_neighbor_buckets -- --nocapture --test-threads=1`
+## Protocol
+`cargo run --release --locked -p sml-store --example g1_latency_rss [N] [QUERIES]`; prefix_bits 8, top_k 1, 256 queries, 1 warmup pass, single run, no repeats → no uncertainty interval. Engines: `exhaustive` (uncapped reference), `neighbor` (`retrieve_with_neighbor_radius`) and `global_wfull` (`retrieve_global_probe`, width 56), radius {1,2} × cap {32,64,128,256}. R@1 here = top-1 Hamming distance equals oracle best (tie-tolerant), computed in an untimed pass. Latency includes verified raw reread (file I/O, page cache warm). Host: shared Linux VM, 8 vCPU "Intel Xeon Processor", x86_64 — NOT a qualified runner (Dell/Thor not used).
 
-The same distributions, sizes, seeds (48 queries) and cap (32) as #803. The r=0 rows reproduce #803's G1_RECALL recall and accounting numbers exactly.
+## Measured — N=1024 (synthetic)
+| dist | engine | r | cap | R@1 | p50 µs | p95 µs |
+|---|---|---|---|---|---|---|
+| clustered | exhaustive | – | none | 1.000 | 30.6 | 38.1 |
+| clustered | neighbor | 2 | 32 | 0.133 | 6.7 | 6.8 |
+| clustered | global_wfull | 1 | 32 | 0.969 | 10.8 | 11.1 |
+| clustered | global_wfull | 2 | 32 | 1.000 | 11.1 | 16.1 |
+| clustered | global_wfull | 2 | 256 | 1.000 | 16.8 | 21.9 |
+| noisy_clustered | exhaustive | – | none | 1.000 | 30.7 | 34.5 |
+| noisy_clustered | global_wfull | 2 | 32 | 1.000 | 12.3 | 15.2 |
+| uniform | exhaustive | – | none | 1.000 | 30.5 | 37.3 |
+| uniform | global_wfull | 2 | 32 | 1.000 | 11.5 | 13.1 |
 
-| dist | N | prefix | R@1 r0→r1 | R@4 r0→r1 | abstain r0→r1 | shortlisted r0→r1 | reread B r0→r1 |
-|---|---|---|---|---|---|---|---|
-| uniform | 64 | 4 | 0.771→0.979 | 0.292→0.635 | 0.000→0.000 | 4.6→20.2 | 35.1→37.3 |
-| uniform | 64 | 8 | 0.625→0.938 | 0.167→0.307 | 0.229→0.021 | 0.9→3.4 | 14.0→30.7 |
-| uniform | 256 | 4 | 0.771→0.771 | 0.365→0.443 | 0.000→0.000 | 16.8→32.0 | 37.3→37.3 |
-| uniform | 256 | 8 | 0.625→0.938 | 0.177→0.375 | 0.083→0.000 | 1.6→9.9 | 20.6→37.3 |
-| uniform | 1024 | 4 | 0.417→0.417 | 0.224→0.224 | 0.000→0.000 | 32.0→32.0 | 37.3→37.3 |
-| uniform | 1024 | 8 | 0.625→0.896 | 0.208→0.427 | 0.000→0.000 | 4.8→30.8 | 35.3→37.3 |
-| clustered | 64 | 4 | 0.771→0.979 | 0.771→0.979 | 0.208→0.021 | 12.7→26.0 | 29.6→36.6 |
-| clustered | 64 | 8 | 0.625→0.938 | 0.625→0.938 | 0.375→0.062 | 10.0→15.0 | 23.3→35.0 |
-| clustered | 256 | 4 | 0.375→0.438 | 0.484→0.552 | 0.208→0.021 | 25.3→31.3 | 29.6→36.6 |
-| clustered | 256 | 8 | 0.333→0.479 | 0.411→0.583 | 0.375→0.062 | 20.0→30.0 | 23.3→35.0 |
-| clustered | 1024 | 4 | 0.125→0.146 | 0.177→0.219 | 0.208→0.021 | 25.3→31.3 | 29.6→36.6 |
-| clustered | 1024 | 8 | 0.083→0.167 | 0.146→0.234 | 0.375→0.062 | 20.0→30.0 | 23.3→35.0 |
-| noisy_clustered | 64 | 4 | 0.771→0.979 | 0.411→0.828 | 0.000→0.000 | 5.4→23.1 | 33.1→37.3 |
-| noisy_clustered | 64 | 8 | 0.625→0.938 | 0.266→0.641 | 0.271→0.000 | 1.5→5.5 | 16.4→33.8 |
-| noisy_clustered | 256 | 4 | 0.708→0.771 | 0.531→0.583 | 0.000→0.000 | 21.5→32.0 | 37.0→37.3 |
-| noisy_clustered | 256 | 8 | 0.625→0.938 | 0.375→0.750 | 0.083→0.000 | 5.4→19.9 | 26.9→36.8 |
-| noisy_clustered | 1024 | 4 | 0.271→0.271 | 0.240→0.240 | 0.000→0.000 | 30.4→32.0 | 37.3→37.3 |
-| noisy_clustered | 1024 | 8 | 0.542→0.688 | 0.307→0.448 | 0.000→0.000 | 12.5→30.1 | 35.6→37.3 |
+N=4096: exhaustive p50/p95 151.6/231.3 µs (clustered), 132.9/148.2 (noisy), 130.0/171.6 (uniform); global_wfull r2 cap32 26.9/47.9 (R@1 1.000), 25.4/35.6 (1.000), 20.9/29.9 (1.000); neighbor r2 cap32 clustered R@1 0.031.
 
-Raw output:
+Peak RSS: process VmHWM 3200 KiB (N=1024 run), 3972 KiB (N=4096 run). Per-cell HWM delta (reset per cell) = 0 KiB for every capped cell; exhaustive cells 0–56 KiB (N=1024) and 0–224 KiB (N=4096). Page-granular, so sub-page allocations are invisible.
+
+## Honesty notes
+- Synthetic only; single run on a shared non-qualified VM; latencies are noisy (max column shows spikes). No generalization claim; not LONGCTX-B1.
+- global_wfull's in-memory scan is O(probed members) — cap bounds rerank/reread only; at N=4096 its p50 is 2–4× neighbor's but ~5× below exhaustive.
+- NOT_MEASURED: page faults, qualified-runner latency, real-text corpora, repeated-run variance.
+
+## Next
+Repeat on a qualified runner (Dell/Thor via RemoteOps) with ≥5 repeats and page-fault counters; then N≥16k scaling.
+
+## Raw (N=1024)
 ```
-G1_NEIGHBOR uniform 64 4 0 0.771 0.469 0.292 0.000 4.6 2.19 35.1 54.5 803072
-G1_NEIGHBOR uniform 64 4 1 0.979 0.792 0.635 0.000 20.2 2.33 37.3 58.8 803072
-G1_NEIGHBOR uniform 64 4 2 0.979 0.917 0.812 0.000 32.0 2.33 37.3 64.1 803072
-G1_NEIGHBOR uniform 64 8 0 0.625 0.323 0.167 0.229 0.9 0.88 14.0 20.5 803072
-G1_NEIGHBOR uniform 64 8 1 0.938 0.552 0.307 0.021 3.4 1.92 30.7 45.6 803072
-G1_NEIGHBOR uniform 64 8 2 1.000 0.740 0.562 0.000 9.6 2.33 37.3 57.0 803072
-G1_NEIGHBOR uniform 256 4 0 0.771 0.542 0.365 0.000 16.8 2.33 37.3 59.2 3212288
-G1_NEIGHBOR uniform 256 4 1 0.771 0.583 0.443 0.000 32.0 2.33 37.3 64.7 3212288
-G1_NEIGHBOR uniform 256 4 2 0.771 0.583 0.443 0.000 32.0 2.33 37.3 66.9 3212288
-G1_NEIGHBOR uniform 256 8 0 0.625 0.344 0.177 0.083 1.6 1.28 20.6 30.4 3212288
-G1_NEIGHBOR uniform 256 8 1 0.938 0.594 0.375 0.000 9.9 2.33 37.3 65.0 3212288
-G1_NEIGHBOR uniform 256 8 2 0.979 0.719 0.599 0.000 31.5 2.33 37.3 79.5 3212288
-G1_NEIGHBOR uniform 1024 4 0 0.417 0.271 0.224 0.000 32.0 2.33 37.3 70.1 12849152
-G1_NEIGHBOR uniform 1024 4 1 0.417 0.271 0.224 0.000 32.0 2.33 37.3 67.2 12849152
-G1_NEIGHBOR uniform 1024 4 2 0.417 0.271 0.224 0.000 32.0 2.33 37.3 67.3 12849152
-G1_NEIGHBOR uniform 1024 8 0 0.625 0.354 0.208 0.000 4.8 2.21 35.3 53.6 12849152
-G1_NEIGHBOR uniform 1024 8 1 0.896 0.583 0.427 0.000 30.8 2.33 37.3 80.5 12849152
-G1_NEIGHBOR uniform 1024 8 2 0.896 0.583 0.432 0.000 32.0 2.33 37.3 83.6 12849152
-G1_NEIGHBOR clustered 64 4 0 0.771 0.771 0.771 0.208 12.7 1.85 29.6 54.2 803072
-G1_NEIGHBOR clustered 64 4 1 0.979 0.979 0.979 0.021 26.0 2.28 36.6 59.3 803072
-G1_NEIGHBOR clustered 64 4 2 1.000 1.000 1.000 0.000 32.0 2.33 37.3 62.1 803072
-G1_NEIGHBOR clustered 64 8 0 0.625 0.625 0.625 0.375 10.0 1.46 23.3 35.0 803072
-G1_NEIGHBOR clustered 64 8 1 0.938 0.938 0.938 0.062 15.0 2.19 35.0 50.5 803072
-G1_NEIGHBOR clustered 64 8 2 1.000 1.000 1.000 0.000 17.7 2.33 37.3 55.3 803072
-G1_NEIGHBOR clustered 256 4 0 0.375 0.469 0.484 0.208 25.3 1.85 29.6 51.7 3212288
-G1_NEIGHBOR clustered 256 4 1 0.438 0.552 0.552 0.021 31.3 2.28 36.6 62.4 3212288
-G1_NEIGHBOR clustered 256 4 2 0.438 0.573 0.562 0.000 32.0 2.33 37.3 66.5 3212288
-G1_NEIGHBOR clustered 256 8 0 0.333 0.396 0.411 0.375 20.0 1.46 23.3 39.9 3212288
-G1_NEIGHBOR clustered 256 8 1 0.479 0.573 0.583 0.062 30.0 2.19 35.0 60.4 3212288
-G1_NEIGHBOR clustered 256 8 2 0.500 0.615 0.620 0.000 32.0 2.33 37.3 62.3 3212288
-G1_NEIGHBOR clustered 1024 4 0 0.125 0.146 0.177 0.208 25.3 1.85 29.6 56.1 12849152
-G1_NEIGHBOR clustered 1024 4 1 0.146 0.177 0.219 0.021 31.3 2.28 36.6 64.2 12849152
-G1_NEIGHBOR clustered 1024 4 2 0.146 0.177 0.219 0.000 32.0 2.33 37.3 72.0 12849152
-G1_NEIGHBOR clustered 1024 8 0 0.083 0.115 0.146 0.375 20.0 1.46 23.3 43.2 12849152
-G1_NEIGHBOR clustered 1024 8 1 0.167 0.208 0.234 0.062 30.0 2.19 35.0 70.0 12849152
-G1_NEIGHBOR clustered 1024 8 2 0.167 0.208 0.240 0.000 32.0 2.33 37.3 68.3 12849152
-G1_NEIGHBOR noisy_clustered 64 4 0 0.771 0.542 0.411 0.000 5.4 2.07 33.1 51.4 803072
-G1_NEIGHBOR noisy_clustered 64 4 1 0.979 0.948 0.828 0.000 23.1 2.33 37.3 64.1 803072
-G1_NEIGHBOR noisy_clustered 64 4 2 0.979 0.958 0.880 0.000 32.0 2.33 37.3 74.1 803072
-G1_NEIGHBOR noisy_clustered 64 8 0 0.625 0.375 0.266 0.271 1.5 1.03 16.4 25.0 803072
-G1_NEIGHBOR noisy_clustered 64 8 1 0.938 0.781 0.641 0.000 5.5 2.11 33.8 50.9 803072
-G1_NEIGHBOR noisy_clustered 64 8 2 1.000 0.948 0.828 0.000 13.1 2.30 36.8 71.9 803072
-G1_NEIGHBOR noisy_clustered 256 4 0 0.708 0.604 0.531 0.000 21.5 2.31 37.0 60.3 3212288
-G1_NEIGHBOR noisy_clustered 256 4 1 0.771 0.646 0.583 0.000 32.0 2.33 37.3 64.4 3212288
-G1_NEIGHBOR noisy_clustered 256 4 2 0.771 0.646 0.583 0.000 32.0 2.33 37.3 64.4 3212288
-G1_NEIGHBOR noisy_clustered 256 8 0 0.625 0.469 0.375 0.083 5.4 1.68 26.9 39.3 3212288
-G1_NEIGHBOR noisy_clustered 256 8 1 0.938 0.802 0.750 0.000 19.9 2.30 36.8 64.2 3212288
-G1_NEIGHBOR noisy_clustered 256 8 2 0.958 0.865 0.807 0.000 30.6 2.33 37.3 73.9 3212288
-G1_NEIGHBOR noisy_clustered 1024 4 0 0.271 0.240 0.240 0.000 30.4 2.33 37.3 91.8 12849152
-G1_NEIGHBOR noisy_clustered 1024 4 1 0.271 0.240 0.240 0.000 32.0 2.33 37.3 84.3 12849152
-G1_NEIGHBOR noisy_clustered 1024 4 2 0.271 0.240 0.240 0.000 32.0 2.33 37.3 84.9 12849152
-G1_NEIGHBOR noisy_clustered 1024 8 0 0.542 0.406 0.307 0.000 12.5 2.22 35.6 62.3 12849152
-G1_NEIGHBOR noisy_clustered 1024 8 1 0.688 0.531 0.448 0.000 30.1 2.33 37.3 82.4 12849152
-G1_NEIGHBOR noisy_clustered 1024 8 2 0.688 0.542 0.453 0.000 32.0 2.33 37.3 77.5 12849152
+G1_LAT_META profile=release os=linux arch=x86_64 segments=1024 queries=256 warmup=1 prefix_bits=8 top_k=1 hwm_reset=true synthetic=true
+G1_LAT dist N engine radius cap R@1 mean_shortlisted p50_us p95_us max_us rss_before_kib peak_rss_delta_kib
+G1_LAT clustered 1024 exhaustive 0 none 1.000 1024.0 30.6 38.1 54.6 2916 0
+G1_LAT clustered 1024 neighbor 1 32 0.133 31.0 6.6 8.1 16.7 2916 0
+G1_LAT clustered 1024 global_wfull 1 32 0.969 31.0 10.8 11.1 16.8 2916 0
+G1_LAT clustered 1024 neighbor 1 64 0.262 62.0 7.8 8.0 12.9 2916 0
+G1_LAT clustered 1024 global_wfull 1 64 0.969 62.0 12.0 12.6 19.0 2916 0
+G1_LAT clustered 1024 neighbor 1 128 0.520 124.0 10.5 12.4 16.3 2916 0
+G1_LAT clustered 1024 global_wfull 1 128 0.969 124.0 12.7 15.2 19.6 2916 0
+G1_LAT clustered 1024 neighbor 1 256 0.969 248.0 16.5 17.2 23.1 2916 0
+G1_LAT clustered 1024 global_wfull 1 256 0.969 248.0 16.8 17.2 35.9 2916 0
+G1_LAT clustered 1024 neighbor 2 32 0.133 32.0 6.7 6.8 6.9 2916 0
+G1_LAT clustered 1024 global_wfull 2 32 1.000 32.0 11.1 16.1 26.4 2916 0
+G1_LAT clustered 1024 neighbor 2 64 0.270 64.0 8.0 8.3 18.4 2916 0
+G1_LAT clustered 1024 global_wfull 2 64 1.000 64.0 11.4 16.2 21.3 2916 0
+G1_LAT clustered 1024 neighbor 2 128 0.535 128.0 10.2 10.5 10.7 2916 0
+G1_LAT clustered 1024 global_wfull 2 128 1.000 128.0 12.7 17.6 22.3 2916 0
+G1_LAT clustered 1024 neighbor 2 256 1.000 256.0 16.5 17.1 22.4 2916 0
+G1_LAT clustered 1024 global_wfull 2 256 1.000 256.0 16.8 21.9 38.3 2916 0
+G1_LAT noisy_clustered 1024 exhaustive 0 none 1.000 1024.0 30.7 34.5 53.2 3116 56
+G1_LAT noisy_clustered 1024 neighbor 1 32 0.785 29.4 7.6 8.0 14.5 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 1 32 0.969 29.4 9.0 11.3 19.3 3124 0
+G1_LAT noisy_clustered 1024 neighbor 1 64 0.926 52.2 8.8 9.2 13.5 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 1 64 0.969 52.2 9.0 10.4 15.7 3124 0
+G1_LAT noisy_clustered 1024 neighbor 1 128 0.969 76.0 10.0 12.3 22.0 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 1 128 0.969 76.0 9.3 11.8 15.5 3124 0
+G1_LAT noisy_clustered 1024 neighbor 1 256 0.969 79.5 9.8 14.4 19.6 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 1 256 0.969 79.5 9.2 12.3 13.3 3124 0
+G1_LAT noisy_clustered 1024 neighbor 2 32 0.793 32.0 8.4 9.8 20.0 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 2 32 1.000 32.0 12.3 15.2 41.7 3124 0
+G1_LAT noisy_clustered 1024 neighbor 2 64 0.934 63.6 9.6 10.4 16.4 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 2 64 1.000 63.6 12.0 14.3 18.3 3124 0
+G1_LAT noisy_clustered 1024 neighbor 2 128 0.984 124.1 13.0 13.8 19.0 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 2 128 1.000 124.1 13.5 18.7 23.3 3124 0
+G1_LAT noisy_clustered 1024 neighbor 2 256 1.000 201.0 19.5 24.1 32.5 3124 0
+G1_LAT noisy_clustered 1024 global_wfull 2 256 1.000 201.0 15.8 19.8 22.4 3124 0
+G1_LAT uniform 1024 exhaustive 0 none 1.000 1024.0 30.5 37.3 53.7 3196 4
+G1_LAT uniform 1024 neighbor 1 32 0.922 31.3 8.9 10.2 16.7 3200 0
+G1_LAT uniform 1024 global_wfull 1 32 0.969 31.3 8.1 8.4 14.9 3200 0
+G1_LAT uniform 1024 neighbor 1 64 0.969 37.3 8.6 9.1 9.3 3200 0
+G1_LAT uniform 1024 global_wfull 1 64 0.969 37.3 8.8 9.6 17.4 3200 0
+G1_LAT uniform 1024 neighbor 1 128 0.969 37.3 8.6 9.2 15.5 3200 0
+G1_LAT uniform 1024 global_wfull 1 128 0.969 37.3 8.3 11.0 12.6 3200 0
+G1_LAT uniform 1024 neighbor 1 256 0.969 37.3 8.8 10.9 20.1 3200 0
+G1_LAT uniform 1024 global_wfull 1 256 0.969 37.3 8.3 9.1 17.1 3200 0
+G1_LAT uniform 1024 neighbor 2 32 0.922 32.0 9.1 9.4 10.2 3200 0
+G1_LAT uniform 1024 global_wfull 2 32 1.000 32.0 11.5 13.1 18.3 3200 0
+G1_LAT uniform 1024 neighbor 2 64 0.977 64.0 11.2 14.0 21.0 3200 0
+G1_LAT uniform 1024 global_wfull 2 64 1.000 64.0 11.5 13.6 23.5 3200 0
+G1_LAT uniform 1024 neighbor 2 128 0.996 128.0 15.0 16.9 43.2 3200 0
+G1_LAT uniform 1024 global_wfull 2 128 1.000 128.0 12.6 15.9 28.7 3200 0
+G1_LAT uniform 1024 neighbor 2 256 1.000 150.0 16.9 18.8 25.2 3200 0
+G1_LAT uniform 1024 global_wfull 2 256 1.000 150.0 13.1 13.9 17.6 3200 0
+G1_LAT_PROCESS peak_rss_kib=3200
 ```
-
-## Interpretation
-- **Quality:**
-  - On these synthetic fixtures, r=1 raised R@1 in 15 of 18 cells and never lowered it.
-  - The gain is largest at prefix 8 (for example uniform 1024: 0.625→0.896).
-  - The cap-bound cells (prefix 4, N=1024) are unchanged: the cap fills from the own bucket.
-  - Clustered at large N stays poor (R@1 ≤0.17): the cap, not the bucket radius, is the limit there.
-  - This is not a generalization claim.
-- **Cost:**
-  - More candidates are scored (bounded by the cap of 32).
-  - Decodes and reread bytes grow modestly, because fewer queries abstain.
-  - Debug latency per query is up to about 2× (indicative only).
-- Bucket-miss: r=1 recovered 64/64 clean 1-bit cases. On 2-bit key misses, r=1 found 0/64 (an honest failure) and r=2 found 64/64.
-- **NOT_MEASURED:** peak RSS/heap, release-build latency, run-to-run variance.
-
-## Evidence
-- fmt; `cargo clippy -p sml-store --all-targets -D warnings` pass; pre-push hook (no --no-verify) on 1463f95b: fmt, clippy --workspace -D warnings, `cargo test --locked --workspace` 279 suites, 2138 passed, 0 failed.
-
-## RemoteOps (E2E evidence, not a qualification verdict)
-- The lease was idle at wake: #803 squash-merged as 16685549 and its poll was deleted. Not SKIPPED_LOCKED.
-- Wake `sml-genius-20261103T191749Z-8152791e` was received at about 19:17:49Z. This cycle started after it.
-- First commit 1463f95b is at 19:20:39Z, after the wake.
-- History:
-  - sml-genius-20261103T174453Z-bb866975 → SKIPPED_LOCKED
-  - sml-genius-20261103T183120Z-f9624612 (run 41694549374) → SKIPPED_LOCKED (lease held by the #803 cycle)
-- session_attestation is **not produced**: no attested-invocation artifact exists for this run, and none was invented. Status therefore stays IN_PROGRESS.
-- The 30-min schedule is NOT enabled. A draft patch exists only locally at /workspace/agent-tools/remoteops-grok-wake-30min-draft.patch.
-- `docs/agent-reports/CHATGPT_GROK_INSTRUCTIONS.md`: 404 on main (missing).
-
-## Next G1 task
-- A release-build latency protocol with repeated runs.
-- A per-bucket cap split (so clustered/cap-bound cells benefit).
-- An RSS probe.
-
-## Gate
-`python3 ops/grok/grok_report_gate.py --status docs/agent-reports/GROK_SML_GENIUS_STATUS.json --report docs/agent-reports/GROK_SML_GENIUS_LATEST.md` (RemoteOps copy) → exit 0: `VALIDATED: status/report schema only; Grok invocation NOT independently attested`
-
-## Clustered failure focus (ChatGPT t121u)
-All numbers come from the measured table above. Each value goes from r=0 (#803 baseline) to r=1.
-
-| N | prefix | R@1 | R@2 | R@4 | Abstention |
-|---|---|---|---|---|---|
-| 1024 | 8 | 0.083→0.167 | 0.115→0.208 | 0.146→0.234 | 0.375→0.062 |
-| 1024 | 4 | 0.125→0.146 | — | 0.177→0.219 | 0.208→0.021 |
-
-- **False negatives:** r=1 mostly removes abstention, because the empty-bucket misses get filled from neighbouring buckets. Top-1 recall stays poor because the 32-candidate cap fills before the true neighbour is reached. Clustered failure is **not fixed**; it is cap/ordering-bound.
-- **Search cost** (mean candidates scored, r=0→r=1, vs exhaustive N=1024): 20.0→30.0 at prefix 8, 25.3→31.3 at prefix 4. Debug-build time per query: about 41.5→67.6 µs at prefix 8.
-- **NOT_MEASURED:** peak RSS (no reliable probe), multi-run variance (single run; recall and accounting are deterministic on fixed seeds, timing is not), release-build latency.
-
-## Wake → contribution chain
-1. Wake `sml-genius-20261103T191749Z-8152791e` from RemoteOps run 41701874209, received about 19:17:49Z.
-2. Lease was idle (#803 merged as 16685549).
-3. This cycle branched from 16685549.
-4. Code commit 1463f95b at 19:20:39Z.
-5. PR #804 opened.
-6. Local pre-push passed: 2138 tests, 0 failed.
-7. CI on the exact head is pending at report time.
-8. Gate exit 0 (schema only).
+## Raw (N=4096)
+```
+G1_LAT_META profile=release os=linux arch=x86_64 segments=4096 queries=256 warmup=1 prefix_bits=8 top_k=1 hwm_reset=true synthetic=true
+G1_LAT dist N engine radius cap R@1 mean_shortlisted p50_us p95_us max_us rss_before_kib peak_rss_delta_kib
+G1_LAT clustered 4096 exhaustive 0 none 1.000 4096.0 151.6 231.3 277.8 3640 0
+G1_LAT clustered 4096 neighbor 1 32 0.031 31.0 7.3 15.5 27.9 3352 0
+G1_LAT clustered 4096 global_wfull 1 32 0.969 31.0 36.7 48.9 53.1 3352 0
+G1_LAT clustered 4096 neighbor 1 64 0.062 62.0 8.2 14.2 16.9 3352 0
+G1_LAT clustered 4096 global_wfull 1 64 0.969 62.0 27.0 45.9 58.6 3352 0
+G1_LAT clustered 4096 neighbor 1 128 0.125 124.0 10.8 19.6 26.1 3352 0
+G1_LAT clustered 4096 global_wfull 1 128 0.969 124.0 35.5 54.9 61.6 3352 0
+G1_LAT clustered 4096 neighbor 1 256 0.234 248.0 17.3 27.4 75.5 3352 0
+G1_LAT clustered 4096 global_wfull 1 256 0.969 248.0 34.2 61.3 70.3 3352 0
+G1_LAT clustered 4096 neighbor 2 32 0.031 32.0 7.3 14.6 19.3 3352 0
+G1_LAT clustered 4096 global_wfull 2 32 1.000 32.0 26.9 47.9 78.4 3352 0
+G1_LAT clustered 4096 neighbor 2 64 0.062 64.0 9.1 18.2 26.8 3352 0
+G1_LAT clustered 4096 global_wfull 2 64 1.000 64.0 27.6 50.1 97.1 3352 0
+G1_LAT clustered 4096 neighbor 2 128 0.129 128.0 10.8 17.0 22.3 3352 0
+G1_LAT clustered 4096 global_wfull 2 128 1.000 128.0 32.3 56.2 81.8 3352 0
+G1_LAT clustered 4096 neighbor 2 256 0.246 256.0 17.2 18.7 25.0 3352 0
+G1_LAT clustered 4096 global_wfull 2 256 1.000 256.0 33.6 54.9 77.1 3352 0
+G1_LAT noisy_clustered 4096 exhaustive 0 none 1.000 4096.0 132.9 148.2 245.0 4056 224
+G1_LAT noisy_clustered 4096 neighbor 1 32 0.465 31.9 7.8 8.5 17.7 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 1 32 0.969 31.9 14.1 20.9 35.2 3704 0
+G1_LAT noisy_clustered 4096 neighbor 1 64 0.598 63.1 9.6 14.1 29.8 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 1 64 0.969 63.1 14.6 20.9 36.0 3704 0
+G1_LAT noisy_clustered 4096 neighbor 1 128 0.758 118.5 12.6 17.8 27.6 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 1 128 0.969 118.5 15.9 22.0 24.9 3704 0
+G1_LAT noisy_clustered 4096 neighbor 1 256 0.918 210.5 19.0 21.5 27.4 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 1 256 0.969 210.5 20.3 27.3 57.6 3704 0
+G1_LAT noisy_clustered 4096 neighbor 2 32 0.465 32.0 9.0 10.9 21.1 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 2 32 1.000 32.0 25.4 35.6 43.4 3704 0
+G1_LAT noisy_clustered 4096 neighbor 2 64 0.598 64.0 9.8 10.3 13.8 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 2 64 1.000 64.0 26.5 37.8 40.3 3704 0
+G1_LAT noisy_clustered 4096 neighbor 2 128 0.762 128.0 12.8 14.4 20.6 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 2 128 1.000 128.0 28.6 43.9 69.0 3704 0
+G1_LAT noisy_clustered 4096 neighbor 2 256 0.922 255.4 21.4 26.9 33.4 3704 0
+G1_LAT noisy_clustered 4096 global_wfull 2 256 1.000 255.4 35.0 50.8 194.6 3704 0
+G1_LAT uniform 4096 exhaustive 0 none 1.000 4096.0 130.0 171.6 226.0 4320 224
+G1_LAT uniform 4096 neighbor 1 32 0.703 32.0 8.3 8.9 18.4 3972 0
+G1_LAT uniform 4096 global_wfull 1 32 0.969 32.0 10.6 12.2 30.6 3972 0
+G1_LAT uniform 4096 neighbor 1 64 0.805 64.0 9.6 10.4 20.1 3972 0
+G1_LAT uniform 4096 global_wfull 1 64 0.969 64.0 11.3 15.2 22.5 3972 0
+G1_LAT uniform 4096 neighbor 1 128 0.934 127.8 13.6 16.4 27.4 3972 0
+G1_LAT uniform 4096 global_wfull 1 128 0.969 127.8 13.1 18.8 28.8 3972 0
+G1_LAT uniform 4096 neighbor 1 256 0.969 144.1 14.1 15.5 23.1 3972 0
+G1_LAT uniform 4096 global_wfull 1 256 0.969 144.1 12.5 14.0 20.3 3972 0
+G1_LAT uniform 4096 neighbor 2 32 0.703 32.0 9.1 11.6 40.1 3972 0
+G1_LAT uniform 4096 global_wfull 2 32 1.000 32.0 20.9 29.9 35.0 3972 0
+G1_LAT uniform 4096 neighbor 2 64 0.805 64.0 10.4 11.0 14.6 3972 0
+G1_LAT uniform 4096 global_wfull 2 64 1.000 64.0 20.9 26.5 39.9 3972 0
+G1_LAT uniform 4096 neighbor 2 128 0.934 128.0 13.9 17.9 25.3 3972 0
+G1_LAT uniform 4096 global_wfull 2 128 1.000 128.0 22.5 36.8 49.0 3972 0
+G1_LAT uniform 4096 neighbor 2 256 0.973 256.0 22.1 28.8 34.2 3972 0
+G1_LAT uniform 4096 global_wfull 2 256 1.000 256.0 26.0 32.5 72.5 3972 0
+G1_LAT_PROCESS peak_rss_kib=3972
+```
