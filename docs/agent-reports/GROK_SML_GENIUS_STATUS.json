@@ -2,23 +2,27 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-04T03:00:00Z",
-  "last_report_utc": "2026-11-04T03:00:00Z",
+  "timestamp_utc": "2026-11-04T06:35:00Z",
+  "last_report_utc": "2026-11-04T06:35:00Z",
   "last_successful_code_commit_utc": "2026-11-04T00:11:56Z",
-  "run_id": "20261104T030000Z",
+  "run_id": "20261104T063500Z",
   "runner": "grok-box (authoring); bench target: none available (repo self-hosted runners total_count=0)",
   "milestone": "G1 CONTEXT-3",
-  "task": "Runner-blocker report + fail-closed G1 cross-run latency aggregator (runner-independent)",
-  "base_sha": "f531f80efe89dc93ea99d2714dd411b8981d93bd",
-  "head_sha": "pending",
-  "branch": "g1-ctx3-runner-blocker",
-  "pr_url": "pending",
+  "task": "IDLE_WAITING: G1 CONTEXT-3 runner-independent scaffold complete through #818; no unblocked slice remains",
+  "base_sha": "688139e6844da11a523851c9836f95cb3b3cd843",
+  "head_sha": "see PR",
+  "branch": "grok/g1-status-idle-waiting",
+  "pr_url": "see PR",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
-    "sml_store_g1_latency_aggregate": "pass",
-    "clippy": "pass",
-    "code_changed": true
+    "code_changed": false
   },
-  "metrics": "NOT_MEASURED: run 41760808506 queued, no self-hosted runner (repo runners total_count=0).",
-  "blocked_reason": "RemoteOps NOT_CONNECTED (no session_attestation; E2E 8152791e NOT_QUALIFIED). G1 native bench blocked: 0 repo self-hosted runners; run 41760808506 queued."
+  "metrics": "NOT_MEASURED: no pinned real-text corpus; run 41760808506 queued (0 self-hosted runners).",
+  "blocked_reason": "WAITING_ON: corpus+SHA / self-hosted runner / ChatGPT M2. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED.",
+  "qualification": "NOT_QUALIFIED",
+  "waiting_on": [
+    "user real-text corpus + SHA-256 pin (G1_REALTEXT_MANIFEST v1)",
+    "Dell/Thor self-hosted runner registration for run 41760808506",
+    "ChatGPT M2 (RemoteOps #1208) verified session_attestation for E2E qualification"
+  ]
 }
