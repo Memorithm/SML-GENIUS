@@ -19,6 +19,12 @@
 //! derivation=v1 key=simhash64-sha256-v1 corpus_id=.. sha256=..`, which the
 //! synthetic aggregator refuses. Rows use dist=`realtext` and add a trailing
 //! `gold@1` column (top-1 segment == derived target).
+//!
+//! Encoder v2 (pre-registered, opt-in): append `--key v2s1` or `--key v2s8`.
+//! Each segment is indexed as one record per 8-token window (stride 1 or 8,
+//! `g1_realtext_key::simhash_windows_v2`); queries keep the v1 key. `N` is
+//! then the number of window records, and `gold@1` maps the top-1 record back
+//! to its parent segment. Meta: `key=simhash64-sha256-v2-w8s<S>`.
 
 #[path = "support/g1_fixture.rs"]
 mod g1_fixture;
@@ -31,7 +37,9 @@ use sml_store::context_retrieve_bench::{
 };
 use sml_store::g1_realtext_corpus::load_pinned;
 use sml_store::g1_realtext_eval::{build_eval_set, PARAMS_V1};
-use sml_store::g1_realtext_key::{simhash_v1, KEY_ENCODER_V1};
+use sml_store::g1_realtext_key::{
+    simhash_v1, simhash_windows_v2, KEY_ENCODER_V1, KEY_ENCODER_V2, STRIDES_V2, WINDOW_V2,
+};
 
 const PREFIX_BITS: u32 = 8;
 const CAPS: [usize; 4] = [32, 64, 128, 256];
@@ -44,23 +52,35 @@ fn kib(v: Option<u64>) -> String {
 
 struct RealText {
     keys: Vec<u64>,
+    /// Record index (0-based) -> parent segment id (1-based haystack order).
+    parent: Vec<u64>,
     words: Vec<u64>,
     gold: Vec<u64>,
     meta: String,
 }
 
 /// Fail-closed: any load, pin, derivation or key error aborts the process.
-fn load_realtext(manifest: &str, corpus: &str) -> Result<RealText, String> {
+fn load_realtext(manifest: &str, corpus: &str, stride: Option<usize>) -> Result<RealText, String> {
     let m = std::fs::read_to_string(manifest).map_err(|e| format!("manifest: {e}"))?;
     let c = std::fs::read(corpus).map_err(|e| format!("corpus: {e}"))?;
     let pinned = load_pinned(&m, &c).map_err(|e| format!("load_pinned: {e:?}"))?;
     let set = build_eval_set(&pinned, &PARAMS_V1).map_err(|e| format!("derive: {e:?}"))?;
-    let keys = set
-        .segments
-        .iter()
-        .map(|s| simhash_v1(&s.tokens))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("key: {e:?}"))?;
+    let mut keys = Vec::new();
+    let mut parent = Vec::new();
+    for (i, s) in set.segments.iter().enumerate() {
+        let k = match stride {
+            None => vec![simhash_v1(&s.tokens).map_err(|e| format!("key: {e:?}"))?],
+            Some(st) => {
+                simhash_windows_v2(&s.tokens, WINDOW_V2, st).map_err(|e| format!("key: {e:?}"))?
+            }
+        };
+        parent.extend(std::iter::repeat_n(i as u64 + 1, k.len()));
+        keys.extend(k);
+    }
+    let key_id = stride.map_or_else(
+        || KEY_ENCODER_V1.to_owned(),
+        |st| format!("{KEY_ENCODER_V2}-w{WINDOW_V2}s{st}"),
+    );
     let mut words = Vec::new();
     let mut gold = Vec::new();
     for q in &set.queries {
@@ -74,20 +94,38 @@ fn load_realtext(manifest: &str, corpus: &str) -> Result<RealText, String> {
     }
     Ok(RealText {
         keys,
+        parent,
         words,
         gold,
-        meta: format!("{} key={KEY_ENCODER_V1}", set.meta_fields()),
+        meta: format!("{} key={key_id}", set.meta_fields()),
     })
 }
 
 fn main() -> Result<(), ContextRetrieveError> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--realtext") {
-        let [_, manifest, corpus] = args.as_slice() else {
-            eprintln!("G1_LAT_REFUSE usage: --realtext <MANIFEST> <CORPUS.tsv> (no default pin)");
-            std::process::exit(2);
+        let (manifest, corpus, stride) = match args.as_slice() {
+            [_, m, c] => (m, c, None),
+            [_, m, c, flag, k] if flag == "--key" => {
+                let st = match k.as_str() {
+                    "v2s1" => 1,
+                    "v2s8" => 8,
+                    _ => {
+                        eprintln!("G1_LAT_REFUSE unknown --key {k} (v2s1|v2s8)");
+                        std::process::exit(2);
+                    }
+                };
+                debug_assert!(STRIDES_V2.contains(&st));
+                (m, c, Some(st))
+            }
+            _ => {
+                eprintln!(
+                    "G1_LAT_REFUSE usage: --realtext <MANIFEST> <CORPUS.tsv> [--key v2s1|v2s8] (no default pin)"
+                );
+                std::process::exit(2);
+            }
         };
-        let rt = match load_realtext(manifest, corpus) {
+        let rt = match load_realtext(manifest, corpus, stride) {
             Ok(rt) => rt,
             Err(e) => {
                 eprintln!("G1_LAT_REFUSE {e}");
@@ -120,7 +158,7 @@ fn main() -> Result<(), ContextRetrieveError> {
         let words: Vec<u64> = (0..queries)
             .map(|s| fixture.dist.query(segments, s))
             .collect();
-        run_cells(&fixture, dist.name(), &words, None, resettable)?;
+        run_cells(&fixture, dist.name(), &words, None, None, resettable)?;
     }
     print_process();
     Ok(())
@@ -144,7 +182,14 @@ fn run_realtext(rt: &RealText) -> Result<(), ContextRetrieveError> {
          rss_before_kib peak_rss_delta_kib minflt_delta majflt_delta gold@1"
     );
     let fixture = Fixture::build_explicit(3200, rt.keys.clone());
-    run_cells(&fixture, "realtext", &rt.words, Some(&rt.gold), resettable)?;
+    run_cells(
+        &fixture,
+        "realtext",
+        &rt.words,
+        Some(&rt.gold),
+        Some(&rt.parent),
+        resettable,
+    )?;
     print_process();
     Ok(())
 }
@@ -170,6 +215,7 @@ fn run_cells(
     dist_name: &str,
     words: &[u64],
     gold: Option<&[u64]>,
+    parent: Option<&[u64]>,
     resettable: bool,
 ) -> Result<(), ContextRetrieveError> {
     let segments = fixture.segments;
@@ -205,7 +251,9 @@ fn run_cells(
         for (qi, (word, &b)) in words.iter().zip(&best).enumerate() {
             let (hits, acc) = run(*word)?;
             if let (Some(g), Some(h)) = (gold, hits.first()) {
-                if h.segment.segment_id == g[qi] {
+                let seg = h.segment.segment_id;
+                let top = parent.map_or(seg, |p| p[(seg - 1) as usize]);
+                if top == g[qi] {
                     gold_hit += 1;
                 }
             }

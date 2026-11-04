@@ -50,3 +50,35 @@ pub fn simhash_v1<S: AsRef<str>>(tokens: &[S]) -> Result<u64, KeyError> {
         .filter(|(_, &cb)| cb > 0)
         .fold(0_u64, |k, (b, _)| k | (1 << b)))
 }
+
+/// Identifier prefix printed in bench meta for encoder v2 (`key=`); the full
+/// id appends the window and stride, e.g. `simhash64-sha256-v2-w8s1`.
+pub const KEY_ENCODER_V2: &str = "simhash64-sha256-v2";
+/// Pre-registered v2 window width, equal to `PARAMS_V1.query_tokens`.
+pub const WINDOW_V2: usize = 8;
+/// Pre-registered v2 strides: 1 (every window) and 8 (non-overlapping).
+pub const STRIDES_V2: [usize; 2] = [1, 8];
+
+/// Encoder v2: one SimHash v1 key per token window of `window` tokens, taken
+/// at offsets `0, stride, 2*stride, ...` while a full window fits. A list
+/// shorter than `window` yields one key over the whole list. Each key keeps
+/// the index of its parent token list, so a hit on any window maps back to
+/// the segment it came from. Queries keep the v1 key (one window of
+/// `query_tokens` tokens). Refuses an empty list, `window == 0` or
+/// `stride == 0`.
+pub fn simhash_windows_v2<S: AsRef<str>>(
+    tokens: &[S],
+    window: usize,
+    stride: usize,
+) -> Result<Vec<u64>, KeyError> {
+    if tokens.is_empty() || window == 0 || stride == 0 {
+        return Err(KeyError::Empty);
+    }
+    if tokens.len() <= window {
+        return Ok(vec![simhash_v1(tokens)?]);
+    }
+    (0..=tokens.len() - window)
+        .step_by(stride)
+        .map(|o| simhash_v1(&tokens[o..o + window]))
+        .collect()
+}
