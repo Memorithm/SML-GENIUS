@@ -79,6 +79,17 @@ corpus_id=.. sha256=.. key=simhash64-sha256-v1`, refused by
 nearest key distance". **NOT_MEASURED** until the user pins a corpus + SHA.
 
 ## CI policy
-Only the 459-byte hand-written fixture
-(`crates/sml-store/tests/fixtures/g1_realtext/`) is used in CI. No corpus is
-downloaded in CI.
+Only hand-written in-repo fixtures (`crates/sml-store/tests/fixtures/g1_realtext/`)
+are used in CI. No corpus is downloaded in CI.
+
+- `tiny.tsv` (459 bytes): loader/split tests; yields `NoQueries` under `PARAMS_V1`.
+- `smoke.tsv` (3344 bytes, sha256
+  `6d8212da1faeb7269eaf7caf0ee207cc6653d9a0fa2805cc56d5d45193e15b65`, 8 docs,
+  `split_mod 2 eval_residue 0` -> 5 eval / 3 train): **smoke fixture only**.
+  `tests/g1_realtext_smoke.rs` checks `load_pinned` -> `build_eval_set(PARAMS_V1)`
+  -> `simhash_v1` and that the meta is refused by the synthetic aggregator.
+  `--realtext smoke.manifest smoke.tsv` exits 0 locally. Any numbers it prints
+  (5 segments, 5 queries) are **not measurements** and must not be cited.
+
+Fixture smoke != validation. Every real corpus remains **NOT_MEASURED** until
+the user chooses a corpus and pins its SHA-256.
