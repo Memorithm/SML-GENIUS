@@ -91,5 +91,8 @@ are used in CI. No corpus is downloaded in CI.
   `--realtext smoke.manifest smoke.tsv` exits 0 locally. Any numbers it prints
   (5 segments, 5 queries) are **not measurements** and must not be cited.
 
+CI: `.github/workflows/g1-realtext-smoke.yml` (GitHub-hosted `ubuntu-24.04`) runs this
+smoke and asserts exit 0 + meta substrings only; CI smoke != validation.
+
 Fixture smoke != validation. Every real corpus remains **NOT_MEASURED** until
 the user chooses a corpus and pins its SHA-256.
