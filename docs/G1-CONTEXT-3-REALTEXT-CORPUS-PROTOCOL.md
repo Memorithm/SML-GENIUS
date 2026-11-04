@@ -29,8 +29,40 @@ Admit a real-text corpus to G1 retrieval runs beyond the synthetic fixture
   `g1_latency_aggregate`) is unchanged and remains the default arm. A real-text
   arm must be a separate, explicitly flagged arm whose meta line records
   `corpus_id` and `sha256`; it must never be aggregated with synthetic runs.
-- Queries/targets derivation from eval docs and the segmenter for real text are
-  **not yet defined**; they must be pre-registered in a follow-up before wiring.
+- Query/target derivation, segmentation and near-dup refusal: see
+  "Derivation rules v1" below (`sml_store::g1_realtext_eval`).
+
+## Derivation rules v1 (pre-registered; `g1_realtext_eval::PARAMS_V1`)
+Frozen before any real-text number is seen. Changing any value is v2.
+1. **Normalization:** Unicode lowercase; every non-alphanumeric char is a
+   separator; tokens = maximal alphanumeric runs.
+2. **Segmentation:** per document, non-overlapping windows of
+   `segment_tokens=64` tokens; a trailing window with < `min_tail_tokens=16`
+   tokens is dropped. Segments never cross documents. Id `<doc_id>#<k>`.
+3. **Haystack:** segments of **eval** documents only. Train docs are never
+   queried or indexed by the eval arm.
+4. **Query/target:** one query per eval doc with >= 1 segment. With
+   `H(x) = u64_be(sha256(x)[0..8])`: target `k = H("g1q-target|"+doc_id) mod n_segs`;
+   offset `= H("g1q-offset|"+doc_id) mod (len(target) - query_tokens + 1)`;
+   query = the contiguous `query_tokens=8`-token window at that offset. The
+   target segment is the only gold answer. This is a **lexical span-recall
+   probe**, not a semantic-retrieval test. Zero queries => refusal.
+5. **Near-duplicate refusal (PROVISIONAL, unvalidated):** for every
+   (train, eval) doc pair, refuse if the normalized token sequences are equal,
+   or if `shingle=5`-token shingle-set Jaccard >= 0.8. Threshold is a
+   placeholder, not calibrated on labelled data; pairwise O(train x eval),
+   suitable only for small corpora. Runs before segmentation.
+6. **Meta:** a real-text arm prints
+   `synthetic=false arm=realtext derivation=v1 corpus_id=<id> sha256=<hex>`
+   (`RealTextEvalSet::meta_fields`). `g1_latency_aggregate` refuses any run
+   without `synthetic=true`, so real-text runs never aggregate with synthetic.
+
+### Not yet wired (next hook)
+`g1_latency_rss` still runs the synthetic arm only. The real-text arm needs a
+pre-registered text -> 64-bit retrieval-bitfield encoder (undefined; the
+synthetic fixture draws words directly). Next step: pre-register that encoder,
+then add an opt-in flag that calls `load_pinned` + `build_eval_set` and prints
+the meta above. No corpus is pinned until the user chooses one and its SHA.
 
 ## CI policy
 Only the 459-byte hand-written fixture
