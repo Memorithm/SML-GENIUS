@@ -16,8 +16,13 @@
 pub const HASH_BITS: u32 = 1 << 16;
 /// Thermometer codes appended after the hashed space for pair features.
 pub const THERMO: u32 = 32;
+/// First index of the extension block (DEC-3 language-model features). DEC-2
+/// never sets these bits, so its heads are unchanged by the block.
+pub const EXTRA_BASE: u32 = HASH_BITS + 2 * THERMO;
+/// Size of the extension block.
+pub const EXTRA: u32 = 64;
 /// Total feature dimension.
-pub const DIM: usize = (HASH_BITS + 2 * THERMO) as usize;
+pub const DIM: usize = (EXTRA_BASE + EXTRA) as usize;
 /// Pre-registered grids, selected on DEV only.
 pub const EPOCH_GRID: [usize; 4] = [1, 2, 4, 8];
 /// Kept fraction of non-zero weights, as 1 / KEEP_DIV[i] (1 keeps all).
