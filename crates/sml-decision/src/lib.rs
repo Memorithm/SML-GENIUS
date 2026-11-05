@@ -15,6 +15,7 @@ pub mod applicability;
 pub mod dec2_text;
 pub mod dec3_lm;
 pub mod dec4_instr;
+pub mod dec5_meaning;
 pub mod elastic_bank;
 pub mod feature_search;
 pub mod mor_bank;
