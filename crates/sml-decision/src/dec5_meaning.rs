@@ -49,6 +49,8 @@ pub fn signs(word: &str) -> u64 {
 /// Learned 64-bit codes of the vocabulary.
 pub struct WordCodes {
     codes: HashMap<String, u64>,
+    /// Fall back on `crate::dec6_lexicon::LEMMA_RULES` for unknown words (DEC-6).
+    lemmatize: bool,
 }
 
 impl WordCodes {
@@ -95,11 +97,27 @@ impl WordCodes {
                 (w, c)
             })
             .collect();
-        Self { codes }
+        Self {
+            codes,
+            lemmatize: false,
+        }
+    }
+
+    /// Codes given directly (DEC-6 lexicon codes), optionally lemmatized on lookup.
+    pub fn from_codes(codes: HashMap<String, u64>, lemmatize: bool) -> Self {
+        Self { codes, lemmatize }
     }
 
     pub fn code(&self, word: &str) -> Option<u64> {
-        self.codes.get(word).copied()
+        if let Some(&c) = self.codes.get(word) {
+            return Some(c);
+        }
+        if !self.lemmatize {
+            return None;
+        }
+        crate::dec6_lexicon::lemma_candidates(word)
+            .iter()
+            .find_map(|w| self.codes.get(w).copied())
     }
 
     pub fn len(&self) -> usize {
