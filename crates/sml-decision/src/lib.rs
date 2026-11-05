@@ -12,6 +12,7 @@ use core::{fmt, mem::size_of};
 pub use sml_core::{circuit::SignalRef, train::TruthTable2};
 
 pub mod applicability;
+pub mod dec2_text;
 pub mod elastic_bank;
 pub mod feature_search;
 pub mod mor_bank;
