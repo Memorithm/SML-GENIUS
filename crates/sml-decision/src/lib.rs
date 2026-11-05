@@ -18,6 +18,7 @@ pub mod dec4_instr;
 pub mod dec5_meaning;
 pub mod dec6_lexicon;
 pub mod dec7_polarity;
+pub mod dec8_fresh;
 pub mod elastic_bank;
 pub mod feature_search;
 pub mod mor_bank;
