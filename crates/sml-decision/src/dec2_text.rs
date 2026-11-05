@@ -136,14 +136,21 @@ pub struct Perceptron {
     b: Vec<i64>,
     ub: Vec<i64>,
     c: i64,
+    dim: usize,
 }
 
 impl Perceptron {
     pub fn new(classes: usize) -> Self {
+        Self::with_dim(classes, DIM)
+    }
+
+    /// A perceptron over `dim` features per class row (DEC-4 uses a larger space).
+    pub fn with_dim(classes: usize, dim: usize) -> Self {
         Self {
             classes,
-            w: vec![0; classes * DIM],
-            u: vec![0; classes * DIM],
+            dim,
+            w: vec![0; classes * dim],
+            u: vec![0; classes * dim],
             b: vec![0; classes],
             ub: vec![0; classes],
             c: 1,
@@ -151,14 +158,15 @@ impl Perceptron {
     }
 
     fn score(&self, class: usize, x: &[u32]) -> i64 {
-        let row = &self.w[class * DIM..(class + 1) * DIM];
+        let d = self.dim;
+        let row = &self.w[class * d..(class + 1) * d];
         self.b[class] + x.iter().map(|&i| row[i as usize]).sum::<i64>()
     }
 
     fn add(&mut self, class: usize, x: &[u32], sign: i64, bias: bool) {
         let c = self.c;
         for &i in x {
-            let k = class * DIM + i as usize;
+            let k = class * self.dim + i as usize;
             self.w[k] += sign;
             self.u[k] += sign * c;
         }
@@ -199,8 +207,14 @@ pub struct Head {
 }
 
 impl Head {
+    /// Features per class row.
+    pub fn dim(&self) -> usize {
+        self.w.len() / self.classes.max(1)
+    }
+
     pub fn score(&self, class: usize, x: &[u32]) -> i64 {
-        let row = &self.w[class * DIM..(class + 1) * DIM];
+        let d = self.dim();
+        let row = &self.w[class * d..(class + 1) * d];
         self.b[class] + x.iter().map(|&i| row[i as usize]).sum::<i64>()
     }
 
@@ -317,7 +331,17 @@ fn step(kind: Kind, p: &mut Perceptron, e: &Example, bias_only: bool) {
 /// Trains `max(epochs)` epochs and returns the averaged head after each
 /// requested epoch count (ascending).
 pub fn train_averaged(kind: Kind, train: &[Example], epochs: &[usize]) -> Vec<(usize, Head)> {
-    let mut p = Perceptron::new(rows(kind));
+    train_averaged_dim(kind, DIM, train, epochs)
+}
+
+/// [`train_averaged`] over a feature space of `dim` bits.
+pub fn train_averaged_dim(
+    kind: Kind,
+    dim: usize,
+    train: &[Example],
+    epochs: &[usize],
+) -> Vec<(usize, Head)> {
+    let mut p = Perceptron::with_dim(rows(kind), dim);
     let mut out = Vec::new();
     let last = epochs.iter().copied().max().unwrap_or(0);
     for epoch in 1..=last {
@@ -362,7 +386,7 @@ pub fn quantize(kind: Kind, avg: &Head, levels: i64, keep_div: usize, train: &[E
             q * v.signum()
         })
         .collect();
-    let mut p = Perceptron::new(avg.classes);
+    let mut p = Perceptron::with_dim(avg.classes, avg.dim());
     p.w.clone_from(&w);
     for pass in 1..=BIAS_PASSES {
         for i in epoch_order(train.len(), 1000 + pass) {
@@ -415,10 +439,20 @@ pub fn select_on_dev(
     train: &[Example],
     dev: &[Example],
 ) -> (Selected, Selected, Vec<GridRow>) {
+    select_on_dev_dim(kind, DIM, train, dev)
+}
+
+/// [`select_on_dev`] over a feature space of `dim` bits.
+pub fn select_on_dev_dim(
+    kind: Kind,
+    dim: usize,
+    train: &[Example],
+    dev: &[Example],
+) -> (Selected, Selected, Vec<GridRow>) {
     let mut grid = Vec::new();
     let mut best_q: Option<Selected> = None;
     let mut best_i: Option<Selected> = None;
-    for (epochs, avg) in train_averaged(kind, train, &EPOCH_GRID) {
+    for (epochs, avg) in train_averaged_dim(kind, dim, train, &EPOCH_GRID) {
         let (c, _) = accuracy(kind, &avg, dev);
         grid.push((epochs, 0, 0, c, avg.nonzero()));
         if best_i.as_ref().is_none_or(|b| c > b.dev_correct) {

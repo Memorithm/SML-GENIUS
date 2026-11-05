@@ -14,6 +14,7 @@ pub use sml_core::{circuit::SignalRef, train::TruthTable2};
 pub mod applicability;
 pub mod dec2_text;
 pub mod dec3_lm;
+pub mod dec4_instr;
 pub mod elastic_bank;
 pub mod feature_search;
 pub mod mor_bank;
