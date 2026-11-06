@@ -116,7 +116,10 @@ fn admission(conf: Settings) -> Result<(u64, u64), String> {
     let effective_available = cgroup_remaining_memory()
         .map(|v| v.min(host_available))
         .unwrap_or(host_available);
-    let reserved = conf.reserve_mib.checked_mul(1024 * 1024).ok_or("reserve overflow")?;
+    let reserved = conf
+        .reserve_mib
+        .checked_mul(1024 * 1024)
+        .ok_or("reserve overflow")?;
     let percent_budget =
         (u128::from(effective_available) * u128::from(conf.max_ram_percent) / 100) as u64;
     let budget = percent_budget.min(effective_available.saturating_sub(reserved));
@@ -139,7 +142,7 @@ fn random(state: &mut u64) -> u64 {
     *state ^= *state >> 12;
     *state ^= *state << 25;
     *state ^= *state >> 27;
-    state.wrapping_mul(2685821657736338717)
+    (*state).wrapping_mul(2685821657736338717)
 }
 
 struct Corpus {
@@ -186,10 +189,14 @@ fn generate(conf: Settings) -> Result<Corpus, String> {
 }
 
 fn dense_dot(weights: &[i8; WIDTH], input: u64) -> i32 {
-    weights.iter().enumerate().map(|(i, &w)| {
-        let sign = if (input >> i) & 1 == 0 { 1 } else { -1 };
-        i32::from(w) * sign
-    }).sum()
+    weights
+        .iter()
+        .enumerate()
+        .map(|(i, &w)| {
+            let sign = if (input >> i) & 1 == 0 { 1 } else { -1 };
+            i32::from(w) * sign
+        })
+        .sum()
 }
 
 fn compact_sum(data: &Corpus) -> i128 {
