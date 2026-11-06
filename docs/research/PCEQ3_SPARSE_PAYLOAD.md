@@ -93,3 +93,35 @@ the memory-controller event semantics for each host.
 This layout is not yet a TurboQuant codec format: publication requires an
 independent serialization version, endian and alignment contract,
 cross-project ownership review, real model data and scientific promotion.
+
+## PCEQ-3 benchmark source now preregistered
+
+Binary: `crates/sml-core/src/bin/sml-pceq3-bench.rs` (run with
+`cargo run --locked --release -p sml-core --bin sml-pceq3-bench`).
+
+The block recipe deterministically marks each block active according to
+`(73 * block_index + 41) % 100 >= zero_percent`; active blocks provide a
+`MaxAbs(32768)` bound and source i16 values, starting with the signed
+minimum. Inactive blocks provide `CertifiedZero` and call no source.
+The same work for block classification, producer generation and weighted
+sum is timed in both arms.
+
+Frozen grid: lengths 4096 / 65536 / 262144, block sizes 32 / 64 / 128,
+certified-zero selection 0% / 50% / 90% / 100%; two variants
+(dense PCEQ-2 and sparse PCEQ-3). `zero_percent` is a threshold used
+to select blocks, **not an observed exact zero-block fraction** for short
+runs. Exactly 72 result rows per host are expected. Each variant receives
+three warmups and nine timed runs; the order alternates. Results report
+median and nearest-rank p95 timing, checksum, active block counts and
+logical bytes. The producer-callback counts, reconstructed tensor and
+weighted sums are compared **before timing**.
+
+The benchmark is synthetic; its producer certifications are inherent in the
+deterministic block recipe, not obtained by reading a preexisting dataset.
+This makes it a test of the benefit **when trustworthy producer metadata
+already exists**, not a proof that such metadata is free to generate.
+A real producer pipeline may have different costs.
+
+The output explicitly marks `drambytes=UNMEASURED`. Do not claim a
+physical DDR bandwidth reduction or model-quality improvement on the
+basis of these results.
