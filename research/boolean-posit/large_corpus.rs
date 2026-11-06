@@ -380,34 +380,31 @@ mod tests {
             verify_each_block: true,
         };
         let mut corpus = generate(conf).unwrap();
-        let (sum, _) = verify_block_oracle(&corpus).unwrap();
+        let baseline = dense_sum(&corpus);
+        assert!(verify_block_oracle(&corpus).is_ok());
 
-        // Two errors of opposite sign leave the aggregate sum unchanged,
-        // but a per-block check must reject the very first mutated block.
-        let first = dense_dot(&corpus.int8[3], corpus.inputs[3]);
-        let second = dense_dot(&corpus.int8[4], corpus.inputs[4]);
-        let mut flipped_a = false;
-        let mut flipped_b = false;
-        for i in 0..WIDTH {
-            if !flipped_a && corpus.int8[3][i] != 0 {
-                corpus.int8[3][i] = -corpus.int8[3][i];
-                flipped_a = true;
-            }
-            if !flipped_b && corpus.int8[4][i] != 0 {
-                corpus.int8[4][i] = -corpus.int8[4][i];
-                flipped_b = true;
-            }
+        // Corrupt two independent INT8 blocks by +1/-1 contribution.
+        // An aggregate checksum still matches, but block 3 must fail.
+        for (block_index, desired_contribution) in [(3, 1i8), (4, -1i8)] {
+            let input = corpus.inputs[block_index];
+            let weights = &mut corpus.int8[block_index];
+            let position = (0..WIDTH)
+                .find(|&i| {
+                    let sign = if (input >> i) & 1 == 0 { 1 } else { -1 };
+                    let delta = desired_contribution * sign;
+                    (-3..=3).contains(&(weights[i] + delta))
+                })
+                .expect("a bounded mutable coefficient exists");
+            let sign = if (input >> position) & 1 == 0 {
+                1
+            } else {
+                -1
+            };
+            weights[position] += desired_contribution * sign;
         }
-        assert!(flipped_a && flipped_b);
-        let changed_a = dense_dot(&corpus.int8[3], corpus.inputs[3]) - first;
-        let changed_b = dense_dot(&corpus.int8[4], corpus.inputs[4]) - second;
-        // Force truly offsetting errors in a second block by adjusting its
-        // input rather than assuming two unrelated bit flips cancel.
-        assert_ne!(changed_a, 0);
-        assert_ne!(changed_b, 0);
+        assert_eq!(dense_sum(&corpus), baseline);
         let mismatch = verify_block_oracle(&corpus).unwrap_err();
         assert!(mismatch.contains("FAIL_BLOCK_EXACTNESS index=3"));
-        assert_ne!(sum, i128::MIN);
     }
 
     #[test]
