@@ -29,6 +29,39 @@ rustc --edition=2021 -O research/boolean-posit/prototype.rs -o /tmp/bpb-demo
 /tmp/bpb-demo --bench
 ```
 
+
+## Gigascale resident-corpus programme (2026-11-06)
+
+**Target host:** Dell T430 (user-reported 125 GB installed RAM). Installed physical RAM is **not** a claim of currently available budget. No unadmitted host experiment is authorized. The initial gate uses GitHub-hosted runners; future Dell execution must be admitted via Memorithm/RemoteOps, with resource/active-job inspection and no disruption.
+
+`large_corpus.rs` generates deterministic **synthetic** BPB blocks and matching INT8 coefficients in actual resident vectors, plus one bipolar 64-bit input per block. Every pass scans the *full* resident corpus through both the bitplane and scalar INT8 kernels, alternates kernel order across passes, and requires exact equality of aggregate integer outputs. The standalone generator uses fixed seed, records sizes and runtimes, does not call a GPU, and never claims real data or measured DRAM bytes.
+
+Physical-resident allocation estimate is computed using Rust `size_of::<Bpb3>() + 64 + 8` per block, **not** the serialized 26-byte payload. For an alignment-32-byte `Bpb3` Rust structure, the expected footprint is approximately 104 bytes/block, excluding Vec headers, allocator overhead, process/tooling and OS caches. The program prints the actual structure size indirectly via the estimate; its output is evidence, not this assumption.
+
+| Blocks (64 coefficients each) | Coefficients | Serialized BPB weights | Estimated resident BPB + INT8 + inputs (if Bpb3 = 32 B) |
+|---:|---:|---:|---:|
+| 1,048,576 | 67,108,864 | 26 MiB | 104 MiB |
+| 8,388,608 | 536,870,912 | 208 MiB | 832 MiB |
+| 32,000,000 | 2,048,000,000 | 832 MB | 3.328 GB |
+| 128,000,000 | 8,192,000,000 | 3.328 GB | 13.312 GB |
+| 256,000,000 | 16,384,000,000 | 6.656 GB | 26.624 GB |
+| 512,000,000 | 32,768,000,000 | 13.312 GB | 53.248 GB |
+
+**Allocation safety:** before any corpus allocation, refuse requests exceeding the smaller of (a) 50% of observed available RAM and (b) available RAM minus a default 16 GiB reserve. Read Linux `MemAvailable`, and if available the effective process cgroup-v2 `memory.max - memory.current`; a missing cgroup limit is *unknown*, not proof of unlimited resources. `--max-ram-percent` is bounded to at most 70% and `--reserve-mib` to at least 256 MiB. An additional RemoteOps admission check is required before invoking the large Dell workload. The allocator uses fallible reserve, but OS OOM from concurrent workloads remains possible, so no host execution should proceed without external isolation/budget enforcement.
+
+Suggested *commands for an already approved RemoteOps task*, **not** instructions for manually running unadmitted work on a busy host:
+
+```bash
+rustc --edition=2021 -O research/boolean-posit/large_corpus.rs -o /tmp/bpb-corpus
+/tmp/bpb-corpus --blocks 8388608 --repeats 2 --reserve-mib 512
+# Dell admitted, isolated 32M-block phase:
+/tmp/bpb-corpus --blocks 32000000 --repeats 2
+# Dell admitted, isolated 256M-block phase; only if resource guard accepts:
+/tmp/bpb-corpus --blocks 256000000 --repeats 2
+```
+
+These are **planned sizes**, not claims of executed Dell runs. Large synthetic checks alone cannot establish neural-network capability, practical numeric accuracy, or storage-traffic elimination. Matched real-corpus quality, multi-seed controls, hardware counters and end-to-end model trials remain separate preregistered gates.
+
 ## Next scientific gates
 
 BP-1: exact bitwise parity, canonical decode and supervised learning on disjoint holdout.
