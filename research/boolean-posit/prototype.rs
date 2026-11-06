@@ -56,7 +56,7 @@ pub fn decode_scale(word: u16) -> Option<i8> {
     } else {
         -(run as i16)
     };
-    let k = i8::try_from(4 * r + i16::from(e)).ok()?;
+    let k = i8::try_from(4 * r + e as i16).ok()?;
     (encode_scale(k) == Some(word)).then_some(k)
 }
 
