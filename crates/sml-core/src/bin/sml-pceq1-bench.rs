@@ -58,7 +58,7 @@ fn generated(index: usize, seed: u64, pattern: Pattern) -> i16 {
     match pattern {
         Pattern::Balanced => value as i16,
         Pattern::Sparse => {
-            if value & 63 < 59 {
+            if (value & 63) < 59 {
                 0
             } else {
                 ((value >> 10) % 253) as i16 - 126
@@ -154,7 +154,8 @@ fn benchmark(length: usize, block: usize, pattern: Pattern) {
     for (i, variant) in variants.iter().enumerate() {
         elapsed[i].sort_unstable();
         let median_ns = elapsed[i][ROUNDS / 2];
-        let p95_ns = elapsed[i][(ROUNDS - 1) * 95 / 100];
+        let p95_index = (ROUNDS * 95).div_ceil(100) - 1;
+        let p95_ns = elapsed[i][p95_index];
         let candidate = if i == 2 { &or } else { &baseline };
         let (sum_sq_err, max_abs_err) = reconstruction_error(candidate, length, pattern);
         let mse = sum_sq_err as f64 / length as f64;
