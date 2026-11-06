@@ -151,6 +151,7 @@ pub mod pascal_vector_projection;
 pub mod pceq0;
 pub mod pceq3;
 pub mod pceq4;
+pub mod pceq5;
 pub mod pi_boolean;
 pub mod pvp6_executor;
 pub mod pvp6_recurrent;
