@@ -451,6 +451,139 @@ mod tests {
     }
 
     #[test]
+    fn certified_envelopes_match_exact_control_and_skip_zero_production() {
+        for block_size in [32, 64, 128] {
+            for len in [0, 1, 31, 32, 33, 63, 64, 65, 129, 257] {
+                let mut source = vec![0_i16; len];
+                for (index, item) in source.iter_mut().enumerate() {
+                    if index / block_size % 2 == 1 {
+                        *item = sample(index);
+                    }
+                }
+                let control = quantize_materialized(&source, block_size).unwrap();
+                let mut producer_calls = 0;
+                let mut envelope_calls = 0;
+                let mut nonzero_blocks = 0;
+                let result = quantize_streaming_bounded(
+                    len,
+                    block_size,
+                    |index| {
+                        producer_calls += 1;
+                        source[index]
+                    },
+                    |block_index| {
+                        envelope_calls += 1;
+                        let start = block_index * block_size;
+                        let end = (start + block_size).min(len);
+                        let block = &source[start..end];
+                        if block.iter().all(|&v| v == 0) {
+                            ProducerBound::CertifiedZero
+                        } else {
+                            nonzero_blocks += 1;
+                            ProducerBound::MaxAbs(
+                                block
+                                    .iter()
+                                    .map(|v| u32::from(v.unsigned_abs()))
+                                    .max()
+                                    .unwrap(),
+                            )
+                        }
+                    },
+                )
+                .unwrap();
+                assert_eq!(result, control);
+                assert_eq!(envelope_calls, len.div_ceil(block_size));
+                let nonzero_elements = (0..nonzero_blocks)
+                    .map(|_| block_size)
+                    .sum::<usize>();
+                assert!(producer_calls <= nonzero_elements);
+            }
+        }
+    }
+
+    #[test]
+    fn streaming_bound_rejects_stale_or_invalid_metadata_before_publication() {
+        let mut calls = 0;
+        let error = quantize_streaming_bounded(
+            64,
+            32,
+            |i| {
+                calls += 1;
+                if i == 5 { 11 } else { 4 }
+            },
+            |_| ProducerBound::MaxAbs(10),
+        );
+        assert_eq!(
+            error,
+            Err(PceqStreamingError::BrokenBound {
+                index: 5,
+                bound: 10,
+                observed: 11
+            })
+        );
+        assert_eq!(calls, 6);
+
+        let mut calls = 0;
+        let invalid = quantize_streaming_bounded(
+            32,
+            32,
+            |_| {
+                calls += 1;
+                0
+            },
+            |_| ProducerBound::MaxAbs(32_769),
+        );
+        assert_eq!(
+            invalid,
+            Err(PceqStreamingError::OutOfRangeBound {
+                block: 0,
+                bound: 32_769
+            })
+        );
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn streaming_rejects_bad_shape_without_invoking_callbacks() {
+        for invalid in [0, 1, 33, 65, 129] {
+            let mut producer_called = false;
+            let mut bound_called = false;
+            let result = quantize_streaming_bounded(
+                100,
+                invalid,
+                |_| {
+                    producer_called = true;
+                    0
+                },
+                |_| {
+                    bound_called = true;
+                    ProducerBound::MaxAbs(0)
+                },
+            );
+            assert_eq!(result, Err(PceqStreamingError::InvalidBlockSize(invalid)));
+            assert!(!producer_called && !bound_called);
+        }
+    }
+
+    #[test]
+    fn coarse_bound_is_lossy_but_never_clips_i16_extrema() {
+        let input = [i16::MIN, i16::MAX, 0, -1, 1, 125, -125, 128];
+        let mut extended = vec![0_i16; 64];
+        extended[..input.len()].copy_from_slice(&input);
+        let result = quantize_streaming_bounded(
+            extended.len(),
+            32,
+            |i| extended[i],
+            |_| ProducerBound::MaxAbs(32_768),
+        )
+        .unwrap();
+        assert_eq!(result.metadata()[0].exponent(), 9);
+        for (&x, &reconstructed) in extended.iter().zip(result.reconstruct().iter()) {
+            assert!((i32::from(x) - reconstructed).abs() <= 256);
+        }
+    }
+
+    #[test]
     fn exhaustive_i16_extrema_and_or_upper_bound() {
         for value in i16::MIN..=i16::MAX {
             let max_abs = u32::from(value.unsigned_abs());
