@@ -262,15 +262,12 @@ mod tests {
     #[test]
     fn pvp6_real_gate_coefficient_bitplanes_obey_exact_xor_reference() {
         use crate::pvp6_executor::Pvp6Gate;
-        let gate_a =
-            Pvp6Gate::<128>::from_monomials(&[0, 3, 17, 63, 64, 127]).unwrap();
+        let gate_a = Pvp6Gate::<128>::from_monomials(&[0, 3, 17, 63, 64, 127]).unwrap();
         let gate_b = Pvp6Gate::<128>::from_monomials(&[0, 17, 64, 125]).unwrap();
-        let a = Arc::new(
-            CanonicalBitplane::from_words(128, gate_a.coefficients().to_vec()).unwrap(),
-        );
-        let b = Arc::new(
-            CanonicalBitplane::from_words(128, gate_b.coefficients().to_vec()).unwrap(),
-        );
+        let a =
+            Arc::new(CanonicalBitplane::from_words(128, gate_a.coefficients().to_vec()).unwrap());
+        let b =
+            Arc::new(CanonicalBitplane::from_words(128, gate_b.coefficients().to_vec()).unwrap());
         let alias = Arc::clone(&a);
         let zero = xor_sparse_exact(&a, &alias).unwrap();
         assert!(zero.zero_by_identity());
