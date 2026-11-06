@@ -84,3 +84,35 @@ the identity fast path has little or no effect.
 
 Do not claim a speedup, saved DDR traffic or model inference gain
 until these controlled native and workload-representative tests exist.
+
+## Frozen research microbenchmark (added before native runs)
+
+`crates/sml-core/src/bin/sml-pceq5-bench.rs` compares two variants
+over **the same prebuilt immutable inputs**:
+
+- `dense_xor`: conventional exact wordwise XOR and dense vector output.
+- `sparse_identity`: exact XOR with immutable shared-`Arc` identity
+  fast path and sparse nonzero-word output.
+
+Frozen case grid: widths 256, 4096 and 65536 bits; self-XOR selection
+thresholds 0%, 25%, 50% and 100%, 32 operand pairs per case. The
+deterministic self-selection rule is
+`(index * 37 + 19) % 100 < same_percent`, so its threshold is **not
+necessarily the exact observed self-XOR incidence** at 32 pairs.
+Producer construction and immutable allocation occur **outside** the
+timed region, unlike a full model workload. Three warmups and nine
+paired timed samples, with alternating candidate order, report
+median and nearest-rank p95. Exactly 24 CSV records per host.
+
+Preflight compares every result word to the independently computed
+dense XOR oracle, checks shared-identity zero-result and access
+counts, and compares total popcounts. The reported
+`algorithmic_source_word_reads` count is derived from the algorithm,
+not from measured cache/DRAM events. `logical_bytes` is output payload
++ sparse bitmap only; it excludes temporary allocations and input
+snapshots. The benchmark explicitly records `drambytes=UNMEASURED`.
+
+Native qualification must only use trusted merged-main code and
+RemoteOps source SHA pin, retain per-host evidence, and must not
+pool Dell and Thor latency distributions. No claim of real-model
+speedup or DDR traffic reduction is admissible from this microbenchmark.
