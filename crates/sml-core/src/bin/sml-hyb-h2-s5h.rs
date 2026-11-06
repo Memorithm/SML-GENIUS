@@ -39,10 +39,15 @@
 //!   FIT/SEL swap, a document bootstrap, a poisoned-future causality check
 //!   and COPY-1 for comparison; it writes
 //!   `h2c.tsv` and never opens EVAL4.
+//! * `copy-eval4 P1_H1D_OUT H1D_OUT NEW_OUTPUT_DIR` judges that copy expert
+//!   once on EVAL4 (docs/HYB-H2C-COPY-EVAL4-PREREGISTRATION.md): it refits
+//!   context 6 on CAL-FIT, refuses to go on unless the shifts are those of
+//!   the third CAL run, then reads `trace-eval4.bin`, its sidecar and
+//!   `eval4.json` and writes `h2c-eval4.tsv`.
 //!
 //! The S5h DEV, EVAL2 and EVAL3 are never opened. `replay EXPERTS.tsv`
 //! prints the digest of a router and its experts on synthetic records
-//! (cross-host check); `smoke`, `smoke-templates` and `smoke-copy` run on generated
+//! (cross-host check); `smoke`, `smoke-templates`, `smoke-copy` and `smoke-copy-eval4` run on generated
 //! traces and are labelled SMOKE, never a result. TEST is never read. NOT_PROMOTED.
 
 use sml_core::{
@@ -1500,29 +1505,7 @@ fn copy_measure(
 ) -> Result<CopyMeasure> {
     let bases = heads.len() + 1;
     let head = |b: usize| heads.get(b);
-    let mut fits: Vec<Vec<CopyFit>> = (0..bases)
-        .map(|_| (0..COPY_VARIANTS).map(|_| CopyFit::new()).collect())
-        .collect();
-    for (i, &span) in fit.iter().enumerate() {
-        let donor = &fit_bytes[(i + 1) % fit.len()];
-        let predictions = span_predictions(span.doc, &fit_bytes[i], donor);
-        let mut at = 0;
-        pair.each(span, |r| {
-            let p = &predictions[at];
-            at += 1;
-            for (b, f) in fits.iter_mut().enumerate() {
-                let s = base_stretches(head(b), r);
-                for (v, fv) in f.iter_mut().enumerate() {
-                    let Some((q, n)) = p[v] else { continue };
-                    for (d, &stretch) in s.iter().enumerate() {
-                        if let Some(e) = expected_bit(q, r.record.target, d) {
-                            fv.add(stretch, e, target_bit(&r.record, d), copy_bucket(n), d);
-                        }
-                    }
-                }
-            }
-        })?;
-    }
+    let fits = copy_fits(pair, heads, fit, fit_bytes)?;
     let mixers: Vec<Vec<CopyMixer>> = fits
         .iter()
         .map(|f| f.iter().map(CopyFit::fit).collect())
@@ -1623,6 +1606,41 @@ fn copy_measure(
         m.docs.push((span.count, doc_base, doc_mixed));
     }
     Ok(m)
+}
+
+/// Histograms of every variant and base on `fit` (bases: each A1d head,
+/// then P1 alone).
+fn copy_fits(
+    pair: &mut Pair,
+    heads: &[(BankHead, i32)],
+    fit: &[Span],
+    fit_bytes: &[Vec<u8>],
+) -> Result<Vec<Vec<CopyFit>>> {
+    let head = |b: usize| heads.get(b);
+    let mut fits: Vec<Vec<CopyFit>> = (0..=heads.len())
+        .map(|_| (0..COPY_VARIANTS).map(|_| CopyFit::new()).collect())
+        .collect();
+    for (i, &span) in fit.iter().enumerate() {
+        let donor = &fit_bytes[(i + 1) % fit.len()];
+        let predictions = span_predictions(span.doc, &fit_bytes[i], donor);
+        let mut at = 0;
+        pair.each(span, |r| {
+            let p = &predictions[at];
+            at += 1;
+            for (b, f) in fits.iter_mut().enumerate() {
+                let s = base_stretches(head(b), r);
+                for (v, fv) in f.iter_mut().enumerate() {
+                    let Some((q, n)) = p[v] else { continue };
+                    for (d, &stretch) in s.iter().enumerate() {
+                        if let Some(e) = expected_bit(q, r.record.target, d) {
+                            fv.add(stretch, e, target_bit(&r.record, d), copy_bucket(n), d);
+                        }
+                    }
+                }
+            }
+        })?;
+    }
+    Ok(fits)
 }
 
 /// Poisoned-future check: the predictions before the middle of a document
@@ -1858,6 +1876,236 @@ fn copy(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
     Ok(())
 }
 
+// H-2c on EVAL4 (`HYB-H2C-COPY-EVAL4-PREREGISTRATION.md`): the copy
+// expert of the third CAL run (context 6, 48 shifts fitted on CAL-FIT),
+// refitted, checked against the frozen shifts and judged once on EVAL4.
+
+/// Variants judged on EVAL4, by index in `span_predictions`: the copy
+/// expert (context 6), the random null and the donor.
+const EVAL4_VARIANTS: [usize; 3] = [0, COPY_NULL, COPY_DONOR];
+/// Shifts of the third CAL run (RemoteOps #864, `h2c.tsv` 4644dca1...),
+/// per `EVAL4_VARIANTS` entry and seed: the refit must give them back.
+const EVAL4_FROZEN_SHIFTS: [[&str; 2]; 3] = [
+    [
+        "-88,168,112,152,200,280,336,440,984,408,240,312,384,504,536,728,1080,616,568,496,520,736,728,952,1280,1016,976,888,816,1112,1072,1288,1624,1376,1312,1472,1472,1664,1536,1624,2040,1568,1336,1896,2016,2032,2040,2032",
+        "440,176,208,144,192,264,344,448,784,416,320,336,384,480,544,712,1064,608,512,528,520,704,728,920,1248,1008,856,920,824,1080,1064,1264,1504,1376,1264,1496,1480,1616,1520,1616,2040,1592,1344,2040,2024,2024,2040,1936",
+    ],
+    [
+        "-112,0,16,0,-8,-16,-32,0,8,8,8,0,-8,-8,0,64,-8,0,0,0,0,0,8,-8,8,0,0,0,0,0,0,-8,-16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "-8,0,8,0,-8,-8,-32,0,0,8,8,0,0,-8,0,56,0,0,0,0,0,0,8,-8,0,0,0,0,0,0,0,-8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+    ],
+    [
+        "-488,88,-48,88,112,152,168,232,-392,248,-40,176,232,288,280,408,1016,352,72,248,288,408,384,576,1144,1304,1464,1088,1112,1224,1224,1264,2016,2040,2016,1848,1992,1568,1624,1416,1024,2040,2024,2040,1232,2040,1504,1248",
+        "328,96,104,72,96,144,200,280,488,264,176,192,224,280,320,456,600,360,264,272,288,384,408,576,1216,1280,1144,1112,1104,1192,1264,1240,2024,2040,2040,1968,2040,1560,1624,1400,1440,2040,2032,1984,1272,1696,1520,1216",
+    ],
+];
+/// GO needs, for both seeds, the copy gain over A1d, its margin over the
+/// donor and the 2.5 % bootstrap quantiles of both to reach this.
+const EVAL4_GAIN_BPC: f64 = 0.01;
+
+/// EVAL4 code lengths: per document, bytes, then bits per base and per
+/// base and `EVAL4_VARIANTS` entry.
+type Eval4Doc = (u64, Vec<f64>, Vec<[f64; 3]>);
+
+/// Gain of entry `v` over the base, or over entry `over`, in bits per
+/// byte, for the documents `pick`.
+fn eval4_gain(docs: &[Eval4Doc], k: usize, v: usize, over: Option<usize>, pick: &[usize]) -> f64 {
+    let (mut n, mut gain) = (0u64, 0.0);
+    for &i in pick {
+        let (count, base, mixed) = &docs[i];
+        n += count;
+        gain += over.map_or(base[k], |o| mixed[k][o]) - mixed[k][v];
+    }
+    gain / n.max(1) as f64
+}
+
+fn copy_eval4(p1: &Path, h1d: &Path, out: &Path, label: &str) -> Result<()> {
+    let cal = load_cal(p1, h1d, label)?;
+    if cal.fit.len() < 2 {
+        return Err("the donor control needs two documents in CAL-FIT".into());
+    }
+    let seeds = cal.heads.len();
+    let bases = seeds + 1;
+    // Freeze check before EVAL4 is opened: CAL-FIT only.
+    let mut pair = Pair::open(&cal.dir, "trace-cal")?;
+    let fit_bytes = span_bytes(&mut pair, &cal.fit)?;
+    let fits = copy_fits(&mut pair, &cal.heads, &cal.fit, &fit_bytes)?;
+    let mixers: Vec<Vec<CopyMixer>> = fits
+        .iter()
+        .map(|f| EVAL4_VARIANTS.iter().map(|&v| f[v].fit()).collect())
+        .collect();
+    if label == "PREREGISTERED" {
+        for (j, frozen) in EVAL4_FROZEN_SHIFTS.iter().enumerate() {
+            for k in 0..seeds {
+                if mixers[k][j].text() != frozen[k] {
+                    return Err(format!(
+                        "refitted {} shifts of seed {} differ from the third CAL run",
+                        copy_name(EVAL4_VARIANTS[j]),
+                        SEEDS[k]
+                    )
+                    .into());
+                }
+            }
+        }
+    }
+    // EVAL4, read once.
+    fs::create_dir(out)?;
+    let eval4 = scan(
+        &cal.dir.join("trace-eval4.bin"),
+        &cal.dir.join("trace-eval4.banks.bin"),
+        5,
+    )?;
+    let eval_docs: std::collections::BTreeSet<u32> = eval4.spans.iter().map(|s| s.doc).collect();
+    if cal
+        .fit
+        .iter()
+        .chain(&cal.sel)
+        .any(|s| eval_docs.contains(&s.doc))
+    {
+        return Err("a doc_index appears in both CAL and EVAL4".into());
+    }
+    if eval4.spans.len() < 2 {
+        return Err("the donor control needs two EVAL4 documents".into());
+    }
+    let eval_json = fs::read_to_string(cal.dir.join("eval4.json"))?;
+    if json_str(&eval_json, "weights_sha256")? != cal.weights {
+        return Err("eval4.json and trace.json name different P1 weights".into());
+    }
+    let n = eval4.records;
+    check_reported(&eval_json, "eval4_trace", bpc(eval4.bits, n))?;
+    let mut pair = Pair::open(&cal.dir, "trace-eval4")?;
+    let eval_bytes = span_bytes(&mut pair, &eval4.spans)?;
+    let head = |b: usize| cal.heads.get(b);
+    let mut docs: Vec<Eval4Doc> = Vec::with_capacity(eval4.spans.len());
+    let (mut covered, mut hits) = (0u64, 0u64);
+    for (i, &span) in eval4.spans.iter().enumerate() {
+        let donor = &eval_bytes[(i + 1) % eval4.spans.len()];
+        let predictions = span_predictions(span.doc, &eval_bytes[i], donor);
+        let mut base = vec![0.0; bases];
+        let mut mixed = vec![[0.0; 3]; bases];
+        let mut at = 0;
+        pair.each(span, |r| {
+            let p = &predictions[at];
+            at += 1;
+            if let Some((q, _)) = p[0] {
+                covered += 1;
+                hits += u64::from(q == r.record.target);
+            }
+            for b in 0..bases {
+                let s = base_stretches(head(b), r);
+                for (d, &stretch) in s.iter().enumerate() {
+                    let bit = target_bit(&r.record, d);
+                    let plain = decision_cost(stretch, bit);
+                    base[b] += plain;
+                    for (j, &v) in EVAL4_VARIANTS.iter().enumerate() {
+                        mixed[b][j] += p[v]
+                            .and_then(|(q, len)| {
+                                expected_bit(q, r.record.target, d).map(|e| {
+                                    decision_cost(
+                                        mixers[b][j].stretch(stretch, e, copy_bucket(len), d),
+                                        bit,
+                                    )
+                                })
+                            })
+                            .unwrap_or(plain);
+                    }
+                }
+            }
+        })?;
+        docs.push((span.count, base, mixed));
+    }
+    let (poison_checked, poison_mismatches) = copy_poison(&eval4.spans, &eval_bytes);
+    let all: Vec<usize> = (0..docs.len()).collect();
+    let mut report = format!(
+        "label\t{label}\nstage\tcopy-eval4\nschema\tSML_HYB_H2C_EVAL4_V1\n\
+         {BASE}_p1_weights_sha256\t{}\n{BASE}_dev_read\tfalse\n{BASE}_eval4_read\ttrue\n\
+         {BASE}_eval4_records\t{n}\n{BASE}_eval4_docs\t{}\n{BASE}_a0_eval4_bpc\t{:.9}\n\
+         {BASE}_copy_min\t{}\n{BASE}_copy_eval4_coverage\t{:.6}\n{BASE}_copy_eval4_hit_rate\t{:.6}\n",
+        cal.weights,
+        docs.len(),
+        bpc(eval4.bits, n),
+        COPY_MINS[0],
+        covered as f64 / n.max(1) as f64,
+        hits as f64 / covered.max(1) as f64,
+    );
+    let mut go = true;
+    let mut null = true;
+    for (k, seed) in SEEDS.iter().take(seeds).enumerate() {
+        let base: f64 = docs.iter().map(|d| d.1[k]).sum();
+        let total = |j: usize| docs.iter().map(|d| d.2[k][j]).sum::<f64>();
+        let gain = eval4_gain(&docs, k, 0, None, &all);
+        let null_gain = eval4_gain(&docs, k, 1, None, &all);
+        let donor_gain = eval4_gain(&docs, k, 2, None, &all);
+        let beyond = eval4_gain(&docs, k, 0, Some(2), &all);
+        let mut state = 0xe4a1_0000 ^ *seed;
+        let mut draws: Vec<(f64, f64)> = (0..COPY_BOOTSTRAP)
+            .map(|_| {
+                let pick: Vec<usize> = (0..docs.len())
+                    .map(|_| {
+                        state = splitmix(state);
+                        (state % docs.len() as u64) as usize
+                    })
+                    .collect();
+                (
+                    eval4_gain(&docs, k, 0, None, &pick),
+                    eval4_gain(&docs, k, 0, Some(2), &pick),
+                )
+            })
+            .collect();
+        draws.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let (low, high) = (
+            draws[COPY_BOOTSTRAP / 40].0,
+            draws[COPY_BOOTSTRAP - 1 - COPY_BOOTSTRAP / 40].0,
+        );
+        draws.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let beyond_low = draws[COPY_BOOTSTRAP / 40].1;
+        let mut per_doc: Vec<f64> = (0..docs.len())
+            .map(|i| eval4_gain(&docs, k, 0, None, &[i]))
+            .collect();
+        per_doc.sort_by(f64::total_cmp);
+        let gaining =
+            per_doc.iter().filter(|&&g| g > 0.0).count() as f64 / per_doc.len().max(1) as f64;
+        go &= gain >= EVAL4_GAIN_BPC
+            && beyond >= EVAL4_GAIN_BPC
+            && low >= EVAL4_GAIN_BPC
+            && beyond_low >= EVAL4_GAIN_BPC;
+        null &= null_gain.abs() < COPY_NULL_BPC;
+        report += &format!(
+            "{BASE}_a1d_seed{seed}_eval4_bpc\t{:.9}\n{BASE}_copy_seed{seed}_eval4_bpc\t{:.9}\n\
+             {BASE}_copy_seed{seed}_gain_over_a1d\t{gain:.9}\n\
+             {BASE}_copy_seed{seed}_bootstrap_low\t{low:.9}\n{BASE}_copy_seed{seed}_bootstrap_high\t{high:.9}\n\
+             {BASE}_null_seed{seed}_gain_over_a1d\t{null_gain:.9}\n\
+             {BASE}_donor_seed{seed}_gain_over_a1d\t{donor_gain:.9}\n\
+             {BASE}_copy_seed{seed}_beyond_donor\t{beyond:.9}\n\
+             {BASE}_copy_seed{seed}_beyond_donor_bootstrap_low\t{beyond_low:.9}\n\
+             {BASE}_copy_seed{seed}_docs_gaining\t{gaining:.6}\n\
+             {BASE}_copy_seed{seed}_doc_gain_median\t{:.9}\n",
+            bpc(base, n),
+            bpc(total(0), n),
+            per_doc[per_doc.len() / 2],
+        );
+    }
+    let p1_gain = eval4_gain(&docs, seeds, 0, None, &all);
+    let causal = poison_mismatches == 0;
+    report += &format!(
+        "{BASE}_copy_p1_gain_over_p1\t{p1_gain:.9}\n\
+         {BASE}_copy_poison_positions\t{poison_checked}\n{BASE}_copy_poison_mismatches\t{poison_mismatches}\n\
+         {BASE}_eval4_gain_bpc\t{EVAL4_GAIN_BPC}\n{BASE}_copy_null_bpc\t{COPY_NULL_BPC}\nverdict\t{}\n",
+        if !causal {
+            "COPY_CAUSALITY_FAIL"
+        } else if !null {
+            "NO_GO_NULL_CONTROL"
+        } else if go {
+            "GO"
+        } else {
+            "NO_GO"
+        }
+    );
+    fs::write(out.join("h2c-eval4.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
 fn cli(args: &[String]) -> Result<()> {
     match args.get(1).map(String::as_str) {
         Some(mode @ ("gate" | "run")) if args.len() == 5 => run(
@@ -1879,6 +2127,22 @@ fn cli(args: &[String]) -> Result<()> {
             Path::new(&args[4]),
             "PREREGISTERED",
         ),
+        Some("copy-eval4") if args.len() == 5 => copy_eval4(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+            "PREREGISTERED",
+        ),
+        Some("smoke-copy-eval4") if args.len() == 3 => {
+            let root = Path::new(&args[2]);
+            write_smoke(root, 14)?;
+            copy_eval4(
+                &root.join("p1"),
+                &root.join("h1d"),
+                &root.join("out"),
+                "SMOKE",
+            )
+        }
         Some("smoke-copy") if args.len() == 3 => {
             let root = Path::new(&args[2]);
             write_smoke(root, 14)?;
@@ -1916,8 +2180,8 @@ fn cli(args: &[String]) -> Result<()> {
             )
         }
         _ => Err(
-            "usage: (gate|run|templates|copy) P1_H1D_OUT H1D_OUT NEW_OUT | replay EXPERTS.tsv | \
-             (smoke|smoke-templates|smoke-copy) NEW_DIR"
+            "usage: (gate|run|templates|copy|copy-eval4) P1_H1D_OUT H1D_OUT NEW_OUT | \
+             replay EXPERTS.tsv | (smoke|smoke-templates|smoke-copy|smoke-copy-eval4) NEW_DIR"
                 .into(),
         ),
     }
@@ -2075,6 +2339,58 @@ mod tests {
         );
         assert!(run("out", "SMOKE").is_err());
         assert!(run("pre", "PREREGISTERED").is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_copy_is_judged_once_on_eval4_with_its_controls() {
+        let root = temp("copy-eval4");
+        let _ = fs::remove_dir_all(&root);
+        write_smoke(&root, 14).unwrap();
+        let run = |name: &str, label: &str| {
+            copy_eval4(&root.join("p1"), &root.join("h1d"), &root.join(name), label)
+        };
+        // Smoke weights are refused when preregistered, before EVAL4 opens.
+        assert!(run("pre", "PREREGISTERED").is_err());
+        assert!(!root.join("pre").exists());
+        run("out", "SMOKE").unwrap();
+        let report = fs::read_to_string(root.join("out/h2c-eval4.tsv")).unwrap();
+        assert_eq!(value(&report, "schema"), "SML_HYB_H2C_EVAL4_V1");
+        assert_eq!(value(&report, "bytes_q4_eval4_read"), "true");
+        assert_eq!(value(&report, "bytes_q4_dev_read"), "false");
+        assert_eq!(num(&report, "bytes_q4_copy_min"), 6.0);
+        assert!(num(&report, "bytes_q4_eval4_docs") >= 2.0);
+        assert_eq!(num(&report, "bytes_q4_copy_poison_mismatches"), 0.0);
+        for seed in SEEDS {
+            for key in [
+                "copy_seed{seed}_gain_over_a1d",
+                "copy_seed{seed}_bootstrap_low",
+                "copy_seed{seed}_beyond_donor",
+                "copy_seed{seed}_beyond_donor_bootstrap_low",
+                "donor_seed{seed}_gain_over_a1d",
+            ] {
+                let key = format!("bytes_q4_{}", key.replace("{seed}", &seed.to_string()));
+                // Random smoke bytes repeat nothing: no cell is learned.
+                assert!(num(&report, &key).abs() < 1e-9, "{key}");
+            }
+            let null = num(&report, &format!("bytes_q4_null_seed{seed}_gain_over_a1d"));
+            assert!(null.abs() < COPY_NULL_BPC, "{null}");
+            let a1d = num(&report, &format!("bytes_q4_a1d_seed{seed}_eval4_bpc"));
+            assert!(a1d.is_finite() && a1d > 0.0);
+        }
+        assert_eq!(value(&report, "verdict"), "NO_GO");
+        // Read once: an existing output is never overwritten; a rerun
+        // elsewhere is identical.
+        assert!(run("out", "SMOKE").is_err());
+        run("again", "SMOKE").unwrap();
+        assert_eq!(
+            fs::read(root.join("again/h2c-eval4.tsv")).unwrap(),
+            fs::read(root.join("out/h2c-eval4.tsv")).unwrap()
+        );
+        // Without EVAL4 there is nothing to judge.
+        let dir = root.join("p1").join(BASE);
+        fs::remove_file(dir.join("trace-eval4.bin")).unwrap();
+        assert!(run("missing", "SMOKE").is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 
