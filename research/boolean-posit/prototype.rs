@@ -243,8 +243,9 @@ fn benchmark() {
     assert_eq!(packed_sum, dense_sum);
     black_box(packed_sum);
     println!(
-        "Weights: packed={} B; INT8={} B (inputs/allocations excluded)",
+        "Weights: serialized={} B; resident_Bpb3={} B; INT8={} B (inputs/allocations excluded)",
         BLOCKS * ENCODED_BYTES,
+        BLOCKS * std::mem::size_of::<Bpb3>(),
         BLOCKS * N
     );
     println!(
