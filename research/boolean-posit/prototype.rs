@@ -242,10 +242,17 @@ fn benchmark() {
     let dense_ns = t1.elapsed().as_nanos();
     assert_eq!(packed_sum, dense_sum);
     black_box(packed_sum);
-    println!("Weights: packed={} B; INT8={} B (inputs/allocations excluded)",
-        BLOCKS * ENCODED_BYTES, BLOCKS * N);
-    println!("Warm microbenchmark: packed={} ns, INT8={} ns ({} calls per arm)",
-        packed_ns, dense_ns, BLOCKS * ROUNDS);
+    println!(
+        "Weights: packed={} B; INT8={} B (inputs/allocations excluded)",
+        BLOCKS * ENCODED_BYTES,
+        BLOCKS * N
+    );
+    println!(
+        "Warm microbenchmark: packed={} ns, INT8={} ns ({} calls per arm)",
+        packed_ns,
+        dense_ns,
+        BLOCKS * ROUNDS
+    );
     println!("No measured DRAM traffic or end-to-end model speed claim.");
 }
 
@@ -256,8 +263,12 @@ fn main() {
     }
     let model = learn(0x2bde, 1024);
     let correct = heldout(&model, 0xdead_beef_8899, 512);
-    println!("BPB-3/v0: {} bytes/64 weights, exponent {}, active {}",
-        ENCODED_BYTES, model.exponent(), model.unpack().iter().filter(|&&q| q != 0).count());
+    println!(
+        "BPB-3/v0: {} bytes/64 weights, exponent {}, active {}",
+        ENCODED_BYTES,
+        model.exponent(),
+        model.unpack().iter().filter(|&&q| q != 0).count()
+    );
     println!("Synthetic heldout supervised accuracy: {correct}/512");
     println!("Not a claim of trained language-model quality.");
 }
