@@ -12,12 +12,17 @@ use core::{fmt, mem::size_of};
 pub use sml_core::{circuit::SignalRef, train::TruthTable2};
 
 pub mod applicability;
+pub mod dec10_grammar;
+pub mod dec11_capacity;
+pub mod dec12_router;
 pub mod dec2_text;
 pub mod dec3_lm;
 pub mod dec4_instr;
 pub mod dec5_meaning;
 pub mod dec6_lexicon;
 pub mod dec7_polarity;
+pub mod dec8_fresh;
+pub mod dec9_grammar;
 pub mod elastic_bank;
 pub mod feature_search;
 pub mod mor_bank;
