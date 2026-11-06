@@ -74,3 +74,7 @@ La sortie `h2c-eval4.tsv` va dans un dossier neuf, nommé d'après le SHA, et n'
 - Le corpus ne contient que des articles peS2o. Les deux premiers octets d'un article ne sont pas tracés par P1, donc l'expert ne les voit pas.
 
 Research only. DEV non lu. EVAL4 non lu à ce jour. TEST fermé. NOT_PROMOTED.
+
+## Erratum de transcription (6 novembre 2026, avant toute lecture de EVAL4 par `copy-eval4`)
+
+Le premier lancement RemoteOps #1285 (run `42188087747`) s'est arrêté à la vérification des décalages CAL-FIT, avant l'ouverture de la trace EVAL4 par l'évaluateur. La constante figée du nul, graine 23, ne comportait que 47 valeurs au lieu des 48 prévues : un `0` avait été omis lors de la transcription. Le correctif rétablit **à l'identique** la suite de 48 décalages publiée dans le troisième run CAL (`40290453340`, `h2c.tsv` sha256 `4644dca13d6b6c35f100ea1b48c95d9a7ee5c12b11203bbba42fe1330af09fe8`). Les prédictions, algorithmes, seuils et modèles ne changent pas. Les traces EVAL4 déjà générées doivent être vérifiées par leurs sommes SHA-256, puis réutilisées sans nouvel entraînement ni nouveau tracé ; l'évaluation H-2c conserve une seule lecture sur EVAL4. Toute divergence doit bloquer l'exécution.
