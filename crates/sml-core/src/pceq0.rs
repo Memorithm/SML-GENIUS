@@ -221,11 +221,7 @@ where
 
 /// Exact per-block scale from producer-carried maximum. Each input is
 /// generated only once, without allocating a full unquantized tensor.
-pub fn quantize_fused<F>(
-    len: usize,
-    block_size: usize,
-    producer: F,
-) -> Result<PceqI16, PceqError>
+pub fn quantize_fused<F>(len: usize, block_size: usize, producer: F) -> Result<PceqI16, PceqError>
 where
     F: FnMut(usize) -> i16,
 {
@@ -279,7 +275,10 @@ mod tests {
                 assert_eq!(fused, baseline);
                 assert_eq!(fused.codes().len(), len);
                 assert_eq!(fused.metadata().len(), len.div_ceil(block_size));
-                assert_eq!(fused.logical_bytes(), len as u128 + 2 * len.div_ceil(block_size) as u128);
+                assert_eq!(
+                    fused.logical_bytes(),
+                    len as u128 + 2 * len.div_ceil(block_size) as u128
+                );
             }
         }
     }
@@ -339,7 +338,10 @@ mod tests {
     fn all_zero_data_retains_zero_scale_and_skippable_blocks() {
         for block_size in [32, 64, 128] {
             let encoded = quantize_or_envelope(257, block_size, |_| 0).unwrap();
-            assert!(encoded.metadata().iter().all(|meta| !meta.active() && meta.exponent() == 0));
+            assert!(encoded
+                .metadata()
+                .iter()
+                .all(|meta| !meta.active() && meta.exponent() == 0));
             assert!(encoded.codes().iter().all(|&code| code == 0));
         }
     }
