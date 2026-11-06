@@ -1,0 +1,28 @@
+name: Boolean Posit BPB-0 reference tests
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-bpb0.yml'
+  push:
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-bpb0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-bitplane-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Rust compiler
+        run: rustc --version
+      - name: Compile exactness tests
+        run: rustc --edition=2021 --test research/boolean-posit/bpb0.rs -o "${RUNNER_TEMP}/bpb0-tests"
+      - name: Run exhaustive and deterministic tests
+        run: "${RUNNER_TEMP}/bpb0-tests"
