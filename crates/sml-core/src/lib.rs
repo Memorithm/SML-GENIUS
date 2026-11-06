@@ -149,6 +149,7 @@ pub mod paired_panel;
 pub mod pascal_gf2;
 pub mod pascal_vector_projection;
 pub mod pceq0;
+pub mod pceq3;
 pub mod pi_boolean;
 pub mod pvp6_executor;
 pub mod pvp6_recurrent;
