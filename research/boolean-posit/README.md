@@ -60,7 +60,17 @@ rustc --edition=2021 -O research/boolean-posit/large_corpus.rs -o /tmp/bpb-corpu
 /tmp/bpb-corpus --blocks 256000000 --repeats 2
 ```
 
-These are **planned sizes**, not claims of executed Dell runs. Large synthetic checks alone cannot establish neural-network capability, practical numeric accuracy, or storage-traffic elimination. Matched real-corpus quality, multi-seed controls, hardware counters and end-to-end model trials remain separate preregistered gates.
+The initial 2026-11-06 physical campaign has now been completed on the Dell via RemoteOps: smoke [42298328750](https://github.com/Memorithm/RemoteOps/actions/runs/42298328750), 32m [42298780704](https://github.com/Memorithm/RemoteOps/actions/runs/42298780704), 128m [42299259414](https://github.com/Memorithm/RemoteOps/actions/runs/42299259414), and 256m [42299615528](https://github.com/Memorithm/RemoteOps/actions/runs/42299615528). All four accepted their resource gates and produced matching **aggregate sums** across two paired bitplane/INT8 passes. These aggregate checks alone do **not** certify individual block correctness; cancellation of distinct block errors can conceal faults. No physical DRAM traffic, real-data quality or model-runtime inference claim follows.
+
+### Independent per-block integer oracle (next gate)
+
+The optional standalone flag `--verify-each-block` scans **every** resident block after the paired benchmark, computing its BPB-3 bitplane result and independently evaluating the corresponding dense INT8 vector with the scalar reference. It aborts immediately with `FAIL_BLOCK_EXACTNESS index=...` when a block differs and prints `PASS_BLOCK_ORACLE blocks=... mismatches=0` only after the complete comparison. A deterministic ordered digest is a reproducibility aid, **not** a cryptographic fingerprint. Unit tests inject two opposite per-block changes whose total sum cancels, showing why prior aggregate-only equality is insufficient. The hosted 8,388,608-block/536,870,912-coefficient gate always enables the per-block comparison; **the Dell 256m run above did not run this new flag**. A separate exact-source-pinned RemoteOps admission/run is required to claim per-block validation at 16.384 billion coefficients.
+
+The oracle checks quantized signed integers, not the accuracy of original floating-point weights or learned model parameters. The same corpus generator provides the paired INT8 and BPB representations; the *dot-product algorithms* are independent, not the provenance of original weights.
+
+To reproduce on a bounded research computer, add `--verify-each-block` to the existing `large_corpus.rs` invocation after its host-specific memory admission.
+
+Large synthetic checks alone cannot establish neural-network capability, practical numeric accuracy, or storage-traffic elimination. Matched real-corpus quality, multi-seed controls, hardware counters and end-to-end model trials remain separate preregistered gates.
 
 ## Next scientific gates
 
