@@ -103,7 +103,7 @@ impl PceqI16 {
     }
 }
 
-fn check_block_size(block_size: usize) -> Result<(), PceqError> {
+pub(crate) fn check_block_size(block_size: usize) -> Result<(), PceqError> {
     match block_size {
         32 | 64 | 128 => Ok(()),
         _ => Err(PceqError::UnsupportedBlockSize(block_size)),
@@ -111,7 +111,7 @@ fn check_block_size(block_size: usize) -> Result<(), PceqError> {
 }
 
 /// Smallest nonnegative power-of-two shift with max_abs <= 127 * 2^shift.
-fn exact_exponent(max_abs: u32) -> u8 {
+pub(crate) fn exact_exponent(max_abs: u32) -> u8 {
     let mut exponent = 0_u8;
     while max_abs > (127_u32 << exponent) {
         exponent += 1;
@@ -132,7 +132,7 @@ fn or_exponent(or_magnitudes: u32) -> u8 {
 
 /// Symmetric integer round-half-away-from-zero. The caller's shift guarantees
 /// no clipping for every i16 source, including i16::MIN.
-fn encode_value(value: i16, exponent: u8) -> i8 {
+pub(crate) fn encode_value(value: i16, exponent: u8) -> i8 {
     let divisor = 1_u32 << exponent;
     let rounded = (u32::from(value.unsigned_abs()) + divisor / 2) / divisor;
     debug_assert!(rounded <= 127);
