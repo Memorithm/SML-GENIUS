@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn coarse_bound_is_lossy_but_never_clips_i16_extrema() {
         let input = [i16::MIN, i16::MAX, 0, -1, 1, 125, -125, 128];
-        let mut extended = vec![0_i16; 64];
+        let mut extended = [0_i16; 64];
         extended[..input.len()].copy_from_slice(&input);
         let result = quantize_streaming_bounded(
             extended.len(),
