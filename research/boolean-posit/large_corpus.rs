@@ -247,9 +247,7 @@ fn verify_block_oracle(data: &Corpus) -> Result<(i128, u64), String> {
             ));
         }
         sum += i128::from(observed);
-        let token = (index as u64)
-            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
-            ^ (observed as i64 as u64);
+        let token = (index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ (observed as i64 as u64);
         digest = digest.rotate_left(9) ^ token.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     }
     Ok((black_box(sum), black_box(digest)))
@@ -395,11 +393,7 @@ mod tests {
                     (-3..=3).contains(&(weights[i] + delta))
                 })
                 .expect("a bounded mutable coefficient exists");
-            let sign = if (input >> position) & 1 == 0 {
-                1
-            } else {
-                -1
-            };
+            let sign = if (input >> position) & 1 == 0 { 1 } else { -1 };
             weights[position] += desired_contribution * sign;
         }
         assert_eq!(dense_sum(&corpus), baseline);
