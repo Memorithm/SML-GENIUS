@@ -2355,6 +2355,14 @@ mod tests {
     }
 
     #[test]
+    fn the_engine_uses_the_copy_shifts_judged_on_eval4() {
+        assert_eq!(
+            EVAL4_FROZEN_SHIFTS[0],
+            sml_core::hyb_h2c_copy::EVAL4_GO_COPY_SHIFTS
+        );
+    }
+
+    #[test]
     fn the_copy_is_judged_once_on_eval4_with_its_controls() {
         let root = temp("copy-eval4");
         let _ = fs::remove_dir_all(&root);
