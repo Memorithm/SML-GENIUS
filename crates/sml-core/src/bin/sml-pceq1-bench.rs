@@ -4,9 +4,7 @@
 //! This is timing evidence only on the actual host, not DRAM traffic proof
 //! and not model-level quality evidence. See PCEQ1_BENCHMARK_PROTOCOL.md.
 
-use sml_core::pceq0::{
-    PceqI16, quantize_fused, quantize_materialized, quantize_or_envelope,
-};
+use sml_core::pceq0::{quantize_fused, quantize_materialized, quantize_or_envelope, PceqI16};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -49,7 +47,9 @@ impl Variant {
 }
 
 fn generated(index: usize, seed: u64, pattern: Pattern) -> i16 {
-    let mut value = (index as u64).wrapping_add(seed).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut value = (index as u64)
+        .wrapping_add(seed)
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15);
     value ^= value >> 30;
     value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value ^= value >> 27;
@@ -129,7 +129,11 @@ fn benchmark(length: usize, block: usize, pattern: Pattern) {
     let or_sum = or.weighted_sum(&weights).unwrap();
 
     let variants = [Variant::Materialized, Variant::FusedExact, Variant::FusedOr];
-    let mut elapsed = [Vec::with_capacity(ROUNDS), Vec::with_capacity(ROUNDS), Vec::with_capacity(ROUNDS)];
+    let mut elapsed = [
+        Vec::with_capacity(ROUNDS),
+        Vec::with_capacity(ROUNDS),
+        Vec::with_capacity(ROUNDS),
+    ];
 
     // Rotate measurement order to limit systematic order bias.
     for trial in 0..(ROUNDS + WARMUPS) {
@@ -192,7 +196,9 @@ mod tests {
                     let b = execute(Variant::FusedExact, length, block, pattern, &weights);
                     assert_eq!(a, b);
                     let c = execute(Variant::FusedOr, length, block, pattern, &weights);
-                    let codes = quantize_or_envelope(length, block, |i| generated(i, SEED, pattern)).unwrap();
+                    let codes =
+                        quantize_or_envelope(length, block, |i| generated(i, SEED, pattern))
+                            .unwrap();
                     assert_eq!(c.0, codes.weighted_sum(&weights).unwrap());
                 }
             }
