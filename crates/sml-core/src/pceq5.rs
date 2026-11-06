@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn all_zero_payload_and_activity_boundary_are_exact() {
-        let width = 4161;
+        let width: usize = 4161;
         let mut lhs = vec![0_u64; width.div_ceil(64)];
         let rhs = vec![0_u64; width.div_ceil(64)];
         lhs[63] = 1;
