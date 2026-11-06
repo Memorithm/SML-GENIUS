@@ -260,6 +260,35 @@ mod tests {
     }
 
     #[test]
+    fn pvp6_real_gate_coefficient_bitplanes_obey_exact_xor_reference() {
+        use crate::pvp6_executor::Pvp6Gate;
+        let gate_a =
+            Pvp6Gate::<128>::from_monomials(&[0, 3, 17, 63, 64, 127]).unwrap();
+        let gate_b = Pvp6Gate::<128>::from_monomials(&[0, 17, 64, 125]).unwrap();
+        let a = Arc::new(
+            CanonicalBitplane::from_words(128, gate_a.coefficients().to_vec()).unwrap(),
+        );
+        let b = Arc::new(
+            CanonicalBitplane::from_words(128, gate_b.coefficients().to_vec()).unwrap(),
+        );
+        let alias = Arc::clone(&a);
+        let zero = xor_sparse_exact(&a, &alias).unwrap();
+        assert!(zero.zero_by_identity());
+        assert_eq!(zero.source_word_reads(), 0);
+        assert_eq!(zero.reconstruct_words(), vec![0_u64; 2]);
+
+        let other = xor_sparse_exact(&a, &b).unwrap();
+        let reference = gate_a
+            .coefficients()
+            .iter()
+            .zip(gate_b.coefficients())
+            .map(|(a, b)| a ^ b)
+            .collect::<Vec<_>>();
+        assert_eq!(other.reconstruct_words(), reference);
+        assert_eq!(other.source_word_reads(), 4);
+    }
+
+    #[test]
     fn rejects_noncanonical_tail_and_wrong_shape() {
         assert_eq!(
             CanonicalBitplane::from_words(65, vec![0, 2]),
