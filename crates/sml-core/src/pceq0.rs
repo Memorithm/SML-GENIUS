@@ -258,8 +258,15 @@ pub enum ProducerBound {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PceqStreamingError {
     InvalidBlockSize(usize),
-    OutOfRangeBound { block: usize, bound: u32 },
-    BrokenBound { index: usize, bound: u32, observed: u32 },
+    OutOfRangeBound {
+        block: usize,
+        bound: u32,
+    },
+    BrokenBound {
+        index: usize,
+        bound: u32,
+        observed: u32,
+    },
 }
 
 /// PCEQ-2: stream values directly into their final quantized representation.
@@ -493,9 +500,7 @@ mod tests {
                 .unwrap();
                 assert_eq!(result, control);
                 assert_eq!(envelope_calls, len.div_ceil(block_size));
-                let nonzero_elements = (0..nonzero_blocks)
-                    .map(|_| block_size)
-                    .sum::<usize>();
+                let nonzero_elements = (0..nonzero_blocks).map(|_| block_size).sum::<usize>();
                 assert!(producer_calls <= nonzero_elements);
             }
         }
@@ -509,7 +514,11 @@ mod tests {
             32,
             |i| {
                 calls += 1;
-                if i == 5 { 11 } else { 4 }
+                if i == 5 {
+                    11
+                } else {
+                    4
+                }
             },
             |_| ProducerBound::MaxAbs(10),
         );
