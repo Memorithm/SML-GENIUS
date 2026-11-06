@@ -47,4 +47,4 @@ jobs:
         shell: bash
         run: |
           rustc --edition=2021 -O research/boolean-posit/large_corpus.rs -o /tmp/bpb-corpus
-          /tmp/bpb-corpus --blocks 8388608 --repeats 2 --reserve-mib 512 --max-ram-percent 50
+          /tmp/bpb-corpus --blocks 8388608 --repeats 2 --reserve-mib 512 --max-ram-percent 50 --verify-each-block
