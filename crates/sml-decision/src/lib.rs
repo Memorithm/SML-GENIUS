@@ -13,6 +13,7 @@ pub use sml_core::{circuit::SignalRef, train::TruthTable2};
 
 pub mod applicability;
 pub mod dec10_grammar;
+pub mod dec11_capacity;
 pub mod dec2_text;
 pub mod dec3_lm;
 pub mod dec4_instr;

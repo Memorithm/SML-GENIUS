@@ -449,10 +449,22 @@ pub fn select_on_dev_dim(
     train: &[Example],
     dev: &[Example],
 ) -> (Selected, Selected, Vec<GridRow>) {
+    select_on_dev_grid(kind, dim, train, dev, &EPOCH_GRID, &LEVEL_GRID)
+}
+
+/// [`select_on_dev_dim`] with explicit epoch and level grids (DEC-11).
+pub fn select_on_dev_grid(
+    kind: Kind,
+    dim: usize,
+    train: &[Example],
+    dev: &[Example],
+    epoch_grid: &[usize],
+    level_grid: &[i64],
+) -> (Selected, Selected, Vec<GridRow>) {
     let mut grid = Vec::new();
     let mut best_q: Option<Selected> = None;
     let mut best_i: Option<Selected> = None;
-    for (epochs, avg) in train_averaged_dim(kind, dim, train, &EPOCH_GRID) {
+    for (epochs, avg) in train_averaged_dim(kind, dim, train, epoch_grid) {
         let (c, _) = accuracy(kind, &avg, dev);
         grid.push((epochs, 0, 0, c, avg.nonzero()));
         if best_i.as_ref().is_none_or(|b| c > b.dev_correct) {
@@ -464,7 +476,7 @@ pub fn select_on_dev_dim(
                 head: avg.clone(),
             });
         }
-        for &levels in &LEVEL_GRID {
+        for &levels in level_grid {
             for &div in &KEEP_DIV {
                 let q = quantize(kind, &avg, levels, div, train);
                 let (c, _) = accuracy(kind, &q, dev);
