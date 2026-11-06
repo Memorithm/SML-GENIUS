@@ -241,6 +241,98 @@ where
     quantize_from_producer(len, block_size, producer, Envelope::Or)
 }
 
+/// An upstream certified absolute-value envelope. Unlike PCEQ-0, the bound
+/// is available BEFORE producing the first item of a block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProducerBound {
+    /// The producer promises every absolute i16 magnitude in this block is
+    /// at most this bound. Values are verified during single-pass production.
+    MaxAbs(u32),
+    /// The producer proves by construction that this entire block is zero.
+    /// Source callbacks are NOT called. This cannot be verified without
+    /// reading the source: use only with trusted, versioned producer metadata.
+    CertifiedZero,
+}
+
+/// Fail-closed error, with no partially encoded snapshot returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PceqStreamingError {
+    InvalidBlockSize(usize),
+    OutOfRangeBound {
+        block: usize,
+        bound: u32,
+    },
+    BrokenBound {
+        index: usize,
+        bound: u32,
+        observed: u32,
+    },
+}
+
+/// PCEQ-2: stream values directly into their final quantized representation.
+///
+/// Unlike the two PCEQ-0 fused paths, there is no per-block i16 scratch array
+/// and no second local read. This is possible only because the upstream
+/// producer supplies a trusted bound *before* emitting any values. Each
+/// non-certified item is observed once to verify its declared bound.
+/// A `CertifiedZero` block avoids producer reads entirely, by contract.
+///
+/// The input producer and its envelope must describe the SAME immutable
+/// version; otherwise a false zero certificate is UNDETECTABLE here.
+/// This research-only API must not be applied to untrusted metadata or
+/// substituted for exact SML Boolean ANF/PVP operations.
+pub fn quantize_streaming_bounded<F, B>(
+    len: usize,
+    block_size: usize,
+    mut producer: F,
+    mut block_bound: B,
+) -> Result<PceqI16, PceqStreamingError>
+where
+    F: FnMut(usize) -> i16,
+    B: FnMut(usize) -> ProducerBound,
+{
+    check_block_size(block_size).map_err(|_| PceqStreamingError::InvalidBlockSize(block_size))?;
+    let mut result = new_snapshot(len, block_size);
+    for (block_index, start) in (0..len).step_by(block_size).enumerate() {
+        let count = (len - start).min(block_size);
+        match block_bound(block_index) {
+            ProducerBound::CertifiedZero => {
+                result.codes.resize(result.codes.len() + count, 0);
+                result.metadata.push(BlockMeta {
+                    exponent: 0,
+                    active: false,
+                });
+            }
+            ProducerBound::MaxAbs(bound) => {
+                if bound > u32::from(i16::MIN.unsigned_abs()) {
+                    return Err(PceqStreamingError::OutOfRangeBound {
+                        block: block_index,
+                        bound,
+                    });
+                }
+                let exponent = exact_exponent(bound);
+                let mut active = false;
+                for index in start..start + count {
+                    let value = producer(index);
+                    let observed = u32::from(value.unsigned_abs());
+                    if observed > bound {
+                        return Err(PceqStreamingError::BrokenBound {
+                            index,
+                            bound,
+                            observed,
+                        });
+                    }
+                    let code = encode_value(value, exponent);
+                    active |= code != 0;
+                    result.codes.push(code);
+                }
+                result.metadata.push(BlockMeta { exponent, active });
+            }
+        }
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +455,141 @@ mod tests {
             quantize_materialized(&[1, 2, 3], 0),
             Err(PceqError::UnsupportedBlockSize(0))
         );
+    }
+
+    #[test]
+    fn certified_envelopes_match_exact_control_and_skip_zero_production() {
+        for block_size in [32, 64, 128] {
+            for len in [0, 1, 31, 32, 33, 63, 64, 65, 129, 257] {
+                let mut source = vec![0_i16; len];
+                for (index, item) in source.iter_mut().enumerate() {
+                    if index / block_size % 2 == 1 {
+                        *item = sample(index);
+                    }
+                }
+                let control = quantize_materialized(&source, block_size).unwrap();
+                let mut producer_calls = 0;
+                let mut envelope_calls = 0;
+                let mut nonzero_blocks = 0;
+                let result = quantize_streaming_bounded(
+                    len,
+                    block_size,
+                    |index| {
+                        producer_calls += 1;
+                        source[index]
+                    },
+                    |block_index| {
+                        envelope_calls += 1;
+                        let start = block_index * block_size;
+                        let end = (start + block_size).min(len);
+                        let block = &source[start..end];
+                        if block.iter().all(|&v| v == 0) {
+                            ProducerBound::CertifiedZero
+                        } else {
+                            nonzero_blocks += 1;
+                            ProducerBound::MaxAbs(
+                                block
+                                    .iter()
+                                    .map(|v| u32::from(v.unsigned_abs()))
+                                    .max()
+                                    .unwrap(),
+                            )
+                        }
+                    },
+                )
+                .unwrap();
+                assert_eq!(result, control);
+                assert_eq!(envelope_calls, len.div_ceil(block_size));
+                let nonzero_elements = (0..nonzero_blocks).map(|_| block_size).sum::<usize>();
+                assert!(producer_calls <= nonzero_elements);
+            }
+        }
+    }
+
+    #[test]
+    fn streaming_bound_rejects_stale_or_invalid_metadata_before_publication() {
+        let mut calls = 0;
+        let error = quantize_streaming_bounded(
+            64,
+            32,
+            |i| {
+                calls += 1;
+                if i == 5 {
+                    11
+                } else {
+                    4
+                }
+            },
+            |_| ProducerBound::MaxAbs(10),
+        );
+        assert_eq!(
+            error,
+            Err(PceqStreamingError::BrokenBound {
+                index: 5,
+                bound: 10,
+                observed: 11
+            })
+        );
+        assert_eq!(calls, 6);
+
+        let mut calls = 0;
+        let invalid = quantize_streaming_bounded(
+            32,
+            32,
+            |_| {
+                calls += 1;
+                0
+            },
+            |_| ProducerBound::MaxAbs(32_769),
+        );
+        assert_eq!(
+            invalid,
+            Err(PceqStreamingError::OutOfRangeBound {
+                block: 0,
+                bound: 32_769
+            })
+        );
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn streaming_rejects_bad_shape_without_invoking_callbacks() {
+        for invalid in [0, 1, 33, 65, 129] {
+            let mut producer_called = false;
+            let mut bound_called = false;
+            let result = quantize_streaming_bounded(
+                100,
+                invalid,
+                |_| {
+                    producer_called = true;
+                    0
+                },
+                |_| {
+                    bound_called = true;
+                    ProducerBound::MaxAbs(0)
+                },
+            );
+            assert_eq!(result, Err(PceqStreamingError::InvalidBlockSize(invalid)));
+            assert!(!producer_called && !bound_called);
+        }
+    }
+
+    #[test]
+    fn coarse_bound_is_lossy_but_never_clips_i16_extrema() {
+        let input = [i16::MIN, i16::MAX, 0, -1, 1, 125, -125, 128];
+        let mut extended = [0_i16; 64];
+        extended[..input.len()].copy_from_slice(&input);
+        let result = quantize_streaming_bounded(
+            extended.len(),
+            32,
+            |i| extended[i],
+            |_| ProducerBound::MaxAbs(32_768),
+        )
+        .unwrap();
+        assert_eq!(result.metadata()[0].exponent(), 9);
+        for (&x, &reconstructed) in extended.iter().zip(result.reconstruct().iter()) {
+            assert!((i32::from(x) - reconstructed).abs() <= 256);
+        }
     }
 
     #[test]
