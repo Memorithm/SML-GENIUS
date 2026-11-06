@@ -1,6 +1,6 @@
 # HYB H-2c — expert de recopie sur EVAL4 : préenregistrement
 
-**Statut : préenregistré, pas encore lancé.** EVAL4 ne sera ni préparé ni lu avant l'accord explicite du propriétaire sur ce texte.
+**Statut : lancé le 6 novembre 2026, verdict `GO`** (voir `RESULTS-HYB-H2C-COPY-EVAL4.md`). EVAL4 a été lu une fois.
 
 ## Ce qui est jugé
 
