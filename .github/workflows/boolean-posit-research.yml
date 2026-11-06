@@ -1,0 +1,50 @@
+name: Boolean posit BPB-3 research checks
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-research.yml'
+  push:
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-research.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bpb-3-standalone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.89 and rustfmt
+        shell: bash
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Formatting
+        run: rustfmt --edition 2021 --check research/boolean-posit/prototype.rs research/boolean-posit/large_corpus.rs
+      - name: Exactness and heldout-learning tests
+        shell: bash
+        run: |
+          rustc --edition=2021 --test research/boolean-posit/prototype.rs -o /tmp/bpb-tests
+          /tmp/bpb-tests --nocapture
+      - name: Standalone demonstration and warm microbenchmark
+        shell: bash
+        run: |
+          rustc --edition=2021 -O research/boolean-posit/prototype.rs -o /tmp/bpb-demo
+          /tmp/bpb-demo
+          /tmp/bpb-demo --bench
+      - name: Check corpus harness unit tests
+        shell: bash
+        run: |
+          rustc --edition=2021 -O --test research/boolean-posit/large_corpus.rs -o /tmp/bpb-large-tests
+          /tmp/bpb-large-tests --nocapture
+      - name: Massive full-corpus resident paired exact scan
+        shell: bash
+        run: |
+          rustc --edition=2021 -O research/boolean-posit/large_corpus.rs -o /tmp/bpb-corpus
+          /tmp/bpb-corpus --blocks 8388608 --repeats 2 --reserve-mib 512 --max-ram-percent 50
