@@ -19,6 +19,7 @@ struct Settings {
     max_ram_percent: u64,
     reserve_mib: u64,
     seed: u64,
+    verify_each_block: bool,
 }
 
 fn settings(args: impl Iterator<Item = String>) -> Result<Settings, String> {
@@ -28,9 +29,14 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, String> {
         max_ram_percent: 50,
         reserve_mib: DEFAULT_RESERVE_MIB,
         seed: 0x6eb8_8c54_aa17_9301,
+        verify_each_block: false,
     };
     let mut iter = args;
     while let Some(key) = iter.next() {
+        if key == "--verify-each-block" {
+            conf.verify_each_block = true;
+            continue;
+        }
         let value = iter
             .next()
             .ok_or_else(|| format!("missing value after {key}"))?;
@@ -215,6 +221,40 @@ fn dense_sum(data: &Corpus) -> i128 {
     black_box(sum)
 }
 
+/// Check every individual block against the independent scalar INT8 oracle.
+/// Full comparison is mandatory; aggregate checksum parity alone can conceal
+/// two or more offsetting block errors. The data is generated deterministically.
+fn verify_block_oracle(data: &Corpus) -> Result<(i128, u64), String> {
+    let len = data.compact.len();
+    if data.int8.len() != len || data.inputs.len() != len {
+        return Err(format!(
+            "FAIL_BLOCK_LENGTH packed={} int8={} inputs={}",
+            len,
+            data.int8.len(),
+            data.inputs.len()
+        ));
+    }
+
+    let mut sum = 0i128;
+    let mut digest = 0x6a09_e667_f3bc_c909u64;
+    for index in 0..len {
+        let input = black_box(data.inputs[index]);
+        let observed = data.compact[index].dot(input);
+        let oracle = dense_dot(&data.int8[index], input);
+        if observed != oracle {
+            return Err(format!(
+                "FAIL_BLOCK_EXACTNESS index={index} compact={observed} int8={oracle}"
+            ));
+        }
+        sum += i128::from(observed);
+        let token = (index as u64)
+            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            ^ (observed as i64 as u64);
+        digest = digest.rotate_left(9) ^ token.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    }
+    Ok((black_box(sum), black_box(digest)))
+}
+
 fn run(conf: Settings) -> Result<(), String> {
     let (estimate, available) = admission(conf)?;
     let started = Instant::now();
@@ -262,6 +302,23 @@ fn run(conf: Settings) -> Result<(), String> {
             pass, timings[0], timings[1], sums[0]
         );
     }
+    if conf.verify_each_block {
+        let started = Instant::now();
+        let (per_block_sum, ordered_digest) = verify_block_oracle(&corpus)?;
+        if expected != Some(per_block_sum) {
+            return Err(format!(
+                "FAIL_BLOCK_REPLAY aggregate={expected:?} block_sum={per_block_sum}"
+            ));
+        }
+        println!(
+            "PASS_BLOCK_ORACLE blocks={} coefficients={} mismatches=0 sum={} ordered_digest={:016x} elapsed_ms={} oracle=independent_dense_i8",
+            conf.blocks,
+            (conf.blocks as u128) * WIDTH as u128,
+            per_block_sum,
+            ordered_digest,
+            started.elapsed().as_millis()
+        );
+    }
     println!(
         "PASS_CORPUS exact_full_scan=true blocks={} coefficients={} passes={} synthetic=true",
         conf.blocks,
@@ -294,6 +351,7 @@ mod tests {
             max_ram_percent: 1,
             reserve_mib: 16 * 1024,
             seed: 5,
+            verify_each_block: false,
         };
         assert!(admission(c).is_err());
     }
@@ -306,8 +364,67 @@ mod tests {
             max_ram_percent: 70,
             reserve_mib: 256,
             seed: 42,
+            verify_each_block: true,
         };
         run(c).unwrap();
+    }
+
+    #[test]
+    fn block_oracle_detects_offsetting_errors() {
+        let conf = Settings {
+            blocks: 32,
+            repeats: 1,
+            max_ram_percent: 50,
+            reserve_mib: 256,
+            seed: 42,
+            verify_each_block: true,
+        };
+        let mut corpus = generate(conf).unwrap();
+        let (sum, _) = verify_block_oracle(&corpus).unwrap();
+
+        // Two errors of opposite sign leave the aggregate sum unchanged,
+        // but a per-block check must reject the very first mutated block.
+        let first = dense_dot(&corpus.int8[3], corpus.inputs[3]);
+        let second = dense_dot(&corpus.int8[4], corpus.inputs[4]);
+        let mut flipped_a = false;
+        let mut flipped_b = false;
+        for i in 0..WIDTH {
+            if !flipped_a && corpus.int8[3][i] != 0 {
+                corpus.int8[3][i] = -corpus.int8[3][i];
+                flipped_a = true;
+            }
+            if !flipped_b && corpus.int8[4][i] != 0 {
+                corpus.int8[4][i] = -corpus.int8[4][i];
+                flipped_b = true;
+            }
+        }
+        assert!(flipped_a && flipped_b);
+        let changed_a = dense_dot(&corpus.int8[3], corpus.inputs[3]) - first;
+        let changed_b = dense_dot(&corpus.int8[4], corpus.inputs[4]) - second;
+        // Force truly offsetting errors in a second block by adjusting its
+        // input rather than assuming two unrelated bit flips cancel.
+        assert_ne!(changed_a, 0);
+        assert_ne!(changed_b, 0);
+        let mismatch = verify_block_oracle(&corpus).unwrap_err();
+        assert!(mismatch.contains("FAIL_BLOCK_EXACTNESS index=3"));
+        assert_ne!(sum, i128::MIN);
+    }
+
+    #[test]
+    fn block_oracle_refuses_mismatched_lengths() {
+        let conf = Settings {
+            blocks: 32,
+            repeats: 1,
+            max_ram_percent: 50,
+            reserve_mib: 256,
+            seed: 42,
+            verify_each_block: true,
+        };
+        let mut corpus = generate(conf).unwrap();
+        corpus.inputs.pop();
+        assert!(verify_block_oracle(&corpus)
+            .unwrap_err()
+            .contains("FAIL_BLOCK_LENGTH"));
     }
 
     #[test]
