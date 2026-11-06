@@ -3,6 +3,7 @@
 - Status: **IDLE_WAITING / BLOCKED** — RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
 - Base: `3ebc6334c5bd8cec5fc33e4709809819f817ccab` (origin/main, research BPB #840). Milestone **G1 CONTEXT-3**. **LONGCTX-B1** untouched / **BLOCKED**.
 - Wake source: Grok Bot routine `sml-genius-dev-watchdog-30m` only — **not** proof of RemoteOps→Grok half-hour loop CONNECTED.
+- Report PR: https://github.com/Memorithm/SML-GENIUS/pull/842 (head report commit `9331333456dfda1e8994cacefb8bf8bccd9e4812`).
 
 ## Runner / bench (re-verified this tick)
 - Self-hosted runners: `total_count=0` (`gh api repos/Memorithm/SML-GENIUS/actions/runners`).
