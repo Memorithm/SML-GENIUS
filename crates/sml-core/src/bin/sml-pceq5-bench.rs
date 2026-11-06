@@ -19,7 +19,9 @@ struct Pair {
 }
 
 fn word(seed: u64, index: usize) -> u64 {
-    let mut x = seed.wrapping_add(index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut x = seed
+        .wrapping_add(index as u64)
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15);
     x ^= x >> 30;
     x = x.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x ^= x >> 27;
