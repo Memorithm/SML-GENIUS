@@ -261,13 +261,9 @@ mod tests {
             for block in [32, 64, 128] {
                 let source = fixture(len, block);
                 let tagged = quantize_sparse_versioned(len, block, &source).unwrap();
-                let reference = quantize_sparse_bounded(
-                    len,
-                    block,
-                    |i| source.input[i],
-                    |b| source.bounds[b],
-                )
-                .unwrap();
+                let reference =
+                    quantize_sparse_bounded(len, block, |i| source.input[i], |b| source.bounds[b])
+                        .unwrap();
                 assert_eq!(tagged.snapshot(), &reference);
                 assert_eq!(tagged.producer_id(), 0xabc123);
                 assert_eq!(tagged.revision(), 7);
@@ -318,19 +314,17 @@ mod tests {
         source.bounds[0] = ProducerBound::MaxAbs(32_769);
         assert_eq!(
             quantize_sparse_versioned(32, 32, &source),
-            Err(Pceq4Error::Quantizer(
-                PceqStreamingError::OutOfRangeBound {
-                    block: 0,
-                    bound: 32_769,
-                }
-            ))
+            Err(Pceq4Error::Quantizer(PceqStreamingError::OutOfRangeBound {
+                block: 0,
+                bound: 32_769,
+            }))
         );
         assert_eq!(source.samples.get(), 0);
         assert_eq!(
             quantize_sparse_versioned(32, 0, &source),
-            Err(Pceq4Error::Quantizer(
-                PceqStreamingError::InvalidBlockSize(0)
-            ))
+            Err(Pceq4Error::Quantizer(PceqStreamingError::InvalidBlockSize(
+                0
+            )))
         );
     }
 
