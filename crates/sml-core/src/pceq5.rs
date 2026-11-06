@@ -21,10 +21,7 @@ pub enum BooleanXorError {
 }
 
 impl CanonicalBitplane {
-    pub fn from_words(
-        logical_bits: usize,
-        words: Vec<u64>,
-    ) -> Result<Self, BooleanXorError> {
+    pub fn from_words(logical_bits: usize, words: Vec<u64>) -> Result<Self, BooleanXorError> {
         let expected = logical_bits.div_ceil(64);
         if words.len() != expected {
             return Err(BooleanXorError::WordCount {
@@ -215,7 +212,9 @@ mod tests {
 
     #[test]
     fn exact_xor_parity_and_bitset_boundary_63_64() {
-        for width in [1, 31, 63, 64, 65, 127, 128, 129, 4095, 4096, 4097, 4161, 8193] {
+        for width in [
+            1, 31, 63, 64, 65, 127, 128, 129, 4095, 4096, 4097, 4161, 8193,
+        ] {
             let a = plane(width, 0x1234_5678);
             let b = plane(width, 0x9876_4321);
             let result = xor_sparse_exact(&a, &b).unwrap();
@@ -227,9 +226,16 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(result.reconstruct_words(), reference);
             assert_eq!(result.source_word_reads(), width.div_ceil(64) * 2);
-            assert_eq!(result.active_bitmap().len(), width.div_ceil(64).div_ceil(64));
             assert_eq!(
-                result.active_bitmap().iter().map(|word| word.count_ones() as usize).sum::<usize>(),
+                result.active_bitmap().len(),
+                width.div_ceil(64).div_ceil(64)
+            );
+            assert_eq!(
+                result
+                    .active_bitmap()
+                    .iter()
+                    .map(|word| word.count_ones() as usize)
+                    .sum::<usize>(),
                 result.payload().len()
             );
             let inverse = xor_sparse_exact(&b, &a).unwrap();
