@@ -6,7 +6,7 @@
 //! See docs/research/PCEQ3_SPARSE_PAYLOAD.md.
 
 use crate::pceq0::{
-    MAX_BLOCK, PceqStreamingError, ProducerBound, check_block_size, encode_value, exact_exponent,
+    check_block_size, encode_value, exact_exponent, PceqStreamingError, ProducerBound, MAX_BLOCK,
 };
 
 /// Immutable sparse block snapshot. Active blocks have full i8 block payloads,
@@ -54,7 +54,10 @@ impl SparsePceqI16 {
 
     #[must_use]
     pub fn active_blocks(&self) -> usize {
-        self.active_words.iter().map(|w| w.count_ones() as usize).sum()
+        self.active_words
+            .iter()
+            .map(|w| w.count_ones() as usize)
+            .sum()
     }
 
     /// Only logical i8 payload + u8 exponents + u64 activity bitset; not RSS,
@@ -146,8 +149,7 @@ where
     F: FnMut(usize) -> i16,
     B: FnMut(usize) -> ProducerBound,
 {
-    check_block_size(block_size)
-        .map_err(|_| PceqStreamingError::InvalidBlockSize(block_size))?;
+    check_block_size(block_size).map_err(|_| PceqStreamingError::InvalidBlockSize(block_size))?;
     let block_count = len.div_ceil(block_size);
     let mut result = SparsePceqI16 {
         logical_len: len,
@@ -269,15 +271,17 @@ mod tests {
                 assert_eq!(sparse.reconstruct(), dense.reconstruct());
                 assert_eq!(sparse.logical_len(), len);
                 assert_eq!(sparse.exponents().len(), len.div_ceil(block_size));
-                assert_eq!(sparse.active_words().len(), len.div_ceil(block_size).div_ceil(64));
+                assert_eq!(
+                    sparse.active_words().len(),
+                    len.div_ceil(block_size).div_ceil(64)
+                );
                 assert!(sparse.codes().len() <= dense.codes().len());
                 let weights = (0..len).map(|i| i as i16 % 29 - 14).collect::<Vec<_>>();
                 assert_eq!(sparse.weighted_sum(&weights), dense.weighted_sum(&weights));
-                assert_eq!(sparse.weighted_sum(&weights[..len.saturating_sub(1)]), if len == 0 {
-                    Some(0)
-                } else {
-                    None
-                });
+                assert_eq!(
+                    sparse.weighted_sum(&weights[..len.saturating_sub(1)]),
+                    if len == 0 { Some(0) } else { None }
+                );
             }
         }
     }
@@ -365,7 +369,11 @@ mod tests {
             32,
             |i| {
                 seen += 1;
-                if i == 32 { 9 } else { 2 }
+                if i == 32 {
+                    9
+                } else {
+                    2
+                }
             },
             |_| ProducerBound::MaxAbs(8),
         );
