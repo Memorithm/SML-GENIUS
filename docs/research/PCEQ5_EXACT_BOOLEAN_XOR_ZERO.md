@@ -116,3 +116,13 @@ Native qualification must only use trusted merged-main code and
 RemoteOps source SHA pin, retain per-host evidence, and must not
 pool Dell and Thor latency distributions. No claim of real-model
 speedup or DDR traffic reduction is admissible from this microbenchmark.
+
+## Model-owned reference linkage
+
+A dedicated test instantiates canonical coefficient planes from
+`Pvp6Gate<128>::from_monomials` and checks the new XOR operation against
+the existing model-owned coefficient words. This proves a local exact
+GF(2) property for gate coefficient planes, **not** semantic equivalence
+for complete PVP6 gate evaluation or Pascal/subset-zeta transforms.
+Promotion into the production executor remains forbidden without
+operation-level reference parity and representative workload incidence.
