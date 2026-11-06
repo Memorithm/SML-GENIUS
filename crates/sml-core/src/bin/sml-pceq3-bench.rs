@@ -125,7 +125,10 @@ fn preflight(len: usize, block: usize, zero_pct: usize, weights: &[i16]) {
     assert_eq!(sparse_calls, expected_calls);
     assert_eq!(s.reconstruct(), d.reconstruct());
     assert_eq!(s.weighted_sum(weights), d.weighted_sum(weights));
-    assert_eq!(s.active_blocks(), d.metadata().iter().filter(|m| m.active()).count());
+    assert_eq!(
+        s.active_blocks(),
+        d.metadata().iter().filter(|m| m.active()).count()
+    );
     assert!(s.codes().len() <= d.codes().len());
 }
 
