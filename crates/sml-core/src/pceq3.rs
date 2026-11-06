@@ -387,20 +387,21 @@ mod tests {
         );
         assert_eq!(seen, 33);
 
-        let mut any = false;
+        let producer_called = std::cell::Cell::new(false);
+        let bound_called = std::cell::Cell::new(false);
         let invalid_size = quantize_sparse_bounded(
             32,
             0,
             |_| {
-                any = true;
+                producer_called.set(true);
                 0
             },
             |_| {
-                any = true;
+                bound_called.set(true);
                 ProducerBound::CertifiedZero
             },
         );
         assert_eq!(invalid_size, Err(PceqStreamingError::InvalidBlockSize(0)));
-        assert!(!any);
+        assert!(!producer_called.get() && !bound_called.get());
     }
 }
