@@ -1892,7 +1892,7 @@ const EVAL4_FROZEN_SHIFTS: [[&str; 2]; 3] = [
     ],
     [
         "-112,0,16,0,-8,-16,-32,0,8,8,8,0,-8,-8,0,64,-8,0,0,0,0,0,8,-8,8,0,0,0,0,0,0,-8,-16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-        "-8,0,8,0,-8,-8,-32,0,0,8,8,0,0,-8,0,56,0,0,0,0,0,0,8,-8,0,0,0,0,0,0,0,-8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "-8,0,8,0,-8,-8,-32,0,0,8,8,0,0,-8,0,56,0,0,0,0,0,0,8,-8,0,0,0,0,0,0,0,-8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
     ],
     [
         "-488,88,-48,88,112,152,168,232,-392,248,-40,176,232,288,280,408,1016,352,72,248,288,408,384,576,1144,1304,1464,1088,1112,1224,1224,1264,2016,2040,2016,1848,1992,1568,1624,1416,1024,2040,2024,2040,1232,2040,1504,1248",
@@ -2340,6 +2340,18 @@ mod tests {
         assert!(run("out", "SMOKE").is_err());
         assert!(run("pre", "PREREGISTERED").is_err());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn frozen_eval4_shifts_have_all_48_cells() {
+        // SML calibration #864, run 40290453340: each variant/seed
+        // contains 6 match-length buckets × 8 binary decisions.
+        // This guards against a truncated literal silently stopping EVAL4.
+        for shifts_by_seed in EVAL4_FROZEN_SHIFTS {
+            for shifts in shifts_by_seed {
+                assert_eq!(shifts.split(',').count(), COPY_BUCKETS * DEPTHS);
+            }
+        }
     }
 
     #[test]
