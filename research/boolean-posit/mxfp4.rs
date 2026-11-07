@@ -142,8 +142,13 @@ mod tests {
     #[test]
     fn round_to_nearest_ties_even_and_saturate() {
         let ties = [
-            (0.25, 0), (0.75, 2), (1.25, 2), (1.75, 4),
-            (2.5, 4), (3.5, 6), (5.0, 6),
+            (0.25, 0),
+            (0.75, 2),
+            (1.25, 2),
+            (1.75, 4),
+            (2.5, 4),
+            (3.5, 6),
+            (5.0, 6),
         ];
         for (value, code) in ties {
             assert_eq!(encode_element(value), code);
@@ -168,7 +173,11 @@ mod tests {
     fn two_blocks_are_exactly_34_bytes_with_independent_scales() {
         let values = std::array::from_fn(|i| {
             if i < 32 {
-                if i % 2 == 0 { 1.5 } else { -3.0 }
+                if i % 2 == 0 {
+                    1.5
+                } else {
+                    -3.0
+                }
             } else if i % 2 == 0 {
                 64.0
             } else {
