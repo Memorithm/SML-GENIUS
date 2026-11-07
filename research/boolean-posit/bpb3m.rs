@@ -63,7 +63,11 @@ fn check_len(raw: &[u8], expected: usize) -> Result<(), Error> {
 }
 
 fn read_word(raw: &[u8], start: usize) -> u64 {
-    u64::from_le_bytes(raw[start..start + 8].try_into().expect("checked fixed layout"))
+    u64::from_le_bytes(
+        raw[start..start + 8]
+            .try_into()
+            .expect("checked fixed layout"),
+    )
 }
 
 fn original_scale_code(scales: &[u8], subgroup: usize) -> u8 {
@@ -90,8 +94,7 @@ fn fp16_to_f32(bits: u16) -> f32 {
         0 => sign * f32::from(fraction) * 2.0f32.powi(-24),
         31 if fraction == 0 => sign * f32::INFINITY,
         31 => f32::NAN,
-        _ => sign * (1.0 + f32::from(fraction) / 1024.0)
-            * 2.0f32.powi(i32::from(exponent) - 15),
+        _ => sign * (1.0 + f32::from(fraction) / 1024.0) * 2.0f32.powi(i32::from(exponent) - 15),
     }
 }
 
@@ -146,8 +149,7 @@ pub fn join_bpb3m(first: &[u8], second: &[u8]) -> Result<[u8; Q3_K_BYTES], Error
             } else {
                 out[96 + global_subgroup - 8] |= (code & 15) << 4;
             }
-            out[104 + global_subgroup % 4] |=
-                ((code >> 4) & 3) << (2 * (global_subgroup / 4));
+            out[104 + global_subgroup % 4] |= ((code >> 4) & 3) << (2 * (global_subgroup / 4));
         }
     }
     out[108..110].copy_from_slice(&first[54..56]);
@@ -339,14 +341,20 @@ mod tests {
         let k = bpb3k::q3_to_bpb3k(&all_neg).unwrap();
         let blocks = split_bpb3k(&k).unwrap();
         for block in blocks.iter() {
-            assert_eq!(dot_bpb3m_bipolar(block, &[0; 2]).unwrap().integer_dot, 128 * 128);
+            assert_eq!(
+                dot_bpb3m_bipolar(block, &[0; 2]).unwrap().integer_dot,
+                128 * 128
+            );
         }
         let mut all_pos = all_neg;
         all_pos[..32].fill(0xff);
         all_pos[32..96].fill(0xff);
         let kp = bpb3k::q3_to_bpb3k(&all_pos).unwrap();
         for block in split_bpb3k(&kp).unwrap() {
-            assert_eq!(dot_bpb3m_bipolar(&block, &[0; 2]).unwrap().integer_dot, -96 * 128);
+            assert_eq!(
+                dot_bpb3m_bipolar(&block, &[0; 2]).unwrap().integer_dot,
+                -96 * 128
+            );
         }
     }
 }
