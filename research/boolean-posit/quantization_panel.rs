@@ -7,6 +7,9 @@
 #[allow(dead_code)]
 mod bpb3;
 
+#[path = "mxfp4.rs"]
+mod mxfp4;
+
 const LANES: usize = 64;
 const BLOCKS: usize = 48;
 const MASKS: usize = 32;
@@ -159,12 +162,15 @@ struct Stats {
     dots: usize,
 }
 
-fn examine_family(family: &str, seed: u64) -> [Stats; 4] {
+fn examine_family(family: &str, seed: u64) -> [Stats; 5] {
     let mut rng = seed;
-    let mut result: [Stats; 4] = std::array::from_fn(|_| Stats::default());
+    let mut result: [Stats; 5] = std::array::from_fn(|_| Stats::default());
     for _ in 0..BLOCKS {
         let original = weights(family, &mut rng);
         let blocks = Quant::ALL.map(|q| quantize(&original, q));
+        let mx_wire = mxfp4::encode64(&original);
+        let mx = mxfp4::decode64(&mx_wire).expect("finite MXFP4 blocks");
+        assert_eq!(mx_wire.len(), mxfp4::PAIR_BYTES);
         assert_eq!(blocks[1], blocks[2], "equal-codebook BPB/INT3 control");
         let bp = bpb3::Bpb3::pack(&blocks[1].q, blocks[1].k).expect("legal BPB quantization");
         assert_eq!(bp.to_bytes().len(), 26);
@@ -173,10 +179,18 @@ fn examine_family(family: &str, seed: u64) -> [Stats; 4] {
             result[index].weight_sq_error += block.sq_error;
             result[index].coeffs += LANES;
         }
+        for (weight, reconstructed) in original.iter().zip(mx.iter()) {
+            let delta = weight - reconstructed;
+            result[4].weight_sq_error += delta * delta;
+            result[4].coeffs += 1;
+        }
         for _ in 0..MASKS {
             let mask = next_random(&mut rng);
             let reference = real_dot(&original, mask);
             assert_eq!(bp.dot(mask), integer_dot(&blocks[1].q, mask));
+            let mx_delta = real_dot(&mx, mask) - reference;
+            result[4].dot_sq_error += mx_delta * mx_delta;
+            result[4].dots += 1;
             for (index, block) in blocks.iter().enumerate() {
                 let predicted =
                     f64::from(integer_dot(&block.q, mask)) * 2.0f64.powi(i32::from(block.k));
@@ -190,7 +204,7 @@ fn examine_family(family: &str, seed: u64) -> [Stats; 4] {
 }
 
 fn main() {
-    println!("protocol=bpb3-independent-quantization-panel-v1,synthetic=true,model_integrated=false,gpu_measured=false");
+    println!("protocol=bpb3-independent-quantization-panel-v2,synthetic=true,model_integrated=false,gpu_measured=false,mxfp4_scale_policy=per_32_sse_search_-24_to_27");
     println!("family,format,wire_bytes_64,effective_bits_per_weight,weight_rmse,dot_rmse,coefficients,dots");
     for (index, family) in FAMILIES.iter().enumerate() {
         let stats = examine_family(
@@ -210,6 +224,17 @@ fn main() {
                 stat.dots
             );
         }
+        let mx = &stats[4];
+        println!(
+            "{},MXFP4_E2M1_E8M0,{},{:.5},{:.12},{:.12},{},{}",
+            family,
+            mxfp4::PAIR_BYTES,
+            8.0 * mxfp4::PAIR_BYTES as f64 / LANES as f64,
+            (mx.weight_sq_error / mx.coeffs as f64).sqrt(),
+            (mx.dot_sq_error / mx.dots as f64).sqrt(),
+            mx.coeffs,
+            mx.dots
+        );
     }
 }
 
@@ -241,6 +266,8 @@ mod tests {
         assert_eq!(Quant::Bpb3.wire_bytes(), 26);
         assert_eq!(Quant::Symmetric3.wire_bytes(), 26);
         assert_eq!(Quant::Symmetric4.wire_bytes(), 34);
+        assert_eq!(mxfp4::PAIR_BYTES, 34);
+        assert_eq!(mxfp4::WIRE_BYTES, 17);
         for quant in Quant::ALL {
             for w in [[0.0; LANES], [1.0; LANES], [-0.75; LANES]] {
                 let block = quantize(&w, quant);
@@ -264,6 +291,8 @@ mod tests {
             }
             assert_eq!(a[1].weight_sq_error, a[2].weight_sq_error);
             assert_eq!(a[1].dot_sq_error, a[2].dot_sq_error);
+            assert!(a[4].weight_sq_error.is_finite());
+            assert!(a[4].dot_sq_error.is_finite());
         }
     }
 }
