@@ -1,28 +1,36 @@
-# Grok SML-GENIUS report — 2026-11-07T07:19:04Z
+# Grok SML-GENIUS report — 2026-11-07T09:17:44Z
 
-- Status: **NOT_CONNECTED** (code delivered; awaiting exact-head CI + ChatGPT G2 review). E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
-- Base: `b9138d1e37784c0eb376a850ce81cb0e07aed6a5` (origin/main, #843 merged). Milestone **G2 pinned admission**. **LONGCTX-B1** untouched / **BLOCKED** (filler/B-lex/B-attn user choices).
-- Wake source: Grok Bot routine only — **not** proof of RemoteOps→Grok loop CONNECTED.
-- Code PR: https://github.com/Memorithm/SML-GENIUS/pull/844 (code commit `94e48dc5a6abfee2f333769f650109811650150a`; this report is a docs-only commit on top).
+- Status: **IN_PROGRESS (CONTEXT-2 code delivered; awaiting exact-head CI + ChatGPT ACK)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
+- Base: `7017bd4843273d347b58c8a70fb7b5073b905beb` (origin/main after G2 #844). Milestone **G2 CONTEXT-2**. **LONGCTX-B1** untouched / **BLOCKED**.
+- Wake source: Grok Bot executor (parent-delegated CONTEXT-2 handoff from ChatGPT #1208 comment 6704762720) — **not** proof of RemoteOps→Grok half-hour loop CONNECTED.
+- Code branch: `grok/g2-bounded-working-context-20261107` tip `ac077bbc48ab0f531e036b8c0abf8fc38de2abdd`.
 
-## This slice (ChatGPT G2 handoff, RemoteOps #1208 comment 6703643130)
-1. **Placeholder provenance refusal:** `source` / `license` refused with `BadValue { key, value }` if trimmed value equals (ASCII case-insensitive) `UNPINNED, TODO, UNKNOWN, N/A, NA, NONE, NULL, TBD, -, ?` or has no ASCII alphanumeric. Committed manifests (pes2o7-v1, tiny, smoke) stay admissible.
-2. **Split fingerprint:** `PinnedRealTextCorpus::split_fingerprint{,_hex}` + pure `split_fingerprint_of`: SHA-256 over length-prefixed, domain-separated (`G1_REALTEXT_SPLIT_FINGERPRINT v1`) preimage of corpus_id, sha256, split_mod, eval_residue, byte-sorted train/eval ids. Identity only, not a measurement. Pin is in the preimage, so re-ordered corpus bytes → new fingerprint; fixed pin → order-independent.
-3. Protocol doc items 6–7 + module docs.
+## This slice (CONTEXT-2 bounded recurrent working-context substrate)
 
-## Evidence (code commit `94e48dc5a6abfee2f333769f650109811650150a`)
-- `cargo fmt --all -- --check` pass; `cargo clippy --locked --workspace --all-targets -- -D warnings` pass; `cargo test --locked --workspace` → **2272 passed; 0 failed; 3 ignored** (pre-push hook revalidated).
-- New `crates/sml-store/tests/g1_realtext_admission.rs`: 7 tests (78 refused placeholder cases across source/license; fingerprint determinism, order-independence, sensitivity, length-prefix non-collision, fixture snapshot).
-- Exact-head CI: pending on PR tip (see PR checks).
+Implemented deterministic reference in `crates/sml-store`:
+1. `WorkingPolicy::{Fixed, Expanding, CapacityBounded}` on identical synthetic segment streams.
+2. Explicit per-segment `RetentionFate::{Retained, Evicted, Lost}` + raw `ContextSegmentId` provenance (`SegmentAccounting`).
+3. Fail-closed: invalid capacity, ID collision, stream mismatch, expanding ceiling, truncated/unknown restart provenance, register/stats mismatch.
+4. Independent `WorkingContextOracle` + integration negatives in `tests/working_context.rs`.
+5. Design note `docs/SML-CONTEXT-2-WORKING.md`.
+
+**Not claimed:** real-text quality, effective context span from capacity, CCOS=1M attention, runner benches.
+
+## Evidence (local tip `ac077bbc48ab0f531e036b8c0abf8fc38de2abdd`)
+- `bash scripts/install-hooks.sh` applied.
+- `cargo fmt --all -- --check` pass.
+- `cargo clippy --locked --workspace --all-targets -- -D warnings` pass.
+- `cargo test --locked --workspace` → **2288 passed; 0 failed; 3 ignored**.
+- Exact-head CI: pending push/PR.
 
 ## WAITING_ON
-1. Exact-head CI all required SUCCESS on #844 tip.
-2. ChatGPT G2 qualification ACK on RemoteOps #1208 (no merge before).
-3. Dell/Thor self-hosted runners (`total_count=0`).
-4. ChatGPT M2 verified `session_attestation`.
+1. Push + open PR; exact-head required CI SUCCESS.
+2. ChatGPT ACK on RemoteOps #1208 before any merge ask.
+3. Dell/Thor self-hosted runners still `total_count=0` for native benches.
+4. LONGCTX-B1 prerequisites (filler/B-lex/B-attn) remain user-blocked.
 
 ## Measured
-None. No scores invented. **NOT_MEASURED**.
+None. Keep **NOT_MEASURED**.
 
-## Out of scope
-BPB #838/#841 untouched; LONGCTX-B1 not launched; hostile-writer O_NOFOLLOW/TOCTOU deferred to a separate G1 PR; no NVIDIA stack.
+## Out of scope this slice
+LONGCTX-B1 campaign. G1 hostile-writer TOCTOU. ChatGPT M2 ACK journal / RemoteOps #1336. NVIDIA stack.
