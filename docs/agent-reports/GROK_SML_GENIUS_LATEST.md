@@ -1,39 +1,40 @@
-# Grok SML-GENIUS report — 2026-11-07T14:22:31Z
+# Grok SML-GENIUS report — 2026-11-07T15:13:02Z
 
-- PR: https://github.com/Memorithm/SML-GENIUS/pull/850
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/850 (now contains #849 G3 via merge commit)
 
-- Status: **IN_PROGRESS (CONTEXT-2 G4 snapshot wire format: PR #850 open; exact-head CI pending)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
-- Base: `30cd5d4b04bc42d56a167ea97207d19995251508` (origin/main after #848). Not stacked on #849 (G3 adversarial restore corpus, left untouched). Milestone **G4 CONTEXT-2 serialization/admission boundary**. **LONGCTX-B1** untouched / **BLOCKED**.
-- Wake source: Grok Bot executor (parent-delegated handoff from ChatGPT RemoteOps #1208 comment 6707906678) — **not** proof of RemoteOps→Grok loop CONNECTED.
-- Branch: `grok/g4-context2-snapshot-wire-20261107`; code commit `a23d5b0ccf9409c0ceb06bddea26f03099fade90`.
-- **NO MERGE** until review.
+- Status: **IN_PROGRESS (CONTEXT-2 G3+G4 integration; awaiting exact-head CI + ChatGPT integration review)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**. **LONGCTX-B1** untouched / **BLOCKED**.
+- Base: `30cd5d4b04bc42d56a167ea97207d19995251508` (origin/main after #848).
+- Integrated head: `55a8a6b570e5d0313d5a82a24dbfb55f451b377e` (code/test commit) on `grok/g4-context2-snapshot-wire-20261107`.
+  - Merge commit `bc16148ec846d7cfd46bc91e17ba9da9fa2fa17e` = G4 tip `f42117be` + G3 tip `37c77076` (G3 code `9ad178a1`, G4 code `a23d5b0c`).
+  - Code overlap G3 vs G4: none; only agent-report LATEST/STATUS conflicted (rewritten here). Both run archives kept: `grok-runs/2026/11/20261107T132349Z.md` (G3), `20261107T142231Z.md` (G4).
+- Wake source: Grok Bot executor per ChatGPT RemoteOps #1208 comment 6708570670 (parent ACK 6708653718) — **not** proof of RemoteOps→Grok CONNECTED.
+- **NO MERGE** of #849/#850 to main. G5 golden harness **queued** until integration review.
 
 ## This slice
-New module `crates/sml-store/src/working_context_wire.rs` (`#![forbid(unsafe_code)]` crate):
-- Versioned canonical LE byte format: magic `SWC2`, wire v1, schema v1; 93-byte header, 74-byte rows, 8-byte seen ids.
-- Limits before allocation: `MAX_SNAPSHOT_BYTES` = 5 374 045 checked before reading; `MAX_SNAPSHOT_ROWS` = 65 536 for R+E and S (checked arithmetic); retained ≤ policy limit; exact implied length == input length before any `Vec` is sized. Caller can tighten via `SnapshotWireLimits::new`.
-- Rejects: oversized length prefixes (incl. u32::MAX), truncation (header/mid-row/mid-seen/every prefix), trailing bytes, bad magic, unknown wire version, unsupported schema, zero stream/segment ids, unknown policy/fate tags, noncanonical resolved encoding, noncanonical ordering.
-- Encoder refuses noncanonical snapshots ⇒ `encode(decode(b)) == b` for every accepted input.
-- `decode_and_restore` / `restore_into`: semantic `WorkingContext::restore` only after full wire decode; rejected bytes never mutate the live context.
-- Docs: `docs/SML-CONTEXT-2-WORKING.md` § Snapshot wire format (G4) + module docs (field table, limits, non-claims).
+New `crates/sml-store/tests/working_context_wire_restore.rs` — **10 tests**, seeded (24 seeds × Fixed/Expanding/CapacityBounded):
+- decode → `WorkingContext::restore` parity: decoded snapshot == `snapshot()`, wire restore == direct restore == live (stats, register, accounting).
+- cut/restart through bytes at every cut (re-encoding after every step) == uninterrupted run; next-eviction parity for 4 further admissions.
+- G3 invariants via wire bytes (decode OK, restore rejects with the **same** error as direct restore): stats counter overflow → `StatsMismatch`; `recurrent_folds` tamper → `StatsMismatch`; zero fingerprint (retained/eviction) → `ZeroFingerprint`; register tamper; step = u64::MAX.
+- Zero segment id rejected on both layers (G3 `InvalidSegmentIdentity` direct; G4 encoder + decoder `InvalidSegmentId`).
+- Negatives (no live mutation, deterministic, live keeps admitting): trailing byte, truncation, inflated length prefix, retained FIFO swap, eviction-log permutation (semantically accepted by G3 restore but refused by canonical wire), duplicate seen id, non-zero resolved padding.
+- Layering property: for every single-byte mutation (3 masks × 3 policies), `decode_and_restore` == `restore(decode)` — wire adds no semantic acceptance.
+- G3 adversarial suite (36) and G4 wire suite (30) unchanged.
 
-Tests: `crates/sml-store/tests/working_context_wire.rs` — **30 tests** (written first; failed to compile against base = red), incl. independent reference writer, roundtrips for Fixed/Expanding/CapacityBounded with and without evictions, restart-through-bytes vs uninterrupted run, negative corpus, reject-without-mutation over 13 corpus entries × 3 policies, exhaustive single-byte mutation sweep (accepted ⇒ canonical).
-
-## Evidence (local, code commit `a23d5b0ccf9409c0ceb06bddea26f03099fade90`)
-- `bash scripts/install-hooks.sh` applied (core.hooksPath=.githooks).
+## Evidence (local, head `55a8a6b5`)
+- `bash scripts/install-hooks.sh` (core.hooksPath=.githooks); commits went through hooks (no --no-verify).
 - `cargo fmt --all -- --check` clean.
 - `cargo clippy --locked --workspace --all-targets -- -D warnings` pass.
-- `cargo test --locked --workspace` → **2324 passed; 0 failed; 3 ignored** (main baseline after #848: 2294; +30).
-- Exact-head CI: PENDING / NOT_QUALIFIED at report time.
+- `cargo test --locked --workspace` → **2370 passed; 0 failed; 3 ignored** (G4 alone 2324 + G3 36 + integration 10).
+- Exact-head CI on integrated tip: PENDING / NOT_QUALIFIED at report time.
 
 ## WAITING_ON
-1. PR open against main + exact-head required CI SUCCESS.
-2. Review (ChatGPT / human) on RemoteOps #1208 before any merge ask.
+1. Exact-head required CI SUCCESS on integrated #850 tip.
+2. ChatGPT integration review on RemoteOps #1208 before any merge ask.
 3. Dell/Thor self-hosted runners `total_count=0`.
 4. LONGCTX-B1 prerequisites (filler/B-lex/B-attn) remain user-blocked.
 
 ## Measured
-None. Keep **NOT_MEASURED** (no throughput or quality metric).
+None. Keep **NOT_MEASURED**.
 
 ## Out of scope this slice
-#849 adversarial restore corpus (not duplicated/rewritten). RemoteOps M2 #1346. LONGCTX-B1 campaign. Claude hybrid/ternary paths. NVIDIA stack. No checksum/signature (non-claim).
+G5 golden harness (queued). Merges to main. LONGCTX-B1 campaign. Claude hybrid/ternary paths. NVIDIA stack. No checksum/signature (non-claim).
