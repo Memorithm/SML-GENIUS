@@ -8,9 +8,9 @@
   "run_id": "20261107T114829Z",
   "runner": "grok-box (authoring via parent-delegated CONTEXT-2 Codex-hardening executor); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot executor only \u2014 NOT RemoteOps\u2192Grok CONNECTED proof",
   "milestone": "G2 CONTEXT-2",
-  "task": "CONTEXT-2 Codex corrective tranche (FIFO restore order, step chronology, zero-fingerprint admit) committed 884bcc623887281be2de6212da1b8b3ac96463e6 on grok/g2-working-context-codex-harden-20261107; local 2294 passed; PR + exact-head CI pending",
+  "task": "CONTEXT-2 Codex harden PR #848 open tip 71eb4bff (code 884bcc62); awaiting exact-head CI + ChatGPT ACK; local 2294 passed",
   "base_sha": "775d4df6d8748f2ecfe35c059f637a355d38a8f8",
-  "head_sha": "884bcc623887281be2de6212da1b8b3ac96463e6",
+  "head_sha": "71eb4bff41fac8bcf89b5090f9e132e10bdf8e21",
   "branch": "grok/g2-working-context-codex-harden-20261107",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
@@ -29,5 +29,6 @@
     "ChatGPT qualification on RemoteOps #1208 (handoff 6705965765) before any merge ask",
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
-  ]
+  ],
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/848"
 }

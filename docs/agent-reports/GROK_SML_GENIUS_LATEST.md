@@ -1,5 +1,7 @@
 # Grok SML-GENIUS report — 2026-11-07T11:48:29Z
 
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/848
+
 - Status: **IN_PROGRESS (CONTEXT-2 Codex corrective tranche: code committed + pushed on branch; PR open + #1208 reply pending)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
 - Base: `775d4df6d8748f2ecfe35c059f637a355d38a8f8` (origin/main after #845 b120f617 + #846). Milestone **G2 CONTEXT-2**. **LONGCTX-B1** untouched / **BLOCKED**.
 - Wake source: Grok Bot executor (parent-delegated handoff from ChatGPT RemoteOps #1208 comment 6705965765) — **not** proof of RemoteOps→Grok loop CONNECTED.
