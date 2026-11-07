@@ -2,15 +2,15 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-07T09:17:44Z",
-  "last_report_utc": "2026-11-07T09:17:44Z",
+  "timestamp_utc": "2026-11-07T09:24:14Z",
+  "last_report_utc": "2026-11-07T09:24:14Z",
   "last_successful_code_commit_utc": "2026-11-07T09:17:44Z",
-  "run_id": "20261107T091744Z",
-  "runner": "grok-box (authoring via parent-delegated CONTEXT-2 executor); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only — NOT RemoteOps→Grok CONNECTED proof",
+  "run_id": "20261107T092414Z",
+  "runner": "grok-box (authoring via parent-delegated CONTEXT-2 executor); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only \u2014 NOT RemoteOps\u2192Grok CONNECTED proof",
   "milestone": "G2 CONTEXT-2",
-  "task": "CONTEXT-2 bounded recurrent working-context substrate delivered on tip ac077bbc48ab0f531e036b8c0abf8fc38de2abdd; local fmt/clippy/test green; awaiting PR exact-head CI + ChatGPT ACK",
+  "task": "CONTEXT-2 PR #845 open at tip bf239ba626b975a287a15503b17377f49d13aadc; awaiting exact-head CI + ChatGPT ACK; local 2288 passed",
   "base_sha": "7017bd4843273d347b58c8a70fb7b5073b905beb",
-  "head_sha": "ac077bbc48ab0f531e036b8c0abf8fc38de2abdd",
+  "head_sha": "bf239ba626b975a287a15503b17377f49d13aadc",
   "branch": "grok/g2-bounded-working-context-20261107",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
@@ -18,16 +18,16 @@
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
     "cargo_test_locked_workspace": "2288 passed, 0 failed, 3 ignored",
-    "exact_head_ci": "pending push/PR"
+    "exact_head_ci": "pending on PR #845"
   },
   "metrics": "NOT_MEASURED: synthetic oracle/fixture comparison only; no pinned real-text corpus measurement; no quality claim.",
-  "blocked_reason": "WAITING_ON: open PR + exact-head required CI SUCCESS; ChatGPT ACK on #1208 before merge; Dell/Thor self-hosted runners total_count=0; LONGCTX-B1 user-blocked. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. This wake is Grok Bot executor only, not RemoteOps→Grok CONNECTED proof.",
+  "blocked_reason": "WAITING_ON: exact-head required CI SUCCESS on PR #845; ChatGPT ACK on #1208 before merge; Dell/Thor self-hosted runners total_count=0; LONGCTX-B1 user-blocked. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. This wake is Grok Bot executor only, not RemoteOps\u2192Grok CONNECTED proof.",
   "qualification": "NOT_QUALIFIED",
   "waiting_on": [
-    "Push/open PR and exact-head required CI SUCCESS",
+    "Exact-head required CI SUCCESS on https://github.com/Memorithm/SML-GENIUS/pull/845",
     "ChatGPT ACK on RemoteOps #1208 before merge ask",
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": null
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/845"
 }

@@ -1,9 +1,9 @@
-# Grok SML-GENIUS report — 2026-11-07T09:17:44Z
+# Grok SML-GENIUS report — 2026-11-07T09:24:14Z
 
 - Status: **IN_PROGRESS (CONTEXT-2 code delivered; awaiting exact-head CI + ChatGPT ACK)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
 - Base: `7017bd4843273d347b58c8a70fb7b5073b905beb` (origin/main after G2 #844). Milestone **G2 CONTEXT-2**. **LONGCTX-B1** untouched / **BLOCKED**.
 - Wake source: Grok Bot executor (parent-delegated CONTEXT-2 handoff from ChatGPT #1208 comment 6704762720) — **not** proof of RemoteOps→Grok half-hour loop CONNECTED.
-- Code branch: `grok/g2-bounded-working-context-20261107` tip `ac077bbc48ab0f531e036b8c0abf8fc38de2abdd`.
+- Code PR: https://github.com/Memorithm/SML-GENIUS/pull/845 — branch `grok/g2-bounded-working-context-20261107` tip `bf239ba626b975a287a15503b17377f49d13aadc` (code `ac077bbc`).
 
 ## This slice (CONTEXT-2 bounded recurrent working-context substrate)
 
@@ -21,10 +21,10 @@ Implemented deterministic reference in `crates/sml-store`:
 - `cargo fmt --all -- --check` pass.
 - `cargo clippy --locked --workspace --all-targets -- -D warnings` pass.
 - `cargo test --locked --workspace` → **2288 passed; 0 failed; 3 ignored**.
-- Exact-head CI: pending push/PR.
+- Exact-head CI: pending on PR #845 (opened).
 
 ## WAITING_ON
-1. Push + open PR; exact-head required CI SUCCESS.
+1. Exact-head required CI SUCCESS on PR #845.
 2. ChatGPT ACK on RemoteOps #1208 before any merge ask.
 3. Dell/Thor self-hosted runners still `total_count=0` for native benches.
 4. LONGCTX-B1 prerequisites (filler/B-lex/B-attn) remain user-blocked.
