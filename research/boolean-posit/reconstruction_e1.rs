@@ -4,10 +4,10 @@
 //! BPB-3 is evaluated on the same original f32 weights in four 64-wide groups.
 //! No trained model, DRAM/GPU timing, or real-weight quality claim is made.
 #![allow(dead_code)]
-#[path = "gguf_k.rs"]
-mod gguf;
 #[path = "prototype.rs"]
 mod bpb3;
+#[path = "gguf_k.rs"]
+mod gguf;
 
 use std::ffi::{c_char, c_void, CStr};
 use std::fs;
@@ -27,8 +27,13 @@ unsafe extern "C" {
     fn ggml_blck_size(ty: i32) -> i64;
     fn ggml_type_size(ty: i32) -> usize;
     fn ggml_quantize_chunk(
-        ty: i32, src: *const f32, dst: *mut c_void,
-        start: i64, nrows: i64, n_per_row: i64, imatrix: *const f32
+        ty: i32,
+        src: *const f32,
+        dst: *mut c_void,
+        start: i64,
+        nrows: i64,
+        n_per_row: i64,
+        imatrix: *const f32,
     ) -> usize;
     fn dequantize_row_q3_K(x: *const c_void, y: *mut f32, k: i64);
     fn dequantize_row_q4_K(x: *const c_void, y: *mut f32, k: i64);
@@ -50,8 +55,20 @@ fn generated(family: &str, seed: &mut u64) -> [f32; N] {
         let base = 2.0 * unit(seed) - 1.0;
         match family {
             "uniform" => 0.85 * base,
-            "sparse" => if next_random(seed) % 5 == 0 { 0.7 * base } else { 0.0 },
-            "outlier" => if i % 31 == 0 { 8.0 * base } else { 0.12 * base },
+            "sparse" => {
+                if next_random(seed) % 5 == 0 {
+                    0.7 * base
+                } else {
+                    0.0
+                }
+            }
+            "outlier" => {
+                if i % 31 == 0 {
+                    8.0 * base
+                } else {
+                    0.12 * base
+                }
+            }
             "logspread" => {
                 let k = (next_random(seed) % 13) as i32 - 12;
                 base.signum() * 2.0f32.powi(k)
@@ -76,8 +93,13 @@ fn official(ty: i32, original: &[f32; N]) -> Vec<u8> {
     let mut encoded = vec![0u8; size];
     let wrote = unsafe {
         ggml_quantize_chunk(
-            ty, original.as_ptr(), encoded.as_mut_ptr().cast::<c_void>(),
-            0, 1, N as i64, std::ptr::null()
+            ty,
+            original.as_ptr(),
+            encoded.as_mut_ptr().cast::<c_void>(),
+            0,
+            1,
+            N as i64,
+            std::ptr::null(),
         )
     };
     assert_eq!(wrote, size, "STOP_GGML_QUANTIZER_WRONG_WIRE_SIZE");
@@ -88,9 +110,17 @@ fn decode_official_c(ty: i32, wire: &[u8]) -> [f32; N] {
     let mut values = [0f32; N];
     unsafe {
         if ty == GGML_Q3_K {
-            dequantize_row_q3_K(wire.as_ptr().cast::<c_void>(), values.as_mut_ptr(), N as i64);
+            dequantize_row_q3_K(
+                wire.as_ptr().cast::<c_void>(),
+                values.as_mut_ptr(),
+                N as i64,
+            );
         } else {
-            dequantize_row_q4_K(wire.as_ptr().cast::<c_void>(), values.as_mut_ptr(), N as i64);
+            dequantize_row_q4_K(
+                wire.as_ptr().cast::<c_void>(),
+                values.as_mut_ptr(),
+                N as i64,
+            );
         }
     }
     values
@@ -99,10 +129,17 @@ fn decode_official_c(ty: i32, wire: &[u8]) -> [f32; N] {
 fn check_c_agreement(ty: i32, bytes: &[u8], rust: &[f32; N]) {
     let c = decode_official_c(ty, bytes);
     for i in 0..N {
-        assert!(c[i].is_finite() && rust[i].is_finite(), "STOP_NONFINITE_DECODE");
+        assert!(
+            c[i].is_finite() && rust[i].is_finite(),
+            "STOP_NONFINITE_DECODE"
+        );
         let tolerance = 0.00001f32 * c[i].abs().max(1.0);
-        assert!((c[i] - rust[i]).abs() <= tolerance,
-            "STOP_OFFICIAL_CPP_RUST_PARITY index={i} c={} rust={}", c[i], rust[i]);
+        assert!(
+            (c[i] - rust[i]).abs() <= tolerance,
+            "STOP_OFFICIAL_CPP_RUST_PARITY index={i} c={} rust={}",
+            c[i],
+            rust[i]
+        );
     }
 }
 
@@ -184,8 +221,12 @@ fn from_f16(code: u16) -> f32 {
 /// per 256 values: 4 × 26-byte BPB3 + 2 × (u8 index, f16 residual) = 110 B.
 /// No search over a hyperparameter, no TEST-based tuning.
 fn bpb_plus_two(original: &[f32; N], baseline: &[f32; N]) -> [f32; N] {
-    let mut ranked: Vec<(usize, f32)> = original.iter().zip(baseline)
-        .enumerate().map(|(i, (&w, &q))| (i, (w - q).abs())).collect();
+    let mut ranked: Vec<(usize, f32)> = original
+        .iter()
+        .zip(baseline)
+        .enumerate()
+        .map(|(i, (&w, &q))| (i, (w - q).abs()))
+        .collect();
     ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     let mut bytes = [0u8; 6];
     for slot in 0..2 {
@@ -210,11 +251,21 @@ fn quantile(sorted: &[f64], fraction: f64) -> f64 {
 }
 
 fn dot(w: &[f32; N], mask: &[f32; N]) -> f64 {
-    w.iter().zip(mask).map(|(&x, &a)| f64::from(x) * f64::from(a)).sum()
+    w.iter()
+        .zip(mask)
+        .map(|(&x, &a)| f64::from(x) * f64::from(a))
+        .sum()
 }
 
-fn report(split: &str, family: &str, codec: &str, bytes: usize,
-          original: &[[f32; N]], reconstructed: &[[f32; N]], seed: u64) {
+fn report(
+    split: &str,
+    family: &str,
+    codec: &str,
+    bytes: usize,
+    original: &[[f32; N]],
+    reconstructed: &[[f32; N]],
+    seed: u64,
+) {
     let mut errors = Vec::with_capacity(original.len() * N);
     let mut ss = 0.0f64;
     let mut abs_sum = 0.0f64;
@@ -238,12 +289,21 @@ fn report(split: &str, family: &str, codec: &str, bytes: usize,
             original_ss += f64::from(v).powi(2);
             reconstructed_ss += f64::from(q).powi(2);
             cross += f64::from(v) * f64::from(q);
-            if v == 0.0 { zcount += 1; zabs += a; }
-            if a > worst.0 { worst = (a, row * N + i); }
+            if v == 0.0 {
+                zcount += 1;
+                zabs += a;
+            }
+            if a > worst.0 {
+                worst = (a, row * N + i);
+            }
         }
         for _ in 0..MASKS {
             let signs = std::array::from_fn(|_| {
-                if next_random(&mut rng) & 1 == 0 { 1.0f32 } else { -1.0f32 }
+                if next_random(&mut rng) & 1 == 0 {
+                    1.0f32
+                } else {
+                    -1.0f32
+                }
             });
             dot_errors.push((dot(estimate, &signs) - dot(reference, &signs)).powi(2));
         }
@@ -254,7 +314,9 @@ fn report(split: &str, family: &str, codec: &str, bytes: usize,
     let norm = (original_ss / n).sqrt();
     let cosine = if original_ss > 0.0 && reconstructed_ss > 0.0 {
         cross / (original_ss * reconstructed_ss).sqrt()
-    } else { 0.0 };
+    } else {
+        0.0
+    };
     println!("{split},{family},{codec},{},{:.6},{},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{},{:.9},{:.9},{:.9},{},{}",
         original.len(), 8.0 * bytes as f64 / N as f64, bytes,
         rmse, if norm > 0.0 { rmse / norm } else { 0.0 },
@@ -273,7 +335,11 @@ fn main() {
         [a, file] if a == "--external-f32le" => Some(PathBuf::from(file)),
         _ => panic!("STOP_USAGE: [--external-f32le /path/to/original.f32le]"),
     };
-    let mode = if input.is_some() { "EXTERNAL_UNVERIFIED" } else { "SYNTHETIC" };
+    let mode = if input.is_some() {
+        "EXTERNAL_UNVERIFIED"
+    } else {
+        "SYNTHETIC"
+    };
     println!("protocol=bpb3-ggml-original-f32-e1-v1,dataset_kind={mode},ggml_pin=f7591a6a01f9273de03331732bdc0b39721168be,optimizer=e2_top2_f16_no_dev_tuning,model_integrated=false");
     println!("split,family,codec,rows,bpw,wire_bytes_per_256,rmse,nrmse_original_rms,mae,signed_bias,cosine,p95_abs,p99_abs,p999_abs,worst_index,max_abs,dot_rmse,zero_abs_mae,coefficients,dots");
     let external = input.map(|path| fs::read(path).expect("STOP_EXTERNAL_WEIGHT_FILE"));
@@ -283,19 +349,27 @@ fn main() {
     }
     for (si, split) in SPLITS.iter().enumerate() {
         for (fi, family) in FAMILY.iter().enumerate() {
-            if external.is_some() && (fi != 0 || si > 1) { continue; }
-            let mut seed = 0x7aa5_dafa_9283_4161u64
-                ^ ((si as u64 + 1) << 48) ^ ((fi as u64 + 1) << 32);
+            if external.is_some() && (fi != 0 || si > 1) {
+                continue;
+            }
+            let mut seed =
+                0x7aa5_dafa_9283_4161u64 ^ ((si as u64 + 1) << 48) ^ ((fi as u64 + 1) << 32);
             let rows: Vec<[f32; N]> = if let Some(raw) = &external {
                 let total = raw.len() / (N * 4);
                 let midpoint = total / 2;
-                let (start, end) = if si == 0 { (0, midpoint) } else { (midpoint, total) };
-                (start..end).map(|row| {
-                    std::array::from_fn(|i| {
-                        let k = (row * N + i) * 4;
-                        f32::from_le_bytes(raw[k..k + 4].try_into().unwrap())
+                let (start, end) = if si == 0 {
+                    (0, midpoint)
+                } else {
+                    (midpoint, total)
+                };
+                (start..end)
+                    .map(|row| {
+                        std::array::from_fn(|i| {
+                            let k = (row * N + i) * 4;
+                            f32::from_le_bytes(raw[k..k + 4].try_into().unwrap())
+                        })
                     })
-                }).collect()
+                    .collect()
             } else {
                 (0..ROWS).map(|_| generated(family, &mut seed)).collect()
             };
@@ -320,12 +394,40 @@ fn main() {
                 q3.push(d3);
                 q4.push(d4);
             }
-            let label = if external.is_some() { "external" } else { family };
+            let label = if external.is_some() {
+                "external"
+            } else {
+                family
+            };
             let row_seed = seed ^ 0x789a_ffab_a5a5_5a5a;
             report(split, label, "BPB-3", 104, &rows, &bpb, row_seed);
-            report(split, label, "BPB-3+2xFP16_RESIDUAL", 110, &rows, &residual, row_seed);
-            report(split, label, "GGUF_Q3_K", gguf::Q3_BYTES, &rows, &q3, row_seed);
-            report(split, label, "GGUF_Q4_K", gguf::Q4_BYTES, &rows, &q4, row_seed);
+            report(
+                split,
+                label,
+                "BPB-3+2xFP16_RESIDUAL",
+                110,
+                &rows,
+                &residual,
+                row_seed,
+            );
+            report(
+                split,
+                label,
+                "GGUF_Q3_K",
+                gguf::Q3_BYTES,
+                &rows,
+                &q3,
+                row_seed,
+            );
+            report(
+                split,
+                label,
+                "GGUF_Q4_K",
+                gguf::Q4_BYTES,
+                &rows,
+                &q4,
+                row_seed,
+            );
         }
     }
 }
@@ -335,9 +437,16 @@ mod tests {
     use super::*;
     #[test]
     fn f16_rounding_and_signed_zero() {
-        for (value, code) in [(0.0, 0), (-0.0, 0x8000), (1.0, 0x3c00),
-                              (0.5, 0x3800), (1.5, 0x3e00), (65504.0, 0x7bff),
-                              (2.0f32.powi(-24), 1), (2.0f32.powi(-14), 0x400)] {
+        for (value, code) in [
+            (0.0, 0),
+            (-0.0, 0x8000),
+            (1.0, 0x3c00),
+            (0.5, 0x3800),
+            (1.5, 0x3e00),
+            (65504.0, 0x7bff),
+            (2.0f32.powi(-24), 1),
+            (2.0f32.powi(-14), 0x400),
+        ] {
             assert_eq!(to_f16(value), code, "f16 encode {value:?}");
             assert_eq!(from_f16(code).to_bits(), value.to_bits());
         }
@@ -346,13 +455,27 @@ mod tests {
     #[test]
     fn two_residuals_have_matching_q3_wire_budget_and_reduce_error() {
         let original = std::array::from_fn(|i| {
-            if i == 3 { 7.5 } else if i == 241 { -6.0 } else { 0.002 * i as f32 }
+            if i == 3 {
+                7.5
+            } else if i == 241 {
+                -6.0
+            } else {
+                0.002 * i as f32
+            }
         });
         let (b, cost) = encode_bpb(&original);
         assert_eq!(cost + 2 * (1 + 2), gguf::Q3_BYTES);
         let better = bpb_plus_two(&original, &b);
-        let e0: f64 = original.iter().zip(b).map(|(&w,q)| f64::from(w-q).powi(2)).sum();
-        let e1: f64 = original.iter().zip(better).map(|(&w,q)| f64::from(w-q).powi(2)).sum();
+        let e0: f64 = original
+            .iter()
+            .zip(b)
+            .map(|(&w, q)| f64::from(w - q).powi(2))
+            .sum();
+        let e1: f64 = original
+            .iter()
+            .zip(better)
+            .map(|(&w, q)| f64::from(w - q).powi(2))
+            .sum();
         assert!(e1 <= e0, "top residuals must not increase square error");
     }
     #[test]
