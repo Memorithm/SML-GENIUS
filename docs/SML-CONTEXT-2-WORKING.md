@@ -37,6 +37,23 @@ attention claim. No real-text quality metric is produced here
 - Expanding ceiling overflow (no silent drop; ID not recorded as seen).
 - Restart from snapshot with unsupported schema, truncated retained coverage,
   unknown provenance, register mismatch, or stats mismatch.
+- Admission of a segment with `fingerprint == 0` even when constructed via
+  public fields (bypassing `WorkingSegment::new`); checked before any
+  mutation (seen set, step, residents unchanged) — `ZeroFingerprint`.
+- Restore of a snapshot whose retained rows are not in strictly increasing
+  `admitted_step` (FIFO oldest-first) — `InconsistentFifoOrder`. The supplied
+  order is rejected, never reconstructed, so it cannot drive the next eviction.
+- Restore of a snapshot with inconsistent chronology —
+  `InconsistentStepChronology`: `step != stats.admitted`; admission steps of
+  retained ∪ eviction_log not exactly `1..=step`; retained rows not the most
+  recent admissions; `resolved_step` outside `admitted_step+1..=step`; under
+  FIFO policies `resolved_step != admitted_step + capacity` or fate not the
+  policy fate (Fixed → Lost, CapacityBounded → Evicted); any resolved row under
+  Expanding.
+
+Hardening origin: Codex review on #845 (r4501101631 FIFO order, r4501101640
+step chronology, r4501101645 zero-fingerprint admit), handoff RemoteOps #1208
+comment 6705965765.
 
 ## Out of scope (this slice)
 
