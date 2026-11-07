@@ -41,6 +41,14 @@ jobs:
           components: rustfmt
       - name: Format
         run: cargo fmt --all -- --check
+      - name: BPB3-K direct bitplane oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
+          "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
 
   rust:
     needs: fmt
