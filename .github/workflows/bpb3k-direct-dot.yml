@@ -1,0 +1,37 @@
+name: BPB3-K direct bitplane dot oracle
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_direct.rs'
+      - 'research/boolean-posit/bpb3k.rs'
+      - 'research/boolean-posit/gguf_k.rs'
+      - 'research/boolean-posit/BPB3_K_DIRECT_DOT.md'
+      - '.github/workflows/bpb3k-direct-dot.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3k_direct.rs'
+      - 'research/boolean-posit/bpb3k.rs'
+      - 'research/boolean-posit/gguf_k.rs'
+      - '.github/workflows/bpb3k-direct-dot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned research toolchain
+        run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+      - name: Verify Rust formatting
+        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs
+      - name: Build direct-dot test oracle (warnings denied)
+        run: rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
+      - name: Execute independent Q3_K dot parity and regression tests
+        run: "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
+      - name: Compile optimized standalone Rust library
+        run: rustup run 1.89.0 rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
