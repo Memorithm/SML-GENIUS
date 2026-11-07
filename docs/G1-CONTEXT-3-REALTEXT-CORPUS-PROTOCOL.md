@@ -72,7 +72,14 @@ Frozen before any real-text number is seen. Changing anything is v2.
 ## Flagged real-text arm (`g1_latency_rss --realtext <MANIFEST> <CORPUS>`)
 Opt-in only; no default corpus and no pin in the repo. Missing args, file
 errors, length/SHA mismatch, near-duplicate or zero-query refusal => exit 2
-with `G1_LAT_REFUSE`. Meta: `synthetic=false arm=realtext derivation=v1
+with `G1_LAT_REFUSE`. **Path confinement (CLI):** both `<MANIFEST>` and
+`<CORPUS>` must be relative paths under the process CWD; absolute / `..` /
+empty paths are refused (`UnsafePath`). After the lexical check,
+`confine_regular_file` walks each component with `symlink_metadata`, refuses
+any symlink (including mid-path directory symlinks), requires a regular file,
+and checks that the canonical path stays under the canonical CWD
+(`SymlinkEscape`). Lexical `Path::components` alone is not filesystem
+confinement. Meta: `synthetic=false arm=realtext derivation=v1
 corpus_id=.. sha256=.. key=simhash64-sha256-v1`, refused by
 `g1_latency_aggregate`. Rows: dist `realtext`, same columns plus `gold@1`
 (top-1 segment == derived target). `R@1` remains "top-1 distance == oracle
