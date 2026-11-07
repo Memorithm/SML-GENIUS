@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "agent": "grok",
+  "status": "NOT_CONNECTED",
+  "timestamp_utc": "2026-11-07T21:50:00Z",
+  "last_report_utc": "2026-11-07T21:50:00Z",
+  "last_successful_code_commit_utc": "2026-11-07T21:34:27Z",
+  "run_id": "20261107T215000Z",
+  "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m Grok Bot routine run); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G6 CONTEXT-2 cross-version/restart compatibility",
+  "task": "G6 CONTEXT-2 compat oracle PR #860 merged af45ce7a (head 7b56601f): independent SWC2 v1 oracle, 12 tests (pinned corpus SHA-256, prefix/flip/count/limit/order mutation agreement, unknown version rejection, restart without replay, atomic restore_into, torn-write all-or-nothing); test-only. G5 #859 merged 21d1f6f3.",
+  "base_sha": "a6c45a118dd9c07a48c015d72205c2f19b589d4c",
+  "head_sha": "7b56601fc5e96a128c225a07744c475323bbd622",
+  "head_sha_note": "head_sha = exact PR head (code/test commit, branch cut from stale a6c45a11 carrying byte-identical G5 files); squash merge af45ce7a71443d7f6652b2879a9e84ceb99eecc2 onto 21d1f6f3 nets 1 file +606",
+  "branch": "grok/g6-context2-compat-oracle-20261107",
+  "tests": {
+    "code_changed": true,
+    "fmt": "pass",
+    "clippy_workspace_all_targets_D_warnings": "pass",
+    "cargo_test_locked_workspace": "2399 passed, 0 failed, 3 ignored (pre-push hook on 7b56601f)",
+    "new_compat_oracle_suite": "crates/sml-store/tests/working_context_wire_compat_oracle.rs 12 passed",
+    "exact_head_ci": "SUCCESS on 7b56601f: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
+  },
+  "metrics": "NOT_MEASURED: format/compatibility qualification only; no model-quality, context-span, latency or throughput claim.",
+  "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
+  "qualification": "NOT_QUALIFIED",
+  "waiting_on": [
+    "Next ChatGPT/roadmap slice on RemoteOps #1208",
+    "Dell/Thor self-hosted runner registration",
+    "LONGCTX-B1 filler/B-lex/B-attn user choices"
+  ],
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/860"
+}
