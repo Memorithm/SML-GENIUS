@@ -178,7 +178,7 @@ mod tests {
             let q3 = q3k_direct::dot_q3k_bipolar(&data, &[0; 4]);
             let bpb = bpb3k_direct::dot_bpb3k_bipolar(&data, &[0; 4]);
             assert_eq!(q3, Err(q3k_direct::Error::WrongLength { actual: len }));
-            assert_eq!(bpb, Err(bpb3k::Error::WrongLength { actual: len }));
+            assert_eq!(bpb, Err(bpb3k_direct::Error::WrongLength { actual: len }));
         }
     }
 }
