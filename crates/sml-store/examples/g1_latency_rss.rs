@@ -35,7 +35,7 @@ use sml_store::context_retrieve::{exhaustive_semantic_scan, ContextRetrieveError
 use sml_store::context_retrieve_bench::{
     current_rss_kib, fault_counters, measure_latency, peak_rss_kib, reset_peak_rss, vm_peak_kib,
 };
-use sml_store::g1_realtext_corpus::load_pinned;
+use sml_store::g1_realtext_corpus::{assert_safe_relative_path, load_pinned};
 use sml_store::g1_realtext_eval::{build_eval_set, PARAMS_V1};
 use sml_store::g1_realtext_key::{
     simhash_v1, simhash_windows_v2, KEY_ENCODER_V1, KEY_ENCODER_V2, STRIDES_V2, WINDOW_V2,
@@ -61,6 +61,10 @@ struct RealText {
 
 /// Fail-closed: any load, pin, derivation or key error aborts the process.
 fn load_realtext(manifest: &str, corpus: &str, stride: Option<usize>) -> Result<RealText, String> {
+    assert_safe_relative_path(std::path::Path::new(manifest))
+        .map_err(|e| format!("manifest path: {e:?}"))?;
+    assert_safe_relative_path(std::path::Path::new(corpus))
+        .map_err(|e| format!("corpus path: {e:?}"))?;
     let m = std::fs::read_to_string(manifest).map_err(|e| format!("manifest: {e}"))?;
     let c = std::fs::read(corpus).map_err(|e| format!("corpus: {e}"))?;
     let pinned = load_pinned(&m, &c).map_err(|e| format!("load_pinned: {e:?}"))?;

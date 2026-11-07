@@ -26,6 +26,7 @@
 //! eval (exact-duplicate leakage) is an error, never a warning.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Component, Path};
 
 use crate::raw_context::sha256_raw_bytes;
 
@@ -83,6 +84,10 @@ pub enum RealTextError {
     Leakage {
         train_id: String,
         eval_id: String,
+    },
+    /// Absolute path, empty path, or non-`Normal` component (`..`, `.`, prefix, root).
+    UnsafePath {
+        path: String,
     },
     Hash,
 }
@@ -202,15 +207,42 @@ pub fn parse_manifest(text: &str) -> Result<RealTextManifest, RealTextError> {
             value: eval_residue.to_string(),
         });
     }
+    let byte_len = num("byte_len")?;
+    // Protocol: corpus size must be > 0 (empty bytes + empty-hash is nonsense).
+    if byte_len == 0 {
+        return Err(RealTextError::BadValue {
+            key: "byte_len",
+            value: "0".to_owned(),
+        });
+    }
     Ok(RealTextManifest {
         corpus_id: corpus_id.to_owned(),
         source: get("source")?.to_owned(),
         license: get("license")?.to_owned(),
         sha256_hex: sha.to_owned(),
-        byte_len: num("byte_len")?,
+        byte_len,
         split_mod,
         eval_residue,
     })
+}
+
+/// Refuse absolute paths and any non-`Normal` component (`..` / root / prefix /
+/// lone `.`). Empty paths are also refused. Mid-path `.` is elided by
+/// `Path::components` and is therefore treated as a normal relative path.
+/// Intended for CLI/opt-in file args before `fs::read`.
+pub fn assert_safe_relative_path(path: &Path) -> Result<(), RealTextError> {
+    let display = path.to_string_lossy().into_owned();
+    if display.is_empty() {
+        return Err(RealTextError::UnsafePath { path: display });
+    }
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+    {
+        return Err(RealTextError::UnsafePath { path: display });
+    }
+    Ok(())
 }
 
 /// Deterministic split bucket of a document id.

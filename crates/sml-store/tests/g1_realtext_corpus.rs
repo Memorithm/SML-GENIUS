@@ -1,7 +1,26 @@
 //! CONTEXT-3 G1 real-text corpus protocol: fail-closed loader tests on a
 //! tiny hand-written fixture. No scores are computed.
+//!
+//! ## Coverage audit (G1 adversarial / Grok 2026-11-07)
+//!
+//! **Already covered (do not duplicate):**
+//! - unpinned / uppercase SHA → `Unpinned`; missing `sha256` → `MissingKey`
+//! - tampered corpus bytes → `ShaMismatch`; truncated → `LengthMismatch`
+//! - exact duplicate text across train/eval → `Leakage`
+//! - duplicate doc id, missing trailing newline, empty line, bad UTF-8 →
+//!   `DuplicateDocId` / `MissingTrailingNewline` / `MalformedDoc` / `NotUtf8`
+//! - empty eval (or train) split → `EmptySplit`
+//! - `BadHeader`, `DuplicateKey`, `UnknownKey`, bad `split_mod` / `eval_residue`
+//!
+//! **Newly added here:**
+//! - absolute / traversal / non-`Normal` path components → `UnsafePath`
+//!   (via `assert_safe_relative_path`; also wired into `g1_latency_rss` CLI)
+//! - safe relative fixture path accepted
+//! - `byte_len 0` → `BadValue` (protocol: size must be > 0)
 
-use sml_store::g1_realtext_corpus::{load_pinned, parse_manifest, RealTextError};
+use sml_store::g1_realtext_corpus::{
+    assert_safe_relative_path, load_pinned, parse_manifest, RealTextError,
+};
 
 const MANIFEST: &str = include_str!("fixtures/g1_realtext/tiny.manifest");
 const CORPUS: &[u8] = include_bytes!("fixtures/g1_realtext/tiny.tsv");
@@ -155,6 +174,51 @@ fn manifest_grammar_is_strict() {
         parse_manifest(&bad_mod),
         Err(RealTextError::BadValue {
             key: "split_mod",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn unsafe_paths_are_refused() {
+    use std::path::Path;
+    // Absolute, parent-dir traversal, empty, lone `.` / `..` must fail closed.
+    // Note: `Path::components` elides mid-path `CurDir` (e.g. `foo/./bar` ≡
+    // `foo/bar`), so that form is accepted as a normal relative path.
+    let cases = [
+        "/etc/passwd",
+        "../secret",
+        "foo/../../etc/passwd",
+        "",
+        ".",
+        "..",
+    ];
+    for s in cases {
+        let err = assert_safe_relative_path(Path::new(s)).unwrap_err();
+        assert!(
+            matches!(err, RealTextError::UnsafePath { .. }),
+            "expected UnsafePath for {s:?}, got {err:?}"
+        );
+    }
+    // Absolute Windows-style prefix: checked on Windows only (`is_absolute`).
+    #[cfg(windows)]
+    {
+        let err = assert_safe_relative_path(Path::new(r"C:\Windows\System32")).unwrap_err();
+        assert!(matches!(err, RealTextError::UnsafePath { .. }));
+    }
+    // Safe relative fixture paths (and mid-path `.` elided by components) pass.
+    assert_safe_relative_path(Path::new("fixtures/g1_realtext/tiny.tsv")).unwrap();
+    assert_safe_relative_path(Path::new("tiny.manifest")).unwrap();
+    assert_safe_relative_path(Path::new("foo/./bar")).unwrap();
+}
+
+#[test]
+fn zero_byte_len_is_refused() {
+    let m = MANIFEST.replace("byte_len 459", "byte_len 0");
+    assert!(matches!(
+        parse_manifest(&m),
+        Err(RealTextError::BadValue {
+            key: "byte_len",
             ..
         })
     ));
