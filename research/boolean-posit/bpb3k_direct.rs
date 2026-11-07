@@ -94,10 +94,8 @@ pub fn dot_bpb3k_bipolar(raw: &[u8], input_negative: &[u64; GROUPS]) -> Result<D
             let lo = bit0 & lane_mask;
             let hi = bit1 & lane_mask;
             let neg = negative & lane_mask;
-            let magnitude_low =
-                2 * (equal_sign & lo).count_ones() as i32 - lo.count_ones() as i32;
-            let magnitude_high =
-                2 * (equal_sign & hi).count_ones() as i32 - hi.count_ones() as i32;
+            let magnitude_low = 2 * (equal_sign & lo).count_ones() as i32 - lo.count_ones() as i32;
+            let magnitude_high = 2 * (equal_sign & hi).count_ones() as i32 - hi.count_ones() as i32;
             let negative_offset =
                 2 * (neg & x_negative).count_ones() as i32 - neg.count_ones() as i32;
             let subgroup_dot = magnitude_low + 2 * magnitude_high + negative_offset;
@@ -145,10 +143,7 @@ mod tests {
         })
     }
 
-    fn expected_dot_from_original_q3(
-        raw_q3: &[u8; bpb3k::BYTES],
-        inputs: &[u64; GROUPS],
-    ) -> f64 {
+    fn expected_dot_from_original_q3(raw_q3: &[u8; bpb3k::BYTES], inputs: &[u64; GROUPS]) -> f64 {
         // Independent reference on original Q3_K bytes, then scalar dense dot.
         let weights = gguf_k::decode_q3_k(raw_q3).expect("valid Q3_K fixture");
         weights
@@ -202,8 +197,7 @@ mod tests {
         let negative = dot_bpb3k_bipolar(&bpb, &[u64::MAX; GROUPS]).unwrap();
         assert_eq!(positive.weighted_integer, 256 * 128);
         assert_eq!(negative.weighted_integer, -(256 * 128));
-        let balanced =
-            dot_bpb3k_bipolar(&bpb, &[0xaaaa_aaaa_aaaa_aaaa; GROUPS]).unwrap();
+        let balanced = dot_bpb3k_bipolar(&bpb, &[0xaaaa_aaaa_aaaa_aaaa; GROUPS]).unwrap();
         assert_eq!(balanced.weighted_integer, 0);
     }
 
