@@ -2,33 +2,32 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-07T07:19:04Z",
-  "last_report_utc": "2026-11-07T07:19:04Z",
-  "last_successful_code_commit_utc": "2026-11-07T07:18:50Z",
-  "run_id": "20261107T071904Z",
-  "runner": "grok-box (authoring via Grok Bot watchdog routine); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot routine only — NOT RemoteOps→Grok CONNECTED proof",
-  "milestone": "G2 pinned admission",
-  "task": "G2 pinned manifest/corpus admission: placeholder source/license refusal + reproducible split fingerprint (PR #844, code commit 94e48dc5a6abfee2f333769f650109811650150a); awaiting exact-head CI + ChatGPT G2 review",
-  "base_sha": "b9138d1e37784c0eb376a850ce81cb0e07aed6a5",
-  "head_sha": "94e48dc5a6abfee2f333769f650109811650150a",
-  "branch": "grok/g2-pinned-admission-20261107",
+  "timestamp_utc": "2026-11-07T09:24:14Z",
+  "last_report_utc": "2026-11-07T09:24:14Z",
+  "last_successful_code_commit_utc": "2026-11-07T09:17:44Z",
+  "run_id": "20261107T092414Z",
+  "runner": "grok-box (authoring via parent-delegated CONTEXT-2 executor); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only \u2014 NOT RemoteOps\u2192Grok CONNECTED proof",
+  "milestone": "G2 CONTEXT-2",
+  "task": "CONTEXT-2 PR #845 open at tip bf239ba626b975a287a15503b17377f49d13aadc; awaiting exact-head CI + ChatGPT ACK; local 2288 passed",
+  "base_sha": "7017bd4843273d347b58c8a70fb7b5073b905beb",
+  "head_sha": "bf239ba626b975a287a15503b17377f49d13aadc",
+  "branch": "grok/g2-bounded-working-context-20261107",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
     "code_changed": true,
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2272 passed, 0 failed, 3 ignored",
-    "new_tests": "crates/sml-store/tests/g1_realtext_admission.rs: 7 tests (78 placeholder refusal cases, fingerprint determinism/order/sensitivity, fixture snapshot)",
-    "exact_head_ci": "PENDING on PR tip (report commit on top of 94e48dc5a6abfee2f333769f650109811650150a)"
+    "cargo_test_locked_workspace": "2288 passed, 0 failed, 3 ignored",
+    "exact_head_ci": "pending on PR #845"
   },
-  "metrics": "NOT_MEASURED: admission negatives + split identity fingerprint only; no corpus measurement; no quality claim.",
-  "blocked_reason": "WAITING_ON: exact-head CI on PR #844 tip; ChatGPT G2 qualification ACK on RemoteOps #1208 (no merge before). RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. Self-hosted runners total_count=0. This wake is Grok Bot routine only.",
+  "metrics": "NOT_MEASURED: synthetic oracle/fixture comparison only; no pinned real-text corpus measurement; no quality claim.",
+  "blocked_reason": "WAITING_ON: exact-head required CI SUCCESS on PR #845; ChatGPT ACK on #1208 before merge; Dell/Thor self-hosted runners total_count=0; LONGCTX-B1 user-blocked. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. This wake is Grok Bot executor only, not RemoteOps\u2192Grok CONNECTED proof.",
   "qualification": "NOT_QUALIFIED",
   "waiting_on": [
-    "exact-head CI (all required checks) SUCCESS on PR #844 tip",
-    "ChatGPT G2 review / qualification ACK on RemoteOps #1208 (do not merge #844 until ACK)",
-    "Dell/Thor self-hosted runner registration (total_count=0)",
-    "ChatGPT M2 (RemoteOps #1208) verified session_attestation for E2E qualification"
+    "Exact-head required CI SUCCESS on https://github.com/Memorithm/SML-GENIUS/pull/845",
+    "ChatGPT ACK on RemoteOps #1208 before merge ask",
+    "Dell/Thor self-hosted runner registration",
+    "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/844"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/845"
 }
