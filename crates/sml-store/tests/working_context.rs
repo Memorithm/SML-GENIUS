@@ -340,3 +340,199 @@ fn snapshot_type_is_publicly_constructible_for_negative_fixtures() {
     let restored = WorkingContext::restore(&snap).unwrap();
     assert_eq!(restored.retained_count(), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Codex hardenings (PR #845 review r4501101631 / r4501101640 / r4501101645).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn negative_restore_rejects_reordered_retained_fifo() {
+    // r4501101631: capacity-2 snapshot [1,2] reversed must not restore, else
+    // admitting 3 would retain [1,3] instead of the FIFO-correct [2,3].
+    let segments = synthetic_stream(stream(), 3).unwrap();
+    let policy = WorkingPolicy::CapacityBounded { capacity: 2 };
+    let mut ctx = WorkingContext::new(stream(), policy).unwrap();
+    admit_all(&mut ctx, &segments[..2]).unwrap();
+    let mut snap = ctx.snapshot();
+    assert_eq!(
+        snap.retained
+            .iter()
+            .map(|r| r.identity.segment_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    snap.retained.reverse();
+    assert_eq!(
+        WorkingContext::restore(&snap),
+        Err(WorkingContextError::InconsistentFifoOrder)
+    );
+    // Same defect under Fixed policy.
+    let mut fixed = WorkingContext::new(stream(), WorkingPolicy::Fixed { capacity: 2 }).unwrap();
+    admit_all(&mut fixed, &segments[..2]).unwrap();
+    let mut snap_fixed = fixed.snapshot();
+    snap_fixed.retained.swap(0, 1);
+    assert_eq!(
+        WorkingContext::restore(&snap_fixed),
+        Err(WorkingContextError::InconsistentFifoOrder)
+    );
+}
+
+#[test]
+fn negative_restore_rejects_inconsistent_step_chronology() {
+    // r4501101640: step=0 after two admissions would make the next admission
+    // reuse admitted_step 1.
+    let segments = synthetic_stream(stream(), 2).unwrap();
+    let mut ctx =
+        WorkingContext::new(stream(), WorkingPolicy::CapacityBounded { capacity: 4 }).unwrap();
+    admit_all(&mut ctx, &segments).unwrap();
+    let base = ctx.snapshot();
+    assert_eq!(base.step, 2);
+
+    let mut snap = base.clone();
+    snap.step = 0;
+    assert!(matches!(
+        WorkingContext::restore(&snap),
+        Err(WorkingContextError::InconsistentStepChronology { .. })
+    ));
+
+    let mut snap_ahead = base.clone();
+    snap_ahead.step = 5;
+    assert!(matches!(
+        WorkingContext::restore(&snap_ahead),
+        Err(WorkingContextError::InconsistentStepChronology { .. })
+    ));
+
+    // Duplicate admitted_step with otherwise valid step.
+    let mut snap_dup = base.clone();
+    snap_dup.retained[1].admitted_step = 1;
+    assert!(matches!(
+        WorkingContext::restore(&snap_dup),
+        Err(WorkingContextError::InconsistentFifoOrder
+            | WorkingContextError::InconsistentStepChronology { .. })
+    ));
+
+    // admitted_step beyond step.
+    let mut snap_future = base;
+    snap_future.retained[1].admitted_step = 3;
+    assert!(matches!(
+        WorkingContext::restore(&snap_future),
+        Err(WorkingContextError::InconsistentStepChronology { .. })
+    ));
+}
+
+#[test]
+fn negative_restore_rejects_inconsistent_resolution_step() {
+    let segments = synthetic_stream(stream(), 4).unwrap();
+    let mut ctx =
+        WorkingContext::new(stream(), WorkingPolicy::CapacityBounded { capacity: 2 }).unwrap();
+    admit_all(&mut ctx, &segments).unwrap();
+    let base = ctx.snapshot();
+    assert_eq!(base.eviction_log.len(), 2);
+    let mut snap = base.clone();
+    snap.eviction_log[0].resolved_step = Some(4);
+    assert!(matches!(
+        WorkingContext::restore(&snap),
+        Err(WorkingContextError::InconsistentStepChronology { .. })
+    ));
+    let mut snap_fate = base;
+    snap_fate.eviction_log[0].fate = RetentionFate::Lost;
+    snap_fate.stats.evicted -= 1;
+    snap_fate.stats.lost += 1;
+    assert!(matches!(
+        WorkingContext::restore(&snap_fate),
+        Err(WorkingContextError::InconsistentStepChronology { .. })
+    ));
+}
+
+#[test]
+fn negative_admit_rejects_zero_fingerprint_without_mutation() {
+    // r4501101645: public fields allow bypassing WorkingSegment::new.
+    for policy in [
+        WorkingPolicy::Fixed { capacity: 2 },
+        WorkingPolicy::Expanding { hard_max: 4 },
+        WorkingPolicy::CapacityBounded { capacity: 2 },
+    ] {
+        let segments = synthetic_stream(stream(), 2).unwrap();
+        let mut ctx = WorkingContext::new(stream(), policy).unwrap();
+        ctx.admit(segments[0].clone()).unwrap();
+        let before = ctx.clone();
+        let bad = WorkingSegment {
+            identity: ContextSegmentId::new(stream(), 77).unwrap(),
+            order_index: 1,
+            content_hash: ContextContentHash::from_sha256([3; 32]),
+            fingerprint: 0,
+        };
+        assert_eq!(ctx.admit(bad), Err(WorkingContextError::ZeroFingerprint));
+        assert_eq!(ctx, before, "zero-fingerprint admit must not mutate state");
+        assert_eq!(ctx.step(), 1);
+        assert_eq!(ctx.stats().admitted, 1);
+        // Segment id 77 was not marked seen: a valid segment with id 77 admits.
+        let good = WorkingSegment::new(
+            ContextSegmentId::new(stream(), 77).unwrap(),
+            1,
+            ContextContentHash::from_sha256([3; 32]),
+            0x77,
+        )
+        .unwrap();
+        ctx.admit(good).unwrap();
+        // Exported snapshot still restores.
+        WorkingContext::restore(&ctx.snapshot()).unwrap();
+    }
+}
+
+#[test]
+fn valid_snapshot_roundtrip_all_policies_after_hardening() {
+    for (policy, n) in [
+        (WorkingPolicy::Fixed { capacity: 3 }, 0_u64),
+        (WorkingPolicy::Fixed { capacity: 3 }, 7),
+        (WorkingPolicy::Expanding { hard_max: 8 }, 5),
+        (WorkingPolicy::CapacityBounded { capacity: 1 }, 4),
+        (WorkingPolicy::CapacityBounded { capacity: 3 }, 9),
+    ] {
+        let segments = synthetic_stream(stream(), n).unwrap();
+        let mut ctx = WorkingContext::new(stream(), policy).unwrap();
+        admit_all(&mut ctx, &segments).unwrap();
+        let snap = ctx.snapshot();
+        let restored = WorkingContext::restore(&snap).unwrap();
+        assert_eq!(restored, ctx);
+        assert_eq!(restored.snapshot(), snap);
+    }
+}
+
+#[test]
+fn restored_capacity_bounded_next_eviction_matches_fresh_oracle() {
+    // Deterministic next-eviction oracle: restore mid-stream, keep admitting,
+    // and compare against a fresh run on the full stream after every step.
+    let policy = WorkingPolicy::CapacityBounded { capacity: 2 };
+    let segments = synthetic_stream(stream(), 6).unwrap();
+    for cut in 0..segments.len() {
+        let mut ctx = WorkingContext::new(stream(), policy).unwrap();
+        admit_all(&mut ctx, &segments[..cut]).unwrap();
+        let mut restored = WorkingContext::restore(&ctx.snapshot()).unwrap();
+        for k in cut..segments.len() {
+            restored.admit(segments[k].clone()).unwrap();
+            let oracle = WorkingContextOracle::evaluate(policy, &segments[..=k]).unwrap();
+            assert_matches_oracle(&restored, &oracle);
+            assert_eq!(restored.step(), (k + 1) as u64);
+        }
+    }
+    // Explicit Codex scenario: [1,2] restored then admit 3 retains [2,3].
+    let mut ctx = WorkingContext::new(stream(), policy).unwrap();
+    admit_all(&mut ctx, &segments[..2]).unwrap();
+    let mut restored = WorkingContext::restore(&ctx.snapshot()).unwrap();
+    restored.admit(segments[2].clone()).unwrap();
+    let ids: Vec<u64> = restored
+        .retained_identities()
+        .iter()
+        .map(|id| id.segment_id)
+        .collect();
+    assert_eq!(ids, vec![2, 3]);
+    let row1 = restored
+        .accounting()
+        .into_iter()
+        .find(|r| r.identity.segment_id == 1)
+        .unwrap();
+    assert_eq!(row1.fate, RetentionFate::Evicted);
+    assert_eq!(row1.admitted_step, 1);
+    assert_eq!(row1.resolved_step, Some(3));
+}

@@ -247,7 +247,14 @@ impl WorkingContext {
 
     /// Admit one segment. Fail-closed on stream mismatch, ID collision,
     /// expanding hard-max overflow, or invalid segment.
+    ///
+    /// `WorkingSegment` fields are public, so a caller can bypass
+    /// [`WorkingSegment::new`]; the zero-fingerprint contract is therefore
+    /// re-checked here **before any mutation** (seen set, step, residents).
     pub fn admit(&mut self, segment: WorkingSegment) -> Result<RetentionFate, WorkingContextError> {
+        if segment.fingerprint == 0 {
+            return Err(WorkingContextError::ZeroFingerprint);
+        }
         if segment.identity.stream_id != self.stream_id {
             return Err(WorkingContextError::StreamMismatch {
                 expected: self.stream_id,
@@ -495,6 +502,9 @@ impl WorkingContext {
             }
         }
         for row in &snapshot.eviction_log {
+            if row.fingerprint == 0 {
+                return Err(WorkingContextError::ZeroFingerprint);
+            }
             if !matches!(row.fate, RetentionFate::Evicted | RetentionFate::Lost) {
                 return Err(WorkingContextError::TruncatedProvenance {
                     reason: "eviction_log row not Evicted/Lost",
@@ -542,6 +552,8 @@ impl WorkingContext {
                 reason: "seen_segment_ids not fully covered by retained+eviction_log",
             });
         }
+
+        validate_chronology(snapshot, policy)?;
 
         let mut register = 0_u64;
         let mut residents = VecDeque::new();
@@ -620,6 +632,111 @@ impl WorkingContext {
         }
         Ok(ctx)
     }
+}
+
+/// Validate snapshot step / admission chronology and retained FIFO order.
+///
+/// Every successful admission increments `step` by exactly one and assigns
+/// that step as `admitted_step`; a refused Expanding admission rolls the step
+/// back. Therefore a consistent snapshot satisfies:
+///
+/// - `step == stats.admitted`;
+/// - the admission steps of retained ∪ eviction_log are exactly `1..=step`
+///   (no duplicates, no gaps);
+/// - retained rows are listed in strictly increasing `admitted_step` (FIFO,
+///   oldest first) and are the most recent admissions;
+/// - every resolved row has `admitted_step < resolved_step <= step`; under
+///   FIFO policies the victim admitted at `a` is resolved at exactly
+///   `a + capacity` with the policy's fate (Fixed → Lost, CapacityBounded →
+///   Evicted); Expanding never resolves a row.
+///
+/// The retained order is **rejected** (not reconstructed) when inconsistent so
+/// the supplied FIFO order can never silently drive the next eviction.
+fn validate_chronology(
+    snapshot: &WorkingContextSnapshot,
+    policy: WorkingPolicy,
+) -> Result<(), WorkingContextError> {
+    let step = snapshot.step;
+    if step != snapshot.stats.admitted {
+        return Err(WorkingContextError::InconsistentStepChronology {
+            reason: "step != stats.admitted",
+        });
+    }
+    let total = snapshot.retained.len() + snapshot.eviction_log.len();
+    if u64::try_from(total).ok() != Some(step) {
+        return Err(WorkingContextError::InconsistentStepChronology {
+            reason: "provenance row count != step",
+        });
+    }
+
+    // Retained FIFO order: strictly increasing admitted_step.
+    for pair in snapshot.retained.windows(2) {
+        if pair[0].admitted_step >= pair[1].admitted_step {
+            return Err(WorkingContextError::InconsistentFifoOrder);
+        }
+    }
+
+    let mut steps: BTreeSet<u64> = BTreeSet::new();
+    for row in snapshot.retained.iter().chain(snapshot.eviction_log.iter()) {
+        if row.admitted_step == 0 || row.admitted_step > step {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "admitted_step outside 1..=step",
+            });
+        }
+        if !steps.insert(row.admitted_step) {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "duplicate admitted_step",
+            });
+        }
+    }
+    // Distinct values in 1..=step with count == step => exactly 1..=step.
+
+    // Retained rows must be the most recent admissions.
+    let retained_len = snapshot.retained.len() as u64;
+    if let Some(first) = snapshot.retained.first() {
+        if first.admitted_step != step - retained_len + 1 {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "retained rows are not the most recent admissions",
+            });
+        }
+    }
+
+    for row in &snapshot.eviction_log {
+        let resolved = row
+            .resolved_step
+            .ok_or(WorkingContextError::TruncatedProvenance {
+                reason: "eviction_log missing resolved_step",
+            })?;
+        if resolved <= row.admitted_step || resolved > step {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "resolved_step outside admitted_step+1..=step",
+            });
+        }
+        let (capacity, expected_fate) = match policy {
+            WorkingPolicy::Fixed { capacity } => (capacity, RetentionFate::Lost),
+            WorkingPolicy::CapacityBounded { capacity } => (capacity, RetentionFate::Evicted),
+            WorkingPolicy::Expanding { .. } => {
+                return Err(WorkingContextError::InconsistentStepChronology {
+                    reason: "expanding policy never resolves a row",
+                });
+            }
+        };
+        if row.fate != expected_fate {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "eviction fate does not match policy",
+            });
+        }
+        let expected_resolved = row
+            .admitted_step
+            .checked_add(capacity as u64)
+            .ok_or(WorkingContextError::StepOverflow)?;
+        if resolved != expected_resolved {
+            return Err(WorkingContextError::InconsistentStepChronology {
+                reason: "resolved_step != admitted_step + capacity",
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Exact oracle for a synthetic stream under one policy.
@@ -771,6 +888,12 @@ pub enum WorkingContextError {
         actual: u64,
     },
     StatsMismatch,
+    /// Snapshot retained rows are not in strictly increasing admission order.
+    InconsistentFifoOrder,
+    /// Snapshot step / admission / resolution chronology is inconsistent.
+    InconsistentStepChronology {
+        reason: &'static str,
+    },
     InternalInvariant,
 }
 
