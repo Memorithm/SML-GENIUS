@@ -21,6 +21,18 @@ Admit a real-text corpus to G1 retrieval runs beyond the synthetic fixture
 5. **Leakage:** identical text in train and eval => refusal. (Exact-duplicate
    check only; near-duplicate detection is a documented gap, to be added before
    any reported result.)
+6. **Provenance metadata (G2):** `source` and `license` must be informative.
+   A trimmed value equal (ASCII case-insensitive) to `UNPINNED`, `TODO`,
+   `UNKNOWN`, `N/A`, `NA`, `NONE`, `NULL`, `TBD`, `-`, `?`, or containing no
+   ASCII alphanumeric character, is refused (`BadValue`). Committed manifests
+   (`g1-pes2o7-v1`, tiny, smoke) remain admissible.
+7. **Split fingerprint (G2):** `PinnedRealTextCorpus::split_fingerprint{,_hex}`
+   = SHA-256 over a length-prefixed preimage (`<len>:<bytes>\n` per field) of
+   `G1_REALTEXT_SPLIT_FINGERPRINT v1`, `corpus_id`, `sha256`, `split_mod`,
+   `eval_residue`, then `train`/count/byte-sorted ids and `eval`/count/
+   byte-sorted ids. A run should record it to identify the exact split used.
+   It is an identity, not a quality measurement; it binds the pinned bytes, so
+   re-ordered corpus lines (new pin) give a new fingerprint.
 
 ## Harness entry points
 - Loader: `load_pinned(manifest_text, corpus_bytes) -> PinnedRealTextCorpus`
