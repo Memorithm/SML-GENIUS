@@ -26,7 +26,8 @@
 //! eval (exact-duplicate leakage) is an error, never a warning.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Component, Path};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 use crate::raw_context::sha256_raw_bytes;
 
@@ -87,6 +88,15 @@ pub enum RealTextError {
     },
     /// Absolute path, empty path, or non-`Normal` component (`..`, `.`, prefix, root).
     UnsafePath {
+        path: String,
+    },
+    /// Symlink component, non-regular file, or path that resolves outside the
+    /// allowed root. Lexical `Path::components` alone cannot detect this.
+    SymlinkEscape {
+        path: String,
+    },
+    /// Filesystem error while confining a path (missing entry, permission, …).
+    PathIo {
         path: String,
     },
     Hash,
@@ -229,7 +239,10 @@ pub fn parse_manifest(text: &str) -> Result<RealTextManifest, RealTextError> {
 /// Refuse absolute paths and any non-`Normal` component (`..` / root / prefix /
 /// lone `.`). Empty paths are also refused. Mid-path `.` is elided by
 /// `Path::components` and is therefore treated as a normal relative path.
-/// Intended for CLI/opt-in file args before `fs::read`.
+///
+/// **Not sufficient for filesystem confinement:** a relative name like
+/// `escape.tsv` passes this check even when it is a symlink that points
+/// outside the allowed root. Call [`confine_regular_file`] before `fs::read`.
 pub fn assert_safe_relative_path(path: &Path) -> Result<(), RealTextError> {
     let display = path.to_string_lossy().into_owned();
     if display.is_empty() {
@@ -243,6 +256,66 @@ pub fn assert_safe_relative_path(path: &Path) -> Result<(), RealTextError> {
         return Err(RealTextError::UnsafePath { path: display });
     }
     Ok(())
+}
+
+/// Resolve `relative` under `root` as a regular, non-symlink file that cannot
+/// escape `root` via symlink (descriptor-relative walk).
+///
+/// Steps (fail-closed, matching publication / corpus-overlap style):
+/// 1. [`assert_safe_relative_path`] (lexical).
+/// 2. `root` must be a non-symlink directory; canonicalize it.
+/// 3. Walk each `Normal` component under that root with `symlink_metadata`;
+///    any symlink component is refused (`SymlinkEscape`).
+/// 4. Final entry must be a regular non-symlink file.
+/// 5. `canonicalize(final).starts_with(root)` (defence in depth).
+///
+/// A path that would pass pure lexical `Path::components` checks but escape
+/// via symlink is therefore refused. Intended for CLI `--realtext` args.
+pub fn confine_regular_file(root: &Path, relative: &Path) -> Result<PathBuf, RealTextError> {
+    assert_safe_relative_path(relative)?;
+    let display = relative.to_string_lossy().into_owned();
+    let root_display = root.to_string_lossy().into_owned();
+    let root_meta = fs::symlink_metadata(root).map_err(|_| RealTextError::PathIo {
+        path: root_display.clone(),
+    })?;
+    if !root_meta.is_dir() || root_meta.file_type().is_symlink() {
+        return Err(RealTextError::SymlinkEscape { path: root_display });
+    }
+    let root_canon =
+        fs::canonicalize(root).map_err(|_| RealTextError::PathIo { path: root_display })?;
+    let mut path = root_canon.clone();
+    for component in relative.components() {
+        let Component::Normal(value) = component else {
+            // Unreachable after assert_safe_relative_path; keep fail-closed.
+            return Err(RealTextError::UnsafePath {
+                path: display.clone(),
+            });
+        };
+        path.push(value);
+        let meta = fs::symlink_metadata(&path).map_err(|_| RealTextError::PathIo {
+            path: display.clone(),
+        })?;
+        if meta.file_type().is_symlink() {
+            return Err(RealTextError::SymlinkEscape {
+                path: display.clone(),
+            });
+        }
+    }
+    let meta = fs::symlink_metadata(&path).map_err(|_| RealTextError::PathIo {
+        path: display.clone(),
+    })?;
+    if !meta.is_file() {
+        return Err(RealTextError::SymlinkEscape {
+            path: display.clone(),
+        });
+    }
+    let canon = fs::canonicalize(&path).map_err(|_| RealTextError::PathIo {
+        path: display.clone(),
+    })?;
+    if !canon.starts_with(&root_canon) {
+        return Err(RealTextError::SymlinkEscape { path: display });
+    }
+    Ok(canon)
 }
 
 /// Deterministic split bucket of a document id.

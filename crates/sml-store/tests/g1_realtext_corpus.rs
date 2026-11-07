@@ -14,12 +14,15 @@
 //!
 //! **Newly added here:**
 //! - absolute / traversal / non-`Normal` path components → `UnsafePath`
-//!   (via `assert_safe_relative_path`; also wired into `g1_latency_rss` CLI)
-//! - safe relative fixture path accepted
+//!   (via `assert_safe_relative_path`)
+//! - symlink escape under an allowed root → `SymlinkEscape` (via
+//!   `confine_regular_file`; lexical `Path::components` alone is insufficient;
+//!   also wired into `g1_latency_rss` CLI for both manifest and corpus)
+//! - safe relative fixture path accepted; confined regular file under root OK
 //! - `byte_len 0` → `BadValue` (protocol: size must be > 0)
 
 use sml_store::g1_realtext_corpus::{
-    assert_safe_relative_path, load_pinned, parse_manifest, RealTextError,
+    assert_safe_relative_path, confine_regular_file, load_pinned, parse_manifest, RealTextError,
 };
 
 const MANIFEST: &str = include_str!("fixtures/g1_realtext/tiny.manifest");
@@ -222,4 +225,73 @@ fn zero_byte_len_is_refused() {
             ..
         })
     ));
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_escape_is_refused_for_manifest_and_corpus() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::path::Path;
+
+    let id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let home = std::env::temp_dir().join(format!("g1-symlink-escape-{}-{id}", std::process::id()));
+    let _ = fs::remove_dir_all(&home);
+    fs::create_dir_all(&home).unwrap();
+    let root = home.join("root");
+    let outside = home.join("outside");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+
+    // Outside secrets a pure lexical check cannot see.
+    fs::write(outside.join("secret.manifest"), b"SECRET_MANIFEST\n").unwrap();
+    fs::write(outside.join("secret.tsv"), b"SECRET_CORPUS\n").unwrap();
+
+    // Relative names that Path::components treats as Normal-only.
+    let man_link = "escape.manifest";
+    let corp_link = "escape.tsv";
+    symlink(outside.join("secret.manifest"), root.join(man_link)).unwrap();
+    symlink(outside.join("secret.tsv"), root.join(corp_link)).unwrap();
+
+    // Lexical check alone would ACCEPT these (no absolute / no `..`).
+    assert_safe_relative_path(Path::new(man_link)).unwrap();
+    assert_safe_relative_path(Path::new(corp_link)).unwrap();
+
+    // Confinement must FAIL CLOSED for both manifest and corpus.
+    let man_err = confine_regular_file(&root, Path::new(man_link)).unwrap_err();
+    assert!(
+        matches!(man_err, RealTextError::SymlinkEscape { .. }),
+        "manifest symlink escape: {man_err:?}"
+    );
+    let corp_err = confine_regular_file(&root, Path::new(corp_link)).unwrap_err();
+    assert!(
+        matches!(corp_err, RealTextError::SymlinkEscape { .. }),
+        "corpus symlink escape: {corp_err:?}"
+    );
+
+    // Mid-path directory symlink that would escape via `via/secret.tsv`.
+    let via = "via";
+    symlink(&outside, root.join(via)).unwrap();
+    let mid = "via/secret.tsv";
+    assert_safe_relative_path(Path::new(mid)).unwrap();
+    let mid_err = confine_regular_file(&root, Path::new(mid)).unwrap_err();
+    assert!(
+        matches!(mid_err, RealTextError::SymlinkEscape { .. }),
+        "mid-path symlink escape: {mid_err:?}"
+    );
+
+    // Positive control: regular files under root are admitted.
+    fs::write(root.join("ok.manifest"), b"ok\n").unwrap();
+    fs::write(root.join("ok.tsv"), b"ok\n").unwrap();
+    let ok_m = confine_regular_file(&root, Path::new("ok.manifest")).unwrap();
+    let ok_c = confine_regular_file(&root, Path::new("ok.tsv")).unwrap();
+    assert!(ok_m.ends_with("ok.manifest"));
+    assert!(ok_c.ends_with("ok.tsv"));
+    assert!(ok_m.starts_with(fs::canonicalize(&root).unwrap()));
+    assert!(ok_c.starts_with(fs::canonicalize(&root).unwrap()));
+
+    let _ = fs::remove_dir_all(&home);
 }
