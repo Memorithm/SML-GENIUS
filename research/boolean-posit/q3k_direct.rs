@@ -52,7 +52,10 @@ fn signed_subgroup_scale(scales: &[u8], subgroup: usize) -> i32 {
 /// No Q3_K -> BPB3-K conversion is performed. No dense decompressed weight
 /// tensor is created. This byte-indexed reference is intentionally simple:
 /// it is NOT an optimized ggml/AVX2/SIMD benchmark competitor.
-pub fn dot_q3k_bipolar(raw: &[u8], input_negative: &[u64; INPUT_MASK_WORDS]) -> Result<DirectDot, Error> {
+pub fn dot_q3k_bipolar(
+    raw: &[u8],
+    input_negative: &[u64; INPUT_MASK_WORDS],
+) -> Result<DirectDot, Error> {
     if raw.len() != WIRE_BYTES {
         return Err(Error::WrongLength { actual: raw.len() });
     }
@@ -74,8 +77,7 @@ pub fn dot_q3k_bipolar(raw: &[u8], input_negative: &[u64; INPUT_MASK_WORDS]) -> 
             let low = i32::from((raw[32 + q_base + lane] >> low_shift) & 3);
             let is_negative = (raw[(group_in_half % 2) * 16 + lane] & sign_bit) == 0;
             let q = low - if is_negative { 4 } else { 0 };
-            let x_negative =
-                (input_negative[index / 64] >> (index % 64)) & 1 != 0;
+            let x_negative = (input_negative[index / 64] >> (index % 64)) & 1 != 0;
             integer_dot += if x_negative { -q } else { q };
         }
 
