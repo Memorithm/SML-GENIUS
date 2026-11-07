@@ -57,10 +57,12 @@ pub fn decode_q3_k(wire: &[u8]) -> Result<[f32; SUPERBLOCK], DecodeError> {
         let high_pair = (scales[8 + scale_index % 4] >> (2 * (scale_index / 4))) & 3;
         let signed_scale = i32::from(low_nibble | (high_pair << 4)) - 32;
 
-        let offset = half * 32 + (group_in_half % 2) * 16 + (i % 16);
+        let local = (group_in_half % 2) * 16 + (i % 16);
+        let q_offset = half * 32 + local;
         let bitplane = group_in_half / 2;
-        let low = (qs[offset] >> (2 * bitplane)) & 3;
-        let hbit_set = hmask[offset] & (1 << bitplane) != 0;
+        let high_bitplane = half * 4 + bitplane;
+        let low = (qs[q_offset] >> (2 * bitplane)) & 3;
+        let hbit_set = hmask[local] & (1 << high_bitplane) != 0;
         let signed_quant = i32::from(low) - if hbit_set { 0 } else { 4 };
         d * (signed_scale as f32) * (signed_quant as f32)
     }))
