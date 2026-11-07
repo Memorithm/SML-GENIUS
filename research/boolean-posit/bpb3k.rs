@@ -88,7 +88,7 @@ pub fn decode_bpb3k(raw: &[u8]) -> Result<[f32; VALUES], Error> {
         let group = i / 64;
         let lane = i % 64;
         let offset = group * 24;
-        let read_word = |p| {
+        let read_word = |p: usize| {
             let start = offset + p * 8;
             u64::from_le_bytes(raw[start..start + 8].try_into().unwrap())
         };
