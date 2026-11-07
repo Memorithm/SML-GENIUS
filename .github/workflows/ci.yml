@@ -49,6 +49,14 @@ jobs:
           rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
           "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
           rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
+      - name: BPB3-M 128-weight reversible microblock and direct dot oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3m.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3m.rs -o "$RUNNER_TEMP/bpb3m-tests"
+          "$RUNNER_TEMP/bpb3m-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3m.rs -o "$RUNNER_TEMP/libbpb3m.rlib"
 
   rust:
     needs: fmt
