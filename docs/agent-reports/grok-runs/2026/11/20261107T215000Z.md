@@ -2,7 +2,7 @@
 
 - PR: https://github.com/Memorithm/SML-GENIUS/pull/860 (MERGED, squash `af45ce7a71443d7f6652b2879a9e84ceb99eecc2`, 2026-11-07T21:34:27Z)
 - Status: **G6 MERGED**. CONTEXT-2 cross-version / restart compatibility oracle. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
-- Base: `21d1f6f3a31648b59b283078c531902be80599bc` (main after G5 #859). Exact PR head `7b56601fc5e96a128c225a07744c475323bbd622` (code/test commit = head).
+- Base: the PR branch was cut from `a6c45a118dd9c07a48c015d72205c2f19b589d4c`, a stale local ref from before G5. The branch therefore also carried the G5 fixture and golden test files, byte-identical to main. The squash onto main `21d1f6f3a31648b59b283078c531902be80599bc` nets to one new file (`git diff 21d1f6f3 af45ce7a`: 1 file, +606). Exact PR head: `7b56601fc5e96a128c225a07744c475323bbd622` (code/test commit = head).
 - Branch: `grok/g6-context2-compat-oracle-20261107`. **LONGCTX-B1** untouched and **BLOCKED**. #850 untouched (obsolete, not merged). RemoteOps M2 (#1352) and ChatGPT branches not touched.
 - Wake source: Grok Bot watchdog routine run (in-agent). It does **not** show the RemoteOps→Grok loop is CONNECTED.
 

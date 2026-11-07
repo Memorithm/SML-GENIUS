@@ -9,9 +9,9 @@
   "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m Grok Bot routine run); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
   "milestone": "G6 CONTEXT-2 cross-version/restart compatibility",
   "task": "G6 CONTEXT-2 compat oracle PR #860 merged af45ce7a (head 7b56601f): independent SWC2 v1 oracle, 12 tests (pinned corpus SHA-256, prefix/flip/count/limit/order mutation agreement, unknown version rejection, restart without replay, atomic restore_into, torn-write all-or-nothing); test-only. G5 #859 merged 21d1f6f3.",
-  "base_sha": "21d1f6f3a31648b59b283078c531902be80599bc",
+  "base_sha": "a6c45a118dd9c07a48c015d72205c2f19b589d4c",
   "head_sha": "7b56601fc5e96a128c225a07744c475323bbd622",
-  "head_sha_note": "head_sha = exact PR head (code/test commit); merge commit af45ce7a71443d7f6652b2879a9e84ceb99eecc2",
+  "head_sha_note": "head_sha = exact PR head (code/test commit, branch cut from stale a6c45a11 carrying byte-identical G5 files); squash merge af45ce7a71443d7f6652b2879a9e84ceb99eecc2 onto 21d1f6f3 nets 1 file +606",
   "branch": "grok/g6-context2-compat-oracle-20261107",
   "tests": {
     "code_changed": true,
