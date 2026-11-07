@@ -1,0 +1,45 @@
+name: BPB3-K Q3_K lossless bitplane transcode parity
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k.rs'
+      - 'research/boolean-posit/BPB3_K_EQUIVALENCE.md'
+      - '.github/workflows/bpb3k-bitplane-equivalence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3k.rs'
+      - 'research/boolean-posit/BPB3_K_EQUIVALENCE.md'
+      - '.github/workflows/bpb3k-bitplane-equivalence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-bitplane-equivalence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Rust 1.89 format and true bitwise Q3_K reconstruction parity
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3k.rs
+          rustc --edition=2021 --test research/boolean-posit/bpb3k.rs \
+            -o "$RUNNER_TEMP/bpb3k-tests"
+          "$RUNNER_TEMP/bpb3k-tests" | tee "$RUNNER_TEMP/bpb3k-parity.txt"
+          grep -q 'test result: ok. 9 passed; 0 failed' "$RUNNER_TEMP/bpb3k-parity.txt"
+      - name: Preserve verifiable parity evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3k-q3-equivalence-${{ github.sha }}
+          path: ${{ runner.temp }}/bpb3k-parity.txt
+          if-no-files-found: warn
+          retention-days: 30
