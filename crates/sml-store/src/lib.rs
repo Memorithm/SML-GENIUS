@@ -26,6 +26,7 @@ pub mod g1_realtext_key;
 pub mod longctx_b1;
 pub mod observed_history;
 pub mod raw_context;
+pub mod working_context;
 
 use std::{fmt, fs::File, io, path::Path};
 
