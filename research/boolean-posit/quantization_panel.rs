@@ -108,7 +108,7 @@ fn weights(family: &str, seed: &mut u64) -> [f64; LANES] {
         match family {
             "uniform" => base * 0.85,
             "sparse" => {
-                if next_random(seed).is_multiple_of(5) {
+                if next_random(seed) % 5 == 0 {
                     base * 0.7
                 } else {
                     0.0
