@@ -133,7 +133,13 @@ fn weights(family: &str, seed: &mut u64) -> [f64; LANES] {
 fn integer_dot(q: &[i8; LANES], mask: u64) -> i32 {
     q.iter()
         .enumerate()
-        .map(|(i, &v)| if (mask >> i) & 1 == 0 { i32::from(v) } else { -i32::from(v) })
+        .map(|(i, &v)| {
+            if (mask >> i) & 1 == 0 {
+                i32::from(v)
+            } else {
+                -i32::from(v)
+            }
+        })
         .sum()
 }
 
@@ -160,8 +166,7 @@ fn examine_family(family: &str, seed: u64) -> [Stats; 4] {
         let original = weights(family, &mut rng);
         let blocks = Quant::ALL.map(|q| quantize(&original, q));
         assert_eq!(blocks[1], blocks[2], "equal-codebook BPB/INT3 control");
-        let bp = bpb3::Bpb3::pack(&blocks[1].q, blocks[1].k)
-            .expect("legal BPB quantization");
+        let bp = bpb3::Bpb3::pack(&blocks[1].q, blocks[1].k).expect("legal BPB quantization");
         assert_eq!(bp.to_bytes().len(), 26);
         assert_eq!(bp.unpack(), blocks[1].q);
         for (index, block) in blocks.iter().enumerate() {
@@ -173,8 +178,8 @@ fn examine_family(family: &str, seed: u64) -> [Stats; 4] {
             let reference = real_dot(&original, mask);
             assert_eq!(bp.dot(mask), integer_dot(&blocks[1].q, mask));
             for (index, block) in blocks.iter().enumerate() {
-                let predicted = f64::from(integer_dot(&block.q, mask))
-                    * 2.0f64.powi(i32::from(block.k));
+                let predicted =
+                    f64::from(integer_dot(&block.q, mask)) * 2.0f64.powi(i32::from(block.k));
                 let delta = predicted - reference;
                 result[index].dot_sq_error += delta * delta;
                 result[index].dots += 1;
