@@ -27,6 +27,7 @@ pub mod longctx_b1;
 pub mod observed_history;
 pub mod raw_context;
 pub mod working_context;
+pub mod working_context_envelope;
 pub mod working_context_wire;
 
 use std::{fmt, fs::File, io, path::Path};
