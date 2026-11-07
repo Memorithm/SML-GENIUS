@@ -34,7 +34,7 @@ jobs:
           rustc --edition=2021 --test research/boolean-posit/bpb3k.rs \
             -o "$RUNNER_TEMP/bpb3k-tests"
           "$RUNNER_TEMP/bpb3k-tests" | tee "$RUNNER_TEMP/bpb3k-parity.txt"
-          grep -q 'test result: ok. 4 passed; 0 failed' "$RUNNER_TEMP/bpb3k-parity.txt"
+          grep -q 'test result: ok. 9 passed; 0 failed' "$RUNNER_TEMP/bpb3k-parity.txt"
       - name: Preserve verifiable parity evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
