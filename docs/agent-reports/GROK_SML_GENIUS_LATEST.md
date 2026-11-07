@@ -1,29 +1,36 @@
-# Grok SML-GENIUS report — 2026-11-06T23:06:00Z
+# Grok SML-GENIUS report — 2026-11-07T05:39:06Z
 
-- Status: **IDLE_WAITING / BLOCKED** — RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
-- Base: `3ebc6334c5bd8cec5fc33e4709809819f817ccab` (origin/main, research BPB #840). Milestone **G1 CONTEXT-3**. **LONGCTX-B1** untouched / **BLOCKED**.
+- Status: **IN_PROGRESS (code delivered; awaiting ChatGPT re-ACK)** / RemoteOps **NOT_CONNECTED**; E2E `sml-genius-20261103T191749Z-8152791e` **NOT_QUALIFIED**. Metrics **NOT_MEASURED**.
+- Base: `7d0c58f809c1cb9669265373d22df6d44b0db374` (origin/main). Milestone **G1 CONTEXT-3**. **LONGCTX-B1** untouched / **BLOCKED**.
 - Wake source: Grok Bot routine `sml-genius-dev-watchdog-30m` only — **not** proof of RemoteOps→Grok half-hour loop CONNECTED.
-- Report PR: https://github.com/Memorithm/SML-GENIUS/pull/842 (head report commit `9331333456dfda1e8994cacefb8bf8bccd9e4812`).
+- Code PR: https://github.com/Memorithm/SML-GENIUS/pull/843 (symlink confinement tip `70e9963c3139d532daca2642a82140717efb5635`).
 
-## Runner / bench (re-verified this tick)
-- Self-hosted runners: `total_count=0` (`gh api repos/Memorithm/SML-GENIUS/actions/runners`).
-- G1 bench run https://github.com/Memorithm/SML-GENIUS/actions/runs/41760808506: status **completed**, conclusion **cancelled** (previously queued; do not claim still queued). Re-dispatch only after Dell/Thor registration.
+## This slice (ChatGPT G1 residual on RemoteOps #1208 comment 6702553263)
 
-## WAITING_ON (unchanged; no honest G1 code slice)
-1. User real-text corpus + SHA-256 pin (`G1_REALTEXT_MANIFEST` v1).
-2. Dell/Thor self-hosted runner registration (then re-dispatch native N=16384 latency/RSS).
-3. ChatGPT M2 (RemoteOps #1208) verified `session_attestation` for E2E qualification.
+Implemented real fail-closed filesystem confinement (preferred over documenting an unresolved restriction):
+1. `confine_regular_file(root, relative)` — lexical `assert_safe_relative_path`, then `symlink_metadata` walk of every component, refuse any symlink, require regular file, `canonicalize` must stay under root (`SymlinkEscape` / `PathIo`).
+2. Wired into `g1_latency_rss --realtext` for **both** manifest and corpus under process CWD.
+3. Unix negative tests: relative names that pass pure `Path::components` but are symlinks (file + mid-path dir) → `SymlinkEscape`; positive regular files under root admitted.
 
-## Scaffold already on main (no new code this tick)
-G1 CONTEXT-3 runner-independent scaffold through #818/#819 remains the last honest code path. Open research PRs #838 / #841 (BPB) are out of scope this tick.
+**Already covered (prior #843 commits):** absolute/`..`/empty → `UnsafePath`; `byte_len==0` → `BadValue`; tampered digest / overlap / unpinned SHA / malformed docs.
+
+## Evidence (exact tip `70e9963c…`)
+- Local: `cargo fmt --all -- --check` pass; `cargo clippy --locked --workspace --all-targets -- -D warnings` pass; `cargo test --locked --workspace` → **2265 passed; 0 failed; 3 ignored** (pre-push revalidated).
+- Exact-head CI SUCCESS:
+  - CI fmt+rust: https://github.com/Memorithm/SML-GENIUS/actions/runs/42342631726
+  - G1 realtext smoke: https://github.com/Memorithm/SML-GENIUS/actions/runs/42342631917
+  - External weight admission: https://github.com/Memorithm/SML-GENIUS/actions/runs/42342631789
+  - Trusted RSI review adapter: https://github.com/Memorithm/SML-GENIUS/actions/runs/42342631662
+  - grok-icm: https://github.com/Memorithm/SML-GENIUS/actions/runs/42342631938
+
+## WAITING_ON
+1. ChatGPT re-review / G1 qualification ACK on RemoteOps #1208 for this symlink residual (do **not** merge #843 until ACK).
+2. User real-text corpus + SHA-256 pin (`G1_REALTEXT_MANIFEST` v1).
+3. Dell/Thor self-hosted runner registration; re-dispatch native G1 bench.
+4. ChatGPT M2 verified `session_attestation` on RemoteOps #1208.
 
 ## Measured
-None. No scores invented. No native N=16384 numbers. Keep **NOT_MEASURED** without pinned corpus + qualified runner.
+None. No scores invented. Keep **NOT_MEASURED**. Self-hosted runners `total_count=0`.
 
-## RAG glance (sibling-owned; non-starving)
-CCOS-Enterprise dense generate run 42307359113 still **queued**; lexical 41570029554 succeeded earlier; hybrid/ccos still missing SUCCESS. No RAG dispatch from this tick.
-
-## Next executable unblock tasks
-1. Pin real-text corpus SHA-256 into `G1_REALTEXT_MANIFEST` v1.
-2. Register Dell/Thor self-hosted runner; re-run trusted-main G1 bench.
-3. Deliver ChatGPT M2 verified session attestation on RemoteOps #1208 → E2E QUALIFIED path.
+## Out of scope this slice
+BPB #838/#841 untouched. LONGCTX-B1 campaign not launched. No NVIDIA stack.
