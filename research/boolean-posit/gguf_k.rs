@@ -173,11 +173,17 @@ mod tests {
         for len in [0, 32, 109, 111, 143, 145, 256] {
             assert_eq!(
                 decode_q3_k(&vec![0u8; len]),
-                Err(DecodeError::WrongLength { actual: len, expected: 110 })
+                Err(DecodeError::WrongLength {
+                    actual: len,
+                    expected: 110
+                })
             );
             assert_eq!(
                 decode_q4_k(&vec![0u8; len]),
-                Err(DecodeError::WrongLength { actual: len, expected: 144 })
+                Err(DecodeError::WrongLength {
+                    actual: len,
+                    expected: 144
+                })
             );
         }
     }
