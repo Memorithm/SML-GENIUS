@@ -87,3 +87,43 @@ remnant coding. Select these hyperparameters on DEV only, then report
 independent TEST outcomes once. The paired `Q3_K` and
 `BPB-3+2residual` 110-byte codecs are a directly interpretable first
 feasibility comparison, **not** a conclusive superiority claim.
+
+
+## Pinned trained-weight validation lane (new independent CI gate)
+
+The separate workflow `.github/workflows/bpb3-reconstruction-real-weights.yml`
+downloads a **public, trained** pretrained model with a declared reuse license,
+without retaining its weight bytes as GitHub artifacts:
+
+- EleutherAI, [Pythia-14M](https://huggingface.co/EleutherAI/pythia-14m),
+  model card states Apache-2.0 and trained checkpoint step143000.
+- Immutable Hugging Face commit:
+  `94f7c35d5e9f2e9bac8ca839329f505b4d007d5d`.
+- Model file `model.safetensors`, expected SHA256:
+  `116a02532db461f91386a5b20f942ff2c8d4de7341e21b55caafc3d7b25f49a1`.
+  The run **fails closed** if downloaded bytes differ. Avoid unsafe pickle model formats.
+- Four specified trained matrix tensors from layers 0 and 5: attention
+  output, attention QKV, MLP expansion and MLP projection; original
+  FP16 tensors are **losslessly upcast** to numeric FP32 for encoding.
+- Per tensor: deterministic independent shuffle seeded by tensor name,
+  24 DEV and 24 TEST selected 256-element superblocks with **disjoint
+  source block indices**. Their exact indices, source tensor shapes,
+  selected-row SHA256 values and license are preserved in a JSON manifest.
+  No dynamic resampling or TEST-based parameter tuning occurs.
+- With Pythia hidden dimension **128**, each 256-element quantizer
+  block covers two adjacent original 128-element matrix rows. This is a
+  reproducible **controlled reblocking** for codec reconstruction, **not**
+  a claim about a GGUF tensor layout or model inference performance.
+- Both official upstream GGML encoder variants, the qualified Rust
+  decoders and the pre-registered fixed BPB-3+2-residual feasibility
+  candidate run over identical selected original values. The existing Rust
+  executable still marks its raw input mode `EXTERNAL_UNVERIFIED`;
+  the **hosting workflow separately verifies** checkpoint license,
+  SHA256 and corpus provenance before any published metric is admissible.
+
+This lane establishes original-*trained*-weight reconstruction for a
+**single small model**, not a general SML or language-model quality claim,
+and not an independent model-heldout TEST. Additional frozen pretrained
+checkpoints and stratified layer/size tests remain needed for external
+validity. If download or source licensing is unavailable, the workflow
+must fail rather than substitute simulated weights.
