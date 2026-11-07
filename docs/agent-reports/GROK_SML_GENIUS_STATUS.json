@@ -2,27 +2,31 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-06T23:06:00Z",
-  "last_report_utc": "2026-11-06T23:06:00Z",
-  "last_successful_code_commit_utc": "2026-11-04T00:11:56Z",
-  "run_id": "20261106T230545Z",
-  "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m routine); bench target: none available (repo self-hosted runners total_count=0); wake is Grok Bot routine only \u2014 NOT RemoteOps\u2192Grok CONNECTED proof",
+  "timestamp_utc": "2026-11-07T04:31:06Z",
+  "last_report_utc": "2026-11-07T04:31:06Z",
+  "last_successful_code_commit_utc": "2026-11-07T04:31:06Z",
+  "run_id": "20261107T043106Z",
+  "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m routine); bench target: none available (repo self-hosted runners); wake is Grok Bot routine only — NOT RemoteOps→Grok CONNECTED proof",
   "milestone": "G1 CONTEXT-3",
-  "task": "BLOCKED/IDLE_WAITING: no honest G1 code slice; mandatory per-tick status-only report",
-  "base_sha": "3ebc6334c5bd8cec5fc33e4709809819f817ccab",
-  "head_sha": "7b6ac80f4569aa15a0c9aaa75818dd3c07c5a12c",
-  "branch": "grok/g1-tick-20261106T230545Z",
+  "task": "G1 adversarial path/byte_len fail-closed PR in flight (#843); awaiting exact-head CI",
+  "base_sha": "7d0c58f809c1cb9669265373d22df6d44b0db374",
+  "head_sha": "e16db1c7bab53d8d312126c346af4596ff1d2746",
+  "branch": "grok/g1-manifest-adversarial-20261107",
   "remoteops_wake_task_id": "sml-genius-20261103T191749Z-8152791e",
   "tests": {
-    "code_changed": false
+    "code_changed": true,
+    "fmt": "pass",
+    "clippy_workspace_all_targets_D_warnings": "pass",
+    "cargo_test_locked_workspace": "2264 passed, 0 failed, 3 ignored"
   },
-  "metrics": "NOT_MEASURED: no pinned real-text corpus; G1 bench run 41760808506 completed cancelled; runners total_count=0.",
-  "blocked_reason": "WAITING_ON: corpus+SHA / Dell-Thor self-hosted runner / ChatGPT M2. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. Bench run 41760808506 cancelled. This wake is Grok Bot routine only, not RemoteOps\u2192Grok CONNECTED proof.",
+  "metrics": "NOT_MEASURED: adversarial loader negatives only; no pinned real-text corpus measurement; no quality claim.",
+  "blocked_reason": "WAITING_ON: corpus+SHA pin / Dell-Thor self-hosted runner / ChatGPT M2 attestation. RemoteOps NOT_CONNECTED; E2E 8152791e NOT_QUALIFIED. G1 adversarial PR #843 open; CI exact-head pending. This wake is Grok Bot routine only, not RemoteOps→Grok CONNECTED proof.",
   "qualification": "NOT_QUALIFIED",
   "waiting_on": [
+    "exact-head CI green on PR #843 then merge",
     "user real-text corpus + SHA-256 pin (G1_REALTEXT_MANIFEST v1)",
-    "Dell/Thor self-hosted runner registration (run 41760808506 completed cancelled; re-dispatch after register)",
+    "Dell/Thor self-hosted runner registration",
     "ChatGPT M2 (RemoteOps #1208) verified session_attestation for E2E qualification"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/842"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/843"
 }
