@@ -1,5 +1,5 @@
 //! Experimental BPB3-K: bit-sliced, *lossless re-layout* of ggml Q3_K.
-//! 
+//!
 //! This is NOT BPB-3 v0: it adopts Q3_K's asymmetric [-4,+3] integer
 //! alphabet and all sixteen 6-bit subgroup scales and its fp16 global
 //! scale. Hence its reconstruction error is identical to Q3_K, not better.
@@ -93,9 +93,12 @@ pub fn decode_bpb3k(raw: &[u8]) -> Result<[f32; VALUES], Error> {
             u64::from_le_bytes(raw[start..start + 8].try_into().unwrap())
         };
         let is_negative = (read_word(0) >> lane) & 1 != 0;
-        let magnitude = (((read_word(1) >> lane) & 1)
-            | (((read_word(2) >> lane) & 1) << 1)) as i32;
-        let q = if is_negative { -(magnitude + 1) } else { magnitude };
+        let magnitude = (((read_word(1) >> lane) & 1) | (((read_word(2) >> lane) & 1) << 1)) as i32;
+        let q = if is_negative {
+            -(magnitude + 1)
+        } else {
+            magnitude
+        };
         let subgroup = i / 16;
         let low = if subgroup < 8 {
             scales[subgroup] & 15
@@ -113,9 +116,7 @@ mod tests {
     use super::*;
 
     fn q3_fixture(case: usize) -> [u8; BYTES] {
-        let mut v = std::array::from_fn(|i| {
-            (i * 73 + i / 4 * 19 + case * 41) as u8
-        });
+        let mut v = std::array::from_fn(|i| (i * 73 + i / 4 * 19 + case * 41) as u8);
         v[108..110].copy_from_slice(&[0x00, 0x3c]); // d=1.0
         v
     }
@@ -130,8 +131,14 @@ mod tests {
     #[test]
     fn reject_truncated_or_oversized_inputs() {
         for size in [0, 1, 109, 111, 144, 256] {
-            assert_eq!(q3_to_bpb3k(&vec![0; size]), Err(Error::WrongLength { actual: size }));
-            assert_eq!(decode_bpb3k(&vec![0; size]), Err(Error::WrongLength { actual: size }));
+            assert_eq!(
+                q3_to_bpb3k(&vec![0; size]),
+                Err(Error::WrongLength { actual: size })
+            );
+            assert_eq!(
+                decode_bpb3k(&vec![0; size]),
+                Err(Error::WrongLength { actual: size })
+            );
         }
     }
 
@@ -144,8 +151,11 @@ mod tests {
             let expected = gguf_k::decode_q3_k(&raw).unwrap();
             let actual = decode_bpb3k(&transcoded).unwrap();
             for i in 0..VALUES {
-                assert_eq!(actual[i].to_bits(), expected[i].to_bits(),
-                    "q3 BPB3K bitwise mismatch case={case} index={i}");
+                assert_eq!(
+                    actual[i].to_bits(),
+                    expected[i].to_bits(),
+                    "q3 BPB3K bitwise mismatch case={case} index={i}"
+                );
             }
         }
     }
@@ -155,11 +165,13 @@ mod tests {
         let mut all_negative = [0u8; BYTES];
         all_negative[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
         let converted = q3_to_bpb3k(&all_negative).unwrap();
-        assert!(decode_bpb3k(&converted).unwrap().iter().all(|&v| v == 128.0));
+        assert!(decode_bpb3k(&converted)
+            .unwrap()
+            .iter()
+            .all(|&v| v == 128.0));
         for group in 0..4 {
-            let sign = u64::from_le_bytes(
-                converted[group * 24..group * 24 + 8].try_into().unwrap()
-            );
+            let sign =
+                u64::from_le_bytes(converted[group * 24..group * 24 + 8].try_into().unwrap());
             assert_eq!(sign, u64::MAX);
         }
         let mut all_positive = all_negative;
