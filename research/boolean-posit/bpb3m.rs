@@ -13,6 +13,21 @@
 //! See BPB3_M_128.md for scope, parity contract and budget.
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+#[path = "gguf_k.rs"]
+#[allow(dead_code)]
+mod gguf_k;
+
+#[cfg(test)]
+#[path = "bpb3k.rs"]
+#[allow(dead_code)]
+mod bpb3k;
+
+#[cfg(test)]
+#[path = "bpb3k_direct.rs"]
+#[allow(dead_code)]
+mod bpb3k_direct;
+
 pub const VALUES: usize = 128;
 pub const BYTES: usize = 56;
 pub const PLANE_BYTES: usize = 48;
@@ -195,18 +210,6 @@ pub fn dot_bpb3m_bipolar(raw: &[u8], input_negative: &[u64; GROUPS]) -> Result<D
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[path = "gguf_k.rs"]
-    #[allow(dead_code)]
-    mod gguf_k;
-
-    #[path = "bpb3k.rs"]
-    #[allow(dead_code)]
-    mod bpb3k;
-
-    #[path = "bpb3k_direct.rs"]
-    #[allow(dead_code)]
-    mod bpb3k_direct;
 
     fn fixture(case: usize, scale: u16) -> [u8; Q3_K_BYTES] {
         let mut raw: [u8; Q3_K_BYTES] =
