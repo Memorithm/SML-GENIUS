@@ -465,8 +465,12 @@ impl WorkingContext {
     }
 
     /// Restore from a snapshot. Fail-closed on schema, capacity, truncated
-    /// retained provenance, unknown fate rows, register mismatch, or stats
-    /// mismatch.
+    /// retained provenance, unknown fate rows, zero segment id, register
+    /// mismatch, or stats mismatch (including counter overflow and
+    /// `recurrent_folds != admitted`).
+    ///
+    /// Pure: builds a new context or returns `Err`; no caller state is touched,
+    /// so a rejected restore can never leave partial live state.
     pub fn restore(snapshot: &WorkingContextSnapshot) -> Result<Self, WorkingContextError> {
         if snapshot.schema_version != WORKING_CONTEXT_SCHEMA_VERSION {
             return Err(WorkingContextError::UnsupportedSchema {
@@ -478,6 +482,13 @@ impl WorkingContext {
             return Err(WorkingContextError::TruncatedProvenance {
                 reason: "retained exceeds policy limit",
             });
+        }
+        // G3: ContextSegmentId fields are public, so forged rows may carry the
+        // zero segment id that ContextSegmentId::new refuses.
+        for row in snapshot.retained.iter().chain(snapshot.eviction_log.iter()) {
+            if row.identity.segment_id == 0 {
+                return Err(WorkingContextError::InvalidSegmentIdentity);
+            }
         }
         // Every retained row must declare Retained fate and complete fields.
         for row in &snapshot.retained {
@@ -554,6 +565,7 @@ impl WorkingContext {
         }
 
         validate_chronology(snapshot, policy)?;
+        validate_snapshot_stats(snapshot)?;
 
         let mut register = 0_u64;
         let mut residents = VecDeque::new();
@@ -632,6 +644,29 @@ impl WorkingContext {
         }
         Ok(ctx)
     }
+}
+
+/// Validate snapshot counters before they reach the live invariant checker.
+///
+/// Corrupt counters (including values whose sum overflows `u64`) are snapshot
+/// corruption and map to [`WorkingContextError::StatsMismatch`], never to
+/// [`WorkingContextError::InternalInvariant`]. Every successful admission
+/// folds exactly once, so `recurrent_folds == admitted` on any honest
+/// snapshot (G3, RemoteOps#1208).
+fn validate_snapshot_stats(snapshot: &WorkingContextSnapshot) -> Result<(), WorkingContextError> {
+    let stats = snapshot.stats;
+    let sum = stats
+        .retained
+        .checked_add(stats.evicted)
+        .and_then(|v| v.checked_add(stats.lost))
+        .ok_or(WorkingContextError::StatsMismatch)?;
+    if sum != stats.admitted || stats.recurrent_folds != stats.admitted {
+        return Err(WorkingContextError::StatsMismatch);
+    }
+    if u64::try_from(snapshot.retained.len()).ok() != Some(stats.retained) {
+        return Err(WorkingContextError::StatsMismatch);
+    }
+    Ok(())
 }
 
 /// Validate snapshot step / admission chronology and retained FIFO order.
