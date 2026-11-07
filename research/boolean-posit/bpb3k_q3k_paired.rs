@@ -27,8 +27,7 @@ mod tests {
     use super::*;
 
     fn q3_wire(case: usize, scale_bits: u16) -> [u8; 110] {
-        let mut raw: [u8; 110] =
-            std::array::from_fn(|i| (i * 73 + (i / 4) * 19 + case * 41) as u8);
+        let mut raw: [u8; 110] = std::array::from_fn(|i| (i * 73 + (i / 4) * 19 + case * 41) as u8);
         raw[108..110].copy_from_slice(&scale_bits.to_le_bytes());
         raw
     }
@@ -60,7 +59,12 @@ mod tests {
         w.iter()
             .enumerate()
             .map(|(i, &v)| {
-                f64::from(v) * if (x[i / 64] >> (i % 64)) & 1 != 0 { -1.0 } else { 1.0 }
+                f64::from(v)
+                    * if (x[i / 64] >> (i % 64)) & 1 != 0 {
+                        -1.0
+                    } else {
+                        1.0
+                    }
             })
             .sum()
     }
@@ -70,8 +74,14 @@ mod tests {
         let direct_q3 = q3k_direct::dot_q3k_bipolar(raw, x).unwrap();
         let direct_bpb = bpb3k_direct::dot_bpb3k_bipolar(&bpb, x).unwrap();
         assert_eq!(direct_q3.weighted_integer, direct_bpb.weighted_integer);
-        assert_eq!(direct_q3.global_scale_f16_bits, direct_bpb.global_scale_f16_bits);
-        assert_eq!(direct_q3.global_scale_f16_bits, u16::from_le_bytes([raw[108], raw[109]]));
+        assert_eq!(
+            direct_q3.global_scale_f16_bits,
+            direct_bpb.global_scale_f16_bits
+        );
+        assert_eq!(
+            direct_q3.global_scale_f16_bits,
+            u16::from_le_bytes([raw[108], raw[109]])
+        );
     }
 
     #[test]
@@ -152,7 +162,10 @@ mod tests {
                 raw[32..96].fill(0xff);
             }
             let direct = q3k_direct::dot_q3k_bipolar(&raw, &[0; 4]).unwrap();
-            assert_eq!(direct.weighted_integer, if positive { -96 * 256 } else { 128 * 256 });
+            assert_eq!(
+                direct.weighted_integer,
+                if positive { -96 * 256 } else { 128 * 256 }
+            );
             assert_matched(&raw, &[0; 4]);
             assert_matched(&raw, &[u64::MAX; 4]);
         }
