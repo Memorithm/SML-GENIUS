@@ -43,7 +43,7 @@ jobs:
                   else:
                       active=None
           for i,block in enumerate(blocks):
-              r=subprocess.run(["bash","-n"],input="\\n".join(block)+"\\n",text=True,capture_output=True)
+              r=subprocess.run(["bash","-n"],input="\n".join(block)+"\n",text=True,capture_output=True)
               if r.returncode:
                   raise SystemExit(f"STOP_BPB3K_SHELL_SYNTAX block={i} error={r.stderr}")
           print(f"PASS_BPB3K_BASH_PREFLIGHT blocks={len(blocks)}")
