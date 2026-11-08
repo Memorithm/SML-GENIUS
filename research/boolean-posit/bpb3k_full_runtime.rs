@@ -360,12 +360,12 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         "        case GGML_TYPE_Q4_K:\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\n        case GGML_TYPE_Q2_K:",
     )?;
 
-    // All Q3_K rows in this pinned SmolLM2 have divisible-by-four output
-    // channels. ggml's multi-row vec_dot ABI supports 4-row micro-tiles.
+    // Upstream ggml has float tmp[32] and only even-row guards. nrows=4
+    // smashes that stack buffer; nrows=2 is a safe 2x2 tile.
     substitute_once(
         &cpu,
         ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 1,",
-        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 4,",
+        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 2,",
     )?;
     substitute_once(
         &cpu_cmake,
