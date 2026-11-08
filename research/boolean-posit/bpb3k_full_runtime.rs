@@ -281,46 +281,10 @@ static void mem_bpb3k_dequant(const block_q3_K *x, float *y, int64_t k) {
 }
 #endif
 #ifdef MEM_BPB3K_DOT
-static void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
-                             const void *vx, size_t bx,
-                             const void *vy, size_t by, int nrc) {
-    assert(n % 256 == 0 && nrc == 1);
-    static atomic_flag seen = ATOMIC_FLAG_INIT;
-    if (!atomic_flag_test_and_set(&seen)) {
-        fputs("BPB3K_DIRECT_DOT_EXECUTED\n", stderr);
-    }
-    (void) bs; (void) bx; (void) by;
-    const block_q3_K *x = (const block_q3_K *)vx;
-    const block_q8_K *y = (const block_q8_K *)vy;
-    // Preserve the upstream ggml Q3_K generic reduction structure:
-    // eight i32 accumulator lanes per block; then eight f32 running sums.
-    float sums[8] = {0};
-    for (int b = 0; b < n / 256; ++b) {
-        const uint8_t *v = (const uint8_t *) &x[b];
-        uint16_t bits;
-        memcpy(&bits, v + 108, sizeof(bits));
-        int32_t aux32[8] = {0};
-        for (int sg = 0; sg < 16; ++sg) {
-            const int scale = mem_bpb3k_subscale(v + 96, sg);
-            for (int lane = 0; lane < 8; ++lane) {
-                const int i0 = 16 * sg + lane;
-                const int i1 = i0 + 8;
-                const int dot = mem_bpb3k_coeff(v, i0) * (int)y[b].qs[i0]
-                              + mem_bpb3k_coeff(v, i1) * (int)y[b].qs[i1];
-                aux32[lane] += scale * dot;
-            }
-        }
-        const float d = ggml_fp16_to_fp32(bits) * y[b].d;
-        for (int lane = 0; lane < 8; ++lane) {
-            sums[lane] += d * (float) aux32[lane];
-        }
-    }
-    float sumf = 0.0f;
-    for (int lane = 0; lane < 8; ++lane) {
-        sumf += sums[lane];
-    }
-    *s = sumf;
-}
+// Rust staticlib supplies the exact ggml ABI; no C SIMD implementation.
+extern void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
+                             const void *vx, size_t bx, const void *vy,
+                             size_t by, int nrc);
 #endif
 #endif
 "#;
@@ -340,12 +304,18 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     let cpu = root.join("ggml/src/ggml-cpu/ggml-cpu.c");
     let bridge = root.join("ggml/src/ggml-bpb3k-experimental.h");
     let tiled = root.join("ggml/src/ggml-cpu/tiled/tiled.cpp");
+    let cpu_cmake = root.join("ggml/src/ggml-cpu/CMakeLists.txt");
     if bridge.exists() {
         return Err("STOP_BPB_BRIDGE_ALREADY_EXISTS".into());
     }
     let a = fs::read_to_string(&core).map_err(|e| e.to_string())?;
     let b = fs::read_to_string(&cpu).map_err(|e| e.to_string())?;
     let t = fs::read_to_string(&tiled).map_err(|e| e.to_string())?;
+    let cmake = fs::read_to_string(&cpu_cmake).map_err(|e| e.to_string())?;
+    if cmake.matches("    ggml_add_backend_library(${GGML_CPU_NAME})").count() != 1 {
+        return Err("STOP_CMAKE_TARGET_LAYOUT_DRIFT".into());
+    }
+
     for (src, expected) in [
         (
             &a,
@@ -389,6 +359,19 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         tiled_gate,
         "        case GGML_TYPE_Q4_K:\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\n        case GGML_TYPE_Q2_K:",
     )?;
+
+    // All Q3_K rows in this pinned SmolLM2 have divisible-by-four output
+    // channels. ggml's multi-row vec_dot ABI supports 4-row micro-tiles.
+    substitute_once(
+        &cpu,
+        ".vec_dot                  = mem_bpb3k_dot_q8,\\n        .vec_dot_type             = GGML_TYPE_Q8_K,\\n        .nrows                    = 1,",
+        ".vec_dot                  = mem_bpb3k_dot_q8,\\n        .vec_dot_type             = GGML_TYPE_Q8_K,\\n        .nrows                    = 4,",
+    )?;
+    substitute_once(
+        &cpu_cmake,
+        "    ggml_add_backend_library(${GGML_CPU_NAME})",
+        "    ggml_add_backend_library(${GGML_CPU_NAME})\\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \\\"${MEM_BPB3K_RUST_STATICLIB}\\\")\\n        message(FATAL_ERROR \\\"BPB3K Rust kernel staticlib required\\\")\\n    endif()\\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \\\"${MEM_BPB3K_RUST_STATICLIB}\\\")",
+    )?;
     println!("PASS_BPB3K_CPU_TILED_BYPASS_CLOSED=Q3_K");
     println!("PASS_BPB3K_PINNED_GGML_PATCH source={} modified=ggml.c,ggml-cpu.c,ggml-cpu/tiled/tiled.cpp header=ggml-bpb3k-experimental.h only_cpu=true", observed_sha);
     Ok(())
@@ -417,11 +400,8 @@ mod tests {
     }
     #[test]
     fn c_bridge_exposes_both_correct_hot_path_symbols() {
-        assert!(C_BRIDGE.contains("mem_bpb3k_dot_q8"));
+        assert!(C_BRIDGE.contains("extern void mem_bpb3k_dot_q8"));
         assert!(C_BRIDGE.contains("mem_bpb3k_dequant"));
-        assert!(C_BRIDGE.contains("y[b].qs[i0]"));
-        assert!(C_BRIDGE.contains("aux32[lane]"));
-        assert!(C_BRIDGE.contains("sumf += sums[lane]"));
-        assert!(C_BRIDGE.contains("BPB3K_DIRECT_DOT_EXECUTED"));
+        assert!(!C_BRIDGE.contains("static void mem_bpb3k_dot_q8"));
     }
 }
