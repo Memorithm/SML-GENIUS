@@ -240,6 +240,8 @@ const C_BRIDGE: &str = r#"
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdatomic.h>
 
 static uint64_t mem_bpb3k_load64(const uint8_t *v) {
     uint64_t x;
@@ -283,6 +285,10 @@ static void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
                              const void *vx, size_t bx,
                              const void *vy, size_t by, int nrc) {
     assert(n % 256 == 0 && nrc == 1);
+    static atomic_flag seen = ATOMIC_FLAG_INIT;
+    if (!atomic_flag_test_and_set(&seen)) {
+        fputs("BPB3K_DIRECT_DOT_EXECUTED\\n", stderr);
+    }
     (void) bs; (void) bx; (void) by;
     const block_q3_K *x = (const block_q3_K *)vx;
     const block_q8_K *y = (const block_q8_K *)vy;
