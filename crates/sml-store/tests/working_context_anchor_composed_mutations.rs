@@ -1214,3 +1214,77 @@ fn authority_tag_is_in_process_equality_not_authenticated_provenance() {
         }
     );
 }
+
+// ---------------------------------------------------------------------------
+// Read-only surface reused by the G18 permutation-invariance suite.
+// ---------------------------------------------------------------------------
+
+/// Opaque, read-only access to the frozen G17 corpus for
+/// `working_context_anchor_permutation_invariance.rs` (G18). Exposes no
+/// new rows and no mutation helpers; G17 definitions stay the single
+/// source of truth. Outcomes are surfaced as their `Debug` rendering so
+/// the private vocabulary does not leak.
+#[allow(dead_code)]
+pub(crate) mod shared {
+    use super::*;
+
+    /// Frozen G17 corpus version and digest, re-exported for pinning.
+    pub(crate) const CORPUS_VERSION: u16 = G17_CORPUS_VERSION;
+    pub(crate) const CORPUS_SHA256: &str = FROZEN_CORPUS_SHA256;
+
+    /// Row names in frozen corpus order.
+    pub(crate) fn row_names() -> Vec<&'static str> {
+        corpus().iter().map(|r| r.name).collect()
+    }
+
+    /// Canonical corpus rendering (same bytes as the G17 frozen digest).
+    pub(crate) fn rendering() -> String {
+        render(&corpus())
+    }
+
+    /// Frozen expected outcome of `name`.
+    pub(crate) fn expected(name: &str) -> String {
+        format!("{:?}", by_name(&corpus(), name).expect)
+    }
+
+    /// Whether the frozen expected outcome of `name` is a rejection.
+    pub(crate) fn is_rejection(name: &str) -> bool {
+        by_name(&corpus(), name).expect.is_rejection()
+    }
+
+    /// Independent (non-production) oracle outcome of `name`.
+    pub(crate) fn oracle_outcome(name: &str) -> String {
+        let rows = corpus();
+        let row = by_name(&rows, name);
+        format!("{:?}", oracle(row, &row_bytes(row), row_facts(row)))
+    }
+
+    /// Production outcome of `name` applied to the caller's `target`.
+    /// Also asserts (inside G17's adapter) that the anchor state is not
+    /// advanced.
+    pub(crate) fn production_outcome(target: &mut WorkingContext, name: &str) -> String {
+        let rows = corpus();
+        let row = by_name(&rows, name);
+        format!("{:?}", run_prod(target, row, &row_bytes(row)))
+    }
+
+    /// Sealed bytes presented by `name`.
+    pub(crate) fn bytes(name: &str) -> Vec<u8> {
+        row_bytes(by_name(&corpus(), name))
+    }
+
+    /// Fresh live target used before every G17 restore attempt.
+    pub(crate) fn initial() -> WorkingContext {
+        initial_target()
+    }
+
+    /// The accepted snapshot the positive control installs.
+    pub(crate) fn accepted_snapshot() -> WorkingContext {
+        fx_ctx(Fx::Home3)
+    }
+
+    /// Byte-for-byte fingerprint: canonical SWC2, SWE1 seal, all stats.
+    pub(crate) fn fingerprint_of(ctx: &WorkingContext) -> (Vec<u8>, Vec<u8>, WorkingContextStats) {
+        fingerprint(ctx)
+    }
+}
