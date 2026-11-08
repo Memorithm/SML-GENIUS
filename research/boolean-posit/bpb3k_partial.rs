@@ -56,10 +56,7 @@ pub fn dot_selected_bpb3k(
     if raw.len() != BYTES {
         return Err(Error::WrongLength { actual: raw.len() });
     }
-    if !matches!(groups, 1 | 2 | 4)
-        || first_group >= 4
-        || first_group + groups > 4
-    {
+    if !matches!(groups, 1 | 2 | 4) || first_group >= 4 || first_group + groups > 4 {
         return Err(Error::InvalidSpan {
             first_group,
             groups,
@@ -146,8 +143,7 @@ mod tests {
                     let mut first_group = 0usize;
                     let mut total = 0i32;
                     for (segment_index, &groups) in layout.parts_in_groups().iter().enumerate() {
-                        let selected =
-                            dot_selected_bpb3k(&k, first_group, groups, &masks).unwrap();
+                        let selected = dot_selected_bpb3k(&k, first_group, groups, &masks).unwrap();
                         let x = bpb3x::dot_segment_bipolar(&wire, segment_index, &masks).unwrap();
                         assert_eq!(selected.weighted_integer, x.weighted_integer);
                         assert_eq!(selected.global_scale_f16_bits, x.global_scale_f16_bits);
