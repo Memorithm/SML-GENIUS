@@ -343,7 +343,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     }
     // The optimized tiled CPU path can otherwise read BPB3-K as stock Q3_K,
     // corrupting the prompt processing and attention state without an error.
-    const tiled_gate = "        case GGML_TYPE_Q4_K:\\n        case GGML_TYPE_Q3_K:\\n        case GGML_TYPE_Q2_K:";
+    const tiled_gate: &str = "        case GGML_TYPE_Q4_K:\\n        case GGML_TYPE_Q3_K:\\n        case GGML_TYPE_Q2_K:";
     if t.matches(tiled_gate).count() != 1 {
         return Err("STOP_TILED_Q3_K_GATE_DRIFT".into());
     }
