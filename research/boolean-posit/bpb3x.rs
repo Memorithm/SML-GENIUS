@@ -66,6 +66,7 @@ pub enum Error {
     WrongLength { actual: usize, expected: usize },
     InvalidLayout { code: u8 },
     GlobalScaleMismatch { expected: u16, actual: u16 },
+    InvalidSegment { index: usize, segments: usize },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,6 +259,79 @@ pub fn dot_bipolar(wire: &[u8], inputs_negative: &[u64; 4]) -> Result<DirectDot,
     })
 }
 
+/// Exact dot of one stored BPB3-X segment of 64, 128 or 256 coefficients.
+///
+/// The entire directory and each segment's two-byte FP16 scale are first
+/// validated. Only the requested segment's bitplanes and packed subgroup
+/// scales are then read for arithmetic. This does *not* establish how many
+/// cache lines or DRAM bytes the CPU actually fetches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SegmentDot {
+    pub weighted_integer: i32,
+    pub global_scale_f16_bits: u16,
+    pub first_coefficient: usize,
+    pub coefficients: usize,
+    pub segment_payload_bytes: usize,
+}
+
+pub fn dot_segment_bipolar(
+    wire: &[u8],
+    segment_index: usize,
+    inputs_negative: &[u64; 4],
+) -> Result<SegmentDot, Error> {
+    let (layout, fp16) = validated_layout(wire)?;
+    let parts = layout.parts_in_groups();
+    if segment_index >= parts.len() {
+        return Err(Error::InvalidSegment {
+            index: segment_index,
+            segments: parts.len(),
+        });
+    }
+
+    let mut cursor = 1;
+    let mut first_group = 0usize;
+    for (ordinal, &groups) in parts.iter().enumerate() {
+        let planes_end = cursor + groups * GROUP_PLANES;
+        let scales_end = planes_end + groups * GROUP_SCALES;
+        if ordinal == segment_index {
+            let planes = &wire[cursor..planes_end];
+            let scales = &wire[planes_end..scales_end];
+            let mut weighted_integer = 0i32;
+            for group in 0..groups {
+                let start = group * GROUP_PLANES;
+                let negative = u64_le(&planes[start..start + 8]);
+                let bit0 = u64_le(&planes[start + 8..start + 16]);
+                let bit1 = u64_le(&planes[start + 16..start + 24]);
+                let activation = inputs_negative[first_group + group];
+                let equal_sign = !(negative ^ activation);
+                for subgroup in 0..4 {
+                    let mask = 0xffffu64 << (16 * subgroup);
+                    let lo = bit0 & mask;
+                    let hi = bit1 & mask;
+                    let neg = negative & mask;
+                    let c0 = 2 * (equal_sign & lo).count_ones() as i32 - lo.count_ones() as i32;
+                    let c1 = 2 * (equal_sign & hi).count_ones() as i32 - hi.count_ones() as i32;
+                    let correction =
+                        2 * (neg & activation).count_ones() as i32 - neg.count_ones() as i32;
+                    let scale = i32::from(packed_scale(scales, group * 4 + subgroup)) - 32;
+                    weighted_integer += (c0 + 2 * c1 + correction) * scale;
+                }
+            }
+            debug_assert!(weighted_integer.abs() <= (groups * 64 * 4 * 32) as i32);
+            return Ok(SegmentDot {
+                weighted_integer,
+                global_scale_f16_bits: fp16,
+                first_coefficient: first_group * 64,
+                coefficients: groups * 64,
+                segment_payload_bytes: groups * (GROUP_PLANES + GROUP_SCALES) + 2,
+            });
+        }
+        cursor = scales_end + 2;
+        first_group += groups;
+    }
+    unreachable!("the selected segment was validated against a nonempty layout")
+}
+
 #[cfg(test)]
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
@@ -338,6 +412,77 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn selected_segment_direct_dot_matches_independent_dense_oracle() {
+        for case in 0..32 {
+            let src = fixture(case, 0x3c00);
+            let weights = bpb3k::decode_bpb3k(&src).unwrap();
+            for pattern in 0..8 {
+                let mask: [u64; 4] = std::array::from_fn(|group| match pattern {
+                    0 => 0,
+                    1 => u64::MAX,
+                    2 => 0xaaaa_aaaa_aaaa_aaaa,
+                    3 => 0x5555_5555_5555_5555,
+                    _ => 1u64 << ((case + pattern + group) % 64),
+                });
+                for layout in Layout::ALL {
+                    let wire = encode(&src, layout).unwrap();
+                    let mut total = 0i32;
+                    let mut next_first = 0usize;
+                    for (index, &groups) in layout.parts_in_groups().iter().enumerate() {
+                        let segment = dot_segment_bipolar(&wire, index, &mask).unwrap();
+                        assert_eq!(segment.first_coefficient, next_first);
+                        assert_eq!(segment.coefficients, groups * 64);
+                        assert_eq!(segment.segment_payload_bytes, groups * 27 + 2);
+                        assert_eq!(segment.global_scale_f16_bits, 0x3c00);
+                        let expected = (next_first..next_first + segment.coefficients)
+                            .map(|lane| {
+                                let negative = ((mask[lane / 64] >> (lane % 64)) & 1) != 0;
+                                f64::from(weights[lane]) * if negative { -1.0 } else { 1.0 }
+                            })
+                            .sum::<f64>();
+                        assert_eq!(
+                            f64::from(segment.weighted_integer),
+                            expected,
+                            "case={case} pattern={pattern} layout={layout:?} segment={index}"
+                        );
+                        total += segment.weighted_integer;
+                        next_first += segment.coefficients;
+                    }
+                    assert_eq!(next_first, SOURCE_VALUES);
+                    assert_eq!(total, dot_bipolar(&wire, &mask).unwrap().weighted_integer);
+                    assert_eq!(
+                        dot_segment_bipolar(&wire, layout.parts_in_groups().len(), &mask),
+                        Err(Error::InvalidSegment {
+                            index: layout.parts_in_groups().len(),
+                            segments: layout.parts_in_groups().len()
+                        })
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn selected_segment_rejects_corrupt_metadata_before_arithmetic() {
+        let src = fixture(4, 0x3c00);
+        let mut wire = encode(&src, Layout::Two128).unwrap();
+        wire[111] ^= 1;
+        assert_eq!(
+            dot_segment_bipolar(&wire, 0, &[0; 4]),
+            Err(Error::GlobalScaleMismatch {
+                expected: 0x3c00,
+                actual: 0x3c01
+            })
+        );
+        assert!(dot_segment_bipolar(&wire[..10], 0, &[0; 4]).is_err());
+        wire[0] = 255;
+        assert_eq!(
+            dot_segment_bipolar(&wire, 0, &[0; 4]),
+            Err(Error::InvalidLayout { code: 255 })
+        );
     }
 
     #[test]
