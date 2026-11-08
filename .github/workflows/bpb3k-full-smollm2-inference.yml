@@ -22,6 +22,32 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Preflight syntax of every Bash run block before expensive builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path(".github/workflows/bpb3k-full-smollm2-inference.yml")
+          lines=p.read_text().splitlines()
+          blocks=[]
+          active=None
+          for ln in lines:
+              if ln=="        run: |":
+                  active=[]
+                  blocks.append(active)
+              elif active is not None:
+                  if ln.startswith("          ") or not ln.strip():
+                      active.append(ln[10:] if ln.startswith("          ") else "")
+                  else:
+                      active=None
+          for i,block in enumerate(blocks):
+              r=subprocess.run(["bash","-n"],input="\\n".join(block)+"\\n",text=True,capture_output=True)
+              if r.returncode:
+                  raise SystemExit(f"STOP_BPB3K_SHELL_SYNTAX block={i} error={r.stderr}")
+          print(f"PASS_BPB3K_BASH_PREFLIGHT blocks={len(blocks)}")
+          PY
       - name: Rust 1.89 adapter and oracle tests
         shell: bash
         run: |
@@ -143,10 +169,6 @@ jobs:
           done
           # All four independently initialized inference processes must match
           # the trained reference. One prompt does not certify full logits.
-          if false; then
-            echo STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH
-            exit 1
-          }
           echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
 
       - name: Same-host unmodified optimized Q3_K full-model benchmark
