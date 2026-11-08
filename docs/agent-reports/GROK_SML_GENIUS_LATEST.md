@@ -1,28 +1,27 @@
-# Grok SML-GENIUS report: 2026-11-08T07:50:00Z
+# Grok SML-GENIUS report: 2026-11-08T08:51:00Z
 
-- PR: https://github.com/Memorithm/SML-GENIUS/pull/875 (MERGED, squash `6e13f82f41d633cbf1fed4874c96d181daf0508d`, 2026-11-08T07:46:37Z)
-- Status: **G12 MERGED**. CONTEXT-2 optional opt-in anchor provenance/identity policy for G10 SWE1 anchor admission. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
-- Base: main `efde7d8cf0c1a20695ef1fda303ed91d4c193724`. Exact PR head: `52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9` (code/test commit = head).
-- Branch: `grok/g12-anchor-provenance-policy-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comments 6717508950 and 6717944410). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 and #1359 not touched. Open PRs #850, #864 and #865 left alone.
-- Wake source: Grok Bot G12 executor (in-agent). It does **not** show the RemoteOps→Grok loop is CONNECTED.
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/877 (MERGED, squash `603152c8040127953b2df0f3e8fb3f8d19c528d6`, 2026-11-08T08:50:35Z)
+- Status: **G13 MERGED**. CONTEXT-2 adversarial differential oracle for G12 provenance policy. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
+- Base: main `7b40403003fe11ceaec112b2463c948dabbb4b0f`. Exact PR head: `46d2574d5f15ec66435a6596ba508bdcdaec091a` (code/test commit = head).
+- Branch: `grok/g13-provenance-adversarial-oracle-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comment 6718994823). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 not touched. Open PRs #850, #864 and #865 left alone.
+- Wake source: Grok Bot G13 executor (in-agent). It does **not** show the RemoteOps→Grok loop is CONNECTED.
 
-## G11 reconciliation
-G11 code PR #873 is **MERGED** (squash `eabcf72a`, exact head `86d6498211727edf575938b6b74150e11f10d56e`, six required checks SUCCESS). G11 report PR #874 is **MERGED** (`efde7d8c`, exact head of that report).
+## G12 reconciliation
+G12 code PR #875 is **MERGED** (squash `6e13f82f`, exact head `52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9`, six required checks SUCCESS). G12 report PR #876 is **MERGED** (`7b404030`, exact head of that report).
 
-## What changed in G12
-- New production module: `crates/sml-store/src/working_context_anchor_provenance.rs`, exported from `sml-store`. G10 `working_context_anchor.rs` gained only a module-doc pointer; `admit` / `advance` / `restore_into_anchored` signatures and behaviour are unchanged.
-- Opt-in policy: `ProvenancePolicy::Unbound` (default) performs no identity check. `ProvenancePolicy::Bound` fails closed unless stream id, authority identifier and digest domain match the expected binding. When a live snapshot is restored, the stream is derived from the candidate and the digest domain from the envelope magic (SWE1).
-- Decision order: unbound skip → absent presented identity → stream-binding mismatch → authority mismatch → digest-domain confusion.
-- `restore_into_anchored_with_provenance` replaces the target only after envelope, wire, restore, provenance and G10 admission all succeed. Every rejected restore leaves encoding and `stats.admitted` unchanged.
-- Independent pure oracle (`oracle_admit_provenance`) lives only in the test file and does not call production `admit_provenance`, `admit` or `advance`. Production results are classified and compared row-by-row.
-- Versioned frozen vectors (`ANCHOR_PROVENANCE_POLICY_VERSION = 1`): 16 named exemplars plus a cartesian expansion over stream IDs `{0, 1, STREAM, u64::MAX}`, two authority tags and digest domains `SWE1` / `OTHR` (positive exact match; negative cross-stream, authority mismatch and domain confusion).
-- Explicit demonstration that a caller-constructed matching `AuthorityId` is **not** authenticated: the identifier is an equality tag, not a signature. Claiming the SWE1 domain tag does not authenticate the digest.
+## What changed in G13
+- No production logic change. Test-only addition: `crates/sml-store/tests/working_context_anchor_provenance_adversarial_oracle.rs`.
+- Independent pure oracle (`oracle_admit_provenance`, `oracle_admit`, `oracle_advance`, `oracle_admit_with_provenance`, `oracle_derived_binding`) lives only in the test file and does not call production `admit_provenance`, `admit_with_provenance`, `derived_binding`, or `sml_store::working_context_anchor::{admit, advance}`. Production results are classified and compared row-by-row.
+- Versioned frozen vectors (`ANCHOR_PROVENANCE_POLICY_VERSION = 1`): 18 named exemplars plus a cartesian expansion over stream IDs `{0, 1, STREAM, u64::MAX}`, three authority tags (including a 31-byte prefix near-collision) and digest domains `{SWE1, SWE2, all-zero}`, under both `Unbound` and `Bound` policies.
+- Coverage: stream-id boundaries and cross-stream pairs; authority-id prefix collisions; digest-domain confusion including prefix-sharing tags (`SWE1` vs `SWE2`) and the all-zero domain; absent presented identity and malformed derived bindings; generation overflow (`advance` at `u64::MAX`) and G12-before-G10 order at generations `0` and `u64::MAX`; cross-stream snapshot substitution on live SWE1 envelopes.
+- Every rejected restore leaves encoding and `stats.admitted` unchanged.
+- Explicit demonstration that a caller-constructed matching `AuthorityId` is an identity binding (equality tag), **not** an authenticated origin.
 
 ## Evidence
-- Pre-push hook on `52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9`, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed.
-- `cargo test --locked --workspace` on head `52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9`: **2449 passed, 0 failed, 3 ignored**.
-- New suite: 7 passed in `working_context_anchor_provenance`.
-- Exact-head CI on `52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9`, all SUCCESS: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
+- Pre-push hook on `46d2574d5f15ec66435a6596ba508bdcdaec091a`, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed.
+- `cargo test --locked --workspace` on head `46d2574d5f15ec66435a6596ba508bdcdaec091a`: **2457 passed, 0 failed, 3 ignored**.
+- New suite: 8 passed in `working_context_anchor_provenance_adversarial_oracle`.
+- Exact-head CI on `46d2574d5f15ec66435a6596ba508bdcdaec091a`, all SUCCESS: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
 - RemoteOps `ops/grok/grok_report_gate.py` validates the status/report schema only. The Grok invocation is NOT independently attested.
 
 ## Limitations
@@ -39,4 +38,4 @@ G11 code PR #873 is **MERGED** (squash `eabcf72a`, exact head `86d6498211727edf5
 None. Status stays **NOT_MEASURED**.
 
 ## Out of scope
-LONGCTX-B1 campaign. Claude ternary/hybrid. NVIDIA stack. CCOS recall is not a 1M attention window. RemoteOps M2 ACK journal work and #1359. Open PRs #850, #864 and #865.
+LONGCTX-B1 campaign. Claude ternary/hybrid. NVIDIA stack. CCOS recall is not a 1M attention window. RemoteOps M2 ACK journal work. Open PRs #850, #864 and #865.
