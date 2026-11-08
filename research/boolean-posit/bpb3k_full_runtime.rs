@@ -29,20 +29,32 @@ fn read<const N: usize>(f: &mut File) -> Result<[u8; N], String> {
     f.read_exact(&mut out).map_err(|e| e.to_string())?;
     Ok(out)
 }
-fn u32le(f: &mut File) -> Result<u32, String> { Ok(u32::from_le_bytes(read(f)?)) }
-fn u64le(f: &mut File) -> Result<u64, String> { Ok(u64::from_le_bytes(read(f)?)) }
+fn u32le(f: &mut File) -> Result<u32, String> {
+    Ok(u32::from_le_bytes(read(f)?))
+}
+fn u64le(f: &mut File) -> Result<u64, String> {
+    Ok(u64::from_le_bytes(read(f)?))
+}
 fn advance(f: &mut File, n: u64, limit: u64) -> Result<(), String> {
     let pos = f.stream_position().map_err(|e| e.to_string())?;
     let end = pos.checked_add(n).ok_or("STOP_GGUF_OFFSET_OVERFLOW")?;
-    if end > limit { return Err("STOP_GGUF_TRUNCATED".into()); }
+    if end > limit {
+        return Err("STOP_GGUF_TRUNCATED".into());
+    }
     f.seek(SeekFrom::Start(end)).map_err(|e| e.to_string())?;
     Ok(())
 }
 fn read_string(f: &mut File, limit: u64) -> Result<String, String> {
     let n = u64le(f)?;
-    if n > MAX_STRING { return Err("STOP_LONG_STRING".into()); }
-    if f.stream_position().map_err(|e| e.to_string())?
-        .checked_add(n).ok_or("STOP_STRING_OFFSET_OVERFLOW")? > limit {
+    if n > MAX_STRING {
+        return Err("STOP_LONG_STRING".into());
+    }
+    if f.stream_position()
+        .map_err(|e| e.to_string())?
+        .checked_add(n)
+        .ok_or("STOP_STRING_OFFSET_OVERFLOW")?
+        > limit
+    {
         return Err("STOP_TRUNCATED_STRING".into());
     }
     let mut bytes = vec![0u8; n as usize];
@@ -55,28 +67,46 @@ fn skip_value(f: &mut File, ty: u32, limit: u64) -> Result<(), String> {
         2 | 3 => advance(f, 2, limit),
         4 | 5 | 6 => advance(f, 4, limit),
         10..=12 => advance(f, 8, limit),
-        8 => { let n = u64le(f)?; advance(f, n, limit) }
+        8 => {
+            let n = u64le(f)?;
+            advance(f, n, limit)
+        }
         9 => {
             let elem = u32le(f)?;
             let count = u64le(f)?;
-            if count > 1_000_000 { return Err("STOP_HUGE_METADATA_ARRAY".into()); }
+            if count > 1_000_000 {
+                return Err("STOP_HUGE_METADATA_ARRAY".into());
+            }
             if elem == 8 {
-                for _ in 0..count { skip_value(f, elem, limit)?; }
+                for _ in 0..count {
+                    skip_value(f, elem, limit)?;
+                }
                 Ok(())
             } else {
                 let width = match elem {
-                    0 | 1 | 7 => 1, 2 | 3 => 2, 4 | 5 | 6 => 4, 10..=12 => 8,
+                    0 | 1 | 7 => 1,
+                    2 | 3 => 2,
+                    4 | 5 | 6 => 4,
+                    10..=12 => 8,
                     _ => return Err("STOP_UNSUPPORTED_METADATA_ELEMENT".into()),
                 };
-                advance(f, count.checked_mul(width).ok_or("STOP_METADATA_OVERFLOW")?, limit)
+                advance(
+                    f,
+                    count.checked_mul(width).ok_or("STOP_METADATA_OVERFLOW")?,
+                    limit,
+                )
             }
         }
         _ => Err("STOP_UNKNOWN_METADATA_TYPE".into()),
     }
 }
 fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
-    if read::<4>(f)? != *b"GGUF" { return Err("STOP_NOT_GGUF".into()); }
-    if u32le(f)? != 3 { return Err("STOP_UNSUPPORTED_GGUF_VERSION".into()); }
+    if read::<4>(f)? != *b"GGUF" {
+        return Err("STOP_NOT_GGUF".into());
+    }
+    if u32le(f)? != 3 {
+        return Err("STOP_UNSUPPORTED_GGUF_VERSION".into());
+    }
     let n_tensors = u64le(f)?;
     let n_kvs = u64le(f)?;
     if n_tensors > MAX_ENTRIES || n_kvs > MAX_ENTRIES {
@@ -88,10 +118,13 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
         let ty = u32le(f)?;
         if key == "general.alignment" {
             alignment = match ty {
-                4 => u64::from(u32le(f)?), 10 => u64le(f)?,
+                4 => u64::from(u32le(f)?),
+                10 => u64le(f)?,
                 _ => return Err("STOP_ALIGNMENT_TYPE".into()),
             };
-        } else { skip_value(f, ty, file_len)?; }
+        } else {
+            skip_value(f, ty, file_len)?;
+        }
     }
     if alignment == 0 || alignment > 4096 || !alignment.is_power_of_two() {
         return Err("STOP_ALIGNMENT_RANGE".into());
@@ -100,61 +133,102 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
     for _ in 0..n_tensors {
         let name = read_string(f, file_len)?;
         let dims = u32le(f)?;
-        if !(1..=4).contains(&dims) { return Err("STOP_DIMS".into()); }
+        if !(1..=4).contains(&dims) {
+            return Err("STOP_DIMS".into());
+        }
         let mut values = 1u64;
         for _ in 0..dims {
-            values = values.checked_mul(u64le(f)?).ok_or("STOP_VALUES_OVERFLOW")?;
+            values = values
+                .checked_mul(u64le(f)?)
+                .ok_or("STOP_VALUES_OVERFLOW")?;
         }
         let kind = u32le(f)?;
         let offset = u64le(f)?;
-        entries.push(Tensor { name, kind, values, offset });
+        entries.push(Tensor {
+            name,
+            kind,
+            values,
+            offset,
+        });
     }
     let header = f.stream_position().map_err(|e| e.to_string())?;
-    let start = header.checked_add(alignment - 1).ok_or("STOP_ALIGN_OVERFLOW")?
+    let start = header
+        .checked_add(alignment - 1)
+        .ok_or("STOP_ALIGN_OVERFLOW")?
         & !(alignment - 1);
-    if start > file_len { return Err("STOP_TRUNCATED_TENSOR_DATA".into()); }
+    if start > file_len {
+        return Err("STOP_TRUNCATED_TENSOR_DATA".into());
+    }
     Ok((start, entries))
 }
 fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
-    if source == dest { return Err("STOP_SOURCE_DEST_SAME".into()); }
-    if dest.exists() { return Err("STOP_DEST_EXISTS".into()); }
+    if source == dest {
+        return Err("STOP_SOURCE_DEST_SAME".into());
+    }
+    if dest.exists() {
+        return Err("STOP_DEST_EXISTS".into());
+    }
     let mut input = File::open(source).map_err(|e| e.to_string())?;
     let file_len = input.metadata().map_err(|e| e.to_string())?.len();
-    if !(1..=MAX_GGUF).contains(&file_len) { return Err("STOP_GGUF_FILE_SIZE".into()); }
+    if !(1..=MAX_GGUF).contains(&file_len) {
+        return Err("STOP_GGUF_FILE_SIZE".into());
+    }
     let (start, all) = tensors(&mut input, file_len)?;
     let q3: Vec<_> = all.iter().filter(|x| x.kind == Q3_K).collect();
-    if q3.is_empty() { return Err("STOP_NO_Q3_K_WEIGHTS".into()); }
+    if q3.is_empty() {
+        return Err("STOP_NO_Q3_K_WEIGHTS".into());
+    }
     for x in &q3 {
-        if x.values == 0 || x.values % 256 != 0 { return Err("STOP_MISALIGNED_Q3_VALUES".into()); }
-        let bytes = (x.values / 256).checked_mul(110).ok_or("STOP_BLOCK_BYTES_OVERFLOW")?;
-        let end = start.checked_add(x.offset).and_then(|v| v.checked_add(bytes))
+        if x.values == 0 || x.values % 256 != 0 {
+            return Err("STOP_MISALIGNED_Q3_VALUES".into());
+        }
+        let bytes = (x.values / 256)
+            .checked_mul(110)
+            .ok_or("STOP_BLOCK_BYTES_OVERFLOW")?;
+        let end = start
+            .checked_add(x.offset)
+            .and_then(|v| v.checked_add(bytes))
             .ok_or("STOP_BLOCK_END_OVERFLOW")?;
-        if end > file_len { return Err(format!("STOP_TENSOR_OUT_OF_FILE name={}", x.name)); }
+        if end > file_len {
+            return Err(format!("STOP_TENSOR_OUT_OF_FILE name={}", x.name));
+        }
     }
     // Prevalidate metadata before touching the destination. Always keep it transient.
     fs::copy(source, dest).map_err(|e| e.to_string())?;
     let result = (|| {
-        let mut output = OpenOptions::new().read(true).write(true).open(dest)
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dest)
             .map_err(|e| e.to_string())?;
         let mut processed = 0u64;
         for tensor in &q3 {
             let blocks = tensor.values / 256;
-            let at = start.checked_add(tensor.offset).ok_or("STOP_TENSOR_OFFSET")?;
+            let at = start
+                .checked_add(tensor.offset)
+                .ok_or("STOP_TENSOR_OFFSET")?;
             input.seek(SeekFrom::Start(at)).map_err(|e| e.to_string())?;
-            output.seek(SeekFrom::Start(at)).map_err(|e| e.to_string())?;
+            output
+                .seek(SeekFrom::Start(at))
+                .map_err(|e| e.to_string())?;
             for _ in 0..blocks {
                 let original = read::<110>(&mut input)?;
                 let converted = bpb3k::q3_to_bpb3k(&original).map_err(|e| format!("{e:?}"))?;
                 output.write_all(&converted).map_err(|e| e.to_string())?;
             }
             processed += blocks;
-            println!("BPB3K_LIVE_TENSOR name={} blocks={} coefficients={}", tensor.name, blocks, tensor.values);
+            println!(
+                "BPB3K_LIVE_TENSOR name={} blocks={} coefficients={}",
+                tensor.name, blocks, tensor.values
+            );
         }
         output.sync_all().map_err(|e| e.to_string())?;
         println!("PASS_BPB3K_REAL_GGUF all_q3_tensors={} blocks={} bytes_per_block=110 gguf_type_surrogate=Q3_K requires_patched_runtime=true", q3.len(), processed);
         Ok(())
     })();
-    if result.is_err() { let _ = fs::remove_file(dest); }
+    if result.is_err() {
+        let _ = fs::remove_file(dest);
+    }
     result
 }
 
@@ -237,34 +311,55 @@ static void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
 
 fn substitute_once(path: &Path, from: &str, to: &str) -> Result<(), String> {
     let source = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    if source.matches(from).count() != 1 { return Err(format!("STOP_SOURCE_LAYOUT_DRIFT path={}", path.display())); }
+    if source.matches(from).count() != 1 {
+        return Err(format!("STOP_SOURCE_LAYOUT_DRIFT path={}", path.display()));
+    }
     fs::write(path, source.replacen(from, to, 1)).map_err(|e| e.to_string())
 }
 fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
-    if observed_sha != GGML_SHA { return Err("STOP_UPSTREAM_PIN_DRIFT".into()); }
+    if observed_sha != GGML_SHA {
+        return Err("STOP_UPSTREAM_PIN_DRIFT".into());
+    }
     let core = root.join("ggml/src/ggml.c");
     let cpu = root.join("ggml/src/ggml-cpu/ggml-cpu.c");
     let bridge = root.join("ggml/src/ggml-bpb3k-experimental.h");
-    if bridge.exists() { return Err("STOP_BPB_BRIDGE_ALREADY_EXISTS".into()); }
+    if bridge.exists() {
+        return Err("STOP_BPB_BRIDGE_ALREADY_EXISTS".into());
+    }
     let a = fs::read_to_string(&core).map_err(|e| e.to_string())?;
     let b = fs::read_to_string(&cpu).map_err(|e| e.to_string())?;
     for (src, expected) in [
-        (&a, ".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,"),
+        (
+            &a,
+            ".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,",
+        ),
         (&b, ".vec_dot                  = ggml_vec_dot_q3_K_q8_K,"),
     ] {
-        if src.matches(expected).count() != 1 { return Err("STOP_TRAIT_LAYOUT_DRIFT".into()); }
+        if src.matches(expected).count() != 1 {
+            return Err("STOP_TRAIT_LAYOUT_DRIFT".into());
+        }
     }
     fs::write(&bridge, C_BRIDGE).map_err(|e| e.to_string())?;
-    substitute_once(&core, "#include <assert.h>",
-        "#include <assert.h>\n#define MEM_BPB3K_DEQUANT 1\n#include \"ggml-bpb3k-experimental.h\"")?;
-    substitute_once(&cpu, "#include <assert.h>",
-        "#include <assert.h>\n#define MEM_BPB3K_DOT 1\n#include \"../ggml-bpb3k-experimental.h\"")?;
-    substitute_once(&core,
+    substitute_once(
+        &core,
+        "#include <assert.h>",
+        "#include <assert.h>\n#define MEM_BPB3K_DEQUANT 1\n#include \"ggml-bpb3k-experimental.h\"",
+    )?;
+    substitute_once(
+        &cpu,
+        "#include <assert.h>",
+        "#include <assert.h>\n#define MEM_BPB3K_DOT 1\n#include \"../ggml-bpb3k-experimental.h\"",
+    )?;
+    substitute_once(
+        &core,
         ".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,",
-        ".to_float                 = (ggml_to_float_t) mem_bpb3k_dequant,")?;
-    substitute_once(&cpu,
+        ".to_float                 = (ggml_to_float_t) mem_bpb3k_dequant,",
+    )?;
+    substitute_once(
+        &cpu,
         ".vec_dot                  = ggml_vec_dot_q3_K_q8_K,",
-        ".vec_dot                  = mem_bpb3k_dot_q8,")?;
+        ".vec_dot                  = mem_bpb3k_dot_q8,",
+    )?;
     println!("PASS_BPB3K_PINNED_GGML_PATCH source={} modified=ggml.c,ggml-cpu.c header=ggml-bpb3k-experimental.h only_cpu=true", observed_sha);
     Ok(())
 }
@@ -276,15 +371,22 @@ fn run() -> Result<(), String> {
         _ => Err("USAGE: bpb3k_full_runtime patch <llama-source-root> <sha> | transcode <original-gguf> <new-disposable-gguf>".into()),
     }
 }
-fn main() { if let Err(e) = run() { eprintln!("{e}"); std::process::exit(1); } }
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn refuses_unpinned_source() {
+    #[test]
+    fn refuses_unpinned_source() {
         let root = std::path::PathBuf::from("/nonexistent-memorithm-test");
         assert!(patch(&root, "wrongsha").is_err());
     }
-    #[test] fn c_bridge_exposes_both_correct_hot_path_symbols() {
+    #[test]
+    fn c_bridge_exposes_both_correct_hot_path_symbols() {
         assert!(C_BRIDGE.contains("mem_bpb3k_dot_q8"));
         assert!(C_BRIDGE.contains("mem_bpb3k_dequant"));
         assert!(C_BRIDGE.contains("y[b].qs[i]"));
