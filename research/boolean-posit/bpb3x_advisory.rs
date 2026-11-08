@@ -160,4 +160,52 @@ mod tests {
         input[0].layout_id = 6;
         assert_eq!(advise(&request(), &input), Err(Reject::InvalidLayout));
     }
+    #[test]
+    fn reject_empty_identity_and_zero_freshness_window() {
+        let input = observations();
+        let mut req = request();
+        req.source_sha = "";
+        assert_eq!(advise(&req, &input), Err(Reject::InvalidRequest));
+        req = request();
+        req.hardware_id = "";
+        assert_eq!(advise(&req, &input), Err(Reject::InvalidRequest));
+        req = request();
+        req.workload_id = "";
+        assert_eq!(advise(&req, &input), Err(Reject::InvalidRequest));
+        req = request();
+        req.max_age_ms = 0;
+        assert_eq!(advise(&req, &input), Err(Reject::InvalidRequest));
+        req = request();
+        req.fixed_baseline_id = 6;
+        assert_eq!(advise(&req, &input), Err(Reject::InvalidRequest));
+    }
+
+    #[test]
+    fn reject_zero_latency_and_mismatched_hardware_or_workload() {
+        let mut input = observations();
+        input[0].latency_ns = 0;
+        assert_eq!(advise(&request(), &input), Err(Reject::OracleFailed));
+        input = observations();
+        input[0].hardware_id = "other-host".into();
+        assert_eq!(advise(&request(), &input), Err(Reject::IdentityMismatch));
+        input = observations();
+        input[0].workload_id = "other-workload".into();
+        assert_eq!(advise(&request(), &input), Err(Reject::IdentityMismatch));
+    }
+
+    #[test]
+    fn tie_break_and_exact_freshness_boundary_are_deterministic() {
+        let mut input = observations();
+        for row in &mut input {
+            row.latency_ns = 20;
+            row.measured_at_ms = 900; // exactly max_age_ms
+        }
+        let snapshot = input.clone();
+        let result = advise(&request(), &input).unwrap();
+        assert_eq!(result.selected_id, 0);
+        assert_eq!(result.selected_latency_ns, 20);
+        assert_eq!(result.baseline_latency_ns, 20);
+        assert_eq!(input, snapshot);
+    }
+
 }
