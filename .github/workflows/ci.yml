@@ -65,6 +65,14 @@ jobs:
           rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/bpb3x-tests"
           "$RUNNER_TEMP/bpb3x-tests" --nocapture
           rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/libbpb3x.rlib"
+      - name: BPB3-X selective segments against independent direct K baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3k_partial.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_partial.rs -o "$RUNNER_TEMP/bpb3k-partial-tests"
+          "$RUNNER_TEMP/bpb3k-partial-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_partial.rs -o "$RUNNER_TEMP/libbpb3k_partial.rlib"
 
   rust:
     needs: fmt
