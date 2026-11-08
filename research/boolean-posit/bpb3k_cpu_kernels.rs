@@ -179,7 +179,7 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
     }).collect();
     let m=mode();
     static TRACE: OnceLock<()> = OnceLock::new();
-    TRACE.get_or_init(|| eprintln!("BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc}"));
+    TRACE.get_or_init(|| eprintln!("BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc} avx2={}",avx2_available()));
 
     for col in 0..nrc {
         let act=slice::from_raw_parts((vy as *const u8).add(col*by),bytes*BLOCK_A);
