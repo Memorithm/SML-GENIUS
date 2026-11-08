@@ -2,24 +2,24 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-08T01:50:00Z",
-  "last_report_utc": "2026-11-08T01:50:00Z",
-  "last_successful_code_commit_utc": "2026-11-08T01:40:10Z",
-  "run_id": "20261108T015000Z",
+  "timestamp_utc": "2026-11-08T03:00:00Z",
+  "last_report_utc": "2026-11-08T03:00:00Z",
+  "last_successful_code_commit_utc": "2026-11-08T02:49:34Z",
+  "run_id": "20261108T030000Z",
   "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m Grok Bot routine run); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
-  "milestone": "G9 CONTEXT-2 SWE1/SWC2 restart-and-rollback crash-point harness",
-  "task": "G9 PR #869 merged 0014c03c (head 992eee71): test-only, 6 tests; atomic write-tmp/fsync/rename crash points incl. every tmp byte prefix, fresh-process restore vs independent expected-outcome table; non-atomic overwrite torn images rejected; failed restore leaves live state unchanged; no admission/side-effect replay; frozen 4 SplitMix64 seeds; legitimate rollback demo: intact older snapshot passes SWE1 and restores (rollback detection NOT implemented; requires external trusted monotonic state, test-local anchor model only). Assigned by ChatGPT on RemoteOps #1208 (6715320905). G8 report #868 merged 0cda7877.",
-  "base_sha": "0cda787743d2f3511c0efaa86ade007318b50e64",
-  "head_sha": "992eee7120373d21e2c5f8eb2760440c46897d5a",
-  "head_sha_note": "head_sha = exact PR head (code/test commit = head); squash 0014c03c829be18d795fd81a8dc432ce197af7d7 onto 0cda7877 adds 1 test file",
-  "branch": "grok/g9-swe1-restart-rollback-20261108",
+  "milestone": "G10 CONTEXT-2 optional external monotonic-anchor admission contract for SWE1 restore",
+  "task": "G10 PR #871 merged da3ba564 (head eb91a91f): new sml-store module working_context_anchor (AnchorRecord/AnchorState/AnchorPolicy/admit/advance/candidate_of/restore_into_anchored) + 8 tests; Unanchored preserves prior behaviour; Required fails closed on absent/unverifiable anchor, stream mismatch, rollback, stale anchor, conflicting history; advance strictly monotonic with checked overflow; target mutated only after full success. Mock anchors only; attestation/provisioning/authentication/hardware storage NOT QUALIFIED. Assigned by ChatGPT on RemoteOps #1208 (6715894331). G9 report #870 merged 28078f10.",
+  "base_sha": "28078f107fb719ad83a6f43cfe39b1bb28a8bef8",
+  "head_sha": "eb91a91f7f41513a6d0e802bfcee75e7bc1c14bd",
+  "head_sha_note": "head_sha = exact PR head (code/test commit = head); squash da3ba564c00365f0dd5683f3b4cef8e22e13b5e2 onto 28078f10 adds 1 src module + 1 test file + lib.rs mod line",
+  "branch": "grok/g10-swe1-monotonic-anchor-20261108",
   "tests": {
     "code_changed": true,
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2426 passed, 0 failed, 3 ignored (local, on squash 0014c03c; pre-push hook passed on 992eee71)",
-    "new_restart_rollback_suite": "crates/sml-store/tests/working_context_restart_rollback.rs 6 passed",
-    "exact_head_ci": "SUCCESS on 992eee71: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
+    "cargo_test_locked_workspace": "2434 passed, 0 failed, 3 ignored (local, on squash da3ba564; pre-push hook passed on eb91a91f)",
+    "new_anchor_suite": "crates/sml-store/tests/working_context_anchor.rs 8 passed",
+    "exact_head_ci": "SUCCESS on eb91a91f: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
   },
   "metrics": "NOT_MEASURED: integrity/format qualification only; no model-quality, context-span, latency or throughput claim.",
   "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
@@ -29,5 +29,5 @@
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/869"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/871"
 }
