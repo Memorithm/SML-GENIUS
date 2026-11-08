@@ -13,7 +13,7 @@ const LANES: usize = 8;
 const TILE: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mode { Scalar, Simd, Tiled, Hybrid }
+enum Mode { Scalar, Simd, Tiled, Hybrid, Fused }
 
 fn mode() -> Mode {
     static SELECTED: OnceLock<Mode> = OnceLock::new();
@@ -22,6 +22,7 @@ fn mode() -> Mode {
             Ok("simd") => Mode::Simd,
             Ok("tiled") => Mode::Tiled,
             Ok("hybrid") => Mode::Hybrid,
+            Ok("fused") => Mode::Fused,
             _ => Mode::Scalar,
         }
     })
@@ -97,6 +98,42 @@ mod x86 {
     use std::arch::x86_64::*;
     // Every AVX2 operation is isolated in this dynamically guarded function;
     // no global -march=native or AVX2 assumption in the main code.
+    // Fused AVX2: keep eight integer accumulators in registers over the
+    // entire 256-element superblock; loads 3 bitplane words per 16-element
+    // subgroup rather than per 8-element half. One store per superblock.
+    #[target_feature(enable="avx2")]
+    pub unsafe fn fused_block(w:&[u8],a:&[u8])->[i32;8] {
+        let bitmask=_mm256_setr_epi32(1,2,4,8,16,32,64,128);
+        let one=_mm256_set1_epi32(1);
+        let two=_mm256_set1_epi32(2);
+        let zero=_mm256_setzero_si256();
+        let mut sum=zero;
+        for g in 0..16usize {
+            let off=(g/4)*24;
+            let shift=(g%4)*16;
+            let neg=u64_at(w,off)>>shift;
+            let lo=u64_at(w,off+8)>>shift;
+            let hi=u64_at(w,off+16)>>shift;
+            let sc=_mm256_set1_epi32(scale(w,g));
+            for half in 0..2usize {
+                let bitshift=half*8;
+                let negbits=_mm256_set1_epi32(((neg>>bitshift)&255) as i32);
+                let lobits=_mm256_set1_epi32(((lo>>bitshift)&255) as i32);
+                let hibits=_mm256_set1_epi32(((hi>>bitshift)&255) as i32);
+                let negmask=_mm256_cmpeq_epi32(_mm256_and_si256(bitmask,negbits),bitmask);
+                let low=_mm256_and_si256(_mm256_cmpeq_epi32(_mm256_and_si256(bitmask,lobits),bitmask),one);
+                let high=_mm256_and_si256(_mm256_cmpeq_epi32(_mm256_and_si256(bitmask,hibits),bitmask),two);
+                let magnitude=_mm256_add_epi32(low,high);
+                let signed=_mm256_blendv_epi8(magnitude,_mm256_sub_epi32(zero,_mm256_add_epi32(magnitude,one)),negmask);
+                let input=_mm_loadl_epi64(a.as_ptr().add(4+g*16+half*8) as *const __m128i);
+                let q8=_mm256_cvtepi8_epi32(input);
+                sum=_mm256_add_epi32(sum,_mm256_mullo_epi32(sc,_mm256_mullo_epi32(signed,q8)));
+            }
+        }
+        let mut out=[0i32;8];
+        _mm256_storeu_si256(out.as_mut_ptr() as *mut __m256i,sum);
+        out
+    }
     #[target_feature(enable="avx2")]
     pub unsafe fn product8(block:&[u8],act:&[u8], start:usize) -> [i32;8] {
         let group=start/64;
@@ -162,6 +199,41 @@ fn grouped(weights:&[&[u8]],act:&[u8],simd:bool)->Vec<f32> {
     sums[..rows].iter().copied().map(finish).collect()
 }
 
+// Fused AVX2 experiment maintains exactly the eight ggml integer lanes and
+// f32 reductions; the existing modes remain independent controls.
+fn fused_rows(weights:&[&[u8]],act:&[u8])->Vec<f32> {
+    let rows=weights.len();
+    assert!((1..=TILE).contains(&rows));
+    assert_eq!(act.len()%BLOCK_A,0);
+    let blocks=act.len()/BLOCK_A;
+    for w in weights {assert_eq!(w.len(),blocks*BLOCK_W);}
+    if !avx2_available() {return weights.iter().map(|w|reference(w,act)).collect();}
+    let mut sums=[[0.0f32;LANES];TILE];
+    for b in 0..blocks {
+        let input=&act[b*BLOCK_A..(b+1)*BLOCK_A];
+        for row in 0..rows {
+            let w=&weights[row][b*BLOCK_W..(b+1)*BLOCK_W];
+            #[cfg(target_arch="x86_64")]
+            let ints=unsafe {x86::fused_block(w,input)};
+            #[cfg(not(target_arch="x86_64"))]
+            let ints={
+                let mut lanes=[0i32;LANES];
+                for g in 0..16 {
+                    let sc=scale(w,g);
+                    for l in 0..LANES {
+                        let x=g*16+l;
+                        lanes[l]+=sc*(coeff(w,x)*(input[4+x] as i8 as i32)
+                                     +coeff(w,x+8)*(input[4+x+8] as i8 as i32));
+                    }
+                }
+                lanes
+            };
+            let d=global_scale(w,input);
+            for lane in 0..LANES {sums[row][lane]+=d*(ints[lane] as f32);}
+        }
+    }
+    sums[..rows].iter().copied().map(finish).collect()
+}
 /// Native ggml vec_dot ABI. bx/by are byte strides; bs is an f32-element
 /// stride (matching ggml's multi-row kernel convention). Upstream tensors
 /// determine buffer bounds; do not expose this entry to untrusted callers.
@@ -194,6 +266,7 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
             Mode::Simd => rows.iter().map(|r|grouped(&[*r],act,true)[0]).collect(),
             Mode::Tiled => grouped(&rows,act,false),
             Mode::Hybrid => grouped(&rows,act,true),
+            Mode::Fused => fused_rows(&rows,act),
         };
         for (row,value) in values.iter().enumerate() {
             *s.add(col*bs+row)=*value;
@@ -228,6 +301,18 @@ mod tests {
                 for (i,(x,y)) in actual.iter().zip(refs.iter()).enumerate() {
                     assert_eq!(x.to_bits(),y.to_bits(),"mode={mode} blocks={blocks} row={i}");
                 }
+            }
+        }
+    }
+    #[test] fn fused_avx2_superblock_exact_eight_lane_oracle() {
+        for blocks in [1,2,3,7,31] {
+            let ws=(0..4).map(|r|wire(r+11,blocks)).collect::<Vec<_>>();
+            let act=input(17,blocks);
+            let slices=ws.iter().map(|w|w.as_slice()).collect::<Vec<_>>();
+            let actual=fused_rows(&slices,&act);
+            for (row,w) in ws.iter().enumerate() {
+                let expected=reference(w,&act);
+                assert_eq!(actual[row].to_bits(),expected.to_bits(),"row={row} blocks={blocks}");
             }
         }
     }
