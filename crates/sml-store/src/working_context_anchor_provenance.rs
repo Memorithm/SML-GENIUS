@@ -53,6 +53,20 @@
 //! - The derived digest-domain tag is domain separation, not proof
 //!   that the digest is authentic. SWE1 is unkeyed SHA-256.
 //!
+//! # Policy version gate (G14)
+//!
+//! [`check_policy_version`] and
+//! [`restore_into_anchored_with_versioned_provenance`] let a caller pass
+//! the policy version it *declares* (for example one stored next to a
+//! snapshot or anchor record). This build supports exactly
+//! [`ANCHOR_PROVENANCE_POLICY_VERSION`]. There is **no policy
+//! migration**: a lower declared version is rejected as
+//! [`PolicyVersionError::Downgrade`], a higher or otherwise unknown one as
+//! [`PolicyVersionError::Unknown`]. The version is checked **before** the
+//! snapshot bytes are parsed, and rejection leaves the target unchanged.
+//! The declared version is a caller assertion, not an authenticated
+//! value. The unversioned functions above are unchanged.
+//!
 //! Vector table version: [`ANCHOR_PROVENANCE_POLICY_VERSION`].
 //! `NOT_MEASURED`. Attestation, authentication, hardware storage and
 //! E2E remain **NOT QUALIFIED**.
@@ -280,4 +294,75 @@ pub fn restore_into_anchored_with_provenance(
         admit_with_provenance(policy, anchor, &cand, provenance, presented, Some(&derived))?;
     *target = ctx;
     Ok((adm, prov))
+}
+
+/// Explicit rejection of a declared policy version this build does not
+/// implement. No migration path exists (G14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyVersionError {
+    /// Declared version is below [`ANCHOR_PROVENANCE_POLICY_VERSION`].
+    Downgrade { declared: u16, supported: u16 },
+    /// Declared version is above [`ANCHOR_PROVENANCE_POLICY_VERSION`].
+    Unknown { declared: u16, supported: u16 },
+}
+
+impl fmt::Display for PolicyVersionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for PolicyVersionError {}
+
+/// Versioned G12 + G10 restore failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VersionedRestoreError {
+    /// Declared policy version rejected before the bytes were parsed.
+    PolicyVersion(PolicyVersionError),
+    /// Unversioned G12/G10 restore failure.
+    Restore(ProvenanceRestoreError),
+}
+
+impl fmt::Display for VersionedRestoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for VersionedRestoreError {}
+
+/// Accept only [`ANCHOR_PROVENANCE_POLICY_VERSION`]; reject everything
+/// else explicitly. Never migrates.
+pub fn check_policy_version(declared: u16) -> Result<(), PolicyVersionError> {
+    let supported = ANCHOR_PROVENANCE_POLICY_VERSION;
+    match declared.cmp(&supported) {
+        core::cmp::Ordering::Equal => Ok(()),
+        core::cmp::Ordering::Less => Err(PolicyVersionError::Downgrade {
+            declared,
+            supported,
+        }),
+        core::cmp::Ordering::Greater => Err(PolicyVersionError::Unknown {
+            declared,
+            supported,
+        }),
+    }
+}
+
+/// [`check_policy_version`] first (before parsing `bytes`), then
+/// [`restore_into_anchored_with_provenance`].
+///
+/// Replaces `target` only after every step succeeds; any rejection leaves
+/// `target` unchanged.
+pub fn restore_into_anchored_with_versioned_provenance(
+    target: &mut WorkingContext,
+    bytes: &[u8],
+    declared_policy_version: u16,
+    policy: AnchorPolicy,
+    anchor: &AnchorState,
+    provenance: ProvenancePolicy,
+    presented: Option<&AnchorIdentity>,
+) -> Result<(Admission, ProvenanceAdmission), VersionedRestoreError> {
+    check_policy_version(declared_policy_version).map_err(VersionedRestoreError::PolicyVersion)?;
+    restore_into_anchored_with_provenance(target, bytes, policy, anchor, provenance, presented)
+        .map_err(VersionedRestoreError::Restore)
 }
