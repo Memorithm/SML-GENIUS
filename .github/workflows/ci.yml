@@ -49,6 +49,14 @@ jobs:
           rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
           "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
           rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
+      - name: BPB3-X reversible Elastic 64/128/256 layout oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3x.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/bpb3x-tests"
+          "$RUNNER_TEMP/bpb3x-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/libbpb3x.rlib"
 
   rust:
     needs: fmt
