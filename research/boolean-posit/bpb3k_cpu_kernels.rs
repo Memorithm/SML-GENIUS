@@ -45,16 +45,22 @@ fn scale(block: &[u8], g: usize) -> i32 {
     i32::from(low|(high<<4))-32
 }
 fn fp16(v: u16) -> f32 {
-    let sign=if v&0x8000!=0 {-1.0} else {1.0};
-    let frac=(v&1023) as f32;
-    let exp=(v>>10)&31;
-    match exp {
-        0 => sign*frac*2.0f32.powi(-24),
-        31 if frac==0.0 => sign*f32::INFINITY,
-        31 => f32::NAN,
-        _ => sign*(1.0+frac/1024.0)*2.0f32.powi(i32::from(exp)-15),
+    // Exact IEEE 754 FP16-to-FP32 widening for normals, zero and infinity:
+    // avoid per-superblock powi/libm calls in the token-generation hot path.
+    let sign=((v as u32)&0x8000)<<16;
+    let exponent=((v>>10)&31) as u32;
+    let fraction=(v as u32)&1023;
+    if exponent==0 {
+        if fraction==0 {return f32::from_bits(sign);}
+        let magnitude=(fraction as f32)*(1.0f32/16_777_216.0f32);
+        return if sign!=0 {-magnitude} else {magnitude};
     }
+    if exponent==31 {
+        return f32::from_bits(sign|0x7f80_0000|(fraction<<13));
+    }
+    f32::from_bits(sign|((exponent+112)<<23)|(fraction<<13))
 }
+
 fn global_scale(block: &[u8], act: &[u8]) -> f32 {
     fp16(u16::from_le_bytes([block[108],block[109]]))
         * f32::from_le_bytes(act[..4].try_into().unwrap())
@@ -286,6 +292,20 @@ mod tests {
         for col in 0..4 { for row in 4..16 { assert!(got[col*16+row].is_nan()); } }
         assert!(output[0].is_finite());
         drop(old);
+    }
+    #[test] fn fp16_exact_widening_exhaustive_all_finite_values() {
+        for bits in 0u16..=u16::MAX {
+            let exponent=(bits>>10)&31;
+            if exponent==31 {continue;}
+            let sign=if bits&0x8000!=0 {-1.0f32} else {1.0f32};
+            let mantissa=(bits&1023) as f32;
+            let expected=if exponent==0 {
+                sign*mantissa*2.0f32.powi(-24)
+            } else {
+                sign*(1.0+mantissa/1024.0)*2.0f32.powi(i32::from(exponent)-15)
+            };
+            assert_eq!(fp16(bits).to_bits(),expected.to_bits(),"fp16={bits:04x}");
+        }
     }
     #[test] fn coefficient_decode_signed_range() {
         let w=wire(5,1);
