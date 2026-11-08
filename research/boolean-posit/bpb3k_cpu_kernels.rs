@@ -50,7 +50,7 @@ fn fp16(v: u16) -> f32 {
     let exp=(v>>10)&31;
     match exp {
         0 => sign*frac*2.0f32.powi(-24),
-        31 if frac==0 => sign*f32::INFINITY,
+        31 if frac==0.0 => sign*f32::INFINITY,
         31 => f32::NAN,
         _ => sign*(1.0+frac/1024.0)*2.0f32.powi(i32::from(exp)-15),
     }
@@ -167,25 +167,32 @@ fn grouped(weights:&[&[u8]],act:&[u8],simd:bool)->Vec<f32> {
 #[no_mangle]
 pub unsafe extern "C" fn mem_bpb3k_dot_q8(
     n:i32, s:*mut f32, bs:usize, vx:*const c_void, bx:usize,
-    vy:*const c_void, _by:usize, nrc:i32,
+    vy:*const c_void, by:usize, nrc:i32,
 ) {
     assert!(n>0 && n%256==0 && (1..=4).contains(&nrc));
     let bytes=n as usize/256;
-    let act=slice::from_raw_parts(vy as *const u8,bytes*BLOCK_A);
-    let rows:Vec<_>=(0..nrc as usize).map(|i| {
+    // ggml nrc is a square microtile: 4 adjacent weight rows and
+    // 4 adjacent activation columns; s[activation * bs + weight].
+    let nrc = nrc as usize;
+    let rows:Vec<_>=(0..nrc).map(|i| {
         slice::from_raw_parts((vx as *const u8).add(i*bx),bytes*BLOCK_W)
     }).collect();
     let m=mode();
     static TRACE: OnceLock<()> = OnceLock::new();
     TRACE.get_or_init(|| eprintln!("BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc}"));
 
-    let result=match m {
-        Mode::Scalar => rows.iter().map(|r|reference(r,act)).collect::<Vec<_>>(),
-        Mode::Simd => rows.iter().map(|r|grouped(&[*r],act,true)[0]).collect(),
-        Mode::Tiled => grouped(&rows,act,false),
-        Mode::Hybrid => grouped(&rows,act,true),
-    };
-    for (i,x) in result.iter().enumerate() { *s.add(i*bs)=*x; }
+    for col in 0..nrc {
+        let act=slice::from_raw_parts((vy as *const u8).add(col*by),bytes*BLOCK_A);
+        let values:Vec<f32>=match m {
+            Mode::Scalar => rows.iter().map(|r|reference(r,act)).collect(),
+            Mode::Simd => rows.iter().map(|r|grouped(&[*r],act,true)[0]).collect(),
+            Mode::Tiled => grouped(&rows,act,false),
+            Mode::Hybrid => grouped(&rows,act,true),
+        };
+        for (row,value) in values.iter().enumerate() {
+            *s.add(col*bs+row)=*value;
+        }
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -217,6 +224,43 @@ mod tests {
                 }
             }
         }
+    }
+    #[test] fn ggml_square_nrc4_abi_matches_16_reference_outputs() {
+        let blocks=3usize;
+        let ws=(0..4).map(|row|wire(row,blocks)).collect::<Vec<_>>();
+        let acts=(0..4).map(|col|input(col,blocks)).collect::<Vec<_>>();
+        let mut output=[f32::NAN;64];
+        let old=std::env::var_os("MEM_BPB3K_KERNEL");
+        // Standalone tests process has no env override by default.
+        unsafe {
+            mem_bpb3k_dot_q8(
+                (blocks*256) as i32,output.as_mut_ptr(),16,
+                ws[0].as_ptr() as *const c_void,
+                0,acts[0].as_ptr() as *const c_void,0,1,
+            );
+        }
+        // Actual four-stride ABI: one contiguous buffer per tensor family.
+        let mut wb=Vec::new();
+        for w in &ws { wb.extend_from_slice(w); }
+        let mut ab=Vec::new();
+        for a in &acts { ab.extend_from_slice(a); }
+        let mut got=[f32::NAN;64];
+        unsafe {
+            mem_bpb3k_dot_q8(
+                (blocks*256) as i32,got.as_mut_ptr(),16,
+                wb.as_ptr() as *const c_void, blocks*BLOCK_W,
+                ab.as_ptr() as *const c_void,blocks*BLOCK_A,4,
+            );
+        }
+        for col in 0..4 {
+            for row in 0..4 {
+                let expected=reference(&ws[row],&acts[col]);
+                assert_eq!(got[col*16+row].to_bits(),expected.to_bits(),"col={col} row={row}");
+            }
+        }
+        for col in 0..4 { for row in 4..16 { assert!(got[col*16+row].is_nan()); } }
+        assert!(output[0].is_finite());
+        drop(old);
     }
     #[test] fn coefficient_decode_signed_range() {
         let w=wire(5,1);
