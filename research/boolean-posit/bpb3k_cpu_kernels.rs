@@ -132,10 +132,10 @@ fn grouped(weights:&[&[u8]],act:&[u8],simd:bool)->Vec<f32> {
     let blocks=act.len()/BLOCK_A;
     assert_eq!(act.len()%BLOCK_A,0);
     for w in weights { assert_eq!(w.len(),blocks*BLOCK_W); }
-    let mut sums=vec![[0.0f32;LANES];rows];
+    let mut sums=[[0.0f32;LANES];TILE];
     for b in 0..blocks {
         let a=&act[b*BLOCK_A..(b+1)*BLOCK_A];
-        let mut acc=vec![[0i32;LANES];rows];
+        let mut acc=[[0i32;LANES];TILE];
         for g in 0..16 {
             for half in 0..2 {
                 let start=16*g+8*half;
@@ -153,7 +153,7 @@ fn grouped(weights:&[&[u8]],act:&[u8],simd:bool)->Vec<f32> {
             for lane in 0..LANES { sums[row][lane]+=d*(acc[row][lane] as f32); }
         }
     }
-    sums.into_iter().map(finish).collect()
+    sums[..rows].iter().copied().map(finish).collect()
 }
 
 /// Native ggml vec_dot ABI. bx/by are byte strides; bs is an f32-element
