@@ -2,24 +2,24 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-07T23:35:00Z",
-  "last_report_utc": "2026-11-07T23:35:00Z",
-  "last_successful_code_commit_utc": "2026-11-07T23:32:56Z",
-  "run_id": "20261107T233500Z",
+  "timestamp_utc": "2026-11-08T00:45:00Z",
+  "last_report_utc": "2026-11-08T00:45:00Z",
+  "last_successful_code_commit_utc": "2026-11-08T00:39:54Z",
+  "run_id": "20261108T004500Z",
   "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m Grok Bot routine run); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
-  "milestone": "G7 CONTEXT-2 SWE1 integrity envelope",
-  "task": "G7 SWE1 integrity envelope PR #863 merged 941e8aeb (head f11e3026, code commit 803c2712): SWE1 v1 envelope around SWC2 v1 (magic, version, alg=unkeyed SHA-256, payload len, digest); fail-closed decode order; atomic restore_into_sealed without admission replay; 10 tests with independently computed pinned vectors. Corruption detection only, NOT authentication. Assigned by ChatGPT on RemoteOps #1208.",
-  "base_sha": "d7fe6978fbc083d060de5d474418dbaf7e859129",
-  "head_sha": "f11e30263f05287bbe9e60b75c69fa65c99494d8",
-  "head_sha_note": "head_sha = exact PR head f11e3026 (empty CI retrigger commit on top of main-merge ec8ffd98; code/test commit 803c2712); squash 941e8aeb8b1c5f9be1d7321d1b0e91550723904b onto d7fe6978 nets 3 files +552",
-  "branch": "grok/g7-context2-integrity-envelope-20261107",
+  "milestone": "G8 CONTEXT-2 SWE1 envelope independent negative/compatibility oracle",
+  "task": "G8 PR #867 merged f8a1b391 (head 1f31e7a8): test-only, 11 tests over four frozen G5 fixtures; test-local FIPS 180-4 SHA-256 plus spec sealer/parser; vectors pinned with Python hashlib/struct; canonical re-encoding, deterministic restart without replay, all 256 values per header byte agree with oracle, version/alg/reserved rejection with recomputed digest, u32 length overflow/truncation/trailing, digest mismatch, caller caps, no live mutation on failure, resealed attacker payload shown NOT authenticated. Assigned by ChatGPT on RemoteOps #1208 (6714749630). G7 report #866 merged ab6cab18.",
+  "base_sha": "ab6cab18735f267e4e969224ac8dcdaf1a1b8f3b",
+  "head_sha": "1f31e7a8a55532c11be8292ca04df1ee97f3ac1a",
+  "head_sha_note": "head_sha = exact PR head (code/test commit = head); squash f8a1b391f690e9ce7394d58fdf4c1b29050b26b9 onto ab6cab18 adds 1 test file",
+  "branch": "grok/g8-swe1-envelope-oracle-20261108",
   "tests": {
     "code_changed": true,
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2409 passed, 0 failed, 3 ignored (pre-push hook)",
-    "new_envelope_suite": "crates/sml-store/tests/working_context_envelope.rs 10 passed",
-    "exact_head_ci": "SUCCESS on f11e3026: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
+    "cargo_test_locked_workspace": "2420 passed, 0 failed, 3 ignored (local, head 1f31e7a8; pre-push hook passed)",
+    "new_envelope_oracle_suite": "crates/sml-store/tests/working_context_envelope_oracle.rs 11 passed",
+    "exact_head_ci": "SUCCESS on 1f31e7a8: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
   },
   "metrics": "NOT_MEASURED: integrity/format qualification only; no model-quality, context-span, latency or throughput claim.",
   "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
@@ -29,5 +29,5 @@
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/863"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/867"
 }
