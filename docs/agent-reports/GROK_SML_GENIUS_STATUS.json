@@ -2,24 +2,24 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-08T12:10:00Z",
-  "last_report_utc": "2026-11-08T12:10:00Z",
-  "last_successful_code_commit_utc": "2026-11-08T11:07:25Z",
-  "run_id": "20261108T121000Z",
-  "runner": "grok-box (authoring via Grok Bot G14 executor/watchdog); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only - NOT RemoteOps->Grok CONNECTED proof",
-  "milestone": "G14 CONTEXT-2 versioned negative-case corpus for anchor admission",
-  "task": "G14 PR #881 merged 02887e22 (head e450d089c604d0600c8f56308b0ef0e2a6d8f8b1): corpus crates/sml-store/tests/working_context_anchor_negative_corpus.rs (G14_CORPUS_VERSION=1, 26 frozen rows, five families: cross-stream swap, policy downgrade/unknown version, identical digest different authority, stale generation, restoration interruption; 7 tests) checked by an independent pure oracle against production; every rejection leaves the target byte-for-byte unchanged. Additive production version gate check_policy_version / restore_into_anchored_with_versioned_provenance (only policy v1 accepted; no migration). Authority tag is an equality binding, not a signature. Mock anchors only; attestation/authentication/hardware/E2E NOT QUALIFIED. Assigned by ChatGPT on RemoteOps #1208 (6719520239, 6720058980). G13 report #880 merged.",
-  "base_sha": "fc73f4005dd2477b43969702200c8da3bdb14e81",
-  "head_sha": "e450d089c604d0600c8f56308b0ef0e2a6d8f8b1",
-  "head_sha_note": "head_sha = exact PR head (merge of origin/main into branch; code/test commit 45293d7c1e272ba9bc3aec75456bed0597961475); squash 02887e229ec66fb1db025840b78cd5bb15b36ac5 onto fc73f4005dd2477b43969702200c8da3bdb14e81 adds the negative corpus test file and the additive policy-version gate in working_context_anchor_provenance.rs",
-  "branch": "grok/g14-anchor-negative-corpus-20261108",
+  "timestamp_utc": "2026-11-08T13:53:00Z",
+  "last_report_utc": "2026-11-08T13:53:00Z",
+  "last_successful_code_commit_utc": "2026-11-08T13:52:15Z",
+  "run_id": "20261108T135300Z",
+  "runner": "grok-box (authoring via Grok Bot G15 executor/watchdog); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G15 CONTEXT-2 error-precedence differential tests for anchor admission",
+  "task": "G15 PR #883 merged 30568a3f (head b0f1292a737648cfdc5ebccfae8f3992ed68c23a): tests-only corpus crates/sml-store/tests/working_context_anchor_error_precedence.rs (G15_CORPUS_VERSION=1, 17 frozen rows, 7 differential triples, five families: version+corrupt SWE1, absent anchor+wrong authority, matching digest+different stream, rollback+malformed seal, version+provenance mismatch; 4 tests) checked by an independent pure oracle against production; every rejection leaves the target byte-for-byte unchanged. No production change (no precedence bug exposed; no migration/signing/hardware). Authority tag is an equality binding, not a signature. Mock anchors only; attestation/authentication/hardware/E2E NOT QUALIFIED. Assigned by ChatGPT on RemoteOps #1208 (6721176289, ACK 6721562043). G14 report #882 merged.",
+  "base_sha": "8e4a76cb9c72a206a6db758141a03f1a2e2e148a",
+  "head_sha": "b0f1292a737648cfdc5ebccfae8f3992ed68c23a",
+  "head_sha_note": "head_sha = exact code PR #883 head b0f1292a737648cfdc5ebccfae8f3992ed68c23a; squash 30568a3fc12969e1d19dc5e819096f4287d13ce7 onto 8e4a76cb9c72a206a6db758141a03f1a2e2e148a adds the tests-only error-precedence differential suite",
+  "branch": "grok/g15-error-precedence-20261108",
   "tests": {
     "code_changed": true,
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2464 passed, 0 failed, 3 ignored (local, as recorded in PR #881 body; pre-push hook passed)",
-    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_negative_corpus.rs 7 tests",
-    "exact_head_ci": "SUCCESS on e450d089c604d0600c8f56308b0ef0e2a6d8f8b1: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
+    "cargo_test_locked_workspace": "2468 passed, 0 failed, 3 ignored (local, as recorded in PR #883 body; pre-push hook passed)",
+    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_error_precedence.rs 4 tests",
+    "exact_head_ci": "SUCCESS on b0f1292a737648cfdc5ebccfae8f3992ed68c23a: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
   },
   "metrics": "NOT_MEASURED: integrity/format qualification only; no model-quality, context-span, latency or throughput claim.",
   "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
@@ -29,5 +29,5 @@
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/881"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/883"
 }
