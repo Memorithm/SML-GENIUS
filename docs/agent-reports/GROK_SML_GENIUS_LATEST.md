@@ -1,26 +1,27 @@
-# Grok SML-GENIUS report: 2026-11-08T12:10:00Z
+# Grok SML-GENIUS report: 2026-11-08T13:53:00Z
 
-- PR: https://github.com/Memorithm/SML-GENIUS/pull/881 (MERGED, squash `02887e229ec66fb1db025840b78cd5bb15b36ac5`, 2026-11-08T11:07:25Z)
-- Status: **G14 MERGED**. CONTEXT-2 versioned negative-case corpus for anchor admission under snapshot replacement and declared policy version. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
-- Base: main `fc73f4005dd2477b43969702200c8da3bdb14e81`. Exact PR head: `e450d089c604d0600c8f56308b0ef0e2a6d8f8b1` (merge of origin/main into the branch; code/test commit `45293d7c1e272ba9bc3aec75456bed0597961475`).
-- Branch: `grok/g14-anchor-negative-corpus-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comments 6719520239 and 6720058980). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 not touched. PR #879 (bpb3x research, another agent) not touched.
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/883 (MERGED, squash `30568a3fc12969e1d19dc5e819096f4287d13ce7`, 2026-11-08T13:52:15Z)
+- Status: **G15 MERGED**. CONTEXT-2 error-precedence differential tests for the G14 versioned anchor admission path under contradictory rejection causes. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
+- Base: main `8e4a76cb9c72a206a6db758141a03f1a2e2e148a`. Exact PR head: `b0f1292a737648cfdc5ebccfae8f3992ed68c23a`.
+- Branch: `grok/g15-error-precedence-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comment 6721176289; ACK 6721562043). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 not touched.
 - Wake source: Grok Bot watchdog routine/executor (in-agent). It does **not** show the RemoteOps→Grok loop is CONNECTED.
 
-## G13 reconciliation
-G13 code PR #877 is **MERGED** (squash `603152c8`, exact head `46d2574d5f15ec66435a6596ba508bdcdaec091a`). G13 report PR #880 is **MERGED** (2026-11-08T09:29:52Z).
+## G14 reconciliation
+G14 code PR #881 is **MERGED** (squash `02887e22`, exact head `e450d089c604d0600c8f56308b0ef0e2a6d8f8b1`). G14 report PR #882 is **MERGED** (squash `8e4a76cb`, 2026-11-08T12:35:20Z).
 
-## What changed in G14
-- Corpus: `crates/sml-store/tests/working_context_anchor_negative_corpus.rs`, `G14_CORPUS_VERSION = 1`, 26 frozen rows in five families: cross-stream swap; policy downgrade / unknown declared version (`0`, `2`, `u16::MAX`, including the version gate masking corrupt and cross-stream bytes); identical digest with different declared authority (31-byte prefix near-collision, all-zero, expected authority not held, absent claim); stale generation (rollback, not-yet-advanced anchor, same-generation fork, absent/unverifiable anchor); restoration interruption (empty, header-only, mid-payload, missing last trailer byte, trailer bit flip).
-- Each row runs through an independent pure oracle (own SWE1 layout and unkeyed-digest check, own G12/G10 decision order, own version gate; shares only the SHA-256 primitive) and through production `restore_into_anchored_with_versioned_provenance`. Outcomes must be identical, and every rejection leaves the target byte-for-byte unchanged (canonical SWC2 encoding, SWE1 seal, all five `WorkingContextStats` counters) with the anchor not advanced.
-- Frozen vectors: SHA-256 of the 5 sealed fixtures and of the canonical corpus rendering are pinned and re-checked for determinism.
-- Additional tests: every proper prefix and every single-bit flip of the anchored envelope (+ trailing byte), full `u16` version-gate sweep, a live replacement sequence, positive controls, and a demonstration that a matching authority tag is an equality binding, not a cryptographic origin.
-- Production change (additive, no migration) in `crates/sml-store/src/working_context_anchor_provenance.rs`: `check_policy_version`, `restore_into_anchored_with_versioned_provenance`, `PolicyVersionError { Downgrade, Unknown }`, `VersionedRestoreError`. Only `ANCHOR_PROVENANCE_POLICY_VERSION = 1` is accepted; the version is checked before bytes are parsed. Existing unversioned G10/G12 APIs are unchanged.
+## What changed in G15
+- Tests-only suite: `crates/sml-store/tests/working_context_anchor_error_precedence.rs`, `G15_CORPUS_VERSION = 1`, 17 frozen rows in five families and 7 differential triples (isolate A, isolate B, combined A+B). Combined cases must report the higher-precedence typed error, never a third error and never an accept.
+- Families: unsupported policy version + corrupt SWE1 (version gate before parse); absent anchor + wrong authority (G12 before G10); matching digest + different stream (G10 stream before digest; matching digest does not accept or conflict); generation rollback + malformed seal (envelope before G10 rollback); version and provenance mismatch (version gate masks wrong authority and derived-stream mismatch).
+- Each row runs through an independent pure oracle (own SWE1 layout and unkeyed-digest check, own G12/G10 decision order, own version gate; shares only the SHA-256 primitive; takes stream/generation from frozen facts instead of decoding SWC2) and through production `restore_into_anchored_with_versioned_provenance`. Outcomes must be identical, and every rejection leaves the target byte-for-byte unchanged (canonical SWC2 encoding, SWE1 seal, all five `WorkingContextStats` counters) with the anchor not advanced.
+- Frozen vectors: SHA-256 of the 3 sealed fixtures (`abbc9fc9…`, `98f16d6e…`, `8bc97e23…`) and of the canonical corpus rendering (`4dbedab565d4012dfb0845596496b8977e73b8d86bd8dd8882283d1ab62787ec`) are pinned and re-checked for determinism.
+- Positive control: matching digest + same stream is accepted and replaces the target exactly. 4 tests.
+- Production change: none. The suite did not expose a precedence bug; production already implements the published order. No policy migration, signing or hardware claim. The G14 corpus is untouched.
 
 ## Evidence
-- Pre-push hook, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed (as recorded in the PR #881 body).
-- `cargo test --locked --workspace` (local, per PR #881 body): **2464 passed, 0 failed, 3 ignored**.
-- New suite: 7 tests in `working_context_anchor_negative_corpus`.
-- Exact-head CI on `e450d089c604d0600c8f56308b0ef0e2a6d8f8b1`, all SUCCESS: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
+- Pre-push hook, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed (as recorded in the PR #883 body).
+- `cargo test --locked --workspace` (local, per PR #883 body): **2468 passed, 0 failed, 3 ignored**.
+- New suite: 4 tests in `working_context_anchor_error_precedence`.
+- Exact-head CI on `b0f1292a737648cfdc5ebccfae8f3992ed68c23a`, all SUCCESS: fmt, rust (job 128745094071, 2026-11-08T13:51:43Z), g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
 - RemoteOps `ops/grok/grok_report_gate.py` validates the status/report schema only. The Grok invocation is NOT independently attested.
 
 ## Limitations
@@ -37,4 +38,4 @@ G13 code PR #877 is **MERGED** (squash `603152c8`, exact head `46d2574d5f15ec664
 None. Status stays **NOT_MEASURED**.
 
 ## Out of scope
-LONGCTX-B1 campaign. Claude ternary/hybrid. NVIDIA stack. CCOS recall is not a 1M attention window. RemoteOps M2 ACK journal work. PR #879.
+LONGCTX-B1 campaign. Claude ternary/hybrid. NVIDIA stack. CCOS recall is not a 1M attention window. RemoteOps M2 ACK journal work.
