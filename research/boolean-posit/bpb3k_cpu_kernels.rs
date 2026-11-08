@@ -176,6 +176,9 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
         slice::from_raw_parts((vx as *const u8).add(i*bx),bytes*BLOCK_W)
     }).collect();
     let m=mode();
+    static TRACE: OnceLock<()> = OnceLock::new();
+    TRACE.get_or_init(|| eprintln!("BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc}"));
+
     let result=match m {
         Mode::Scalar => rows.iter().map(|r|reference(r,act)).collect::<Vec<_>>(),
         Mode::Simd => rows.iter().map(|r|grouped(&[*r],act,true)[0]).collect(),
