@@ -9,7 +9,7 @@ mod bpb3k;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const GGML_SHA: &str = "f7591a6a01f9273de03331732bdc0b39721168be";
 const Q3_K: u32 = 11;
@@ -281,7 +281,7 @@ fn main() { if let Err(e) = run() { eprintln!("{e}"); std::process::exit(1); } }
 mod tests {
     use super::*;
     #[test] fn refuses_unpinned_source() {
-        let root = PathBuf::from("/nonexistent-memorithm-test");
+        let root = std::path::PathBuf::from("/nonexistent-memorithm-test");
         assert!(patch(&root, "wrongsha").is_err());
     }
     #[test] fn c_bridge_exposes_both_correct_hot_path_symbols() {
