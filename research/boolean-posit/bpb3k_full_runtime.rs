@@ -292,24 +292,34 @@ static void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
     (void) bs; (void) bx; (void) by;
     const block_q3_K *x = (const block_q3_K *)vx;
     const block_q8_K *y = (const block_q8_K *)vy;
-    float total = 0.0f;
+    // Preserve the upstream ggml Q3_K generic reduction structure:
+    // eight i32 accumulator lanes per block; then eight f32 running sums.
+    float sums[8] = {0};
     for (int b = 0; b < n / 256; ++b) {
         const uint8_t *v = (const uint8_t *) &x[b];
         uint16_t bits;
         memcpy(&bits, v + 108, sizeof(bits));
-        int32_t subtotal = 0;
+        int32_t aux32[8] = {0};
         for (int sg = 0; sg < 16; ++sg) {
-            int32_t dot = 0;
-            for (int lane = 0; lane < 16; ++lane) {
-                int i = 16 * sg + lane;
-                dot += mem_bpb3k_coeff(v, i) * (int32_t)y[b].qs[i];
+            const int scale = mem_bpb3k_subscale(v + 96, sg);
+            for (int lane = 0; lane < 8; ++lane) {
+                const int i0 = 16 * sg + lane;
+                const int i1 = i0 + 8;
+                const int dot = mem_bpb3k_coeff(v, i0) * (int)y[b].qs[i0]
+                              + mem_bpb3k_coeff(v, i1) * (int)y[b].qs[i1];
+                aux32[lane] += scale * dot;
             }
-            subtotal += mem_bpb3k_subscale(v + 96, sg) * dot;
         }
-        const float d = ggml_fp16_to_fp32(bits);
-        total += (d * y[b].d) * (float) subtotal;
+        const float d = ggml_fp16_to_fp32(bits) * y[b].d;
+        for (int lane = 0; lane < 8; ++lane) {
+            sums[lane] += d * (float) aux32[lane];
+        }
     }
-    *s = total;
+    float sumf = 0.0f;
+    for (int lane = 0; lane < 8; ++lane) {
+        sumf += sums[lane];
+    }
+    *s = sumf;
 }
 #endif
 #endif
@@ -410,7 +420,8 @@ mod tests {
         assert!(C_BRIDGE.contains("mem_bpb3k_dot_q8"));
         assert!(C_BRIDGE.contains("mem_bpb3k_dequant"));
         assert!(C_BRIDGE.contains("y[b].qs[i]"));
-        assert!(C_BRIDGE.contains("subtotal"));
+        assert!(C_BRIDGE.contains("aux32[lane]"));
+        assert!(C_BRIDGE.contains("sumf += sums[lane]"));
         assert!(C_BRIDGE.contains("BPB3K_DIRECT_DOT_EXECUTED"));
     }
 }
