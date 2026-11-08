@@ -94,6 +94,28 @@ prefetchers and line-crossings can fetch bytes outside the selected
 coefficient span. The 1-byte directory is counted on every storage
 layout; a true random-access tensor may need additional offsets.
 
+## Independent direct selective BPB3-K control
+
+The research comparator `bpb3k_partial.rs` computes 64, 128 or 256
+consecutive coefficients **directly from the original BPB3-K planes**.
+It reads only the selected groups' plane words, the subgroup-scale
+bytes actually addressed and the FP16 global bits. It does not force
+a full 110-byte decode or an FP32 coefficient array.
+
+The matched tests compare each BPB3-X selected segment to (1) this
+direct selective BPB3-K kernel and (2) an independent original Q3_K
+dense numerical oracle at exactly representable global scale, then
+confirm that segment results sum to the qualified full BPB3-K dot.
+
+**Critical correction:** the BPB3-K metadata is *not* inevitably
+fetched in full for partial reads. The minimal indexed subgroup scales
+may require fewer than all 12 scale bytes, depending on subgroup,
+packing and addressing. Thus naive totals such as BPB3-M 56B versus
+"BPB3-K must read 62B" are **upper-bound layout descriptions**, not
+proven per-query read budgets. Count actual accesses with pinned
+compiled code, cache-line/DRAM counters and NUMA evidence. Explicitly
+include BPB3-X's layout directory and per-query selection overhead.
+
 ## Measurements that could falsify the hypothesis
 
 - Full 256-coefficient dot: compare X layouts with K whole and
