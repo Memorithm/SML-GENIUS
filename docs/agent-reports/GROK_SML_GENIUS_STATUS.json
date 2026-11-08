@@ -2,24 +2,24 @@
   "schema_version": 1,
   "agent": "grok",
   "status": "NOT_CONNECTED",
-  "timestamp_utc": "2026-11-08T05:15:00Z",
-  "last_report_utc": "2026-11-08T05:15:00Z",
-  "last_successful_code_commit_utc": "2026-11-08T05:12:02Z",
-  "run_id": "20261108T051500Z",
-  "runner": "grok-box (authoring via sml-genius-dev-watchdog-30m Grok Bot routine run); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
-  "milestone": "G11 CONTEXT-2 adversarial differential oracle for G10 SWE1 anchor admission",
-  "task": "G11 PR #873 merged eabcf72a (head 86d6498211727edf575938b6b74150e11f10d56e): new test-only file crates/sml-store/tests/working_context_anchor_adversarial_oracle.rs (8 tests) with an independent pure oracle that does not call production admit/advance; frozen named+cartesian vectors over stream IDs 0/1/MAX and generations 0/u64::MAX; equal-generation digest conflicts; snapshot truncation; all crash boundaries; Unanchored accepts intact rollback; forged caller-supplied Verified anchors are not authenticated. Every rejected restore leaves state unchanged. No production logic change. Mock anchors only; attestation/provisioning/authentication/hardware storage NOT QUALIFIED. Assigned by ChatGPT on RemoteOps #1208 (6716426454, 6717000596). G10 report #872 merged 9361d618.",
-  "base_sha": "9361d61847df95cfcf364bf4c57017b0bbde2771",
-  "head_sha": "86d6498211727edf575938b6b74150e11f10d56e",
-  "head_sha_note": "head_sha = exact PR head (code/test commit = head); squash eabcf72a4f3e27e32eb3ed454ea6cd3291dfca15 onto 9361d61847df95cfcf364bf4c57017b0bbde2771 adds 1 test file",
-  "branch": "grok/g11-anchor-adversarial-oracle-20261108",
+  "timestamp_utc": "2026-11-08T07:50:00Z",
+  "last_report_utc": "2026-11-08T07:50:00Z",
+  "last_successful_code_commit_utc": "2026-11-08T07:46:37Z",
+  "run_id": "20261108T075000Z",
+  "runner": "grok-box (authoring via Grok Bot G12 executor); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot routine/executor only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G12 CONTEXT-2 optional opt-in anchor provenance/identity policy for G10 admission",
+  "task": "G12 PR #875 merged 6e13f82f (head 52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9): new module crates/sml-store/src/working_context_anchor_provenance.rs and tests/working_context_anchor_provenance.rs (7 tests) with an independent pure oracle that does not call production admit/advance; versioned frozen vectors (policy version 1) covering exact match, cross-stream, authority mismatch and SWE1/OTHR domain confusion; Unbound leaves G10 default unchanged; rejection does not mutate state. AuthorityId is an equality tag, not a signature. Mock anchors only; attestation/authentication/hardware/E2E NOT QUALIFIED. Assigned by ChatGPT on RemoteOps #1208 (6717508950, 6717944410). G11 report #874 merged efde7d8c.",
+  "base_sha": "efde7d8cf0c1a20695ef1fda303ed91d4c193724",
+  "head_sha": "52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9",
+  "head_sha_note": "head_sha = exact PR head (code/test commit = head); squash 6e13f82f41d633cbf1fed4874c96d181daf0508d onto efde7d8cf0c1a20695ef1fda303ed91d4c193724 adds the provenance module, tests, lib.rs export and a G10 module-doc pointer",
+  "branch": "grok/g12-anchor-provenance-policy-20261108",
   "tests": {
     "code_changed": true,
     "fmt": "pass",
     "clippy_workspace_all_targets_D_warnings": "pass",
-    "cargo_test_locked_workspace": "2442 passed, 0 failed, 3 ignored (local, on head 86d6498211727edf575938b6b74150e11f10d56e; pre-push hook passed on the same SHA)",
-    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_adversarial_oracle.rs 8 passed",
-    "exact_head_ci": "SUCCESS on 86d6498211727edf575938b6b74150e11f10d56e: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
+    "cargo_test_locked_workspace": "2449 passed, 0 failed, 3 ignored (local, on head 52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9; pre-push hook passed on the same SHA)",
+    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_provenance.rs 7 passed",
+    "exact_head_ci": "SUCCESS on 52f1708c0a5bb7ab8e06bfdf78d6a8f0a0b3ecd9: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature"
   },
   "metrics": "NOT_MEASURED: integrity/format qualification only; no model-quality, context-span, latency or throughput claim.",
   "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
@@ -29,5 +29,5 @@
     "Dell/Thor self-hosted runner registration",
     "LONGCTX-B1 filler/B-lex/B-attn user choices"
   ],
-  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/873"
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/875"
 }
