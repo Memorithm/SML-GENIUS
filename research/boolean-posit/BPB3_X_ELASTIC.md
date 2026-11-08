@@ -71,6 +71,29 @@ No live transition during inference, model format migration, or
 runtime promotion is authorized by this PR. Physical tests must be
 admitted through Memorithm/RemoteOps. No NVIDIA SDK dependency.
 
+## Selected-segment correctness (new in DIRECT-PARTIAL)
+
+The research kernel `dot_segment_bipolar` takes an explicit **segment
+ordinal** and four bipolar input masks and returns the exact integer
+dot for that segment, its start coefficient and 64/128/256 size, plus
+unchanged FP16 scale bits. The function validates the full directory,
+length and all segment FP16 metadata before doing arithmetic; it
+computes using **only the selected segment's coefficient planes and
+six-bit scales**, not a reconstructed 256-weight FP32 array.
+
+The test uses the *separate* BPB3-K decoder as an independent dense
+mathematical oracle for 32 source fixtures × 8 bipolar masks × six
+layouts, evaluating each segment separately, then checking that their
+integer dots sum to the existing whole-block BPB3-X dot. Rejects
+out-of-range segment indexes and corrupt global scales, including a
+corrupt **unselected** segment.
+
+This code does not prove fewer DRAM bytes were read: directory
+validation still examines all global FP16 metadata, and caches,
+prefetchers and line-crossings can fetch bytes outside the selected
+coefficient span. The 1-byte directory is counted on every storage
+layout; a true random-access tensor may need additional offsets.
+
 ## Measurements that could falsify the hypothesis
 
 - Full 256-coefficient dot: compare X layouts with K whole and
