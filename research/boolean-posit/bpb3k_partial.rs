@@ -197,7 +197,8 @@ mod tests {
 
     #[test]
     fn preserve_global_fp16_bits_without_floating_point_assumptions() {
-        for bits in [0, 0x8000, 1, 0x3c00, 0x7bff, 0x7c00, 0x7e00, 0xfc00] {
+        let scale_bits: [u16; 8] = [0, 0x8000, 1, 0x3c00, 0x7bff, 0x7c00, 0x7e00, 0xfc00];
+        for bits in scale_bits {
             let mut k = bpb3k::q3_to_bpb3k(&q3_fixture(11)).unwrap();
             k[108..110].copy_from_slice(&bits.to_le_bytes());
             for first in 0..4 {
