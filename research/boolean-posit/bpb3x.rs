@@ -98,8 +98,8 @@ fn original_scale(scales: &[u8], subgroup: usize) -> u8 {
 fn packed_scale(scales: &[u8], subgroup: usize) -> u8 {
     let position = subgroup * 6;
     let start = position / 8;
-    let word = u16::from(scales[start])
-        | (u16::from(scales.get(start + 1).copied().unwrap_or(0)) << 8);
+    let word =
+        u16::from(scales[start]) | (u16::from(scales.get(start + 1).copied().unwrap_or(0)) << 8);
     ((word >> (position % 8)) & 63) as u8
 }
 
@@ -319,15 +319,21 @@ mod tests {
                     3 => 0x5555_5555_5555_5555,
                     _ => {
                         let k = (i + j + pattern) % 64;
-                        if pattern % 2 == 0 { 1u64 << k } else { !(1u64 << k) }
+                        if pattern % 2 == 0 {
+                            1u64 << k
+                        } else {
+                            !(1u64 << k)
+                        }
                     }
                 });
                 let oracle = bpb3k_direct::dot_bpb3k_bipolar(&src, &mask).unwrap();
                 for layout in Layout::ALL {
                     let wire = encode(&src, layout).unwrap();
                     let got = dot_bipolar(&wire, &mask).unwrap();
-                    assert_eq!(got.weighted_integer, oracle.weighted_integer,
-                        "case={i} pattern={pattern} layout={layout:?}");
+                    assert_eq!(
+                        got.weighted_integer, oracle.weighted_integer,
+                        "case={i} pattern={pattern} layout={layout:?}"
+                    );
                     assert_eq!(got.global_scale_f16_bits, oracle.global_scale_f16_bits);
                 }
             }
@@ -338,7 +344,10 @@ mod tests {
     fn invalid_length_marker_and_mixed_global_scales_fail_closed() {
         assert_eq!(
             decode(&[]),
-            Err(Error::WrongLength { actual: 0, expected: 1 })
+            Err(Error::WrongLength {
+                actual: 0,
+                expected: 1
+            })
         );
         assert_eq!(decode(&[6]), Err(Error::InvalidLayout { code: 6 }));
         let source = fixture(7, 0x3c00);
