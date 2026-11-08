@@ -96,6 +96,11 @@ jobs:
             grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$kernel.txt" || {
               echo "STOP_BPB3K_MODEL_SEMANTIC_MISMATCH mode=$kernel"; exit 1;
             }
+            if [[ "$kernel" == simd || "$kernel" == hybrid ]]; then
+              grep -Fq 'avx2=true' "full-model-$kernel.txt" || {
+                echo "STOP_BPB3K_SIMD_NOT_ACTUALLY_QUALIFIED mode=$kernel"; exit 1;
+              }
+            fi
             echo "PASS_BPB3K_FULL_MODEL_MODE=$kernel prompt_canary=matched"
           done
       - name: Run exact-source stock llama.cpp control on the original unmodified GGUF
