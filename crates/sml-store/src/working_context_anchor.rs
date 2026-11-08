@@ -39,6 +39,11 @@
 //!   wire, restore **and** anchor admission all succeed; nothing is replayed.
 //!
 //! `NOT_MEASURED`.
+//!
+//! Optional opt-in identity binding (stream, authority, digest domain)
+//! lives in [`crate::working_context_anchor_provenance`] and does not
+//! change the default [`admit`] / [`advance`] / [`restore_into_anchored`]
+//! behaviour.
 
 use core::fmt;
 

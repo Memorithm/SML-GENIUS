@@ -28,6 +28,7 @@ pub mod observed_history;
 pub mod raw_context;
 pub mod working_context;
 pub mod working_context_anchor;
+pub mod working_context_anchor_provenance;
 pub mod working_context_envelope;
 pub mod working_context_wire;
 
