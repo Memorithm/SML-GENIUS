@@ -364,13 +364,13 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     // channels. ggml's multi-row vec_dot ABI supports 4-row micro-tiles.
     substitute_once(
         &cpu,
-        ".vec_dot                  = mem_bpb3k_dot_q8,\\n        .vec_dot_type             = GGML_TYPE_Q8_K,\\n        .nrows                    = 1,",
-        ".vec_dot                  = mem_bpb3k_dot_q8,\\n        .vec_dot_type             = GGML_TYPE_Q8_K,\\n        .nrows                    = 4,",
+        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 1,",
+        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 4,",
     )?;
     substitute_once(
         &cpu_cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
-        "    ggml_add_backend_library(${GGML_CPU_NAME})\\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \\\"${MEM_BPB3K_RUST_STATICLIB}\\\")\\n        message(FATAL_ERROR \\\"BPB3K Rust kernel staticlib required\\\")\\n    endif()\\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \\\"${MEM_BPB3K_RUST_STATICLIB}\\\")",
+        "    ggml_add_backend_library(${GGML_CPU_NAME})\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \"${MEM_BPB3K_RUST_STATICLIB}\")\n        message(FATAL_ERROR \"BPB3K Rust kernel staticlib required\")\n    endif()\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \"${MEM_BPB3K_RUST_STATICLIB}\")",
     )?;
     println!("PASS_BPB3K_CPU_TILED_BYPASS_CLOSED=Q3_K");
     println!("PASS_BPB3K_PINNED_GGML_PATCH source={} modified=ggml.c,ggml-cpu.c,ggml-cpu/tiled/tiled.cpp header=ggml-bpb3k-experimental.h only_cpu=true", observed_sha);
