@@ -225,6 +225,31 @@ mod tests {
             }
         }
     }
+    #[test] fn ggml_runtime_nrc2_uses_safe_two_by_two_scratch_layout() {
+        let blocks=4usize;
+        let weights=(0..2).map(|row|wire(row+7,blocks)).collect::<Vec<_>>();
+        let activations=(0..2).map(|col|input(col+2,blocks)).collect::<Vec<_>>();
+        let mut wb=Vec::new();
+        let mut ab=Vec::new();
+        for row in &weights {wb.extend_from_slice(row);}
+        for col in &activations {ab.extend_from_slice(col);}
+        let mut output=[f32::NAN;32]; // upstream ggml uses exactly tmp[32]
+        unsafe {
+            mem_bpb3k_dot_q8(
+                (blocks*256) as i32,output.as_mut_ptr(),16,
+                wb.as_ptr() as *const c_void, blocks*BLOCK_W,
+                ab.as_ptr() as *const c_void,blocks*BLOCK_A,2,
+            );
+        }
+        for col in 0..2 {
+            for row in 0..2 {
+                let expected=reference(&weights[row],&activations[col]);
+                assert_eq!(output[col*16+row].to_bits(),expected.to_bits(),"col={col} row={row}");
+            }
+        }
+        assert!(output[2..16].iter().all(|x|x.is_nan()));
+        assert!(output[18..32].iter().all(|x|x.is_nan()));
+    }
     #[test] fn ggml_square_nrc4_abi_matches_16_reference_outputs() {
         let blocks=3usize;
         let ws=(0..4).map(|row|wire(row,blocks)).collect::<Vec<_>>();
