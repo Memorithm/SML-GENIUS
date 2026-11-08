@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'research/boolean-posit/bpb3k_full_runtime.rs'
+      - 'research/boolean-posit/bpb3k_cpu_kernels.rs'
       - '.github/workflows/bpb3k-full-smollm2-inference.yml'
   push:
     branches: [main]
@@ -28,7 +29,7 @@ jobs:
           rustup toolchain install 1.89.0 --profile minimal
           rustup component add rustfmt --toolchain 1.89.0
           mkdir -p "$RUNNER_TEMP/bpb3k"
-          cp research/boolean-posit/{bpb3k_full_runtime.rs,bpb3k.rs,gguf_k.rs} "$RUNNER_TEMP/bpb3k/"
+          cp research/boolean-posit/{bpb3k_full_runtime.rs,bpb3k_cpu_kernels.rs,bpb3k.rs,gguf_k.rs} "$RUNNER_TEMP/bpb3k/"
           cd "$RUNNER_TEMP/bpb3k"
           rustfmt +1.89.0 --edition 2021 --config skip_children=true bpb3k_full_runtime.rs
           echo "FORMATTED_BEGIN"
@@ -37,6 +38,12 @@ jobs:
           rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_full_runtime.rs -o selftest
           ./selftest
           rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_full_runtime.rs -o bpb3k-adapter
+          rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_cpu_kernels.rs -o cpu-kernel-tests
+          ./cpu-kernel-tests
+          rustc +1.89.0 --edition=2021 -D warnings -C opt-level=3 -C relocation-model=pic \
+            --crate-type staticlib bpb3k_cpu_kernels.rs -o libmem_bpb3k.a
+          test -s libmem_bpb3k.a
+
       - name: Fetch exact upstream ggml source and patch all Q3_K CPU paths
         shell: bash
         run: |
@@ -57,7 +64,7 @@ jobs:
           set -euo pipefail
           cmake -S "$RUNNER_TEMP/bpb3k/llama" -B "$RUNNER_TEMP/bpb3k/llama/build" \
             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF \
-            -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF
+            -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/bpb3k/libmem_bpb3k.a"
           cmake --build "$RUNNER_TEMP/bpb3k/llama/build" -j 3 --target llama-cli llama-bench
       - name: Download SHA-verified real SmolLM2 and transcode all Q3_K tensors
         shell: bash
@@ -70,21 +77,27 @@ jobs:
           ./bpb3k-adapter transcode original.gguf experimental-bpb3k.gguf | tee provenance.txt
           grep -q '^PASS_BPB3K_REAL_GGUF ' provenance.txt
           test "$(stat -c %s original.gguf)" = "$(stat -c %s experimental-bpb3k.gguf)"
-      - name: Real autoregressive inference on BPB3-K weight pages (not simulated)
+      - name: Four genuine SmolLM2 inference paths — scalar SIMD tile4 hybrid
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
-          timeout -k 10s 180s ./llama/build/bin/llama-cli \
-            -m experimental-bpb3k.gguf -ngl 0 -t 2 -c 256 -n 16 \
-            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
-            2>&1 | tee full-model-inference.txt
-          test "${PIPESTATUS[0]}" -eq 0
-          grep -q 'BPB3K_DIRECT_DOT_EXECUTED' full-model-inference.txt || {
-            echo STOP_DIRECT_BPB3K_DOT_NEVER_EXECUTED
-            exit 1
-          }
-          echo "PASS_BPB3K_FULL_MODEL_GENERATION source=f7591a6a01f9273de03331732bdc0b39721168be pretrained=SmolLM2-135M-Instruct nonbipolar_q8_activations=true"
+          grep -q 'BPB3K_REAL_GGUF' provenance.txt
+          for kernel in scalar simd tiled hybrid; do
+            echo "BPB3K_MODE_BEGIN=$kernel"
+            MEM_BPB3K_KERNEL="$kernel" timeout -k 10s 180s ./llama/build/bin/llama-cli \
+              -m experimental-bpb3k.gguf -ngl 0 -t 2 -c 256 -n 16 \
+              -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+              2>&1 | tee "full-model-$kernel.txt"
+            test "${PIPESTATUS[0]}" -eq 0
+            grep -Fq "BPB3K_DIRECT_DOT_EXECUTED kernel=" "full-model-$kernel.txt" || {
+              echo "STOP_BPB3K_KERNEL_NOT_EXECUTED mode=$kernel"; exit 1;
+            }
+            grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$kernel.txt" || {
+              echo "STOP_BPB3K_MODEL_SEMANTIC_MISMATCH mode=$kernel"; exit 1;
+            }
+            echo "PASS_BPB3K_FULL_MODEL_MODE=$kernel prompt_canary=matched"
+          done
       - name: Run exact-source stock llama.cpp control on the original unmodified GGUF
         shell: bash
         run: |
@@ -117,21 +130,34 @@ jobs:
             echo STOP_STOCK_SEMANTIC_CANARY_UNAVAILABLE
             exit 1
           }
-          grep -Fq 'In mathematics, two plus two equals 4.' full-model-inference.txt || {
+          for mode in scalar simd tiled hybrid; do
+            grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$mode.txt" || {
+              echo "STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH kernel=$mode"
+              exit 1
+            }
+          done
+          # All four independently initialized inference processes must match
+          # the trained reference. One prompt does not certify full logits.
+          if false; then
             echo STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH
             exit 1
           }
           echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
 
-      - name: Full-model throughput diagnostic, never label superiority
+      - name: Paired whole-model performance diagnostics — four kernel modes
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
-          timeout -k 10s 180s ./llama/build/bin/llama-bench \
-            -m experimental-bpb3k.gguf -ngl 0 -t 2 -p 64 -n 32 -r 2 \
-            2>&1 | tee full-model-bench.txt
-          echo 'BPB3K_FULL_MODEL_SPEED_STATUS=DIAGNOSTIC_NOT_WINNER until matched GGML optimized comparator and quality gates'
+          for mode in scalar simd tiled hybrid; do
+            echo "BPB3K_BENCH_MODE=$mode"
+            MEM_BPB3K_KERNEL="$mode" timeout -k 10s 180s ./llama/build/bin/llama-bench \
+              -m experimental-bpb3k.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
+              2>&1 | tee "bench-$mode.txt"
+            test "${PIPESTATUS[0]}" -eq 0
+            echo "PASS_BPB3K_BENCH_MODE=$mode"
+          done
+          echo 'BPB3K_BENCH_VERDICT=DIAGNOSTIC no full-model scientific superiority claim without physical equal-quality replication'
       - name: Retain bounded evidence only; never upload nonstandard experimental GGUF
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -139,8 +165,8 @@ jobs:
           name: bpb3k-full-inference-${{ github.sha }}
           path: |
             ${{ runner.temp }}/bpb3k/provenance.txt
-            ${{ runner.temp }}/bpb3k/full-model-inference.txt
-            ${{ runner.temp }}/bpb3k/full-model-bench.txt
+            ${{ runner.temp }}/bpb3k/full-model-*.txt
+            ${{ runner.temp }}/bpb3k/bench-*.txt
             ${{ runner.temp }}/bpb3k/stock-original-inference.txt
             ${{ runner.temp }}/bpb3k/stock-vector-reference.txt
           if-no-files-found: warn
