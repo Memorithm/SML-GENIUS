@@ -287,7 +287,7 @@ static void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
     assert(n % 256 == 0 && nrc == 1);
     static atomic_flag seen = ATOMIC_FLAG_INIT;
     if (!atomic_flag_test_and_set(&seen)) {
-        fputs("BPB3K_DIRECT_DOT_EXECUTED\\n", stderr);
+        fputs("BPB3K_DIRECT_DOT_EXECUTED\n", stderr);
     }
     (void) bs; (void) bx; (void) by;
     const block_q3_K *x = (const block_q3_K *)vx;
@@ -349,7 +349,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     }
     // The optimized tiled CPU path can otherwise read BPB3-K as stock Q3_K,
     // corrupting the prompt processing and attention state without an error.
-    let tiled_gate: &str = "        case GGML_TYPE_Q4_K:\\n        case GGML_TYPE_Q3_K:\\n        case GGML_TYPE_Q2_K:";
+    let tiled_gate: &str = "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:";
     if t.matches(tiled_gate).count() != 1 {
         return Err("STOP_TILED_Q3_K_GATE_DRIFT".into());
     }
@@ -377,7 +377,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     substitute_once(
         &tiled,
         tiled_gate,
-        "        case GGML_TYPE_Q4_K:\\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\\n        case GGML_TYPE_Q2_K:",
+        "        case GGML_TYPE_Q4_K:\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\n        case GGML_TYPE_Q2_K:",
     )?;
     println!("PASS_BPB3K_CPU_TILED_BYPASS_CLOSED=Q3_K");
     println!("PASS_BPB3K_PINNED_GGML_PATCH source={} modified=ggml.c,ggml-cpu.c,ggml-cpu/tiled/tiled.cpp header=ggml-bpb3k-experimental.h only_cpu=true", observed_sha);
