@@ -102,6 +102,15 @@ jobs:
             2>&1 | tee stock-original-inference.txt
           test "${PIPESTATUS[0]}" -eq 0
           echo "PASS_STOCK_LLAMA_MODEL_CONTROL original=sha256_pinned_file same_prompts=true same_threads=true same_seed=true"
+          # Separate the numerical effect of ggml's reference Q3_K vec_dot
+          # from the accelerated tiled implementation on the same hardware.
+          GGML_CPU_TILED_MM=0 timeout -k 10s 180s ./stock/build/bin/llama-cli \
+            -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
+            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+            2>&1 | tee stock-vector-reference.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          echo "PASS_STOCK_SCALAR_Q3_K_REFERENCE execution=complete"
+
           # One fixed semantic canary is necessary, not sufficient, for quality.
           # Fail closed: native program success is NOT an equivalent LLM result.
           grep -Fq 'In mathematics, two plus two equals 4.' stock-original-inference.txt || {
@@ -133,5 +142,6 @@ jobs:
             ${{ runner.temp }}/bpb3k/full-model-inference.txt
             ${{ runner.temp }}/bpb3k/full-model-bench.txt
             ${{ runner.temp }}/bpb3k/stock-original-inference.txt
+            ${{ runner.temp }}/bpb3k/stock-vector-reference.txt
           if-no-files-found: warn
           retention-days: 30
