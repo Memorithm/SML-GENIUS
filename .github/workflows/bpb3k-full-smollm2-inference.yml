@@ -108,7 +108,7 @@ jobs:
           test ! -e stock/ggml/src/ggml-bpb3k-experimental.h
           cmake -S stock -B stock/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
             -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF
-          cmake --build stock/build -j 3 --target llama-cli
+          cmake --build stock/build -j 3 --target llama-cli llama-bench
           timeout -k 10s 180s ./stock/build/bin/llama-cli \
             -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
             -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
@@ -144,6 +144,16 @@ jobs:
           }
           echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
 
+      - name: Same-host unmodified optimized Q3_K full-model benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          timeout -k 10s 180s ./stock/build/bin/llama-bench \
+            -m original.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
+            2>&1 | tee bench-stock-q3k.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          echo 'PASS_STOCK_OPTIMIZED_Q3_K_SAME_HOST_BENCH=true'
       - name: Paired whole-model performance diagnostics — four kernel modes
         shell: bash
         run: |
