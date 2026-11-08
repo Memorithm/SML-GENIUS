@@ -103,13 +103,13 @@ jobs:
           ./bpb3k-adapter transcode original.gguf experimental-bpb3k.gguf | tee provenance.txt
           grep -q '^PASS_BPB3K_REAL_GGUF ' provenance.txt
           test "$(stat -c %s original.gguf)" = "$(stat -c %s experimental-bpb3k.gguf)"
-      - name: Four genuine SmolLM2 inference paths — scalar SIMD tile4 hybrid
+      - name: Four genuine SmolLM2 inference paths — scalar SIMD tile2 hybrid fused
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
           grep -q 'BPB3K_REAL_GGUF' provenance.txt
-          for kernel in scalar simd tiled hybrid; do
+          for kernel in scalar simd tiled hybrid fused; do
             echo "BPB3K_MODE_BEGIN=$kernel"
             MEM_BPB3K_KERNEL="$kernel" timeout -k 10s 180s ./llama/build/bin/llama-cli \
               -m experimental-bpb3k.gguf -ngl 0 -t 2 -c 256 -n 16 \
@@ -122,7 +122,7 @@ jobs:
             grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$kernel.txt" || {
               echo "STOP_BPB3K_MODEL_SEMANTIC_MISMATCH mode=$kernel"; exit 1;
             }
-            if [[ "$kernel" == simd || "$kernel" == hybrid ]]; then
+            if [[ "$kernel" == simd || "$kernel" == hybrid || "$kernel" == fused ]]; then
               grep -Fq 'avx2=true' "full-model-$kernel.txt" || {
                 echo "STOP_BPB3K_SIMD_NOT_ACTUALLY_QUALIFIED mode=$kernel"; exit 1;
               }
@@ -161,7 +161,7 @@ jobs:
             echo STOP_STOCK_SEMANTIC_CANARY_UNAVAILABLE
             exit 1
           }
-          for mode in scalar simd tiled hybrid; do
+          for mode in scalar simd tiled hybrid fused; do
             grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$mode.txt" || {
               echo "STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH kernel=$mode"
               exit 1
@@ -186,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
-          for mode in scalar simd tiled hybrid; do
+          for mode in scalar simd tiled hybrid fused; do
             echo "BPB3K_BENCH_MODE=$mode"
             MEM_BPB3K_KERNEL="$mode" timeout -k 10s 180s ./llama/build/bin/llama-bench \
               -m experimental-bpb3k.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
