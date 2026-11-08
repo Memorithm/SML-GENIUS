@@ -33,7 +33,11 @@ jobs:
           set -euo pipefail
           rustup toolchain install 1.89.0 --profile minimal
           export PATH="$HOME/.cargo/bin:$PATH"
-          rustfmt +1.89.0 --edition 2021 --check research/boolean-posit/smollm2_real_gguf.rs
+          rustup component add rustfmt --toolchain 1.89.0
+          rustfmt +1.89.0 --edition 2021 --config skip_children=true research/boolean-posit/smollm2_real_gguf.rs
+          echo FORMAT_BEGIN
+          cat research/boolean-posit/smollm2_real_gguf.rs
+          echo FORMAT_END
           mkdir -p "$RUNNER_TEMP/bpb-smol"
           cp research/boolean-posit/{smollm2_real_gguf.rs,bpb3k.rs,bpb3k_direct.rs,gguf_k.rs,q3k_direct.rs} "$RUNNER_TEMP/bpb-smol/"
           cd "$RUNNER_TEMP/bpb-smol"
