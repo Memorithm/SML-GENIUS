@@ -63,6 +63,23 @@ experiments; no presumed winner.
 
 This bounded corpus does not establish universal model equivalence.
 
+### First hosted attempt: retain failed qualification
+
+Run 42520935508, source 3c15114e, artifact 13633895972: the six one-prompt
+canaries passed. The debug example's default tensor callback interleaved the
+Rust dispatch trace and broke its grep; use `--save-logits` to disable that
+callback, without changing inference. The two complete retained dumps already
+show an inherited v1/optimized-stock discrepancy: identical eight token IDs,
+393216 logits, max absolute difference 0.8565626144, RMSE 0.2078400580,
+392708 frozen-tolerance violations. This is a failed numeric qualification,
+not evidence of v2 speed or superiority. No Dell campaign was dispatched.
+
+The next hosted attempt retains all prompts/repeats and adds explicitly labeled
+stock/fused vector controls with `GGML_CPU_TILED_MM=0` to investigate numerical
+accumulation and activation-quantization effects. These are diagnostic controls;
+the optimized stock baseline, original primary criteria and tolerances above
+remain unchanged. Do not promote the candidate by substituting the new controls.
+
 ## Historical evidence re-audit
 
 RemoteOps run 42510895356 completed successfully under CHECKUPAUTO; controller
