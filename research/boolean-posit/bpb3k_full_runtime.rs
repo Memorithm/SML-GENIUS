@@ -419,7 +419,7 @@ mod tests {
     fn c_bridge_exposes_both_correct_hot_path_symbols() {
         assert!(C_BRIDGE.contains("mem_bpb3k_dot_q8"));
         assert!(C_BRIDGE.contains("mem_bpb3k_dequant"));
-        assert!(C_BRIDGE.contains("y[b].qs[i]"));
+        assert!(C_BRIDGE.contains("y[b].qs[i0]"));
         assert!(C_BRIDGE.contains("aux32[lane]"));
         assert!(C_BRIDGE.contains("sumf += sums[lane]"));
         assert!(C_BRIDGE.contains("BPB3K_DIRECT_DOT_EXECUTED"));
