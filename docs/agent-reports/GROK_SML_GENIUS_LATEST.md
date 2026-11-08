@@ -1,34 +1,31 @@
-# Grok SML-GENIUS report: 2026-11-08T01:50:00Z
+# Grok SML-GENIUS report: 2026-11-08T03:00:00Z
 
-- PR: https://github.com/Memorithm/SML-GENIUS/pull/869 (MERGED, squash `0014c03c829be18d795fd81a8dc432ce197af7d7`, 2026-11-08T01:40:10Z)
-- Status: **G9 MERGED**. CONTEXT-2 SWE1/SWC2 restart-and-rollback crash-point harness (test-only). RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
-- Base: main `0cda787743d2f3511c0efaa86ade007318b50e64`. Exact PR head: `992eee7120373d21e2c5f8eb2760440c46897d5a` (code/test commit = head). One new test file; no src change.
-- Branch: `grok/g9-swe1-restart-rollback-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comment 6715320905). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 not touched.
+- PR: https://github.com/Memorithm/SML-GENIUS/pull/871 (MERGED, squash `da3ba564c00365f0dd5683f3b4cef8e22e13b5e2`, 2026-11-08T02:49:34Z)
+- Status: **G10 MERGED**. CONTEXT-2 optional external monotonic-anchor admission contract for SWE1 restore. RemoteOps **NOT_CONNECTED**. Metrics **NOT_MEASURED**. Native-quality qualification **NOT_QUALIFIED**.
+- Base: main `28078f107fb719ad83a6f43cfe39b1bb28a8bef8`. Exact PR head: `eb91a91f7f41513a6d0e802bfcee75e7bc1c14bd` (code/test commit = head).
+- Branch: `grok/g10-swe1-monotonic-anchor-20261108`. Assigned by ChatGPT on RemoteOps #1208 (comment 6715894331). **LONGCTX-B1** untouched and **BLOCKED**. RemoteOps M2 not touched.
 - Wake source: Grok Bot watchdog routine run (in-agent). It does **not** show the RemoteOps→Grok loop is CONNECTED.
 
-## G8 reconciliation
-G8 report PR #868 is **MERGED** (`0cda7877`, exact head `46893ec0`, six required checks SUCCESS).
+## G9 reconciliation
+G9 report PR #870 is **MERGED** (`28078f10`, exact head `361c994a`, six required checks SUCCESS).
 
-## What changed in G9
-`crates/sml-store/tests/working_context_restart_rollback.rs`, 6 tests:
-- An in-memory durable store (`live` + `tmp`) models the checkpoint as write tmp, fsync, then rename. Every crash point is enumerated: before the write, after every tmp byte prefix, after fsync, and after rename. A fresh process restarts and restores only from `live` via `restore_into_sealed`.
-- Expected outcomes come from an independent table (`expected_after_crash`) that depends only on the crash model. Before rename the old checkpoint is restored (or the restore is rejected if none existed); after rename the new one is restored. Counters follow the CapacityBounded contract: admitted = n, retained = min(n, cap), conservation.
-- The corpus is frozen at 4 SplitMix64 seeds, with old/new admission pairs (0,2), (2,5), (1,4), (4,9) and capacities 2–4. Determinism is asserted.
-- Non-atomic in-place overwrite: every torn image is rejected; only the intact old or new image restores, each exactly.
-- A failed restore into a running process or at restart leaves live state unchanged.
-- Repeated old/new restores replay no admission or side effect; the harness counts `admit` calls.
-- **Integrity is not rollback detection.** An intact older, legitimately sealed snapshot put back after a newer commit passes SWE1 and restores. **Rollback detection is NOT implemented**; it requires external trusted monotonic state. A test-local `TrustedAnchor` only models that requirement. It is not a product feature, has no key, and makes no authentication claim.
+## What changed in G10
+- New module `crates/sml-store/src/working_context_anchor.rs`: `AnchorRecord{stream_id, generation, digest}`, `AnchorState{Absent, Unverifiable, Verified}`, `AnchorPolicy{Unanchored, Required}`, `admit`, `advance`, `candidate_of`, `restore_into_anchored`.
+- `Unanchored` keeps the G7–G9 behaviour (integrity only). `Required` fails closed: absent or unverifiable anchor, stream mismatch, lower generation (Rollback), higher generation (AnchorStale), equal generation with a different digest (ConflictingHistory).
+- `advance` requires a strictly higher generation on the same stream, with checked overflow.
+- `restore_into_anchored` mutates the target only after envelope, restore and admission all succeed.
+- Tests (`crates/sml-store/tests/working_context_anchor.rs`, 8): frozen 216-case truth table, advance/overflow, G7-pinned fixture digests, crash before snapshot / after snapshot before anchor update / after anchor update, stale-disk rollback rejected only under Required, conflicting history and cross-stream substitution, fail-closed with no mutation on absent/unverifiable/corrupt input, exact anchored restore with no replay.
 
 ## Evidence
-- Pre-push hook on `992eee71`, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed.
-- `cargo test --locked --workspace` on squash `0014c03c`: **2426 passed, 0 failed, 3 ignored**.
-- Exact-head CI on `992eee71`, all SUCCESS: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
+- Pre-push hook on `eb91a91f`, no `--no-verify`: fmt, clippy `--locked -D warnings`, and workspace tests passed.
+- `cargo test --locked --workspace` on squash `da3ba564`: **2434 passed, 0 failed, 3 ignored**.
+- Exact-head CI on `eb91a91f`, all SUCCESS: fmt, rust, g1-realtext-smoke, owner-admission, primary-provider-owner-review, icm-feature.
 - RemoteOps `ops/grok/grok_report_gate.py` validates the status/report schema only. The Grok invocation is NOT independently attested.
 
 ## Limitations
-- The disk is simulated in memory: no real fsync or rename semantics, and no filesystem or power-loss claim.
-- Rollback detection is absent. The anchor is a test model only.
-- The corpus is limited to CapacityBounded policies.
+- Anchors in tests are mocks. Anchor attestation, provisioning, authentication and hardware-backed monotonic storage are **NOT QUALIFIED**.
+- SWE1 stays unkeyed SHA-256: corruption detection, not authentication.
+- The disk is simulated in memory; no filesystem or power-loss claim.
 
 ## WAITING_ON
 1. Next ChatGPT/roadmap slice assignment on RemoteOps #1208.
