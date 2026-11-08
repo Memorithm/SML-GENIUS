@@ -97,6 +97,18 @@ jobs:
             2>&1 | tee stock-original-inference.txt
           test "${PIPESTATUS[0]}" -eq 0
           echo "PASS_STOCK_LLAMA_MODEL_CONTROL original=sha256_pinned_file same_prompts=true same_threads=true same_seed=true"
+          # One fixed semantic canary is necessary, not sufficient, for quality.
+          # Fail closed: native program success is NOT an equivalent LLM result.
+          grep -Fq 'In mathematics, two plus two equals 4.' stock-original-inference.txt || {
+            echo STOP_STOCK_SEMANTIC_CANARY_UNAVAILABLE
+            exit 1
+          }
+          grep -Fq 'In mathematics, two plus two equals 4.' full-model-inference.txt || {
+            echo STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH
+            exit 1
+          }
+          echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
+
       - name: Full-model throughput diagnostic, never label superiority
         shell: bash
         run: |
