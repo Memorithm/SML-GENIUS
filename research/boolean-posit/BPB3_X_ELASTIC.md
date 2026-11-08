@@ -107,14 +107,22 @@ direct selective BPB3-K kernel and (2) an independent original Q3_K
 dense numerical oracle at exactly representable global scale, then
 confirm that segment results sum to the qualified full BPB3-K dot.
 
-**Critical correction:** the BPB3-K metadata is *not* inevitably
-fetched in full for partial reads. The minimal indexed subgroup scales
-may require fewer than all 12 scale bytes, depending on subgroup,
-packing and addressing. Thus naive totals such as BPB3-M 56B versus
-"BPB3-K must read 62B" are **upper-bound layout descriptions**, not
-proven per-query read budgets. Count actual accesses with pinned
-compiled code, cache-line/DRAM counters and NUMA evidence. Explicitly
-include BPB3-X's layout directory and per-query selection overhead.
+**Critical correction:** BPB3-K's subgroup scale packing is
+noncontiguous for partial requests; this CPU reference accesses only
+the bytes needed by the selected four/eight subgroups. For a 64-value
+segment, this address pattern touches **8 distinct signed-scale bytes**
+plus 2 FP16 bytes and 24 bitplane bytes = **34 distinct logical source
+bytes**. For a contiguous 128-value segment it touches all 12 signed
+scale bytes plus 2 FP16 and 48 bitplane bytes = **62 distinct logical
+source bytes**. For a full 256-value scan, 110 logical source bytes.
+
+The corresponding BPB3-X segment payload is 29B (64) or 56B (128),
+*plus a one-byte layout directory per 256 source values*, metadata
+checks for the other segments, and any tensor index/offset lookup.
+Those logical access counts do **not** establish actual cache-line or
+DRAM reads, bandwidth, kernel latency or speedups. Count accesses
+with pinned compiled code and full cache/NUMA/DRAM evidence, and
+report the per-query selection and validation overhead.
 
 ## Measurements that could falsify the hypothesis
 
