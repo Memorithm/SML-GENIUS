@@ -4,6 +4,9 @@ on:
     paths:
       - 'research/boolean-posit/bpb3k_full_runtime.rs'
       - 'research/boolean-posit/bpb3k_cpu_kernels.rs'
+      - 'research/boolean-posit/bpb3k_fidelity.rs'
+      - 'research/boolean-posit/bpb3k_kernel_bench.rs'
+      - 'research/boolean-posit/run_bpb3k_fidelity.sh'
       - '.github/workflows/bpb3k-full-smollm2-inference.yml'
   push:
     branches: [main]
@@ -55,7 +58,7 @@ jobs:
           rustup toolchain install 1.89.0 --profile minimal
           rustup component add rustfmt --toolchain 1.89.0
           mkdir -p "$RUNNER_TEMP/bpb3k"
-          cp research/boolean-posit/{bpb3k_full_runtime.rs,bpb3k_cpu_kernels.rs,bpb3k.rs,gguf_k.rs} "$RUNNER_TEMP/bpb3k/"
+          cp research/boolean-posit/{bpb3k_full_runtime.rs,bpb3k_cpu_kernels.rs,bpb3k_fidelity.rs,bpb3k_kernel_bench.rs,bpb3k.rs,gguf_k.rs} "$RUNNER_TEMP/bpb3k/"
           cd "$RUNNER_TEMP/bpb3k"
           rustfmt +1.89.0 --edition 2021 --config skip_children=true bpb3k_full_runtime.rs
           echo "FORMATTED_BEGIN"
@@ -66,6 +69,13 @@ jobs:
           rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_full_runtime.rs -o bpb3k-adapter
           rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_cpu_kernels.rs -o cpu-kernel-tests
           ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=fused_v2 ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=fused_v2_i16 ./cpu-kernel-tests
+          rustfmt +1.89.0 --edition 2021 --check --config skip_children=true bpb3k_cpu_kernels.rs bpb3k_fidelity.rs bpb3k_kernel_bench.rs
+          rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_fidelity.rs -o fidelity-tests
+          ./fidelity-tests
+          rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_fidelity.rs -o bpb3k-fidelity
+          rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_kernel_bench.rs -o kernel-bench
           rustc +1.89.0 --edition=2021 -D warnings -C opt-level=3 -C relocation-model=pic \
             --crate-type staticlib bpb3k_cpu_kernels.rs -o libmem_bpb3k.a
           test -s libmem_bpb3k.a
@@ -81,6 +91,7 @@ jobs:
           git -C "$RUNNER_TEMP/bpb3k/llama" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/bpb3k/llama" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
           "$RUNNER_TEMP/bpb3k/bpb3k-adapter" patch "$RUNNER_TEMP/bpb3k/llama" f7591a6a01f9273de03331732bdc0b39721168be
+          "$RUNNER_TEMP/bpb3k/bpb3k-fidelity" patch-debug "$RUNNER_TEMP/bpb3k/llama"
           grep -q 'mem_bpb3k_dot_q8' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml-cpu/ggml-cpu.c"
           grep -q 'mem_bpb3k_dequant' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml.c"
           grep -q 'Q3_K surrogate is BPB3-K' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml-cpu/tiled/tiled.cpp"
@@ -90,8 +101,8 @@ jobs:
           set -euo pipefail
           cmake -S "$RUNNER_TEMP/bpb3k/llama" -B "$RUNNER_TEMP/bpb3k/llama/build" \
             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF \
-            -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/bpb3k/libmem_bpb3k.a"
-          cmake --build "$RUNNER_TEMP/bpb3k/llama/build" -j 3 --target llama-cli llama-bench
+            -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/bpb3k/libmem_bpb3k.a"
+          cmake --build "$RUNNER_TEMP/bpb3k/llama/build" -j 3 --target llama-cli llama-bench llama-debug
       - name: Download SHA-verified real SmolLM2 and transcode all Q3_K tensors
         shell: bash
         run: |
@@ -109,7 +120,7 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
           grep -q 'BPB3K_REAL_GGUF' provenance.txt
-          for kernel in scalar simd tiled hybrid fused; do
+          for kernel in scalar simd tiled hybrid fused fused_v2; do
             echo "BPB3K_MODE_BEGIN=$kernel"
             MEM_BPB3K_KERNEL="$kernel" timeout -k 10s 180s ./llama/build/bin/llama-cli \
               -m experimental-bpb3k.gguf -ngl 0 -t 2 -c 256 -n 16 \
@@ -122,7 +133,7 @@ jobs:
             grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$kernel.txt" || {
               echo "STOP_BPB3K_MODEL_SEMANTIC_MISMATCH mode=$kernel"; exit 1;
             }
-            if [[ "$kernel" == simd || "$kernel" == hybrid || "$kernel" == fused ]]; then
+            if [[ "$kernel" == simd || "$kernel" == hybrid || "$kernel" == fused || "$kernel" == fused_v2 ]]; then
               grep -Fq 'avx2=true' "full-model-$kernel.txt" || {
                 echo "STOP_BPB3K_SIMD_NOT_ACTUALLY_QUALIFIED mode=$kernel"; exit 1;
               }
@@ -137,9 +148,10 @@ jobs:
           git -C llama worktree add --detach "$RUNNER_TEMP/bpb3k/stock" f7591a6a01f9273de03331732bdc0b39721168be
           test "$(git -C stock rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
           test ! -e stock/ggml/src/ggml-bpb3k-experimental.h
+          ./bpb3k-fidelity patch-debug "$RUNNER_TEMP/bpb3k/stock"
           cmake -S stock -B stock/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
-            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF
-          cmake --build stock/build -j 3 --target llama-cli llama-bench
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build stock/build -j 3 --target llama-cli llama-bench llama-debug
           timeout -k 10s 180s ./stock/build/bin/llama-cli \
             -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
             -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
@@ -161,7 +173,7 @@ jobs:
             echo STOP_STOCK_SEMANTIC_CANARY_UNAVAILABLE
             exit 1
           }
-          for mode in scalar simd tiled hybrid fused; do
+          for mode in scalar simd tiled hybrid fused fused_v2; do
             grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$mode.txt" || {
               echo "STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH kernel=$mode"
               exit 1
@@ -170,6 +182,16 @@ jobs:
           # All four independently initialized inference processes must match
           # the trained reference. One prompt does not certify full logits.
           echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
+
+      - name: Full vocabulary logits, deterministic token IDs and fresh-process reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/boolean-posit/run_bpb3k_fidelity.sh "$RUNNER_TEMP/bpb3k" "$RUNNER_TEMP/bpb3k/experimental-bpb3k.gguf" | tee "$RUNNER_TEMP/bpb3k/fidelity-summary.txt"
+          cd "$RUNNER_TEMP/bpb3k"
+          for mode in fused fused_v2_i16 fused_v2; do
+            MEM_BPB3K_KERNEL="$mode" ./kernel-bench | tee "kernel-diagnostic-$mode.txt"
+          done
 
       - name: Same-host unmodified optimized Q3_K full-model benchmark
         shell: bash
@@ -186,7 +208,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
-          for mode in scalar simd tiled hybrid fused; do
+          for mode in scalar simd tiled hybrid fused fused_v2; do
             echo "BPB3K_BENCH_MODE=$mode"
             MEM_BPB3K_KERNEL="$mode" timeout -k 10s 180s ./llama/build/bin/llama-bench \
               -m experimental-bpb3k.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
@@ -206,5 +228,8 @@ jobs:
             ${{ runner.temp }}/bpb3k/bench-*.txt
             ${{ runner.temp }}/bpb3k/stock-original-inference.txt
             ${{ runner.temp }}/bpb3k/stock-vector-reference.txt
+            ${{ runner.temp }}/bpb3k/fidelity/
+            ${{ runner.temp }}/bpb3k/fidelity-summary.txt
+            ${{ runner.temp }}/bpb3k/kernel-diagnostic-*.txt
           if-no-files-found: warn
           retention-days: 30
