@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "agent": "grok",
+  "status": "NOT_CONNECTED",
+  "timestamp_utc": "2026-11-09T07:30:00Z",
+  "last_report_utc": "2026-11-09T07:30:00Z",
+  "last_successful_code_commit_utc": "2026-11-09T07:23:27Z",
+  "run_id": "20261109T073000Z",
+  "runner": "grok-box (authoring via Grok Bot, parent-delegated run); bench target: none; wake is Grok Bot only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G20 CONTEXT-2 paired-perturbation completeness of the frozen G19 mutation-to-detector matrix (G17 corpus, G18 permutation/transcript guard)",
+  "task": "G20 code PR #900 OPEN, NOT merged, awaiting ChatGPT qualification (exact head 6a9a653b8da490d5c745f0900571a14779139f86, base main 071217ca4d958d1ae9e4716627920e68a89d499b): tests-only crates/sml-store/tests/working_context_anchor_g20_paired_mutations.rs (5 tests + 5 G17 tests re-run). All 28 unordered catalogue pairs of the 7 G19 singles (incl. self-pairs; corpus+permutation 8, expectation+permutation 4, corpus+expectation 2, permutation+permutation 10, corpus+corpus 3, expectation+expectation 1) applied together in both orders, plus 48 SplitMix64-seeded pairs (seed 0x4720000000000020; 24 corpus+permutation, 24 expectation+permutation). Independent typed oracle (predict) agrees with the harness on every control/single/pair/seeded evaluation (detector set and rejection count). Union/masking matrix v1 pinned at SHA-256 020d1f0de9fa35a358f44d2553234d2d5cb912d425d69732e41df609d7d7911f: 23/28 catalogue pairs and 48/48 seeded pairs are exact unions of their singles; no pair gains a detector; 5 catalogue pairs mask a detector (omitted row + expectation loses OracleAgreement; swap self-pair loses PermutationDigest/TranscriptDigest and is fully undetected because net-null; 3 duplicate_permutation pairs lose PermutationDistinct in one order and are order-dependent). StateInvariant never fires and PermutationDigest/TranscriptDigest are never separated (negative results). Reproduces G17 15ceba9c..., G18 b2b50f6c.../de2098e9... and G19 fc9dacbb... on the unmutated control; pins G17/G18/G19 source SHA-256. 256 evaluations, 24018 production rejections all byte-preserve SWC2/SWE1/stats; anchor never advanced. No production change. Assigned by ChatGPT on RemoteOps #1208 (6729688978, 6730382450).",
+  "base_sha": "071217ca4d958d1ae9e4716627920e68a89d499b",
+  "head_sha": "6a9a653b8da490d5c745f0900571a14779139f86",
+  "head_sha_note": "head_sha = exact code PR #900 head (one commit on main 071217ca adding the tests-only G20 paired-mutation suite); not merged",
+  "branch": "grok/g20-paired-mutation-matrix-20261109",
+  "tests": {
+    "code_changed": true,
+    "fmt": "pass",
+    "clippy_workspace_all_targets_D_warnings": "pass",
+    "cargo_test_locked_workspace": "2505 passed, 0 failed, 3 ignored (local Grok box; pre-push hook passed)",
+    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_g20_paired_mutations.rs 5 tests (+5 G17 tests re-run in the same binary)",
+    "exact_head_ci": "PENDING on 6a9a653b8da490d5c745f0900571a14779139f86 at report time (CI 42579745913 etc.); to be confirmed on RemoteOps #1208"
+  },
+  "metrics": "NOT_MEASURED: harness integrity/completeness qualification only; no model-quality, context-span, latency or throughput claim.",
+  "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners not available; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
+  "qualification": "NOT_QUALIFIED",
+  "waiting_on": [
+    "Exact-head required CI on #900 and on this report PR",
+    "ChatGPT qualification and merge of G20 code PR #900, then of this report PR (Grok does not merge either)",
+    "G21 handoff only after qualified G20 (RemoteOps #1208)",
+    "Unresolved independent review of G18 report #896 (Codex usage-limit failure)",
+    "Dell/Thor self-hosted runner registration",
+    "LONGCTX-B1 filler/B-lex/B-attn user choices"
+  ],
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/900"
+}
