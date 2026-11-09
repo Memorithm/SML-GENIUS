@@ -490,7 +490,6 @@ mod dacr_latent_tests {
     }
 }
 
-
 #[cfg(test)]
 mod dacr_dense_address_tests {
     use super::*;
@@ -598,8 +597,14 @@ mod dacr_dense_address_tests {
             index.lookup(stream, 4, &unknown),
             Err(AddressError::UnknownSelectedFeature)
         );
-        assert_eq!(index.lookup(other, 4, &sbg(2)), Err(AddressError::WrongStream));
-        assert_eq!(index.lookup(stream, 5, &sbg(2)), Err(AddressError::WrongEpoch));
+        assert_eq!(
+            index.lookup(other, 4, &sbg(2)),
+            Err(AddressError::WrongStream)
+        );
+        assert_eq!(
+            index.lookup(stream, 5, &sbg(2)),
+            Err(AddressError::WrongEpoch)
+        );
         assert_eq!(index.len(), 1);
         assert_eq!(index.address_slot_count(), 4);
         assert_eq!(
