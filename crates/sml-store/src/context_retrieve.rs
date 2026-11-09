@@ -56,6 +56,13 @@ impl ContextRetrievePolicy {
     }
 }
 
+/// Explicit cap on selected-address expansion for unknown SBG bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LatentProbeBudget {
+    pub max_unknown_bits: usize,
+    pub max_address_probes: usize,
+}
+
 /// Index construction limits for one retriever.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContextRetrieverConfig {
@@ -367,6 +374,37 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         let policy = policy.validate()?;
         let (candidates, address_accounting) = index
             .lookup(self.stream_id, epoch, address_query)
+            .map_err(ContextRetrieveError::LatentAddress)?;
+        let (hits, verification_accounting) =
+            self.retrieve_from_candidate_ids(&candidates, mor_query, &policy)?;
+        Ok((hits, verification_accounting, address_accounting))
+    }
+
+    /// Source-verifies a bounded expansion over unknown selected SBG bits.
+    ///
+    /// Unlike the exact latent path, this opt-in path probes both possible
+    /// values for each admitted unknown bit. An over-budget candidate union is
+    /// rejected before any raw reread rather than silently truncated.
+    pub fn retrieve_with_partial_latent_candidates(
+        &self,
+        index: &CandidateIndex<BITS>,
+        epoch: u64,
+        address_query: &SbgAddress<BITS>,
+        mor_query: &SemanticBitField<BITS>,
+        policy: &ContextRetrievePolicy,
+        probe: LatentProbeBudget,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting, CandidateAccounting), ContextRetrieveError>
+    {
+        let policy = policy.validate()?;
+        let (candidates, address_accounting) = index
+            .lookup_partial(
+                self.stream_id,
+                epoch,
+                address_query,
+                probe.max_unknown_bits,
+                probe.max_address_probes,
+                policy.max_shortlist.min(index.capacity()),
+            )
             .map_err(ContextRetrieveError::LatentAddress)?;
         let (hits, verification_accounting) =
             self.retrieve_from_candidate_ids(&candidates, mor_query, &policy)?;
