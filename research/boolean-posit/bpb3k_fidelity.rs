@@ -52,8 +52,12 @@ static bool mem_bpb3k_layer_cb(ggml_tensor * t, bool ask, void *) {
     uint64_t hash = 14695981039346656037ULL;
     for (const uint8_t b : bytes) { hash = (hash ^ b) * 1099511628211ULL; }
     fprintf(stderr,
-        "BPB3K_LAYER seq=%llu name=%s op=%s type=%s dims=%lld:%lld:%lld:%lld bytes=%zu fnv64=%016llx\n",
+        "BPB3K_LAYER seq=%llu name=%s op=%s type=%s src0=%s src0type=%s src1=%s src1type=%s dims=%lld:%lld:%lld:%lld bytes=%zu fnv64=%016llx\n",
         id, t->name, ggml_op_name(t->op), ggml_type_name(t->type),
+        t->src[0] ? t->src[0]->name : "-",
+        t->src[0] ? ggml_type_name(t->src[0]->type) : "-",
+        t->src[1] ? t->src[1]->name : "-",
+        t->src[1] ? ggml_type_name(t->src[1]->type) : "-",
         (long long)t->ne[0], (long long)t->ne[1],
         (long long)t->ne[2], (long long)t->ne[3],
         n, (unsigned long long)hash);
