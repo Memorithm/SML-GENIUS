@@ -686,4 +686,3 @@ mod dacr_rebind_tests {
         );
     }
 }
-
