@@ -34,6 +34,32 @@ const OBSERVER: &str = r#"
         return true;
     }
 "#;
+const TRACE_OBSERVER: &str = r#"
+// Read-only graph checkpoint: only hashes of bounded FP16/FP32 tensors,
+// never model weights or bulk activation dumps. Activated explicitly for
+// diagnostic runs and not during timed inference.
+static bool mem_bpb3k_layer_cb(ggml_tensor * t, bool ask, void *) {
+    if (ask) { return true; }
+    if (!t || !t->buffer || !ggml_is_contiguous(t) ||
+        (t->type != GGML_TYPE_F32 && t->type != GGML_TYPE_F16)) { return true; }
+    const size_t n = ggml_nbytes(t);
+    if (n == 0 || n > 4 * 1024 * 1024) { return true; }
+    static std::atomic<unsigned long long> sequence{0};
+    const auto id = sequence.fetch_add(1, std::memory_order_relaxed);
+    if (id >= 4096) { return true; }
+    std::vector<uint8_t> bytes(n);
+    ggml_backend_tensor_get(t, bytes.data(), 0, n);
+    uint64_t hash = 14695981039346656037ULL;
+    for (const uint8_t b : bytes) { hash = (hash ^ b) * 1099511628211ULL; }
+    fprintf(stderr,
+        "BPB3K_LAYER seq=%llu name=%s op=%s type=%s dims=%lld:%lld:%lld:%lld bytes=%zu fnv64=%016llx\n",
+        id, t->name, ggml_op_name(t->op), ggml_type_name(t->type),
+        (long long)t->ne[0], (long long)t->ne[1],
+        (long long)t->ne[2], (long long)t->ne[3],
+        n, (unsigned long long)hash);
+    return true;
+}
+"#;
 fn patch(root: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .arg("-C")
@@ -55,8 +81,18 @@ fn patch(root: &Path) -> Result<(), String> {
         source
             .replacen(marker, &format!("{marker}\n{OBSERVER}"), 1)
             .replacen(
+                "static bool run(llama_context * ctx, const common_params & params) {",
+                &format!("{TRACE_OBSERVER}\nstatic bool run(llama_context * ctx, const common_params & params) {{"),
+                1,
+            )
+            .replacen(
+                "    auto llama_init = common_init_from_params(params);",
+                "    if (std::getenv(\"MEM_BPB3K_LAYER_TRACE\")) {\n        params.cb_eval = mem_bpb3k_layer_cb;\n        params.cb_eval_user_data = nullptr;\n    }\n    auto llama_init = common_init_from_params(params);",
+                1,
+            )
+            .replacen(
                 "#include <cstdlib>",
-                "#include <cstdlib>\n#include <cmath>",
+                "#include <cstdlib>\n#include <cmath>\n#include <atomic>\n#include <cstdint>\n#include <cstdio>\n#include \"ggml-backend.h\"",
                 1,
             ),
     )
