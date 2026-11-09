@@ -567,7 +567,7 @@ mod dacr_rebind_tests {
         }
     }
 
-    fn index(epoch: u64, bucket_entries: usize) -> (ContextStreamId, CandidateIndex<16>) {
+    fn fixture(epoch: u64, bucket_entries: usize) -> (ContextStreamId, CandidateIndex<16>) {
         let stream = ContextStreamId::new(136).unwrap();
         let encoder =
             DiscreteAddress::fixed(vec![0, 1], budget(bucket_entries)).unwrap();
@@ -579,7 +579,7 @@ mod dacr_rebind_tests {
 
     #[test]
     fn dacr_rebind_moves_one_segment_and_invalidates_old_epoch() {
-        let (stream, mut index) = index(7, 2);
+        let (stream, mut index) = fixture(7, 2);
         let segment = ContextSegmentId::new(stream, 1).unwrap();
         let other = ContextSegmentId::new(stream, 2).unwrap();
         assert_eq!(index.epoch(), 7);
@@ -592,7 +592,7 @@ mod dacr_rebind_tests {
         assert_eq!(index.lookup(stream, 8, &key(2)).unwrap().0, vec![segment]);
         assert_eq!(index.lookup(stream, 8, &key(1)).unwrap().0, vec![other]);
         assert_eq!(index.lookup(stream, 8, &key(2)).unwrap().1.address_buckets_probed, 1);
-        let (_, mut replay) = index(7, 2);
+        let (_, mut replay) = fixture(7, 2);
         replay.rebind(segment, 7, 8, &key(0), &key(2)).unwrap();
         for code in 0..4 {
             assert_eq!(index.lookup(stream, 8, &key(code)), replay.lookup(stream, 8, &key(code)));
@@ -601,7 +601,7 @@ mod dacr_rebind_tests {
 
     #[test]
     fn dacr_rebind_refuses_stale_epoch_wrong_address_unknown_bit_and_unregistered_id() {
-        let (stream, mut index) = index(12, 2);
+        let (stream, mut index) = fixture(12, 2);
         let segment = ContextSegmentId::new(stream, 1).unwrap();
         let foreign = ContextSegmentId::new(ContextStreamId::new(137).unwrap(), 1).unwrap();
         let missing = ContextSegmentId::new(stream, 3).unwrap();
@@ -639,7 +639,7 @@ mod dacr_rebind_tests {
 
     #[test]
     fn dacr_rebind_destination_full_fails_atomically_but_same_bucket_can_advance_epoch() {
-        let (stream, mut index) = index(3, 1);
+        let (stream, mut index) = fixture(3, 1);
         let segment = ContextSegmentId::new(stream, 1).unwrap();
         let other = ContextSegmentId::new(stream, 2).unwrap();
         assert_eq!(index.rebind(segment, 3, 4, &key(0), &key(1)), Err(AddressError::BucketFull));
@@ -655,7 +655,7 @@ mod dacr_rebind_tests {
 
     #[test]
     fn dacr_rebind_epoch_overflow_rejects_before_mutation() {
-        let (stream, mut index) = index(u64::MAX, 2);
+        let (stream, mut index) = fixture(u64::MAX, 2);
         let segment = ContextSegmentId::new(stream, 1).unwrap();
         assert_eq!(
             index.rebind(segment, u64::MAX, 0, &key(0), &key(2)),
