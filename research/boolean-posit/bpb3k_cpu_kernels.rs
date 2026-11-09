@@ -26,6 +26,7 @@ enum Mode {
     FusedV2,
     FusedV2I16,
     StockVector,
+    FusedV2Stock,
 }
 
 fn mode() -> Mode {
@@ -38,6 +39,7 @@ fn mode() -> Mode {
         Ok("fused_v2") => Mode::FusedV2,
         Ok("fused_v2_i16") => Mode::FusedV2I16,
         Ok("stock_vector") => Mode::StockVector,
+        Ok("fused_v2_stock") => Mode::FusedV2Stock,
         _ => Mode::Scalar,
     })
 }
@@ -143,6 +145,23 @@ fn stock_vector_reference(weights: &[u8], activations: &[u8]) -> f32 {
     let c = sums[6] + sums[2];
     let d = sums[7] + sums[3];
     (a + c) + (b + d)
+}
+
+fn stock_tiled_reference(weights: &[u8], activations: &[u8]) -> f32 {
+    let mut sum = 0.0f32;
+    for (w, a) in weights
+        .chunks_exact(BLOCK_W)
+        .zip(activations.chunks_exact(BLOCK_A))
+    {
+        let mut total = 0i32;
+        for i in 0..256 {
+            total += coeff(w, i) * scale(w, i / 16) * i32::from(a[4 + i] as i8);
+        }
+        let d = fp16(u16::from_le_bytes([w[108], w[109]]));
+        let ad = f32::from_le_bytes(a[..4].try_into().unwrap());
+        sum = (d * total as f32).mul_add(ad, sum);
+    }
+    sum
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -345,6 +364,24 @@ mod x86 {
         let sum = _mm_add_ps(sum, _mm_movehl_ps(sum, sum));
         _mm_cvtss_f32(_mm_add_ss(sum, _mm_movehdup_ps(sum)))
     }
+    #[target_feature(enable = "avx2,fma")]
+    pub unsafe fn stock_tiled_row(w: &[u8], a: &[u8]) -> f32 {
+        let mut sum = _mm_setzero_ps();
+        for (weight, act) in w.chunks_exact(BLOCK_W).zip(a.chunks_exact(BLOCK_A)) {
+            let ints = fused_v2_block(weight, act);
+            // Full block sum is bounded by 4,194,304: exactly f32-representable.
+            let pair = _mm_add_epi32(
+                _mm256_castsi256_si128(ints),
+                _mm256_extracti128_si256(ints, 1),
+            );
+            let pair = _mm_hadd_epi32(pair, pair);
+            let total = _mm_cvtsi128_si32(_mm_hadd_epi32(pair, pair));
+            let d = fp16(u16::from_le_bytes([weight[108], weight[109]]));
+            let ad = f32::from_le_bytes(act[..4].try_into().unwrap());
+            sum = _mm_fmadd_ss(_mm_set_ss(d * total as f32), _mm_set_ss(ad), sum);
+        }
+        _mm_cvtss_f32(sum)
+    }
     // Every AVX2 operation is isolated in this dynamically guarded function;
     // no global -march=native or AVX2 assumption in the main code.
     // Fused AVX2: keep eight integer accumulators in registers over the
@@ -457,6 +494,19 @@ fn stock_vector_row(weights: &[u8], act: &[u8]) -> f32 {
         return unsafe { x86::stock_vector_row(weights, act) };
     }
     stock_vector_reference(weights, act)
+}
+fn stock_tiled_row(weights: &[u8], act: &[u8]) -> f32 {
+    assert_eq!(act.len() % BLOCK_A, 0);
+    assert_eq!(weights.len(), act.len() / BLOCK_A * BLOCK_W);
+    if avx2_available() && fma_available() {
+        #[cfg(target_arch = "x86_64")]
+        return unsafe { x86::stock_tiled_row(weights, act) };
+    }
+    stock_tiled_reference(weights, act)
+}
+#[no_mangle]
+pub extern "C" fn mem_bpb3k_uses_stock_order() -> i32 {
+    i32::from(mode() == Mode::FusedV2Stock)
 }
 fn lane_products(block: &[u8], act: &[u8], start: usize, simd: bool) -> [i32; 8] {
     if simd && avx2_available() {
@@ -576,6 +626,38 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
     by: usize,
     nrc: i32,
 ) {
+    dot_impl(n, s, bs, vx, bx, vy, by, nrc, false);
+}
+/// Same safety and buffer contract as mem_bpb3k_dot_q8; used only by the
+/// pinned adapter when the original stock would select tiled arithmetic.
+/// # Safety
+/// Caller must supply the valid square microtile buffers documented above.
+#[no_mangle]
+pub unsafe extern "C" fn mem_bpb3k_dot_q8_stock_tiled(
+    n: i32,
+    s: *mut f32,
+    bs: usize,
+    vx: *const c_void,
+    bx: usize,
+    vy: *const c_void,
+    by: usize,
+    nrc: i32,
+) {
+    assert_eq!(mode(), Mode::FusedV2Stock);
+    dot_impl(n, s, bs, vx, bx, vy, by, nrc, true);
+}
+#[allow(clippy::too_many_arguments)]
+unsafe fn dot_impl(
+    n: i32,
+    s: *mut f32,
+    bs: usize,
+    vx: *const c_void,
+    bx: usize,
+    vy: *const c_void,
+    by: usize,
+    nrc: i32,
+    stock_tiled: bool,
+) {
     assert!(n > 0 && n % 256 == 0 && (1..=4).contains(&nrc));
     let bytes = n as usize / 256;
     // ggml nrc is a square microtile: 4 adjacent weight rows and
@@ -583,21 +665,29 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
     let nrc = nrc as usize;
     let m = mode();
     static TRACE: OnceLock<()> = OnceLock::new();
-    TRACE.get_or_init(|| {
+    static TILED_TRACE: OnceLock<()> = OnceLock::new();
+    let trace = if stock_tiled { &TILED_TRACE } else { &TRACE };
+    trace.get_or_init(|| {
         eprintln!(
-            "BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc} avx2={} fma={}",
+            "BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc} avx2={} fma={} stock_tiled={stock_tiled}",
             avx2_available(),
             fma_available()
         )
     });
 
-    if m == Mode::FusedV2 || m == Mode::FusedV2I16 || m == Mode::StockVector {
+    if m == Mode::FusedV2
+        || m == Mode::FusedV2I16
+        || m == Mode::StockVector
+        || m == Mode::FusedV2Stock
+    {
         // Bypass all per-call row/result Vec allocations for the v2 path.
         for col in 0..nrc {
             let act = slice::from_raw_parts((vy as *const u8).add(col * by), bytes * BLOCK_A);
             for row in 0..nrc {
                 let w = slice::from_raw_parts((vx as *const u8).add(row * bx), bytes * BLOCK_W);
-                *s.add(col * bs + row) = if m == Mode::StockVector {
+                *s.add(col * bs + row) = if stock_tiled {
+                    stock_tiled_row(w, act)
+                } else if m == Mode::StockVector || m == Mode::FusedV2Stock {
                     stock_vector_row(w, act)
                 } else if m == Mode::FusedV2 {
                     fused_v2_row(w, act)
@@ -620,7 +710,7 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
             Mode::Tiled => grouped(&rows, act, false),
             Mode::Hybrid => grouped(&rows, act, true),
             Mode::Fused => fused_rows(&rows, act),
-            Mode::FusedV2 | Mode::FusedV2I16 | Mode::StockVector => {
+            Mode::FusedV2 | Mode::FusedV2I16 | Mode::StockVector | Mode::FusedV2Stock => {
                 unreachable!("v2 writes directly to caller storage")
             }
         };
@@ -786,6 +876,71 @@ mod tests {
             std::panic::catch_unwind(|| stock_vector_row(&wire(0, 1), &input(0, 1)[..291]))
                 .is_err()
         );
+    }
+    #[test]
+    fn stock_tiled_multiblock_rounding_and_unaligned_buffers() {
+        for blocks in [0, 1, 2, 3, 6, 9, 36, 257] {
+            for seed in 0..16 {
+                let mut w = wire(seed, blocks);
+                let mut a = input(seed, blocks);
+                for b in 0..blocks {
+                    let d = [
+                        0x0001u16, 0x03ff, 0x0400, 0x3555, 0x7bff, 0x8000, 0xbc00, 0xfbff,
+                    ][(b + seed) % 8];
+                    w[b * BLOCK_W + 108..(b + 1) * BLOCK_W].copy_from_slice(&d.to_le_bytes());
+                    a[b * BLOCK_A..b * BLOCK_A + 4].copy_from_slice(
+                        &[0.0f32, -0.125, 0.1, 1.0e-20, 1.0e20][(b + seed) % 5].to_le_bytes(),
+                    );
+                }
+                let expected = stock_tiled_reference(&w, &a);
+                let mut wu = vec![0u8];
+                wu.extend_from_slice(&w);
+                let mut au = vec![0u8; 3];
+                au.extend_from_slice(&a);
+                assert_eq!(
+                    stock_tiled_row(&wu[1..], &au[3..]).to_bits(),
+                    expected.to_bits(),
+                    "blocks={blocks} seed={seed}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn stock_tiled_square_abi_keeps_sentinels_and_column_strides() {
+        if mode() != Mode::FusedV2Stock {
+            return;
+        }
+        for nrc in [1usize, 2, 4] {
+            let blocks = 6;
+            let weights: Vec<_> = (0..nrc).map(|i| wire(i, blocks)).collect();
+            let acts: Vec<_> = (0..nrc).map(|i| input(i + 1, blocks)).collect();
+            let wb: Vec<_> = weights.iter().flatten().copied().collect();
+            let ab: Vec<_> = acts.iter().flatten().copied().collect();
+            let mut out = vec![f32::from_bits(0x7fc01234); 2 + nrc * 16];
+            unsafe {
+                mem_bpb3k_dot_q8_stock_tiled(
+                    (blocks * 256) as i32,
+                    out.as_mut_ptr().add(1),
+                    16,
+                    wb.as_ptr().cast(),
+                    blocks * BLOCK_W,
+                    ab.as_ptr().cast(),
+                    blocks * BLOCK_A,
+                    nrc as i32,
+                );
+            }
+            for (i, value) in out.iter().enumerate() {
+                if i > 0 && (i - 1) / 16 < nrc && (i - 1) % 16 < nrc {
+                    assert_eq!(
+                        value.to_bits(),
+                        stock_tiled_reference(&weights[(i - 1) % 16], &acts[(i - 1) / 16])
+                            .to_bits()
+                    );
+                } else {
+                    assert_eq!(value.to_bits(), 0x7fc01234);
+                }
+            }
+        }
     }
     #[test]
     fn fused_v2_multiblock_float_order_unaligned_and_edge_scales() {

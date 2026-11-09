@@ -113,6 +113,36 @@ arithmetic path for batches of at least eight tokens; a vector-only profile
 does not establish equivalence for those prompts. The discarded local idea of
 applying the tiled epilogue to every row was never published or promoted.
 
+### V2b stock-order candidate: prospective model qualification
+
+The separately named `fused_v2_stock` candidate combines both original stock
+arithmetic contracts. For small batches it uses the AVX2 grouping/FMA/reduction
+above. When the pinned stock would admit tiled Q3_K (batch >= 8, enabled,
+not reference execution, no repacked weight buffer), its Rust entry instead
+reduces each block as integers, rounds weight-scale times that integer, then
+FMAs the activation scale into the row accumulator. The adapter mirrors the
+original environment enable/force switches; other kernel modes keep their
+previous behavior. No stock decoder ever receives BPB3-K bytes. No persistent
+format, weight, quantization, tolerance, or optimized-stock baseline changes.
+
+Before any real-model observation of v2b, independent native fixture tests
+matched 896 original upstream AVX2 C outputs and 112 original tiled C++ outputs
+bit for bit. The tiled oracle compiles the unchanged pinned upstream kernel
+and repackers; the fixture adapter supplies original-Q3_K bytes and Q8 codes.
+Its C++ is diagnostic only and never linked into the BPB3-K inference runtime.
+The Rust tests include unaligned/extreme multiblock results and nrc=1/2/4 tiled
+ABI column strides with surrounding output sentinels.
+
+V2b is now the prospective candidate against the SAME original optimized
+stock criterion: every finite logit within abs 2e-4 + rel 2e-5 and identical
+eight greedy token IDs, with the original prompts/context/thread/repeat grid.
+Fresh-process outputs must remain bit-identical. V1/legacy-v2a exact parity
+remains mandatory as a control; the failed legacy-v2a/stock comparison stays
+explicitly reported as a rejected prior experiment. This is a new arithmetic
+implementation targeting the stock's own operations, not a relaxed tolerance.
+No v2b model equivalence or speed is claimed before those observations. Only
+qualified v2b may become the seventh primary arm of the physical protocol.
+
 ## Historical evidence re-audit
 
 RemoteOps run 42510895356 completed successfully under CHECKUPAUTO; controller

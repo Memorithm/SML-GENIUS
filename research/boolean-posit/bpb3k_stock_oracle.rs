@@ -9,6 +9,12 @@ mod kernels;
 use std::ffi::c_void;
 
 extern "C" {
+    fn original_q3_tiled_oracle(
+        blocks: i32,
+        weights: *const u8,
+        activations: *const u8,
+        out: *mut f32,
+    );
     fn ggml_vec_dot_q3_K_q8_K(
         n: i32,
         s: *mut f32,
@@ -30,12 +36,11 @@ fn main() {
             && std::is_x86_feature_detected!("f16c"),
         "STOP_STOCK_ORACLE_ISA"
     );
-    assert_eq!(
-        std::env::var("MEM_BPB3K_KERNEL").as_deref(),
-        Ok("stock_vector")
-    );
+    let selected = std::env::var("MEM_BPB3K_KERNEL").unwrap();
+    assert!(selected == "stock_vector" || selected == "fused_v2_stock");
     let mut random = 0x62d3_93ab_5f01_7cd9u64;
     let mut cases = 0;
+    let mut tiled_cases = 0;
     for blocks in [1usize, 2, 3, 6, 9, 36, 257] {
         for case in 0..128usize {
             let mut raw = vec![0u8; blocks * 110];
@@ -96,7 +101,37 @@ fn main() {
                 "blocks={blocks} case={case} expected={expected} actual={actual}"
             );
             cases += 1;
+            if selected == "fused_v2_stock" && case < 16 {
+                unsafe {
+                    original_q3_tiled_oracle(
+                        blocks as i32,
+                        raw.as_ptr(),
+                        act.as_ptr(),
+                        &mut expected,
+                    );
+                    kernels::mem_bpb3k_dot_q8_stock_tiled(
+                        (blocks * 256) as i32,
+                        &mut actual,
+                        0,
+                        packed.as_ptr().cast(),
+                        0,
+                        act.as_ptr().cast(),
+                        0,
+                        1,
+                    );
+                }
+                assert!(expected.is_finite() && actual.is_finite());
+                assert_eq!(
+                    actual.to_bits(),
+                    expected.to_bits(),
+                    "tiled blocks={blocks} case={case}"
+                );
+                tiled_cases += 1;
+            }
         }
     }
     println!("PASS_BPB3K_ORIGINAL_AVX2_ORACLE cases={cases} exact_bits=true boundary=kernel_only_not_model_qualification");
+    if tiled_cases > 0 {
+        println!("PASS_BPB3K_ORIGINAL_TILED_ORACLE cases={tiled_cases} exact_bits=true boundary=kernel_only_not_model_qualification");
+    }
 }

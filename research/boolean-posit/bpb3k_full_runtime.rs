@@ -242,6 +242,7 @@ const C_BRIDGE: &str = r#"
 #include <assert.h>
 #include <stdio.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 
 static uint64_t mem_bpb3k_load64(const uint8_t *v) {
     uint64_t x;
@@ -285,6 +286,25 @@ static void mem_bpb3k_dequant(const block_q3_K *x, float *y, int64_t k) {
 extern void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
                              const void *vx, size_t bx, const void *vy,
                              size_t by, int nrc);
+extern void mem_bpb3k_dot_q8_stock_tiled(int n, float *s, size_t bs,
+                             const void *vx, size_t bx, const void *vy,
+                             size_t by, int nrc);
+extern int mem_bpb3k_uses_stock_order(void);
+// Match the pinned stock's admission, including its explicit diagnostic
+// environment switches. This selects arithmetic only; BPB3-K bytes never
+// reach the upstream Q3_K decoder or the stock tiled weight repacker.
+static int mem_bpb3k_stock_tiled_enabled(int use_ref, int64_t columns, int has_extra) {
+#if defined(__AVX2__) && defined(__FMA__)
+    if (use_ref || has_extra || !mem_bpb3k_uses_stock_order()) { return 0; }
+    const char * enabled = getenv("GGML_CPU_TILED_MM");
+    const char * forced = getenv("GGML_CPU_TILED_MM_FORCE");
+    return (enabled == NULL || atoi(enabled) != 0) &&
+        (columns >= 8 || (forced != NULL && atoi(forced) == 1));
+#else
+    (void) use_ref; (void) columns; (void) has_extra;
+    return 0;
+#endif
+}
 #endif
 #endif
 "#;
@@ -312,7 +332,15 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     let b = fs::read_to_string(&cpu).map_err(|e| e.to_string())?;
     let t = fs::read_to_string(&tiled).map_err(|e| e.to_string())?;
     let cmake = fs::read_to_string(&cpu_cmake).map_err(|e| e.to_string())?;
-    if cmake.matches("    ggml_add_backend_library(${GGML_CPU_NAME})").count() != 1 {
+    let dot_dispatch = "    ggml_vec_dot_t const vec_dot      = type_traits_cpu[type].vec_dot;";
+    if b.matches(dot_dispatch).count() != 1 {
+        return Err("STOP_STOCK_ORDER_DISPATCH_LAYOUT_DRIFT".into());
+    }
+    if cmake
+        .matches("    ggml_add_backend_library(${GGML_CPU_NAME})")
+        .count()
+        != 1
+    {
         return Err("STOP_CMAKE_TARGET_LAYOUT_DRIFT".into());
     }
 
@@ -329,7 +357,8 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     }
     // The optimized tiled CPU path can otherwise read BPB3-K as stock Q3_K,
     // corrupting the prompt processing and attention state without an error.
-    let tiled_gate: &str = "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:";
+    let tiled_gate: &str =
+        "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:";
     if t.matches(tiled_gate).count() != 1 {
         return Err("STOP_TILED_Q3_K_GATE_DRIFT".into());
     }
@@ -366,6 +395,11 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         &cpu,
         ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 1,",
         ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 2,",
+    )?;
+    substitute_once(
+        &cpu,
+        dot_dispatch,
+        "    ggml_vec_dot_t const vec_dot = (type == GGML_TYPE_Q3_K &&\n        mem_bpb3k_stock_tiled_enabled(params->use_ref, ne11, src0->extra != NULL))\n        ? mem_bpb3k_dot_q8_stock_tiled : type_traits_cpu[type].vec_dot;",
     )?;
     substitute_once(
         &cpu_cmake,
