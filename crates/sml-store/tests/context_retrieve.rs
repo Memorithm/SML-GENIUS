@@ -17,7 +17,7 @@ use sml_store::{
     context_ingest::{ContextIngestError, SegmentTokenCounter, StreamingIngestPolicy},
     context_retrieve::{
         exhaustive_semantic_scan, ContextRetrieveError, ContextRetrievePolicy, ContextRetriever,
-        ContextRetrieverConfig, RetrieveQuery,
+        ContextRetrieverConfig, LatentProbeBudget, RetrieveQuery,
     },
     context_semantic_ingest::{
         build_provenance_artifact, parse_provenance_artifact, ContextSemanticIngestError,
@@ -980,4 +980,165 @@ fn dacr2c_mor_query_is_independent_of_address_truth() {
     assert!(hits[0].hamming_distance > 0);
     assert_eq!(source_work.raw_reread_segments, 1);
     assert_eq!(address_work.candidates_returned, 1);
+}
+
+#[test]
+fn dacr2d_partial_address_recovers_a_source_verified_hit() {
+    let fixture = Fixture::build(79, 8);
+    let retriever = fixture.open_all();
+    let fixed = DiscreteAddress::fixed(vec![4, 6], dacr2c_budget()).unwrap();
+    let mut index = CandidateIndex::new(fixed, fixture.stream, 23).unwrap();
+    for class in 0..4 {
+        index
+            .insert(
+                fixture.segment((class + 1) as u64),
+                &dacr2c_address(class, 0b001),
+            )
+            .unwrap();
+    }
+    let mut query = dacr2c_address(0, 0b110);
+    // One selected bit unknown: both 0 and 1 are valid address proposals.
+    query.known.set(4, false).unwrap();
+    assert_eq!(
+        index.lookup(fixture.stream, 23, &query),
+        Err(AddressError::UnknownSelectedFeature)
+    );
+    let caps = LatentProbeBudget {
+        max_unknown_bits: 1,
+        max_address_probes: 2,
+    };
+    let (hits, source_work, address_work) = retriever
+        .retrieve_with_partial_latent_candidates(
+            &index,
+            23,
+            &query,
+            &signature_for_segment(2),
+            &policy(2, 1),
+            caps,
+        )
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].segment, fixture.segment(2));
+    assert_eq!(hits[0].raw_bytes, raw_bytes_for_order(1));
+    assert!(hits[0].source_exact);
+    assert_eq!(address_work.address_buckets_probed, 2);
+    assert_eq!(address_work.candidates_returned, 2);
+    assert_eq!(source_work.shortlisted, 2);
+    assert_eq!(source_work.decoded, 1);
+    assert_eq!(source_work.raw_reread_segments, 1);
+    assert_eq!(source_work.raw_reread_bytes, SEGMENT_BYTES as u64);
+    assert!(source_work.invariant_holds());
+    assert_eq!(
+        retriever
+            .retrieve_with_partial_latent_candidates(
+                &index,
+                23,
+                &query,
+                &signature_for_segment(2),
+                &policy(2, 1),
+                caps,
+            )
+            .unwrap(),
+        (hits, source_work, address_work)
+    );
+}
+
+#[test]
+fn dacr2d_partial_address_rejects_budget_before_raw_io() {
+    let fixture = Fixture::build(80, 8);
+    let retriever = fixture.open_all();
+    let fixed = DiscreteAddress::fixed(vec![4, 6], dacr2c_budget()).unwrap();
+    let mut index = CandidateIndex::new(fixed, fixture.stream, 23).unwrap();
+    index
+        .insert(fixture.segment(1), &dacr2c_address(0, 0))
+        .unwrap();
+    index
+        .insert(fixture.segment(2), &dacr2c_address(1, 0))
+        .unwrap();
+    let mut query = dacr2c_address(1, 0);
+    // Value is true but bit is unknown: both codes are queried.
+    assert!(query.value.get(4).unwrap());
+    query.known.set(4, false).unwrap();
+    fs::remove_file(retriever.raw_path(2)).unwrap();
+    assert!(matches!(
+        retriever.retrieve_with_partial_latent_candidates(
+            &index,
+            23,
+            &query,
+            &signature_for_segment(2),
+            &policy(1, 1),
+            LatentProbeBudget {
+                max_unknown_bits: 1,
+                max_address_probes: 2,
+            },
+        ),
+        Err(ContextRetrieveError::LatentAddress(
+            AddressError::CandidateOverflow
+        ))
+    ));
+    assert!(matches!(
+        retriever.retrieve_with_partial_latent_candidates(
+            &index,
+            23,
+            &query,
+            &signature_for_segment(2),
+            &policy(2, 1),
+            LatentProbeBudget {
+                max_unknown_bits: 1,
+                max_address_probes: 1,
+            },
+        ),
+        Err(ContextRetrieveError::LatentAddress(
+            AddressError::ProbeBudget
+        ))
+    ));
+    assert!(matches!(
+        retriever.retrieve_with_partial_latent_candidates(
+            &index,
+            23,
+            &query,
+            &signature_for_segment(2),
+            &policy(2, 1),
+            LatentProbeBudget {
+                max_unknown_bits: 0,
+                max_address_probes: 2,
+            },
+        ),
+        Err(ContextRetrieveError::LatentAddress(
+            AddressError::UnknownSelectedFeature
+        ))
+    ));
+}
+
+#[test]
+fn dacr2d_partial_address_reread_still_checks_raw_sha256() {
+    let fixture = Fixture::build(81, 8);
+    let retriever = fixture.open_all();
+    let fixed = DiscreteAddress::fixed(vec![4, 6], dacr2c_budget()).unwrap();
+    let mut index = CandidateIndex::new(fixed, fixture.stream, 23).unwrap();
+    index
+        .insert(fixture.segment(2), &dacr2c_address(1, 0))
+        .unwrap();
+    let mut query = dacr2c_address(0, 0);
+    query.known.set(4, false).unwrap();
+    let path = retriever.raw_path(2);
+    let mut raw = fs::read(&path).unwrap();
+    let last = raw.len() - 1;
+    raw[last] ^= 0x01;
+    fs::remove_file(&path).unwrap();
+    fs::write(&path, raw).unwrap();
+    assert!(matches!(
+        retriever.retrieve_with_partial_latent_candidates(
+            &index,
+            23,
+            &query,
+            &signature_for_segment(2),
+            &policy(2, 1),
+            LatentProbeBudget {
+                max_unknown_bits: 1,
+                max_address_probes: 2,
+            },
+        ),
+        Err(ContextRetrieveError::HashMismatch)
+    ));
 }
