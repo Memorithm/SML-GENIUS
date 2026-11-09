@@ -113,6 +113,12 @@ or order indices is not detected. Not an effective context window, not CCOS
 recall, no 1M-attention or quality claim (`NOT_MEASURED`). No throughput
 metric.
 
+## Real inference loop (CTX2-INFER)
+
+Preregistration and integration design for wiring CONTEXT-2 into a real
+model inference loop: [`research/CTX2_INFER_PREREG.md`](research/CTX2_INFER_PREREG.md)
+(`NOT_MEASURED`).
+
 ## Out of scope (this slice)
 
 - CONTEXT-4 hot/warm/cold retention tiers.
