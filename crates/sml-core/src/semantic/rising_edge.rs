@@ -201,15 +201,13 @@ mod tests {
         let registry = registry(0);
         let engine = engine();
 
-        let (first, route) =
-            observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
+        let (first, route) = observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(first.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0b1000]);
         assert_eq!(route.router_inputs.len(), 1);
 
         // A second native MOR decision is still computed with no new front.
-        let (held, route) =
-            observe(&mut probe, 2, &state, &bridge, &registry, &engine).unwrap();
+        let (held, route) = observe(&mut probe, 2, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(held.rising_routing_bits, 0);
         assert_eq!(held.active_routing_bits, 1);
         assert_eq!(route.router_inputs.len(), 1);
@@ -226,18 +224,15 @@ mod tests {
         let registry = registry(0);
         let engine = engine();
 
-        let (rise, _) =
-            observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
+        let (rise, _) = observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(rise.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0, 1]);
 
-        let (fall, _) =
-            observe(&mut probe, 2, &baseline, &bridge, &registry, &engine).unwrap();
+        let (fall, _) = observe(&mut probe, 2, &baseline, &bridge, &registry, &engine).unwrap();
         assert_eq!(fall.falling_routing_bits, 1);
         assert_eq!(probe.falling_words(), &[0, 1]);
 
-        let (rearm, _) =
-            observe(&mut probe, 3, &state, &bridge, &registry, &engine).unwrap();
+        let (rearm, _) = observe(&mut probe, 3, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(rearm.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0, 1]);
     }
