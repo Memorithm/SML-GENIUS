@@ -7,7 +7,9 @@
 use crate::{
     mor::{ExpertRuntimeHint, MixtureOfRouters, PreviousRoute},
     mor_registry::MorRouterRegistry,
-    semantic::{SemanticBitField, SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticState},
+    semantic::{
+        SemanticBitField, SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticState,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,9 +132,7 @@ mod tests {
     use crate::{
         mor::{MorPolicy, RouterId},
         mor_registry::{MorRegistryPolicy, RouterSpecialization},
-        semantic::{
-            SemanticExpertSignature, SemanticMorTopK, SemanticRouterSignature,
-        },
+        semantic::{SemanticExpertSignature, SemanticMorTopK, SemanticRouterSignature},
         PageId,
     };
 
@@ -172,6 +172,25 @@ mod tests {
         MixtureOfRouters::new(MorPolicy::default()).unwrap()
     }
 
+    fn observe<const BITS: usize>(
+        probe: &mut SbgRisingMorProbe<BITS>,
+        cycle: u64,
+        state: &SemanticState<BITS>,
+        bridge: &SemanticMorBridge<BITS>,
+        registry: &MorRouterRegistry,
+        engine: &MixtureOfRouters,
+    ) -> Result<(SbgRisingMorEvidence, SemanticMorRoute), SbgRisingMorError> {
+        probe.observe_native_route(
+            cycle,
+            state,
+            bridge,
+            registry,
+            engine,
+            &[],
+            &PreviousRoute::default(),
+        )
+    }
+
     #[test]
     fn held_high_sbg_routing_state_does_not_emit_repeated_events() {
         let baseline = SemanticState::<8>::zeroed().unwrap();
@@ -182,33 +201,15 @@ mod tests {
         let registry = registry(0);
         let engine = engine();
 
-        let (first, route) = probe
-            .observe_native_route(
-                1,
-                &state,
-                &bridge,
-                &registry,
-                &engine,
-                &[],
-                &PreviousRoute::default(),
-            )
-            .unwrap();
+        let (first, route) =
+            observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(first.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0b1000]);
         assert_eq!(route.router_inputs.len(), 1);
 
         // A second native MOR decision is still computed with no new front.
-        let (held, route) = probe
-            .observe_native_route(
-                2,
-                &state,
-                &bridge,
-                &registry,
-                &engine,
-                &[],
-                &PreviousRoute::default(),
-            )
-            .unwrap();
+        let (held, route) =
+            observe(&mut probe, 2, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(held.rising_routing_bits, 0);
         assert_eq!(held.active_routing_bits, 1);
         assert_eq!(route.router_inputs.len(), 1);
@@ -225,21 +226,18 @@ mod tests {
         let registry = registry(0);
         let engine = engine();
 
-        let (rise, _) = probe
-            .observe_native_route(1, &state, &bridge, &registry, &engine, &[], &PreviousRoute::default())
-            .unwrap();
+        let (rise, _) =
+            observe(&mut probe, 1, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(rise.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0, 1]);
 
-        let (fall, _) = probe
-            .observe_native_route(2, &baseline, &bridge, &registry, &engine, &[], &PreviousRoute::default())
-            .unwrap();
+        let (fall, _) =
+            observe(&mut probe, 2, &baseline, &bridge, &registry, &engine).unwrap();
         assert_eq!(fall.falling_routing_bits, 1);
         assert_eq!(probe.falling_words(), &[0, 1]);
 
-        let (rearm, _) = probe
-            .observe_native_route(3, &state, &bridge, &registry, &engine, &[], &PreviousRoute::default())
-            .unwrap();
+        let (rearm, _) =
+            observe(&mut probe, 3, &state, &bridge, &registry, &engine).unwrap();
         assert_eq!(rearm.rising_routing_bits, 1);
         assert_eq!(probe.rising_words(), &[0, 1]);
     }
@@ -251,12 +249,16 @@ mod tests {
         let before = probe.clone();
         let bridge = bridge::<8>();
         let engine = engine();
+
         assert_eq!(
-            probe.observe_native_route(3, &baseline, &bridge, &registry(0), &engine, &[], &PreviousRoute::default()),
-            Err(SbgRisingMorError::NonIncreasingCycle { previous: 3, next: 3 })
+            observe(&mut probe, 3, &baseline, &bridge, &registry(0), &engine),
+            Err(SbgRisingMorError::NonIncreasingCycle {
+                previous: 3,
+                next: 3
+            })
         );
         assert!(matches!(
-            probe.observe_native_route(4, &baseline, &bridge, &registry(1), &engine, &[], &PreviousRoute::default()),
+            observe(&mut probe, 4, &baseline, &bridge, &registry(1), &engine),
             Err(SbgRisingMorError::NativeRouting(_))
         ));
         assert_eq!(probe, before);
