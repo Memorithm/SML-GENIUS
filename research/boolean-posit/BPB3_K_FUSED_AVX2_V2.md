@@ -4,6 +4,10 @@ Status: experimental candidate; E (incomplete qualification) until the exact
 merged source has passed fidelity and paired Dell measurements. Targets are
 not results. No format, model weights, quantization, or default mode change.
 
+Observed results, retained failures and the final category E are recorded in
+[the 2026-11-09 Dell report](BPB3_K_V2_DELL_RESULTS_20261109.md). The frozen
+criteria below remain unchanged; CI success is not stock superiority.
+
 ## Audit and hypotheses
 
 Audited SML main `a45459259e6165a50a35d416fa7ea149fd5f4eac`, ancestor
