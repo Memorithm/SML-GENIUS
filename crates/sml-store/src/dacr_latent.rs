@@ -237,6 +237,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         self.entries.is_empty()
     }
 
+    /// Frozen maximum admitted source IDs, independent of current index size.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.encoder.budget.max_entries
+    }
+
     pub fn insert(
         &mut self,
         segment: ContextSegmentId,
