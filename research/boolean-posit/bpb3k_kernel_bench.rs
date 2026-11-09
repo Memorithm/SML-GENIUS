@@ -4,7 +4,7 @@
 mod kernels;
 use std::{ffi::c_void, hint::black_box, time::Instant};
 fn main() {
-    for blocks in [3usize, 9, 36] {
+    for blocks in [3usize, 6, 9, 36] {
         let mut w = vec![0u8; blocks * 110];
         let mut a = vec![0u8; blocks * 292];
         for (i, x) in w.iter_mut().enumerate() {

@@ -25,6 +25,7 @@ enum Mode {
     Fused,
     FusedV2,
     FusedV2I16,
+    StockVector,
 }
 
 fn mode() -> Mode {
@@ -36,6 +37,7 @@ fn mode() -> Mode {
         Ok("fused") => Mode::Fused,
         Ok("fused_v2") => Mode::FusedV2,
         Ok("fused_v2_i16") => Mode::FusedV2I16,
+        Ok("stock_vector") => Mode::StockVector,
         _ => Mode::Scalar,
     })
 }
@@ -115,6 +117,32 @@ fn reference(weights: &[u8], activations: &[u8]) -> f32 {
         }
     }
     finish(sums)
+}
+
+// Diagnostic contract of pinned arch/x86/quants.c Q3_K AVX2: each integer
+// lane contains four adjacent coefficients in each 32-value group, followed
+// by blockwise FMA and the upstream balanced horizontal reduction. This is
+// deliberately separate from v1/v2's generic eight-lane contract.
+fn stock_vector_reference(weights: &[u8], activations: &[u8]) -> f32 {
+    let mut sums = [0.0f32; LANES];
+    for (w, a) in weights
+        .chunks_exact(BLOCK_W)
+        .zip(activations.chunks_exact(BLOCK_A))
+    {
+        let mut ints = [0i32; LANES];
+        for i in 0..256 {
+            ints[(i % 32) / 4] += coeff(w, i) * scale(w, i / 16) * i32::from(a[4 + i] as i8);
+        }
+        let d = global_scale(w, a);
+        for lane in 0..LANES {
+            sums[lane] = d.mul_add(ints[lane] as f32, sums[lane]);
+        }
+    }
+    let a = sums[4] + sums[0];
+    let b = sums[5] + sums[1];
+    let c = sums[6] + sums[2];
+    let d = sums[7] + sums[3];
+    (a + c) + (b + d)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -252,6 +280,71 @@ mod x86 {
         _mm256_storeu_ps(lanes.as_mut_ptr(), sums);
         finish(lanes)
     }
+    #[target_feature(enable = "avx2,fma")]
+    pub unsafe fn stock_vector_row(w: &[u8], a: &[u8]) -> f32 {
+        let bits = _mm256_set1_epi64x(0x8040_2010_0804_0201u64 as i64);
+        let indices = _mm256_setr_epi64x(
+            0,
+            0x0101_0101_0101_0101,
+            0x0202_0202_0202_0202,
+            0x0303_0303_0303_0303,
+        );
+        let one = _mm256_set1_epi8(1);
+        let two = _mm256_set1_epi8(2);
+        let mut acc = _mm256_setzero_ps();
+        for (weight, act) in w.chunks_exact(BLOCK_W).zip(a.chunks_exact(BLOCK_A)) {
+            let mut ints = _mm256_setzero_si256();
+            for bank in 0..4 {
+                let neg = _mm256_set1_epi64x(u64_at(weight, bank * 24) as i64);
+                let lo = _mm256_set1_epi64x(u64_at(weight, bank * 24 + 8) as i64);
+                let hi = _mm256_set1_epi64x(u64_at(weight, bank * 24 + 16) as i64);
+                for part in 0..2 {
+                    let g = bank * 4 + part * 2;
+                    let index = _mm256_add_epi8(indices, _mm256_set1_epi8((part * 4) as i8));
+                    let n = _mm256_shuffle_epi8(neg, index);
+                    let l = _mm256_shuffle_epi8(lo, index);
+                    let h = _mm256_shuffle_epi8(hi, index);
+                    let nm = _mm256_cmpeq_epi8(_mm256_and_si256(n, bits), bits);
+                    let lv =
+                        _mm256_and_si256(_mm256_cmpeq_epi8(_mm256_and_si256(l, bits), bits), one);
+                    let hv =
+                        _mm256_and_si256(_mm256_cmpeq_epi8(_mm256_and_si256(h, bits), bits), two);
+                    let q = _mm256_xor_si256(_mm256_or_si256(lv, hv), nm);
+                    let aq = _mm256_loadu_si256(act.as_ptr().add(4 + g * 16).cast());
+                    let p0 = _mm256_madd_epi16(
+                        _mm256_mullo_epi16(
+                            _mm256_cvtepi8_epi16(_mm256_castsi256_si128(q)),
+                            _mm256_set1_epi16(scale(weight, g) as i16),
+                        ),
+                        _mm256_cvtepi8_epi16(_mm256_castsi256_si128(aq)),
+                    );
+                    let p1 = _mm256_madd_epi16(
+                        _mm256_mullo_epi16(
+                            _mm256_cvtepi8_epi16(_mm256_extracti128_si256(q, 1)),
+                            _mm256_set1_epi16(scale(weight, g + 1) as i16),
+                        ),
+                        _mm256_cvtepi8_epi16(_mm256_extracti128_si256(aq, 1)),
+                    );
+                    // Each madd result is an adjacent pair. Join pairs into
+                    // the four-coefficient lanes of the original stock kernel.
+                    let joined = _mm256_hadd_epi32(p0, p1);
+                    let joined = _mm256_permutevar8x32_epi32(
+                        joined,
+                        _mm256_setr_epi32(0, 1, 4, 5, 2, 3, 6, 7),
+                    );
+                    ints = _mm256_add_epi32(ints, joined);
+                }
+            }
+            acc = _mm256_fmadd_ps(
+                _mm256_set1_ps(global_scale(weight, act)),
+                _mm256_cvtepi32_ps(ints),
+                acc,
+            );
+        }
+        let sum = _mm_add_ps(_mm256_extractf128_ps(acc, 1), _mm256_castps256_ps128(acc));
+        let sum = _mm_add_ps(sum, _mm_movehl_ps(sum, sum));
+        _mm_cvtss_f32(_mm_add_ss(sum, _mm_movehdup_ps(sum)))
+    }
     // Every AVX2 operation is isolated in this dynamically guarded function;
     // no global -march=native or AVX2 assumption in the main code.
     // Fused AVX2: keep eight integer accumulators in registers over the
@@ -345,6 +438,25 @@ fn avx2_available() -> bool {
     {
         false
     }
+}
+fn fma_available() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    {
+        std::is_x86_feature_detected!("fma")
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        false
+    }
+}
+fn stock_vector_row(weights: &[u8], act: &[u8]) -> f32 {
+    assert_eq!(act.len() % BLOCK_A, 0);
+    assert_eq!(weights.len(), act.len() / BLOCK_A * BLOCK_W);
+    if avx2_available() && fma_available() {
+        #[cfg(target_arch = "x86_64")]
+        return unsafe { x86::stock_vector_row(weights, act) };
+    }
+    stock_vector_reference(weights, act)
 }
 fn lane_products(block: &[u8], act: &[u8], start: usize, simd: bool) -> [i32; 8] {
     if simd && avx2_available() {
@@ -473,18 +585,21 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
     static TRACE: OnceLock<()> = OnceLock::new();
     TRACE.get_or_init(|| {
         eprintln!(
-            "BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc} avx2={}",
-            avx2_available()
+            "BPB3K_DIRECT_DOT_EXECUTED kernel={m:?} rows={nrc} avx2={} fma={}",
+            avx2_available(),
+            fma_available()
         )
     });
 
-    if m == Mode::FusedV2 || m == Mode::FusedV2I16 {
+    if m == Mode::FusedV2 || m == Mode::FusedV2I16 || m == Mode::StockVector {
         // Bypass all per-call row/result Vec allocations for the v2 path.
         for col in 0..nrc {
             let act = slice::from_raw_parts((vy as *const u8).add(col * by), bytes * BLOCK_A);
             for row in 0..nrc {
                 let w = slice::from_raw_parts((vx as *const u8).add(row * bx), bytes * BLOCK_W);
-                *s.add(col * bs + row) = if m == Mode::FusedV2 {
+                *s.add(col * bs + row) = if m == Mode::StockVector {
+                    stock_vector_row(w, act)
+                } else if m == Mode::FusedV2 {
                     fused_v2_row(w, act)
                 } else {
                     row_v2(w, act, false)
@@ -505,7 +620,7 @@ pub unsafe extern "C" fn mem_bpb3k_dot_q8(
             Mode::Tiled => grouped(&rows, act, false),
             Mode::Hybrid => grouped(&rows, act, true),
             Mode::Fused => fused_rows(&rows, act),
-            Mode::FusedV2 | Mode::FusedV2I16 => {
+            Mode::FusedV2 | Mode::FusedV2I16 | Mode::StockVector => {
                 unreachable!("v2 writes directly to caller storage")
             }
         };
@@ -625,6 +740,52 @@ mod tests {
                 assert_eq!(actual, expected, "i16 ablation case={case}");
             }
         }
+    }
+    #[test]
+    fn stock_vector_multiblock_contract_unaligned_and_rounding_sensitive() {
+        let mut differs_from_generic = 0;
+        for blocks in [0, 1, 2, 3, 6, 9, 36, 257] {
+            for seed in 0..32 {
+                let mut w = wire(seed, blocks);
+                let mut a = input(seed, blocks);
+                for b in 0..blocks {
+                    let d = [
+                        0x0001u16, 0x03ff, 0x0400, 0x3555, 0x7bff, 0x8000, 0xbc00, 0xfbff,
+                    ][(b + seed) % 8];
+                    w[b * BLOCK_W + 108..(b + 1) * BLOCK_W].copy_from_slice(&d.to_le_bytes());
+                    a[b * BLOCK_A..b * BLOCK_A + 4].copy_from_slice(
+                        &[0.0f32, -0.125, 0.1, 1.0e-20, 1.0e20][(b + seed) % 5].to_le_bytes(),
+                    );
+                }
+                let expected = stock_vector_reference(&w, &a);
+                differs_from_generic +=
+                    usize::from(expected.to_bits() != reference(&w, &a).to_bits());
+                let mut wu = vec![0u8];
+                wu.extend_from_slice(&w);
+                let mut au = vec![0u8; 3];
+                au.extend_from_slice(&a);
+                assert_eq!(
+                    stock_vector_row(&wu[1..], &au[3..]).to_bits(),
+                    expected.to_bits(),
+                    "blocks={blocks} seed={seed}"
+                );
+            }
+        }
+        assert!(
+            differs_from_generic > 0,
+            "fixtures must exercise distinct FP32 orders"
+        );
+    }
+    #[test]
+    fn stock_vector_rejects_partial_buffers() {
+        assert!(
+            std::panic::catch_unwind(|| stock_vector_row(&wire(0, 1)[..109], &input(0, 1)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| stock_vector_row(&wire(0, 1), &input(0, 1)[..291]))
+                .is_err()
+        );
     }
     #[test]
     fn fused_v2_multiblock_float_order_unaligned_and_edge_scales() {

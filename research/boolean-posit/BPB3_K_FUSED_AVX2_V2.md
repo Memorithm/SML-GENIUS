@@ -80,6 +80,39 @@ accumulation and activation-quantization effects. These are diagnostic controls;
 the optimized stock baseline, original primary criteria and tolerances above
 remain unchanged. Do not promote the candidate by substituting the new controls.
 
+### Independent stock-vector diagnostic (2026-11-09)
+
+Run `42585696784` at `8f7f6097` tested nrc=1 instead of nrc=2. The first
+divergent tensor and arithmetic-prompt max logit difference remained identical.
+This falsifies the row-dispatch explanation for that observed discrepancy;
+the safe nrc=2 runtime was restored in `1b0577a6`.
+
+Pinned upstream `arch/x86/quants.c` has a distinct AVX2 FP32 contract: each
+integer lane groups four consecutive coefficients within each 32-value group,
+then the block scale is accumulated using FMA, and a balanced horizontal sum
+finishes the row. V1/v2 instead preserve the generic C eight-lane grouping,
+separate multiplication/addition and serial horizontal sum. A new separately
+named `stock_vector` Rust profile reproduces the former as a diagnostic only.
+Its dynamic AVX2/FMA guard retains a portable explicitly fused scalar oracle.
+It consumes the same lossless 110-byte blocks and allocates no per-call Vec.
+
+`run_bpb3k_stock_oracle.sh` verifies upstream's exact SHA and unchanged source
+file, extracts the original C AVX2 function and its two helpers unchanged, and
+links them only into a Rust diagnostic fixture executable. Before any model
+observation of this profile, 896 local Linux cases (1/2/3/6/9/36/257 blocks,
+random original Q3_K bytes, Q8 extremes, varied finite FP16 scales) matched the
+original C function bit for bit. The new multiblock/unaligned Rust test also
+requires fixtures that distinguish the generic and stock-vector FP32 orders.
+This is kernel evidence, not real-model fidelity or throughput evidence.
+
+The full-model script retains its original primary stock/v2 tolerance and exact
+v1/v2 criterion. It additionally records stock/stock_vector diagnostic logits,
+repeatability and operator fingerprints. It cannot promote stock_vector through
+that diagnostic comparison. In particular, upstream selects a different tiled
+arithmetic path for batches of at least eight tokens; a vector-only profile
+does not establish equivalence for those prompts. The discarded local idea of
+applying the tiled epilogue to every row was never published or promoted.
+
 ## Historical evidence re-audit
 
 RemoteOps run 42510895356 completed successfully under CHECKUPAUTO; controller

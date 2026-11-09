@@ -6,6 +6,8 @@ on:
       - 'research/boolean-posit/bpb3k_cpu_kernels.rs'
       - 'research/boolean-posit/bpb3k_fidelity.rs'
       - 'research/boolean-posit/bpb3k_kernel_bench.rs'
+      - 'research/boolean-posit/bpb3k_stock_oracle.rs'
+      - 'research/boolean-posit/run_bpb3k_stock_oracle.sh'
       - 'research/boolean-posit/run_bpb3k_fidelity.sh'
       - '.github/workflows/bpb3k-full-smollm2-inference.yml'
   push:
@@ -71,7 +73,9 @@ jobs:
           ./cpu-kernel-tests
           MEM_BPB3K_KERNEL=fused_v2 ./cpu-kernel-tests
           MEM_BPB3K_KERNEL=fused_v2_i16 ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=stock_vector ./cpu-kernel-tests
           rustfmt +1.89.0 --edition 2021 --check --config skip_children=true bpb3k_cpu_kernels.rs bpb3k_fidelity.rs bpb3k_kernel_bench.rs
+          rustfmt +1.89.0 --edition 2021 --check --config skip_children=true "$GITHUB_WORKSPACE/research/boolean-posit/bpb3k_stock_oracle.rs"
           rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_fidelity.rs -o fidelity-tests
           ./fidelity-tests
           rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_fidelity.rs -o bpb3k-fidelity
@@ -188,7 +192,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/bpb3k"
-          for mode in stock fused_v2; do
+          for mode in stock fused_v2 stock_vector; do
             if [[ "$mode" == stock ]]; then
               binary=./stock/build/bin/llama-debug
               model=original.gguf
@@ -207,27 +211,34 @@ jobs:
           python3 - <<'PY' | tee optrace-summary.txt
           from pathlib import Path
           logs = {}
-          for mode in ("stock", "fused_v2"):
+          for mode in ("stock", "fused_v2", "stock_vector"):
               rows = [line.strip() for line in Path(f"optrace-{mode}.log").read_text().splitlines()
                       if line.startswith("BPB3K_LAYER seq=")]
               if not rows:
                   raise SystemExit(f"STOP_BPB3K_LAYER_TRACE_EMPTY mode={mode}")
               logs[mode] = rows
               print(f"BPB3K_LAYER_COUNT mode={mode} count={len(rows)}")
-          left, right = logs["stock"], logs["fused_v2"]
-          for i, (a, b) in enumerate(zip(left, right)):
-              if a != b:
-                  print(f"BPB3K_FIRST_DIVERGENCE index={i}")
-                  print(f"BPB3K_STOCK_OPERATOR {a}")
-                  print(f"BPB3K_FUSED_OPERATOR {b}")
-                  break
-          else:
-              if len(left) != len(right):
-                  print(f"BPB3K_LAYER_LENGTH_MISMATCH stock={len(left)} fused={len(right)}")
+          for mode in ("fused_v2", "stock_vector"):
+              left, right = logs["stock"], logs[mode]
+              for i, (a, b) in enumerate(zip(left, right)):
+                  if a != b:
+                      print(f"BPB3K_FIRST_DIVERGENCE mode={mode} index={i}")
+                      print(f"BPB3K_STOCK_OPERATOR {a}")
+                      print(f"BPB3K_FUSED_OPERATOR mode={mode} {b}")
+                      break
               else:
-                  print("BPB3K_LAYER_TRACE_IDENTICAL bounded=true")
+                  if len(left) != len(right):
+                      print(f"BPB3K_LAYER_LENGTH_MISMATCH mode={mode} stock={len(left)} fused={len(right)}")
+                  else:
+                      print(f"BPB3K_LAYER_TRACE_IDENTICAL mode={mode} bounded=true")
           print("BPB3K_TRACE_VERDICT=DIAGNOSTIC_ONLY no_qualification_or_threshold_change")
           PY
+      - name: Independent original AVX2 C oracle for the diagnostic stock-vector order
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh "$RUNNER_TEMP/bpb3k/stock" "$RUNNER_TEMP/bpb3k/stock-oracle"
+
       - name: Full vocabulary logits, deterministic token IDs and fresh-process reproducibility
         shell: bash
         run: |
