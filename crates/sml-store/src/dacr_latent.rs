@@ -232,14 +232,30 @@ impl<const BITS: usize> DiscreteAddress<BITS> {
                 accounting.different_pairs += 1;
             }
             for (bit, counts) in observed.iter_mut().enumerate() {
-                if !pair.left.known.get(bit).map_err(|_| AddressError::InvalidFeature)?
-                    || !pair.right.known.get(bit).map_err(|_| AddressError::InvalidFeature)?
+                if !pair
+                    .left
+                    .known
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                    || !pair
+                        .right
+                        .known
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?
                 {
                     continue;
                 }
                 accounting.observed_feature_comparisons += 1;
-                let disagreed = pair.left.value.get(bit).map_err(|_| AddressError::InvalidFeature)?
-                    != pair.right.value.get(bit).map_err(|_| AddressError::InvalidFeature)?;
+                let disagreed = pair
+                    .left
+                    .value
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                    != pair
+                        .right
+                        .value
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?;
                 if pair.same {
                     counts.same_seen += 1;
                     counts.same_disagreed += usize::from(disagreed);
@@ -277,7 +293,9 @@ impl<const BITS: usize> DiscreteAddress<BITS> {
         eligible.sort_unstable_by(|left, right| {
             let left_rate = left.advantage_numerator * right.advantage_denominator;
             let right_rate = right.advantage_numerator * left.advantage_denominator;
-            right_rate.cmp(&left_rate).then_with(|| left.bit.cmp(&right.bit))
+            right_rate
+                .cmp(&left_rate)
+                .then_with(|| left.bit.cmp(&right.bit))
         });
         if eligible.len() < budget.address_bits {
             return Err(AddressError::InsufficientSignal);
