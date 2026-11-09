@@ -230,6 +230,11 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         self.entries.len()
     }
 
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn insert(
         &mut self,
         segment: ContextSegmentId,
