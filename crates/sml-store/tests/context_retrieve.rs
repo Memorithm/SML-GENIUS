@@ -614,7 +614,6 @@ fn context3_t10_sublinear_fit_on_declared_fixture_with_exhaustive_negative_contr
     );
 }
 
-
 #[test]
 fn dacr2b_direct_candidate_reuses_mor_and_verified_raw_reread() {
     let fixture = Fixture::build(71, 64);
@@ -635,17 +634,24 @@ fn dacr2b_direct_candidate_reuses_mor_and_verified_raw_reread() {
     assert_eq!(counter.raw_reread_bytes, SEGMENT_BYTES as u64);
     assert!(counter.invariant_holds());
 
-    let requested = [fixture.segment(31), fixture.segment(53), fixture.segment(17), fixture.segment(1)];
+    let requested = [
+        fixture.segment(31),
+        fixture.segment(53),
+        fixture.segment(17),
+        fixture.segment(1),
+    ];
     let (ranked, stats) = retriever
         .retrieve_from_candidate_ids(&requested, &query, &policy(4, 2))
         .unwrap();
     assert_eq!(ranked.len(), 2);
     assert_eq!(ranked[0].segment, fixture.segment(1));
     let mut expected = requested;
-    expected.sort_by_key(|segment| (
-        signature_for_segment(segment.segment_id).xor_popcount(&query),
-        segment.segment_id,
-    ));
+    expected.sort_by_key(|segment| {
+        (
+            signature_for_segment(segment.segment_id).xor_popcount(&query),
+            segment.segment_id,
+        )
+    });
     assert_eq!(ranked[0].segment, expected[0]);
     assert_eq!(ranked[1].segment, expected[1]);
     assert_eq!(ranked[0].rank, 0);
@@ -712,13 +718,16 @@ fn dacr2b_manifest_semantic_id_forgery_fails_in_all_retrieval_paths() {
     let retriever = fixture.open_all();
     let needle = 7;
     let provenance_path = retriever.provenance_path(needle);
-    let mut manifest =
-        parse_provenance_artifact(&fs::read(&provenance_path).unwrap()).unwrap();
+    let mut manifest = parse_provenance_artifact(&fs::read(&provenance_path).unwrap()).unwrap();
     // Reissue a CRC-valid provenance manifest binding a different semantic
     // record ID to unchanged raw SHA and segment ID.
     manifest.semantic_record_ids[0] += 9;
     fs::remove_file(&provenance_path).unwrap();
-    fs::write(&provenance_path, build_provenance_artifact(&manifest).unwrap()).unwrap();
+    fs::write(
+        &provenance_path,
+        build_provenance_artifact(&manifest).unwrap(),
+    )
+    .unwrap();
     let query = exact_query(needle);
     assert!(matches!(
         retriever.retrieve(&query, &policy(8, 1)),
