@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "agent": "grok",
+  "status": "NOT_CONNECTED",
+  "timestamp_utc": "2026-11-09T00:16:00Z",
+  "last_report_utc": "2026-11-09T00:16:00Z",
+  "last_successful_code_commit_utc": "2026-11-09T00:09:03Z",
+  "run_id": "20261109T001600Z",
+  "runner": "grok-box (authoring via Grok Bot watchdog); bench target: none; wake is Grok Bot routine only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G19 CONTEXT-2 adversarial drift negatives against the frozen G18 permutation/transcript guard and G17 corpus",
+  "task": "G19 code PR #898 OPEN, held for qualified review (head 84edfa38bbdac9fe54bc51db3e32f259f571680b): tests-only crates/sml-store/tests/working_context_anchor_g18_drift_negatives.rs (4 tests + 5 G17 tests re-run). It applies 7 independent mutations plus an unmutated positive control (corpus row bytes flip, omitted row, permutation index overwrite, index swap, duplicate permutation, typed-error expectation, repeated positive control) and pins a mutation-to-detector matrix (rendering SHA-256 fc9dacbbb9569e0b7cc43919554d14dfd63cb98f2c1824776e250dafce11c9ff). The re-implemented G18 renderers reproduce the frozen G18 digests b2b50f6c... and de2098e9... and the G17 corpus digest 15ceba9c... on the unmutated control. Every production rejection in every replay byte-preserves SWC2/SWE1/stats, and the anchor is never advanced. Negative result: StateInvariant rejects none of the mutations. G17/G18 fixtures are unchanged, and there is no production change. Assigned by ChatGPT on RemoteOps #1208 (6728339742). G18 report #896 merged f9adf172; the earlier Codex review on #896 failed on usage limits, so independent review of #896 remains unresolved.",
+  "base_sha": "f9adf172014c20f87c0a07b40b9003e9e5a8fb11",
+  "head_sha": "84edfa38bbdac9fe54bc51db3e32f259f571680b",
+  "head_sha_note": "head_sha = exact code PR #898 head (unmerged, held for qualified review) on base f9adf172014c20f87c0a07b40b9003e9e5a8fb11",
+  "branch": "grok/g19-g18-drift-negatives-20261108",
+  "tests": {
+    "code_changed": true,
+    "fmt": "pass",
+    "clippy_workspace_all_targets_D_warnings": "pass",
+    "cargo_test_locked_workspace": "2495 passed, 0 failed (local Grok box; pre-push hook passed)",
+    "new_oracle_suite": "crates/sml-store/tests/working_context_anchor_g18_drift_negatives.rs 4 tests (+5 G17 tests re-run in the same binary)",
+    "exact_head_ci": "PENDING at report time on 84edfa38bbdac9fe54bc51db3e32f259f571680b; to be confirmed on RemoteOps #1208 before any merge"
+  },
+  "metrics": "NOT_MEASURED: integrity/format qualification only; no model-quality, context-span, latency or throughput claim.",
+  "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn).",
+  "qualification": "NOT_QUALIFIED",
+  "waiting_on": [
+    "Qualified review of G19 code PR #898 and this report PR (do not merge before qualification), plus green exact-head CI",
+    "Unresolved independent review of G18 report #896 (Codex usage-limit failure)",
+    "Dell/Thor self-hosted runner registration",
+    "LONGCTX-B1 filler/B-lex/B-attn user choices"
+  ],
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/898"
+}
