@@ -4,7 +4,7 @@
 //! Source-exact answers must be checked independently through CONTEXT-1c / DACR-1.
 //! No token attention, memory scan, trained language model, or speed claim.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use sml_core::{
     context_ledger::{ContextSegmentId, ContextStreamId},
@@ -204,7 +204,8 @@ pub struct CandidateIndex<const BITS: usize> {
     stream: ContextStreamId,
     epoch: u64,
     entries: BTreeSet<ContextSegmentId>,
-    buckets: BTreeMap<u16, Vec<ContextSegmentId>>,
+    /// Exactly 2^address_bits slots. Address decoding is a direct offset.
+    buckets: Vec<Vec<ContextSegmentId>>,
 }
 
 impl<const BITS: usize> CandidateIndex<BITS> {
@@ -216,12 +217,13 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         if epoch == 0 {
             return Err(AddressError::WrongEpoch);
         }
+        let address_slots = 1_usize << encoder.budget.address_bits;
         Ok(Self {
             encoder,
             stream,
             epoch,
             entries: BTreeSet::new(),
-            buckets: BTreeMap::new(),
+            buckets: vec![Vec::new(); address_slots],
         })
     }
 
@@ -233,6 +235,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Number of preallocated direct-address slots, including empty ones.
+    #[must_use]
+    pub fn address_slot_count(&self) -> usize {
+        self.buckets.len()
     }
 
     pub fn insert(
@@ -253,15 +261,11 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         if self.entries.len() >= self.encoder.budget.max_entries {
             return Err(AddressError::IndexFull);
         }
-        if self
-            .buckets
-            .get(&address)
-            .is_some_and(|bucket| bucket.len() >= self.encoder.budget.max_bucket_entries)
-        {
+        if self.buckets[address as usize].len() >= self.encoder.budget.max_bucket_entries {
             return Err(AddressError::BucketFull);
         }
         self.entries.insert(segment);
-        self.buckets.entry(address).or_default().push(segment);
+        self.buckets[address as usize].push(segment);
         Ok(())
     }
 
@@ -280,7 +284,7 @@ impl<const BITS: usize> CandidateIndex<BITS> {
             return Err(AddressError::WrongEpoch);
         }
         let address = self.encoder.encode(key)?;
-        let hits = self.buckets.get(&address).cloned().unwrap_or_default();
+        let hits = self.buckets[address as usize].clone();
         let accounting = CandidateAccounting {
             address_buckets_probed: 1,
             candidates_returned: hits.len() as u64,
