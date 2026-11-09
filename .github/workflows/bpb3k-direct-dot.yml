@@ -37,6 +37,8 @@ jobs:
       - name: Build direct-dot test oracle (warnings denied)
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
       - name: Execute independent Q3_K dot parity and regression tests
-        run: "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
       - name: Compile optimized standalone Rust library
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
