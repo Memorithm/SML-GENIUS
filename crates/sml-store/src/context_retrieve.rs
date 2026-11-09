@@ -362,14 +362,8 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         address_query: &SbgAddress<BITS>,
         mor_query: &SemanticBitField<BITS>,
         policy: &ContextRetrievePolicy,
-    ) -> Result<
-        (
-            Vec<RetrieveHit>,
-            RetrieveAccounting,
-            CandidateAccounting,
-        ),
-        ContextRetrieveError,
-    > {
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting, CandidateAccounting), ContextRetrieveError>
+    {
         let policy = policy.validate()?;
         let (candidates, address_accounting) = index
             .lookup(self.stream_id, epoch, address_query)
