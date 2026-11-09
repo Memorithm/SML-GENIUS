@@ -10,7 +10,7 @@
 //! fixture-only and supports no scale claim.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt, fs, io,
     path::{Path, PathBuf},
 };
@@ -142,6 +142,8 @@ pub enum ContextRetrieveError {
     MissingRaw,
     MissingProvenance,
     AssociativeDenied,
+    InvalidCandidateIdentity,
+    DuplicateCandidate,
     Io(io::Error),
 }
 
@@ -301,6 +303,48 @@ impl<const BITS: usize> ContextRetriever<BITS> {
             | WriteOutcome::Replaced { .. } => Ok(()),
             WriteOutcome::CollisionRejected { .. } => Err(ContextRetrieveError::AssociativeDenied),
         }
+    }
+
+    /// Verifies an externally selected *untrusted* shortlist of CONTEXT-0 segment IDs.
+    ///
+    /// This path never searches the global history, and never treats a
+    /// semantic-address match as proof of source truth. It uses the same native
+    /// MOR top-k and immutable raw/provenance reread as ordinary CONTEXT-3.
+    /// `source_exact` describes SBG signature equality, not literal-key truth.
+    pub fn retrieve_from_candidate_ids(
+        &self,
+        candidates: &[ContextSegmentId],
+        query: &SemanticBitField<BITS>,
+        policy: &ContextRetrievePolicy,
+    ) -> Result<(Vec<RetrieveHit>, RetrieveAccounting), ContextRetrieveError> {
+        let policy = policy.validate()?;
+        if candidates.len() > policy.max_shortlist {
+            return Err(ContextRetrieveError::BudgetOverflow);
+        }
+        let mut seen = BTreeSet::new();
+        let mut shortlist = Vec::with_capacity(candidates.len());
+        for &segment in candidates {
+            if segment.stream_id != self.stream_id
+                || segment.segment_id == 0
+                || segment.segment_id > self.entries.len() as u64
+            {
+                return Err(ContextRetrieveError::InvalidCandidateIdentity);
+            }
+            if !seen.insert(segment) {
+                return Err(ContextRetrieveError::DuplicateCandidate);
+            }
+            let index = (segment.segment_id - 1) as usize;
+            if self.entries[index].segment != segment {
+                return Err(ContextRetrieveError::InvalidCandidateIdentity);
+            }
+            shortlist.push(index);
+        }
+        let accounting = RetrieveAccounting {
+            shortlisted: shortlist.len() as u64,
+            ..RetrieveAccounting::default()
+        };
+        let ranked = self.rank(&shortlist, query, policy.top_k)?;
+        self.reread(ranked, accounting)
     }
 
     /// Bounded retrieval: shortlist -> MOR top-k -> verified raw reread.
@@ -672,6 +716,11 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         .map_err(map_raw_error)?;
         if raw.reference.identity != candidate.segment {
             return Err(ContextRetrieveError::MissingRaw);
+        }
+        // Raw payload integrity alone does not establish its semantic-ID
+        // linkage to the current CONTEXT-1c provenance manifest.
+        if raw.reference.semantic_record_ids() != manifest.semantic_record_ids.as_slice() {
+            return Err(ContextRetrieveError::MissingProvenance);
         }
         let actual = sha256_raw_bytes(&raw.raw_bytes).map_err(map_raw_error)?;
         if actual != candidate.content_hash || raw.reference.content_hash != candidate.content_hash
