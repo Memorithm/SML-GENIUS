@@ -613,3 +613,147 @@ fn context3_t10_sublinear_fit_on_declared_fixture_with_exhaustive_negative_contr
         "exhaustive alpha {alpha_scan}"
     );
 }
+
+
+#[test]
+fn dacr2b_direct_candidate_reuses_mor_and_verified_raw_reread() {
+    let fixture = Fixture::build(71, 64);
+    let retriever = fixture.open_all();
+    let target = fixture.segment(53);
+    let query = signature_for_segment(1);
+    let (direct, counter) = retriever
+        .retrieve_from_candidate_ids(&[target], &query, &policy(1, 1))
+        .unwrap();
+    assert_eq!(direct.len(), 1);
+    assert_eq!(direct[0].segment, target);
+    assert_eq!(direct[0].raw_bytes, raw_bytes_for_order(52));
+    assert!(!direct[0].source_exact);
+    assert!(direct[0].hamming_distance > 0);
+    assert_eq!(counter.shortlisted, 1);
+    assert_eq!(counter.decoded, 1);
+    assert_eq!(counter.raw_reread_segments, 1);
+    assert_eq!(counter.raw_reread_bytes, SEGMENT_BYTES as u64);
+    assert!(counter.invariant_holds());
+
+    let requested = [fixture.segment(31), fixture.segment(53), fixture.segment(17), fixture.segment(1)];
+    let (ranked, stats) = retriever
+        .retrieve_from_candidate_ids(&requested, &query, &policy(4, 2))
+        .unwrap();
+    assert_eq!(ranked.len(), 2);
+    assert_eq!(ranked[0].segment, fixture.segment(1));
+    let mut expected = requested;
+    expected.sort_by_key(|segment| (
+        signature_for_segment(segment.segment_id).xor_popcount(&query),
+        segment.segment_id,
+    ));
+    assert_eq!(ranked[0].segment, expected[0]);
+    assert_eq!(ranked[1].segment, expected[1]);
+    assert_eq!(ranked[0].rank, 0);
+    assert_eq!(ranked[1].rank, 1);
+    assert!(ranked[0].source_exact);
+    assert_eq!(stats.shortlisted, 4);
+    assert_eq!(stats.decoded, 2);
+    assert_eq!(stats.raw_reread_segments, 2);
+    assert!(stats.invariant_holds());
+    assert_eq!(
+        retriever
+            .retrieve_from_candidate_ids(&requested, &query, &policy(4, 2))
+            .unwrap(),
+        (ranked, stats)
+    );
+}
+
+#[test]
+fn dacr2b_candidate_rejections_fail_before_any_raw_read() {
+    let fixture = Fixture::build(72, 8);
+    let retriever = fixture.open_all();
+    let query = signature_for_segment(3);
+    let good = fixture.segment(3);
+    let foreign = ContextSegmentId::new(ContextStreamId::new(999).unwrap(), 3).unwrap();
+    let zero = ContextSegmentId {
+        stream_id: fixture.stream,
+        segment_id: 0,
+    };
+    let outside = fixture.segment(9);
+    let (empty, stats) = retriever
+        .retrieve_from_candidate_ids(&[], &query, &policy(2, 1))
+        .unwrap();
+    assert!(empty.is_empty());
+    assert_eq!(stats.shortlisted, 0);
+    assert_eq!(stats.raw_reread_segments, 0);
+    assert!(stats.invariant_holds());
+
+    // Removing the candidate raw file proves identity/budget errors occur
+    // before any source reread (which would otherwise be MissingRaw).
+    fs::remove_file(retriever.raw_path(3)).unwrap();
+    for invalid in [[good, foreign], [good, zero], [good, outside]] {
+        assert!(matches!(
+            retriever.retrieve_from_candidate_ids(&invalid, &query, &policy(2, 2)),
+            Err(ContextRetrieveError::InvalidCandidateIdentity)
+        ));
+    }
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(&[good, good], &query, &policy(2, 2)),
+        Err(ContextRetrieveError::DuplicateCandidate)
+    ));
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(&[good, foreign], &query, &policy(1, 1)),
+        Err(ContextRetrieveError::BudgetOverflow)
+    ));
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(&[good], &query, &policy(1, 2)),
+        Err(ContextRetrieveError::BudgetOverflow)
+    ));
+}
+
+#[test]
+fn dacr2b_manifest_semantic_id_forgery_fails_in_all_retrieval_paths() {
+    let fixture = Fixture::build(73, 16);
+    let retriever = fixture.open_all();
+    let needle = 7;
+    let provenance_path = retriever.provenance_path(needle);
+    let mut manifest =
+        parse_provenance_artifact(&fs::read(&provenance_path).unwrap()).unwrap();
+    // Reissue a CRC-valid provenance manifest binding a different semantic
+    // record ID to unchanged raw SHA and segment ID.
+    manifest.semantic_record_ids[0] += 9;
+    fs::remove_file(&provenance_path).unwrap();
+    fs::write(&provenance_path, build_provenance_artifact(&manifest).unwrap()).unwrap();
+    let query = exact_query(needle);
+    assert!(matches!(
+        retriever.retrieve(&query, &policy(8, 1)),
+        Err(ContextRetrieveError::MissingProvenance)
+    ));
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(
+            &[fixture.segment(needle)],
+            &query.bitfield,
+            &policy(1, 1)
+        ),
+        Err(ContextRetrieveError::MissingProvenance)
+    ));
+}
+
+#[test]
+fn dacr2b_missing_source_artifact_fails_closed() {
+    let fixture = Fixture::build(74, 8);
+    let retriever = fixture.open_all();
+    fs::remove_file(retriever.raw_path(5)).unwrap();
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(
+            &[fixture.segment(5)],
+            &signature_for_segment(5),
+            &policy(1, 1)
+        ),
+        Err(ContextRetrieveError::MissingRaw)
+    ));
+    fs::remove_file(retriever.provenance_path(6)).unwrap();
+    assert!(matches!(
+        retriever.retrieve_from_candidate_ids(
+            &[fixture.segment(6)],
+            &signature_for_segment(6),
+            &policy(1, 1)
+        ),
+        Err(ContextRetrieveError::MissingProvenance)
+    ));
+}
