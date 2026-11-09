@@ -3014,7 +3014,7 @@ fn quint_oracle(muts: &[Mutation]) -> QuadVerdict {
             equal_pair |= a == b;
         }
     }
-    if equal_pair || st.orders.iter().any(|o| *o == identity) {
+    if equal_pair || st.orders.contains(&identity) {
         fired.insert(PermutationDistinct);
     }
     let changed = st.orders != t.frozen;
