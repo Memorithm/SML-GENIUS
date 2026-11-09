@@ -117,10 +117,7 @@ pub struct CycloidGraph {
 }
 
 impl CycloidGraph {
-    pub fn new(
-        nodes: Vec<CycloidNode>,
-        mut edges: Vec<CycloidEdge>,
-    ) -> Result<Self, CycloidError> {
+    pub fn new(nodes: Vec<CycloidNode>, mut edges: Vec<CycloidEdge>) -> Result<Self, CycloidError> {
         if !(2..=MAX_CYCLOID_NODES).contains(&nodes.len())
             || edges.is_empty()
             || edges.len() > MAX_CYCLOID_EDGES
@@ -184,9 +181,7 @@ impl CycloidGraph {
             .iter()
             .position(|node| *node == CycloidNode::Page(target))
             .ok_or(CycloidError::MissingDestination)?;
-        let goal = CycloidNodeId(
-            u16::try_from(goal).map_err(|_| CycloidError::InvalidGraph)?,
-        );
+        let goal = CycloidNodeId(u16::try_from(goal).map_err(|_| CycloidError::InvalidGraph)?);
         let entry = CycloidNodeId(0);
         let direct = self
             .edges
@@ -363,8 +358,13 @@ mod tests {
             vec![edge(0, 2, 120, 900), edge(0, 1, 10, 10), edge(1, 2, 20, 20)],
         )
         .unwrap();
-        let plan = graph.plan_for_mor(&decision(&[7]), PageId(7), budget(), 5).unwrap();
-        assert_eq!(plan.nodes, vec![CycloidNodeId(0), CycloidNodeId(1), CycloidNodeId(2)]);
+        let plan = graph
+            .plan_for_mor(&decision(&[7]), PageId(7), budget(), 5)
+            .unwrap();
+        assert_eq!(
+            plan.nodes,
+            vec![CycloidNodeId(0), CycloidNodeId(1), CycloidNodeId(2)]
+        );
         assert_eq!(plan.selected_estimated_ns, 35);
         assert_eq!(plan.direct_estimated_ns, 120);
         assert_eq!(plan.selected_estimated_read_bytes, 30);
@@ -382,7 +382,9 @@ mod tests {
             vec![edge(0, 2, 40, 50), edge(0, 1, 10, 10), edge(1, 2, 20, 10)],
         )
         .unwrap();
-        let plan = graph.plan_for_mor(&decision(&[7]), PageId(7), budget(), 10).unwrap();
+        let plan = graph
+            .plan_for_mor(&decision(&[7]), PageId(7), budget(), 10)
+            .unwrap();
         assert!(!plan.indirect_selected);
         assert_eq!(plan.selected_estimated_ns, 40);
         assert_eq!(plan.online_dispatch_ns, 0);
@@ -401,7 +403,9 @@ mod tests {
         .unwrap();
         let mut limits = budget();
         limits.max_read_bytes = 100;
-        let plan = graph.plan_for_mor(&decision(&[7]), PageId(7), limits, 0).unwrap();
+        let plan = graph
+            .plan_for_mor(&decision(&[7]), PageId(7), limits, 0)
+            .unwrap();
         assert!(!plan.indirect_selected);
         assert_eq!(plan.selected_estimated_read_bytes, 40);
     }
@@ -493,10 +497,17 @@ mod tests {
             ],
         )
         .unwrap();
-        let first = graph.plan_for_mor(&decision(&[7]), PageId(7), budget(), 0).unwrap();
-        let second = graph.plan_for_mor(&decision(&[7]), PageId(7), budget(), 0).unwrap();
+        let first = graph
+            .plan_for_mor(&decision(&[7]), PageId(7), budget(), 0)
+            .unwrap();
+        let second = graph
+            .plan_for_mor(&decision(&[7]), PageId(7), budget(), 0)
+            .unwrap();
         assert_eq!(first, second);
         assert_eq!(first.selected_estimated_ns, 20);
-        assert_eq!(first.nodes, vec![CycloidNodeId(0), CycloidNodeId(1), CycloidNodeId(3)]);
+        assert_eq!(
+            first.nodes,
+            vec![CycloidNodeId(0), CycloidNodeId(1), CycloidNodeId(3)]
+        );
     }
 }
