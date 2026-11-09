@@ -14,16 +14,10 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::time::Instant;
 
-use sml_core::{
-    elastic_weights::WeightPrecision,
-    mor::MorDecision,
-    PageId,
-};
+use sml_core::{elastic_weights::WeightPrecision, mor::MorDecision, PageId};
 
 use crate::{
-    artifact::{
-        crc32c, parse_weight_artifact, WeightArtifactError, WEIGHT_ARTIFACT_HEADER_BYTES,
-    },
+    artifact::{crc32c, parse_weight_artifact, WeightArtifactError, WEIGHT_ARTIFACT_HEADER_BYTES},
     ram::{ElasticRamRuntime, WeightArtifactEntry},
 };
 
@@ -136,8 +130,7 @@ pub fn profile_same_mor_page(
         .ok_or(CycloidPageProfileError::ArithmeticOverflow)?;
     let mut disk_bytes = Vec::new();
     file.take(read_limit).read_to_end(&mut disk_bytes)?;
-    if u64::try_from(disk_bytes.len())
-        .map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
+    if u64::try_from(disk_bytes.len()).map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
         != expected_file_bytes
     {
         return Err(CycloidPageProfileError::ArtifactLengthMismatch);
@@ -176,12 +169,12 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use sml_core::elastic_weights::{
-        ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier,
-    };
     use crate::{
         artifact::build_weight_artifact,
         ram::{RamMaterializationBudget, WeightArtifactCatalog},
+    };
+    use sml_core::elastic_weights::{
+        ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier,
     };
 
     static TEST_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -221,14 +214,8 @@ mod tests {
         )
         .unwrap();
         let mut runtime = ElasticRamRuntime::new(planner).unwrap();
-        let bytes = build_weight_artifact(
-            PageId(0),
-            0,
-            WeightPrecision::Boolean,
-            8,
-            &[0xa5],
-        )
-        .unwrap();
+        let bytes =
+            build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, 8, &[0xa5]).unwrap();
         let catalog = WeightArtifactCatalog::from_retained_bytes(vec![bytes]).unwrap();
         let plan = runtime.planner().plan_cycle(&[PageId(0)], 1).unwrap();
         let staged = runtime
@@ -244,14 +231,8 @@ mod tests {
             "sml-cycloid-page-{}-{suffix}.smlwgt",
             std::process::id(),
         ));
-        let artifact = build_weight_artifact(
-            PageId(0),
-            0,
-            WeightPrecision::Boolean,
-            8,
-            &[0xa5],
-        )
-        .unwrap();
+        let artifact =
+            build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, 8, &[0xa5]).unwrap();
         fs::write(&path, artifact).unwrap();
         let entry = WeightArtifactEntry {
             page_id: PageId(0),
