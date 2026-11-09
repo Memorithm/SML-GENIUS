@@ -982,7 +982,6 @@ fn dacr2c_mor_query_is_independent_of_address_truth() {
     assert_eq!(address_work.candidates_returned, 1);
 }
 
-
 #[test]
 fn dacr2d_partial_address_recovers_a_source_verified_hit() {
     let fixture = Fixture::build(79, 8);
@@ -1089,7 +1088,9 @@ fn dacr2d_partial_address_rejects_budget_before_raw_io() {
                 max_address_probes: 1,
             },
         ),
-        Err(ContextRetrieveError::LatentAddress(AddressError::ProbeBudget))
+        Err(ContextRetrieveError::LatentAddress(
+            AddressError::ProbeBudget
+        ))
     ));
     assert!(matches!(
         retriever.retrieve_with_partial_latent_candidates(
