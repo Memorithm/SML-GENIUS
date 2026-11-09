@@ -24,6 +24,7 @@ use sml_core::{
 
 use crate::{
     context_semantic_ingest::{parse_provenance_artifact, ContextProvenanceManifest},
+    dacr_latent::{AddressError, CandidateAccounting, CandidateIndex, SbgAddress},
     raw_context::{
         load_raw_segment, sha256_raw_bytes, RawContextStoreError, RawContextStoreLimits,
     },
@@ -144,6 +145,7 @@ pub enum ContextRetrieveError {
     AssociativeDenied,
     InvalidCandidateIdentity,
     DuplicateCandidate,
+    LatentAddress(AddressError),
     Io(io::Error),
 }
 
@@ -345,6 +347,36 @@ impl<const BITS: usize> ContextRetriever<BITS> {
         };
         let ranked = self.rank(&shortlist, query, policy.top_k)?;
         self.reread(ranked, accounting)
+    }
+
+    /// Connects an independently trained SBG address to a source-verified
+    /// candidate reread, keeping latent and raw-source work separate.
+    ///
+    /// Neither matching an address nor having an intact source establishes
+    /// answer relevance. A large bucket is rejected rather than truncated
+    /// or silently widened into a full-history search.
+    pub fn retrieve_with_latent_candidates(
+        &self,
+        index: &CandidateIndex<BITS>,
+        epoch: u64,
+        address_query: &SbgAddress<BITS>,
+        mor_query: &SemanticBitField<BITS>,
+        policy: &ContextRetrievePolicy,
+    ) -> Result<
+        (
+            Vec<RetrieveHit>,
+            RetrieveAccounting,
+            CandidateAccounting,
+        ),
+        ContextRetrieveError,
+    > {
+        let policy = policy.validate()?;
+        let (candidates, address_accounting) = index
+            .lookup(self.stream_id, epoch, address_query)
+            .map_err(ContextRetrieveError::LatentAddress)?;
+        let (hits, verification_accounting) =
+            self.retrieve_from_candidate_ids(&candidates, mor_query, &policy)?;
+        Ok((hits, verification_accounting, address_accounting))
     }
 
     /// Bounded retrieval: shortlist -> MOR top-k -> verified raw reread.
