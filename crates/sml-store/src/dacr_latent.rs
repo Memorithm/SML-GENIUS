@@ -65,6 +65,8 @@ pub enum AddressError {
     DuplicateSegment,
     IndexFull,
     BucketFull,
+    ProbeBudget,
+    CandidateOverflow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -352,6 +354,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         self.entries.is_empty()
     }
 
+    /// Frozen maximum admitted source IDs, independent of current index size.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.encoder.budget.max_entries
+    }
+
     pub fn insert(
         &mut self,
         segment: ContextSegmentId,
@@ -400,6 +408,82 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         let hits = self.buckets.get(&address).cloned().unwrap_or_default();
         let accounting = CandidateAccounting {
             address_buckets_probed: 1,
+            candidates_returned: hits.len() as u64,
+        };
+        Ok((hits, accounting))
+    }
+
+    /// Opt-in direct probes over BOTH possible values of each unknown selected
+    /// SBG bit. The default exact lookup continues to reject unknown bits.
+    ///
+    /// No history scan, approximate scoring or implicit unknown->false coercion.
+    /// All caps are preflighted; oversized candidate unions are never truncated.
+    pub fn lookup_partial(
+        &self,
+        stream: ContextStreamId,
+        epoch: u64,
+        key: &SbgAddress<BITS>,
+        max_unknown_bits: usize,
+        max_address_probes: usize,
+        max_candidates: usize,
+    ) -> Result<(Vec<ContextSegmentId>, CandidateAccounting), AddressError> {
+        if stream != self.stream {
+            return Err(AddressError::WrongStream);
+        }
+        if epoch != self.epoch {
+            return Err(AddressError::WrongEpoch);
+        }
+        if max_unknown_bits > self.encoder.budget.address_bits
+            || !(1..=256).contains(&max_address_probes)
+            || max_candidates == 0
+            || max_candidates > self.encoder.budget.max_entries
+        {
+            return Err(AddressError::ProbeBudget);
+        }
+        let mut base = 0_u16;
+        let mut unknown_positions = Vec::new();
+        for (address_position, &bit) in self.encoder.features.iter().enumerate() {
+            if key
+                .known
+                .get(bit)
+                .map_err(|_| AddressError::InvalidFeature)?
+            {
+                if key
+                    .value
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                {
+                    base |= 1_u16 << address_position;
+                }
+            } else {
+                unknown_positions.push(address_position);
+            }
+        }
+        if unknown_positions.len() > max_unknown_bits {
+            return Err(AddressError::UnknownSelectedFeature);
+        }
+        // address_bits <= 8 by construction, so the maximum is 256.
+        let probe_count = 1_usize << unknown_positions.len();
+        if probe_count > max_address_probes {
+            return Err(AddressError::ProbeBudget);
+        }
+        let mut hits = Vec::new();
+        for assignment in 0..probe_count {
+            let mut address = base;
+            for (index, &position) in unknown_positions.iter().enumerate() {
+                if assignment & (1_usize << index) != 0 {
+                    address |= 1_u16 << position;
+                }
+            }
+            if let Some(bucket) = self.buckets.get(&address) {
+                if bucket.len() > max_candidates - hits.len() {
+                    return Err(AddressError::CandidateOverflow);
+                }
+                hits.extend_from_slice(bucket);
+            }
+        }
+        let accounting = CandidateAccounting {
+            address_buckets_probed: probe_count as u64,
             candidates_returned: hits.len() as u64,
         };
         Ok((hits, accounting))
@@ -603,197 +687,131 @@ mod dacr_latent_tests {
     }
 }
 
-
 #[cfg(test)]
-mod dacr_balanced_tests {
+mod dacr_partial_tests {
     use super::*;
 
-    const BITS: usize = 16;
-
-    fn sample(bits: u64) -> SbgAddress<BITS> {
-        SbgAddress {
-            value: SemanticBitField::from_words(vec![bits]).unwrap(),
-            known: SemanticBitField::ones().unwrap(),
-        }
+    fn key(code: u8, known_low: bool, known_high: bool) -> SbgAddress<16> {
+        let mut value = SemanticBitField::<16>::zeroed().unwrap();
+        value.set(4, code & 1 != 0).unwrap();
+        value.set(6, code & 2 != 0).unwrap();
+        let mut known = SemanticBitField::<16>::ones().unwrap();
+        known.set(4, known_low).unwrap();
+        known.set(6, known_high).unwrap();
+        SbgAddress { value, known }
     }
 
-    fn pair(left: SbgAddress<BITS>, right: SbgAddress<BITS>, same: bool) -> PairConstraint<BITS> {
-        PairConstraint { left, right, same }
-    }
-
-    fn budget() -> AddressBudget {
-        AddressBudget {
-            address_bits: 1,
-            max_pairs: 36,
-            max_entries: 2,
-            max_bucket_entries: 2,
+    fn setup() -> (ContextStreamId, CandidateIndex<16>) {
+        let stream = ContextStreamId::new(90).unwrap();
+        let budget = AddressBudget {
+            address_bits: 2,
+            max_pairs: 1,
+            max_entries: 4,
+            max_bucket_entries: 4,
+        };
+        let encoder = DiscreteAddress::fixed(vec![4, 6], budget).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, 17).unwrap();
+        for code in 0..4_u8 {
+            index
+                .insert(
+                    ContextSegmentId::new(stream, u64::from(code) + 1).unwrap(),
+                    &key(code, true, true),
+                )
+                .unwrap();
         }
-    }
-
-    fn policy() -> BalancedPairwisePolicy {
-        BalancedPairwisePolicy {
-            min_same_observed: 4,
-            min_different_observed: 32,
-        }
-    }
-
-    fn imbalanced_pairs() -> Vec<PairConstraint<BITS>> {
-        let mut pairs = Vec::new();
-        // Same-label examples always disagree on nuisance coordinate 1.
-        for _ in 0..4 {
-            pairs.push(pair(sample(0), sample(1 << 1), true));
-        }
-        // Overrepresented different-label comparisons also disagree on the
-        // nuisance, so a raw count incorrectly rewards coordinate 1.
-        for _ in 0..24 {
-            pairs.push(pair(sample(0), sample(1 << 1), false));
-        }
-        for _ in 0..4 {
-            pairs.push(pair(sample(0), sample(1 << 4), false));
-        }
-        for _ in 0..4 {
-            pairs.push(pair(sample(0), sample(1 << 15), false));
-        }
-        pairs
+        (stream, index)
     }
 
     #[test]
-    fn dacr_balanced_corrects_imbalanced_pair_signal_with_frozen_holdout() {
-        let pairs = imbalanced_pairs();
-        assert_eq!(pairs.len(), 36);
-        let (legacy, _) = DiscreteAddress::train_pairwise(&pairs, budget()).unwrap();
-        assert_eq!(legacy.features(), &[1]);
-        let (balanced, accounting, evidence) =
-            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), policy()).unwrap();
-        assert_eq!(balanced.features(), &[4]);
-        assert_eq!(accounting.same_pairs, 4);
-        assert_eq!(accounting.different_pairs, 32);
-        assert_eq!(accounting.observed_feature_comparisons, 36 * BITS);
+    fn dacr_partial_one_unknown_enumerates_both_values_without_false_coercion() {
+        let (stream, index) = setup();
+        let left = key(0, false, true);
+        let right = key(1, false, true); // Unknown underlying value is TRUE.
         assert_eq!(
-            evidence,
-            vec![BalancedFeatureEvidence {
-                bit: 4,
-                same_observed: 4,
-                different_observed: 32,
-                same_disagreements: 0,
-                different_disagreements: 4,
-                advantage_numerator: 16,
-                advantage_denominator: 128,
-            }]
+            index.lookup(stream, 17, &left),
+            Err(AddressError::UnknownSelectedFeature)
         );
-        assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), policy()).unwrap(),
-            (balanced.clone(), accounting, evidence)
-        );
-        let stream = ContextStreamId::new(119).unwrap();
-        let mut legacy_index = CandidateIndex::new(legacy, stream, 7).unwrap();
-        let mut balanced_index = CandidateIndex::new(balanced, stream, 7).unwrap();
-        for (class, word) in [0_u64, 1_u64 << 4].into_iter().enumerate() {
-            let id = ContextSegmentId::new(stream, (class + 1) as u64).unwrap();
-            legacy_index.insert(id, &sample(word)).unwrap();
-            balanced_index.insert(id, &sample(word)).unwrap();
-        }
-        let mut legacy_found = 0;
-        let mut balanced_found = 0;
-        // TEST nuisance bit 1 = 1, whereas all indexed sources had bit 1 = 0.
-        for (class, word) in [1_u64 << 1, (1_u64 << 1) | (1_u64 << 4)]
-            .into_iter()
-            .enumerate()
-        {
-            let expected = ContextSegmentId::new(stream, (class + 1) as u64).unwrap();
-            legacy_found += usize::from(legacy_index.lookup(stream, 7, &sample(word)).unwrap().0.contains(&expected));
-            let (candidates, work) = balanced_index.lookup(stream, 7, &sample(word)).unwrap();
-            balanced_found += usize::from(candidates.contains(&expected));
-            assert_eq!(candidates, vec![expected]);
-            assert_eq!(work.address_buckets_probed, 1);
-            assert_eq!(work.candidates_returned, 1);
-        }
-        assert_eq!(legacy_found, 0);
-        assert_eq!(balanced_found, 2);
-    }
-
-    #[test]
-    fn dacr_balanced_observes_both_known_masks_and_support_floors() {
-        let mut hidden_positive_value = sample(1 << 4);
-        hidden_positive_value.known.set(4, false).unwrap();
-        assert!(hidden_positive_value.value.get(4).unwrap());
-        let pairs = vec![
-            pair(sample(0), sample(0), true),
-            pair(hidden_positive_value, sample(0), true),
-            pair(sample(0), sample(1 << 4), false),
+        let expected = vec![
+            ContextSegmentId::new(stream, 1).unwrap(),
+            ContextSegmentId::new(stream, 2).unwrap(),
         ];
-        let caps = AddressBudget {
-            max_pairs: 3,
-            ..budget()
-        };
+        for key in [&left, &right] {
+            let (hits, counters) = index.lookup_partial(stream, 17, key, 1, 2, 2).unwrap();
+            assert_eq!(hits, expected);
+            assert_eq!(counters.address_buckets_probed, 2);
+            assert_eq!(counters.candidates_returned, 2);
+            assert_eq!(
+                index.lookup_partial(stream, 17, key, 1, 2, 2).unwrap(),
+                (hits, counters)
+            );
+        }
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(
-                &pairs,
-                caps,
-                BalancedPairwisePolicy {
-                    min_same_observed: 2,
-                    min_different_observed: 1,
-                },
+            index
+                .lookup_partial(stream, 17, &key(2, true, true), 0, 1, 1)
+                .unwrap(),
+            (
+                vec![ContextSegmentId::new(stream, 3).unwrap()],
+                CandidateAccounting {
+                    address_buckets_probed: 1,
+                    candidates_returned: 1
+                }
             )
-            .err(),
-            Some(AddressError::InsufficientSignal)
         );
-        let (model, work, evidence) = DiscreteAddress::train_pairwise_balanced(
-            &pairs,
-            caps,
-            BalancedPairwisePolicy {
-                min_same_observed: 1,
-                min_different_observed: 1,
-            },
-        )
-        .unwrap();
-        assert_eq!(model.features(), &[4]);
-        assert_eq!(evidence[0].same_observed, 1);
-        assert_eq!(evidence[0].different_observed, 1);
-        assert_eq!(evidence[0].same_disagreements, 0);
-        assert_eq!(evidence[0].different_disagreements, 1);
-        assert_eq!(work.observed_feature_comparisons, 3 * BITS - 1);
-        let mut unknown = sample(1 << 4);
-        unknown.known.set(4, false).unwrap();
-        assert_eq!(model.encode(&unknown), Err(AddressError::UnknownSelectedFeature));
     }
 
     #[test]
-    fn dacr_balanced_rejects_invalid_or_one_label_protocols() {
-        let pairs = imbalanced_pairs();
-        let bad_policy = BalancedPairwisePolicy {
-            min_same_observed: 0,
-            ..policy()
-        };
+    fn dacr_partial_two_unknowns_probe_four_and_budget_rejects_without_truncation() {
+        let (stream, index) = setup();
+        let all_unknown = key(3, false, false);
+        let (hits, counters) = index
+            .lookup_partial(stream, 17, &all_unknown, 2, 4, 4)
+            .unwrap();
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), bad_policy).err(),
-            Some(AddressError::InvalidBudget)
+            hits,
+            (1..=4)
+                .map(|n| ContextSegmentId::new(stream, n).unwrap())
+                .collect::<Vec<_>>()
         );
-        let bad_caps = AddressBudget {
-            max_pairs: 1_000_001,
-            ..budget()
-        };
+        assert_eq!(counters.address_buckets_probed, 4);
+        assert_eq!(counters.candidates_returned, 4);
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&pairs, bad_caps, policy()).err(),
-            Some(AddressError::InvalidBudget)
+            index.lookup_partial(stream, 17, &all_unknown, 1, 4, 4),
+            Err(AddressError::UnknownSelectedFeature)
         );
-        let too_few = AddressBudget {
-            max_pairs: 35,
-            ..budget()
-        };
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&pairs, too_few, policy()).err(),
-            Some(AddressError::InvalidBudget)
+            index.lookup_partial(stream, 17, &all_unknown, 2, 2, 4),
+            Err(AddressError::ProbeBudget)
         );
-        let same = pairs.iter().filter(|p| p.same).cloned().collect::<Vec<_>>();
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&same, budget(), policy()).err(),
-            Some(AddressError::InsufficientPairs)
+            index.lookup_partial(stream, 17, &all_unknown, 2, 4, 3),
+            Err(AddressError::CandidateOverflow)
         );
-        let different = pairs.iter().filter(|p| !p.same).cloned().collect::<Vec<_>>();
+        for (unknown, probes, candidates) in
+            [(3, 4, 4), (2, 0, 4), (2, 257, 4), (2, 4, 0), (2, 4, 5)]
+        {
+            assert_eq!(
+                index.lookup_partial(stream, 17, &all_unknown, unknown, probes, candidates),
+                Err(AddressError::ProbeBudget)
+            );
+        }
+    }
+
+    #[test]
+    fn dacr_partial_stream_and_epoch_guards_are_retained() {
+        let (stream, index) = setup();
+        let query = key(0, false, true);
+        let foreign = ContextStreamId::new(91).unwrap();
         assert_eq!(
-            DiscreteAddress::train_pairwise_balanced(&different, budget(), policy()).err(),
-            Some(AddressError::InsufficientPairs)
+            index.lookup_partial(foreign, 17, &query, 1, 2, 2),
+            Err(AddressError::WrongStream)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 18, &query, 1, 2, 2),
+            Err(AddressError::WrongEpoch)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 17, &query, 0, 2, 2),
+            Err(AddressError::UnknownSelectedFeature)
         );
     }
 }
