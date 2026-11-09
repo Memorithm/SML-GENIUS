@@ -931,7 +931,13 @@ mod dacr_balanced_tests {
             .enumerate()
         {
             let expected = ContextSegmentId::new(stream, (class + 1) as u64).unwrap();
-            legacy_found += usize::from(legacy_index.lookup(stream, 7, &sample(word)).unwrap().0.contains(&expected));
+            legacy_found += usize::from(
+                legacy_index
+                    .lookup(stream, 7, &sample(word))
+                    .unwrap()
+                    .0
+                    .contains(&expected),
+            );
             let (candidates, work) = balanced_index.lookup(stream, 7, &sample(word)).unwrap();
             balanced_found += usize::from(candidates.contains(&expected));
             assert_eq!(candidates, vec![expected]);
@@ -985,7 +991,10 @@ mod dacr_balanced_tests {
         assert_eq!(work.observed_feature_comparisons, 3 * BITS - 1);
         let mut unknown = sample(1 << 4);
         unknown.known.set(4, false).unwrap();
-        assert_eq!(model.encode(&unknown), Err(AddressError::UnknownSelectedFeature));
+        assert_eq!(
+            model.encode(&unknown),
+            Err(AddressError::UnknownSelectedFeature)
+        );
     }
 
     #[test]
@@ -1020,7 +1029,11 @@ mod dacr_balanced_tests {
             DiscreteAddress::train_pairwise_balanced(&same, budget(), policy()).err(),
             Some(AddressError::InsufficientPairs)
         );
-        let different = pairs.iter().filter(|p| !p.same).cloned().collect::<Vec<_>>();
+        let different = pairs
+            .iter()
+            .filter(|p| !p.same)
+            .cloned()
+            .collect::<Vec<_>>();
         assert_eq!(
             DiscreteAddress::train_pairwise_balanced(&different, budget(), policy()).err(),
             Some(AddressError::InsufficientPairs)
