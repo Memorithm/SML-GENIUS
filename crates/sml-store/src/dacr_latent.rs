@@ -555,3 +555,115 @@ mod dacr_latent_tests {
         );
     }
 }
+
+
+#[cfg(test)]
+mod dacr_partial_tests {
+    use super::*;
+
+    fn key(code: u8, known_low: bool, known_high: bool) -> SbgAddress<16> {
+        let mut value = SemanticBitField::<16>::zeroed().unwrap();
+        value.set(4, code & 1 != 0).unwrap();
+        value.set(6, code & 2 != 0).unwrap();
+        let mut known = SemanticBitField::<16>::ones().unwrap();
+        known.set(4, known_low).unwrap();
+        known.set(6, known_high).unwrap();
+        SbgAddress { value, known }
+    }
+
+    fn setup() -> (ContextStreamId, CandidateIndex<16>) {
+        let stream = ContextStreamId::new(90).unwrap();
+        let budget = AddressBudget {
+            address_bits: 2,
+            max_pairs: 1,
+            max_entries: 4,
+            max_bucket_entries: 4,
+        };
+        let encoder = DiscreteAddress::fixed(vec![4, 6], budget).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, 17).unwrap();
+        for code in 0..4_u8 {
+            index
+                .insert(
+                    ContextSegmentId::new(stream, u64::from(code) + 1).unwrap(),
+                    &key(code, true, true),
+                )
+                .unwrap();
+        }
+        (stream, index)
+    }
+
+    #[test]
+    fn dacr_partial_one_unknown_enumerates_both_values_without_false_coercion() {
+        let (stream, index) = setup();
+        let left = key(0, false, true);
+        let right = key(1, false, true); // Unknown underlying value is TRUE.
+        assert_eq!(index.lookup(stream, 17, &left), Err(AddressError::UnknownSelectedFeature));
+        let expected = vec![
+            ContextSegmentId::new(stream, 1).unwrap(),
+            ContextSegmentId::new(stream, 2).unwrap(),
+        ];
+        for key in [&left, &right] {
+            let (hits, counters) = index.lookup_partial(stream, 17, key, 1, 2, 2).unwrap();
+            assert_eq!(hits, expected);
+            assert_eq!(counters.address_buckets_probed, 2);
+            assert_eq!(counters.candidates_returned, 2);
+            assert_eq!(
+                index.lookup_partial(stream, 17, key, 1, 2, 2).unwrap(),
+                (hits, counters)
+            );
+        }
+        assert_eq!(
+            index.lookup_partial(stream, 17, &key(2, true, true), 0, 1, 1).unwrap(),
+            (vec![ContextSegmentId::new(stream, 3).unwrap()],
+             CandidateAccounting { address_buckets_probed: 1, candidates_returned: 1 })
+        );
+    }
+
+    #[test]
+    fn dacr_partial_two_unknowns_probe_four_and_budget_rejects_without_truncation() {
+        let (stream, index) = setup();
+        let all_unknown = key(3, false, false);
+        let (hits, counters) =
+            index.lookup_partial(stream, 17, &all_unknown, 2, 4, 4).unwrap();
+        assert_eq!(hits, (1..=4).map(|n| ContextSegmentId::new(stream, n).unwrap()).collect::<Vec<_>>());
+        assert_eq!(counters.address_buckets_probed, 4);
+        assert_eq!(counters.candidates_returned, 4);
+        assert_eq!(
+            index.lookup_partial(stream, 17, &all_unknown, 1, 4, 4),
+            Err(AddressError::UnknownSelectedFeature)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 17, &all_unknown, 2, 2, 4),
+            Err(AddressError::ProbeBudget)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 17, &all_unknown, 2, 4, 3),
+            Err(AddressError::CandidateOverflow)
+        );
+        for (unknown, probes, candidates) in [(3, 4, 4), (2, 0, 4), (2, 257, 4), (2, 4, 0), (2, 4, 5)] {
+            assert_eq!(
+                index.lookup_partial(stream, 17, &all_unknown, unknown, probes, candidates),
+                Err(AddressError::ProbeBudget)
+            );
+        }
+    }
+
+    #[test]
+    fn dacr_partial_stream_and_epoch_guards_are_retained() {
+        let (stream, index) = setup();
+        let query = key(0, false, true);
+        let foreign = ContextStreamId::new(91).unwrap();
+        assert_eq!(
+            index.lookup_partial(foreign, 17, &query, 1, 2, 2),
+            Err(AddressError::WrongStream)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 18, &query, 1, 2, 2),
+            Err(AddressError::WrongEpoch)
+        );
+        assert_eq!(
+            index.lookup_partial(stream, 17, &query, 0, 2, 2),
+            Err(AddressError::UnknownSelectedFeature)
+        );
+    }
+}
