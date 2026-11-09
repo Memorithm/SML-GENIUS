@@ -326,8 +326,16 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         let mut base = 0_u16;
         let mut unknown_positions = Vec::new();
         for (address_position, &bit) in self.encoder.features.iter().enumerate() {
-            if key.known.get(bit).map_err(|_| AddressError::InvalidFeature)? {
-                if key.value.get(bit).map_err(|_| AddressError::InvalidFeature)? {
+            if key
+                .known
+                .get(bit)
+                .map_err(|_| AddressError::InvalidFeature)?
+            {
+                if key
+                    .value
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                {
                     base |= 1_u16 << address_position;
                 }
             } else {
@@ -562,7 +570,6 @@ mod dacr_latent_tests {
     }
 }
 
-
 #[cfg(test)]
 mod dacr_partial_tests {
     use super::*;
@@ -603,7 +610,10 @@ mod dacr_partial_tests {
         let (stream, index) = setup();
         let left = key(0, false, true);
         let right = key(1, false, true); // Unknown underlying value is TRUE.
-        assert_eq!(index.lookup(stream, 17, &left), Err(AddressError::UnknownSelectedFeature));
+        assert_eq!(
+            index.lookup(stream, 17, &left),
+            Err(AddressError::UnknownSelectedFeature)
+        );
         let expected = vec![
             ContextSegmentId::new(stream, 1).unwrap(),
             ContextSegmentId::new(stream, 2).unwrap(),
@@ -619,9 +629,16 @@ mod dacr_partial_tests {
             );
         }
         assert_eq!(
-            index.lookup_partial(stream, 17, &key(2, true, true), 0, 1, 1).unwrap(),
-            (vec![ContextSegmentId::new(stream, 3).unwrap()],
-             CandidateAccounting { address_buckets_probed: 1, candidates_returned: 1 })
+            index
+                .lookup_partial(stream, 17, &key(2, true, true), 0, 1, 1)
+                .unwrap(),
+            (
+                vec![ContextSegmentId::new(stream, 3).unwrap()],
+                CandidateAccounting {
+                    address_buckets_probed: 1,
+                    candidates_returned: 1
+                }
+            )
         );
     }
 
@@ -629,9 +646,15 @@ mod dacr_partial_tests {
     fn dacr_partial_two_unknowns_probe_four_and_budget_rejects_without_truncation() {
         let (stream, index) = setup();
         let all_unknown = key(3, false, false);
-        let (hits, counters) =
-            index.lookup_partial(stream, 17, &all_unknown, 2, 4, 4).unwrap();
-        assert_eq!(hits, (1..=4).map(|n| ContextSegmentId::new(stream, n).unwrap()).collect::<Vec<_>>());
+        let (hits, counters) = index
+            .lookup_partial(stream, 17, &all_unknown, 2, 4, 4)
+            .unwrap();
+        assert_eq!(
+            hits,
+            (1..=4)
+                .map(|n| ContextSegmentId::new(stream, n).unwrap())
+                .collect::<Vec<_>>()
+        );
         assert_eq!(counters.address_buckets_probed, 4);
         assert_eq!(counters.candidates_returned, 4);
         assert_eq!(
@@ -646,7 +669,9 @@ mod dacr_partial_tests {
             index.lookup_partial(stream, 17, &all_unknown, 2, 4, 3),
             Err(AddressError::CandidateOverflow)
         );
-        for (unknown, probes, candidates) in [(3, 4, 4), (2, 0, 4), (2, 257, 4), (2, 4, 0), (2, 4, 5)] {
+        for (unknown, probes, candidates) in
+            [(3, 4, 4), (2, 0, 4), (2, 257, 4), (2, 4, 0), (2, 4, 5)]
+        {
             assert_eq!(
                 index.lookup_partial(stream, 17, &all_unknown, unknown, probes, candidates),
                 Err(AddressError::ProbeBudget)
