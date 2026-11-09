@@ -26,6 +26,18 @@ pub struct SbgRisingMorEvidence {
     pub active_routing_bits: u64,
 }
 
+/// Exact native routing inputs for the current model cycle.
+/// Passing the whole context prevents accidentally coupling event state to
+/// a partial or stale MOR argument set.
+#[derive(Debug, Clone, Copy)]
+pub struct SbgNativeRouteContext<'a, const BITS: usize> {
+    pub bridge: &'a SemanticMorBridge<BITS>,
+    pub registry: &'a MorRouterRegistry,
+    pub engine: &'a MixtureOfRouters,
+    pub runtime_hints: &'a [ExpertRuntimeHint],
+    pub previous_route: &'a PreviousRoute,
+}
+
 /// Store a previous SBG R-field snapshot, plus two current event masks.
 /// The model remains sovereign: no FLAT runtime dependency or Transformer
 /// attention score path enters this native non-attention observer.
@@ -79,11 +91,7 @@ impl<const BITS: usize> SbgRisingMorProbe<BITS> {
         &mut self,
         cycle: u64,
         state: &SemanticState<BITS>,
-        bridge: &SemanticMorBridge<BITS>,
-        registry: &MorRouterRegistry,
-        engine: &MixtureOfRouters,
-        runtime_hints: &[ExpertRuntimeHint],
-        previous_route: &PreviousRoute,
+        context: SbgNativeRouteContext<'_, BITS>,
     ) -> Result<(SbgRisingMorEvidence, SemanticMorRoute), SbgRisingMorError> {
         if cycle <= self.last_cycle {
             return Err(SbgRisingMorError::NonIncreasingCycle {
@@ -92,8 +100,15 @@ impl<const BITS: usize> SbgRisingMorProbe<BITS> {
             });
         }
         // Validate and execute native routing *before* mutating edge state.
-        let native_route = bridge
-            .route(state, registry, engine, runtime_hints, previous_route)
+        let native_route = context
+            .bridge
+            .route(
+                state,
+                context.registry,
+                context.engine,
+                context.runtime_hints,
+                context.previous_route,
+            )
             .map_err(SbgRisingMorError::NativeRouting)?;
 
         let mut rising_count = 0_u64;
@@ -183,11 +198,13 @@ mod tests {
         probe.observe_native_route(
             cycle,
             state,
-            bridge,
-            registry,
-            engine,
-            &[],
-            &PreviousRoute::default(),
+            SbgNativeRouteContext {
+                bridge,
+                registry,
+                engine,
+                runtime_hints: &[],
+                previous_route: &PreviousRoute::default(),
+            },
         )
     }
 
