@@ -19,6 +19,7 @@ pub mod context_retrieve;
 pub mod context_retrieve_bench;
 pub mod context_semantic_ingest;
 pub mod dacr_exact;
+pub mod dacr_latent;
 pub mod delta_kv_context;
 pub mod g1_latency_aggregate;
 pub mod g1_realtext_corpus;
