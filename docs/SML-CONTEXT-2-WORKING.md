@@ -117,7 +117,10 @@ metric.
 
 Preregistration and integration design for wiring CONTEXT-2 into a real
 model inference loop: [`research/CTX2_INFER_PREREG.md`](research/CTX2_INFER_PREREG.md)
-(`NOT_MEASURED`).
+(`NOT_MEASURED`). Revision r1 (pre-freeze) fixes exact token-ID budget audits,
+the one-sided McNemar direction for H3b, strict H2 versus prompt-only H2p under
+a failed determinism precheck, one-based query distance, and the derived compute
+envelope (26 880 test calls, 72-hour ceiling). Its revision log is in section 13.
 
 ## Out of scope (this slice)
 
