@@ -360,10 +360,13 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         "        case GGML_TYPE_Q4_K:\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\n        case GGML_TYPE_Q2_K:",
     )?;
 
-    // Qualification ablation: keep upstream's single-row dispatch so both
-    // independent stock Q3_K and BPB3-K use nrc=1 at the first FFN MUL_MAT.
-    // The standalone nrc=2 ABI test remains; do not promote a 2x2 runtime
-    // path without distinct full-model numerical evidence.
+    // Upstream ggml has float tmp[32] and only even-row guards. nrows=4
+    // smashes that stack buffer; nrows=2 is a safe 2x2 tile.
+    substitute_once(
+        &cpu,
+        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 1,",
+        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 2,",
+    )?;
     substitute_once(
         &cpu_cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
