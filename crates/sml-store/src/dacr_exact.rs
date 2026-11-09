@@ -308,11 +308,11 @@ mod dacr_exact_tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
-    use sml_core::context_ledger::ContextSegmentRef;
     use crate::{
         context_semantic_ingest::{build_provenance_artifact, ContextProvenanceManifest},
         raw_context::{build_raw_segment_artifact, sha256_raw_bytes},
     };
+    use sml_core::context_ledger::ContextSegmentRef;
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
 
@@ -329,16 +329,26 @@ mod dacr_exact_tests {
                 NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
             ));
             fs::create_dir(&directory).unwrap();
-            Self { directory, stream: ContextStreamId::new(71).unwrap() }
+            Self {
+                directory,
+                stream: ContextStreamId::new(71).unwrap(),
+            }
         }
 
         fn add(&self, n: u64, raw: &[u8]) -> ExactBinding {
             let segment = ContextSegmentId::new(self.stream, n).unwrap();
             let content_hash = sha256_raw_bytes(raw).unwrap();
             let reference = ContextSegmentRef::new(
-                segment, 0, raw.len() as u64, 0, raw.len() as u64, n - 1,
-                content_hash, vec![100 + n],
-            ).unwrap();
+                segment,
+                0,
+                raw.len() as u64,
+                0,
+                raw.len() as u64,
+                n - 1,
+                content_hash,
+                vec![100 + n],
+            )
+            .unwrap();
             let manifest = ContextProvenanceManifest {
                 stream_id: self.stream,
                 segment_id: n,
@@ -349,12 +359,18 @@ mod dacr_exact_tests {
             fs::write(
                 self.directory.join(format!("{base}.smlctx")),
                 build_raw_segment_artifact(&reference, raw).unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
             fs::write(
                 self.directory.join(format!("{base}.smlprov")),
                 build_provenance_artifact(&manifest).unwrap(),
-            ).unwrap();
-            ExactBinding { key: Vec::new(), segment, content_hash }
+            )
+            .unwrap();
+            ExactBinding {
+                key: Vec::new(),
+                segment,
+                content_hash,
+            }
         }
 
         fn index(&self, limits: ExactIndexLimits) -> ExactSourceIndex {
@@ -400,10 +416,14 @@ mod dacr_exact_tests {
         let fixture = Fixture::new();
         let mut index = fixture.index(limits());
         let key = b"KEY=abc";
-        index.insert(bound(fixture.add(1, b"prefix KEY=abc suffix"), key)).unwrap();
+        index
+            .insert(bound(fixture.add(1, b"prefix KEY=abc suffix"), key))
+            .unwrap();
         assert_eq!(index.len(), 1);
         let (result, accounting) = index.lookup(fixture.stream, 1, key).unwrap();
-        let ExactLookup::Hit(hit) = result else { panic!("expected verified hit"); };
+        let ExactLookup::Hit(hit) = result else {
+            panic!("expected verified hit");
+        };
         assert_eq!(hit.raw_bytes, b"prefix KEY=abc suffix");
         assert_eq!(accounting.raw_reread_segments, 1);
         assert_eq!(accounting.raw_reread_bytes, 21);
@@ -418,14 +438,18 @@ mod dacr_exact_tests {
         let fixture = Fixture::new();
         let mut index = fixture.index(limits());
         let keys: Vec<Vec<u8>> = (0..40).map(|n| format!("key-{n}").into_bytes()).collect();
-        let (a, b) = keys.iter().enumerate()
+        let (a, b) = keys
+            .iter()
+            .enumerate()
             .flat_map(|(i, a)| keys.iter().skip(i + 1).map(move |b| (a, b)))
             .find(|(a, b)| index.address(a) == index.address(b))
             .unwrap();
         index.insert(bound(fixture.add(1, a), a)).unwrap();
         index.insert(bound(fixture.add(2, b), b)).unwrap();
         let (hit, accounting) = index.lookup(fixture.stream, 1, b).unwrap();
-        let ExactLookup::Hit(hit) = hit else { panic!("second exact key not retrieved"); };
+        let ExactLookup::Hit(hit) = hit else {
+            panic!("second exact key not retrieved");
+        };
         assert_eq!(hit.segment.segment_id, 2);
         assert_eq!(accounting.full_keys_compared, 2);
     }
@@ -437,7 +461,10 @@ mod dacr_exact_tests {
         let second = bound(fixture.add(2, b"second KEY"), b"KEY");
         let mut index = fixture.index(limits());
         index.insert(first.clone()).unwrap();
-        assert!(matches!(index.insert(first), Err(ExactIndexError::DuplicateBinding)));
+        assert!(matches!(
+            index.insert(first),
+            Err(ExactIndexError::DuplicateBinding)
+        ));
         assert_eq!(index.len(), 1);
         index.insert(second).unwrap();
         let (result, accounting) = index.lookup(fixture.stream, 1, b"KEY").unwrap();
@@ -450,24 +477,37 @@ mod dacr_exact_tests {
         let fixture = Fixture::new();
         let keys: Vec<Vec<u8>> = (0..60).map(|n| format!("value-{n}").into_bytes()).collect();
         let a = &keys[0];
-        let b = keys.iter().skip(1).find(|k| {
-            let index = fixture.index(limits());
-            index.address(k) == index.address(a)
-        }).unwrap();
+        let b = keys
+            .iter()
+            .skip(1)
+            .find(|k| {
+                let index = fixture.index(limits());
+                index.address(k) == index.address(a)
+            })
+            .unwrap();
         let mut capped = limits();
         capped.max_bucket_entries = 1;
         let mut index = fixture.index(capped);
         index.insert(bound(fixture.add(1, a), a)).unwrap();
-        assert!(matches!(index.insert(bound(fixture.add(2, b), b)), Err(ExactIndexError::BucketBudget)));
+        assert!(matches!(
+            index.insert(bound(fixture.add(2, b), b)),
+            Err(ExactIndexError::BucketBudget)
+        ));
         assert_eq!(index.len(), 1);
-        assert!(matches!(index.lookup(fixture.stream, 1, a).unwrap().0, ExactLookup::Hit(_)));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, a).unwrap().0,
+            ExactLookup::Hit(_)
+        ));
 
         let mut one_entry = limits();
         one_entry.max_entries = 1;
         one_entry.max_bucket_entries = 1;
         let mut index = fixture.index(one_entry);
         index.insert(bound(fixture.add(1, a), a)).unwrap();
-        assert!(matches!(index.insert(bound(fixture.add(2, b), b)), Err(ExactIndexError::EntryBudget)));
+        assert!(matches!(
+            index.insert(bound(fixture.add(2, b), b)),
+            Err(ExactIndexError::EntryBudget)
+        ));
         assert_eq!(index.len(), 1);
     }
 
@@ -476,17 +516,39 @@ mod dacr_exact_tests {
         let fixture = Fixture::new();
         let mut index = fixture.index(limits());
         let b = bound(fixture.add(1, b"KEY"), b"KEY");
-        assert!(matches!(index.insert(bound(b.clone(), b"")), Err(ExactIndexError::InvalidKey)));
-        assert!(matches!(index.insert(bound(b.clone(), &[b'X'; 33])), Err(ExactIndexError::InvalidKey)));
+        assert!(matches!(
+            index.insert(bound(b.clone(), b"")),
+            Err(ExactIndexError::InvalidKey)
+        ));
+        assert!(matches!(
+            index.insert(bound(b.clone(), &[b'X'; 33])),
+            Err(ExactIndexError::InvalidKey)
+        ));
         let mut other = b.clone();
         other.segment = ContextSegmentId::new(ContextStreamId::new(99).unwrap(), 1).unwrap();
-        assert!(matches!(index.insert(other), Err(ExactIndexError::WrongStream)));
+        assert!(matches!(
+            index.insert(other),
+            Err(ExactIndexError::WrongStream)
+        ));
         index.insert(b).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 2, b"KEY"), Err(ExactIndexError::WrongEpoch)));
-        assert!(matches!(index.lookup(ContextStreamId::new(99).unwrap(), 1, b"KEY"), Err(ExactIndexError::WrongStream)));
-        assert!(matches!(ExactSourceIndex::new(&fixture.directory, fixture.stream, 0, limits()), Err(ExactIndexError::WrongEpoch)));
-        let mut zero = limits(); zero.max_key_bytes = 0;
-        assert!(matches!(ExactSourceIndex::new(&fixture.directory, fixture.stream, 1, zero), Err(ExactIndexError::InvalidLimits)));
+        assert!(matches!(
+            index.lookup(fixture.stream, 2, b"KEY"),
+            Err(ExactIndexError::WrongEpoch)
+        ));
+        assert!(matches!(
+            index.lookup(ContextStreamId::new(99).unwrap(), 1, b"KEY"),
+            Err(ExactIndexError::WrongStream)
+        ));
+        assert!(matches!(
+            ExactSourceIndex::new(&fixture.directory, fixture.stream, 0, limits()),
+            Err(ExactIndexError::WrongEpoch)
+        ));
+        let mut zero = limits();
+        zero.max_key_bytes = 0;
+        assert!(matches!(
+            ExactSourceIndex::new(&fixture.directory, fixture.stream, 1, zero),
+            Err(ExactIndexError::InvalidLimits)
+        ));
     }
 
     #[test]
@@ -498,11 +560,20 @@ mod dacr_exact_tests {
         let path = fixture.path(1, "smlprov");
         let saved = fs::read(&path).unwrap();
         fs::remove_file(&path).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"KEY"), Err(ExactIndexError::MissingProvenance)));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"KEY"),
+            Err(ExactIndexError::MissingProvenance)
+        ));
         fs::write(&path, b"bad").unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"KEY"), Err(ExactIndexError::MissingProvenance)));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"KEY"),
+            Err(ExactIndexError::MissingProvenance)
+        ));
         fs::write(path, saved).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"KEY"), Ok((ExactLookup::Hit(_), _))));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"KEY"),
+            Ok((ExactLookup::Hit(_), _))
+        ));
     }
 
     #[test]
@@ -514,15 +585,29 @@ mod dacr_exact_tests {
         let path = fixture.path(1, "smlctx");
         let saved = fs::read(&path).unwrap();
         fs::remove_file(&path).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"KEY"), Err(ExactIndexError::Raw(_))));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"KEY"),
+            Err(ExactIndexError::Raw(_))
+        ));
         let mut altered = saved.clone();
         *altered.last_mut().unwrap() ^= 1;
         fs::write(&path, altered).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"KEY"), Err(ExactIndexError::Raw(_))));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"KEY"),
+            Err(ExactIndexError::Raw(_))
+        ));
         fs::write(&path, saved).unwrap();
         let mut wrong_hash = fixture.index(limits());
-        wrong_hash.insert(ExactBinding { content_hash: ContextContentHash::from_sha256([0; 32]), ..b }).unwrap();
-        assert!(matches!(wrong_hash.lookup(fixture.stream, 1, b"KEY"), Err(ExactIndexError::SourceMismatch)));
+        wrong_hash
+            .insert(ExactBinding {
+                content_hash: ContextContentHash::from_sha256([0; 32]),
+                ..b
+            })
+            .unwrap();
+        assert!(matches!(
+            wrong_hash.lookup(fixture.stream, 1, b"KEY"),
+            Err(ExactIndexError::SourceMismatch)
+        ));
     }
 
     #[test]
@@ -531,14 +616,19 @@ mod dacr_exact_tests {
         let binding = bound(fixture.add(1, b"verified but unrelated"), b"ABSENT");
         let mut index = fixture.index(limits());
         index.insert(binding).unwrap();
-        assert!(matches!(index.lookup(fixture.stream, 1, b"ABSENT"), Err(ExactIndexError::KeyAbsentFromSource)));
+        assert!(matches!(
+            index.lookup(fixture.stream, 1, b"ABSENT"),
+            Err(ExactIndexError::KeyAbsentFromSource)
+        ));
     }
 
     #[test]
     fn repeat_queries_are_deterministic_and_do_not_mutate() {
         let fixture = Fixture::new();
         let mut index = fixture.index(limits());
-        index.insert(bound(fixture.add(1, b"literal KEY"), b"KEY")).unwrap();
+        index
+            .insert(bound(fixture.add(1, b"literal KEY"), b"KEY"))
+            .unwrap();
         let first = index.lookup(fixture.stream, 1, b"KEY").unwrap();
         let second = index.lookup(fixture.stream, 1, b"KEY").unwrap();
         assert_eq!(first, second);
