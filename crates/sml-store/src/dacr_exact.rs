@@ -249,7 +249,7 @@ impl ExactSourceIndex {
     fn verify(&self, binding: &ExactBinding) -> Result<VerifiedExactHit, ExactIndexError> {
         let base = self.basename(binding.segment);
         let path = self.directory.join(format!("{base}.smlprov"));
-        let mut file = match File::open(path) {
+        let file = match File::open(path) {
             Ok(file) => file,
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 return Err(ExactIndexError::MissingProvenance);
@@ -281,7 +281,7 @@ impl ExactSourceIndex {
         .map_err(ExactIndexError::Raw)?;
         if raw.reference.identity != binding.segment
             || raw.reference.content_hash != binding.content_hash
-            || raw.reference.semantic_record_ids() != manifest.semantic_record_ids
+            || raw.reference.semantic_record_ids() != manifest.semantic_record_ids.as_slice()
         {
             return Err(ExactIndexError::SourceMismatch);
         }
