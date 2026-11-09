@@ -65,6 +65,8 @@ pub enum AddressError {
     DuplicateSegment,
     IndexFull,
     BucketFull,
+    ProbeBudget,
+    CandidateOverflow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,6 +285,74 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         let hits = self.buckets.get(&address).cloned().unwrap_or_default();
         let accounting = CandidateAccounting {
             address_buckets_probed: 1,
+            candidates_returned: hits.len() as u64,
+        };
+        Ok((hits, accounting))
+    }
+
+    /// Opt-in direct probes over BOTH possible values of each unknown selected
+    /// SBG bit. The default exact lookup continues to reject unknown bits.
+    ///
+    /// No history scan, approximate scoring or implicit unknown->false coercion.
+    /// All caps are preflighted; oversized candidate unions are never truncated.
+    pub fn lookup_partial(
+        &self,
+        stream: ContextStreamId,
+        epoch: u64,
+        key: &SbgAddress<BITS>,
+        max_unknown_bits: usize,
+        max_address_probes: usize,
+        max_candidates: usize,
+    ) -> Result<(Vec<ContextSegmentId>, CandidateAccounting), AddressError> {
+        if stream != self.stream {
+            return Err(AddressError::WrongStream);
+        }
+        if epoch != self.epoch {
+            return Err(AddressError::WrongEpoch);
+        }
+        if max_unknown_bits > self.encoder.budget.address_bits
+            || !(1..=256).contains(&max_address_probes)
+            || max_candidates == 0
+            || max_candidates > self.encoder.budget.max_entries
+        {
+            return Err(AddressError::ProbeBudget);
+        }
+        let mut base = 0_u16;
+        let mut unknown_positions = Vec::new();
+        for (address_position, &bit) in self.encoder.features.iter().enumerate() {
+            if key.known.get(bit).map_err(|_| AddressError::InvalidFeature)? {
+                if key.value.get(bit).map_err(|_| AddressError::InvalidFeature)? {
+                    base |= 1_u16 << address_position;
+                }
+            } else {
+                unknown_positions.push(address_position);
+            }
+        }
+        if unknown_positions.len() > max_unknown_bits {
+            return Err(AddressError::UnknownSelectedFeature);
+        }
+        // address_bits <= 8 by construction, so the maximum is 256.
+        let probe_count = 1_usize << unknown_positions.len();
+        if probe_count > max_address_probes {
+            return Err(AddressError::ProbeBudget);
+        }
+        let mut hits = Vec::new();
+        for assignment in 0..probe_count {
+            let mut address = base;
+            for (index, &position) in unknown_positions.iter().enumerate() {
+                if assignment & (1_usize << index) != 0 {
+                    address |= 1_u16 << position;
+                }
+            }
+            if let Some(bucket) = self.buckets.get(&address) {
+                if bucket.len() > max_candidates - hits.len() {
+                    return Err(AddressError::CandidateOverflow);
+                }
+                hits.extend_from_slice(bucket);
+            }
+        }
+        let accounting = CandidateAccounting {
+            address_buckets_probed: probe_count as u64,
             candidates_returned: hits.len() as u64,
         };
         Ok((hits, accounting))
