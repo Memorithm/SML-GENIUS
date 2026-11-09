@@ -183,6 +183,51 @@ jobs:
           # the trained reference. One prompt does not certify full logits.
           echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
 
+      - name: Bounded first-divergent operator fingerprints (diagnostic only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          for mode in stock fused_v2; do
+            if [[ "$mode" == stock ]]; then
+              binary=./stock/build/bin/llama-debug
+              model=original.gguf
+            else
+              binary=./llama/build/bin/llama-debug
+              model=experimental-bpb3k.gguf
+            fi
+            MEM_BPB3K_LAYER_TRACE=1 MEM_BPB3K_KERNEL="$mode" \
+              MEM_BPB3K_FIDELITY_DUMP="$RUNNER_TEMP/bpb3k/optrace-$mode.bin" \
+              timeout -k 10s 180s "$binary" -m "$model" -ngl 0 -t 2 -c 128 -n 8 \
+                -p 'La capitale de la France est' --save-logits \
+                >"optrace-$mode.log" 2>&1
+            grep -q 'PASS_BPB3K_FIDELITY_DUMP' "optrace-$mode.log"
+            grep -q '^BPB3K_LAYER seq=' "optrace-$mode.log"
+          done
+          python3 - <<'PY' | tee optrace-summary.txt
+          from pathlib import Path
+          logs = {}
+          for mode in ("stock", "fused_v2"):
+              rows = [line.strip() for line in Path(f"optrace-{mode}.log").read_text().splitlines()
+                      if line.startswith("BPB3K_LAYER seq=")]
+              if not rows:
+                  raise SystemExit(f"STOP_BPB3K_LAYER_TRACE_EMPTY mode={mode}")
+              logs[mode] = rows
+              print(f"BPB3K_LAYER_COUNT mode={mode} count={len(rows)}")
+          left, right = logs["stock"], logs["fused_v2"]
+          for i, (a, b) in enumerate(zip(left, right)):
+              if a != b:
+                  print(f"BPB3K_FIRST_DIVERGENCE index={i}")
+                  print(f"BPB3K_STOCK_OPERATOR {a}")
+                  print(f"BPB3K_FUSED_OPERATOR {b}")
+                  break
+          else:
+              if len(left) != len(right):
+                  print(f"BPB3K_LAYER_LENGTH_MISMATCH stock={len(left)} fused={len(right)}")
+              else:
+                  print("BPB3K_LAYER_TRACE_IDENTICAL bounded=true")
+          print("BPB3K_TRACE_VERDICT=DIAGNOSTIC_ONLY no_qualification_or_threshold_change")
+          PY
       - name: Full vocabulary logits, deterministic token IDs and fresh-process reproducibility
         shell: bash
         run: |
@@ -231,5 +276,7 @@ jobs:
             ${{ runner.temp }}/bpb3k/fidelity/
             ${{ runner.temp }}/bpb3k/fidelity-summary.txt
             ${{ runner.temp }}/bpb3k/kernel-diagnostic-*.txt
+            ${{ runner.temp }}/bpb3k/optrace-*.log
+            ${{ runner.temp }}/bpb3k/optrace-summary.txt
           if-no-files-found: warn
           retention-days: 30
