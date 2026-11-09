@@ -122,12 +122,28 @@ impl<const BITS: usize> DiscreteAddress<BITS> {
                 accounting.different_pairs += 1;
             }
             for (bit, score) in scores.iter_mut().enumerate() {
-                if pair.left.known.get(bit).map_err(|_| AddressError::InvalidFeature)?
-                    && pair.right.known.get(bit).map_err(|_| AddressError::InvalidFeature)?
+                if pair
+                    .left
+                    .known
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                    && pair
+                        .right
+                        .known
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?
                 {
                     accounting.observed_feature_comparisons += 1;
-                    let differs = pair.left.value.get(bit).map_err(|_| AddressError::InvalidFeature)?
-                        != pair.right.value.get(bit).map_err(|_| AddressError::InvalidFeature)?;
+                    let differs = pair
+                        .left
+                        .value
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?
+                        != pair
+                            .right
+                            .value
+                            .get(bit)
+                            .map_err(|_| AddressError::InvalidFeature)?;
                     if differs {
                         *score += if pair.same { -1 } else { 1 };
                     }
@@ -137,24 +153,37 @@ impl<const BITS: usize> DiscreteAddress<BITS> {
         if accounting.same_pairs == 0 || accounting.different_pairs == 0 {
             return Err(AddressError::InsufficientPairs);
         }
-        let mut candidates: Vec<usize> =
-            (0..BITS).filter(|&bit| scores[bit] > 0).collect();
+        let mut candidates: Vec<usize> = (0..BITS).filter(|&bit| scores[bit] > 0).collect();
         candidates.sort_unstable_by_key(|&bit| (std::cmp::Reverse(scores[bit]), bit));
         if candidates.len() < budget.address_bits {
             return Err(AddressError::InsufficientSignal);
         }
         candidates.truncate(budget.address_bits);
         candidates.sort_unstable();
-        Ok((Self { features: candidates, budget }, accounting))
+        Ok((
+            Self {
+                features: candidates,
+                budget,
+            },
+            accounting,
+        ))
     }
 
     pub fn encode(&self, sbg: &SbgAddress<BITS>) -> Result<u16, AddressError> {
         let mut code = 0_u16;
         for (position, &bit) in self.features.iter().enumerate() {
-            if !sbg.known.get(bit).map_err(|_| AddressError::InvalidFeature)? {
+            if !sbg
+                .known
+                .get(bit)
+                .map_err(|_| AddressError::InvalidFeature)?
+            {
                 return Err(AddressError::UnknownSelectedFeature);
             }
-            if sbg.value.get(bit).map_err(|_| AddressError::InvalidFeature)? {
+            if sbg
+                .value
+                .get(bit)
+                .map_err(|_| AddressError::InvalidFeature)?
+            {
                 code |= 1_u16 << position;
             }
         }
@@ -219,9 +248,11 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         if self.entries.len() >= self.encoder.budget.max_entries {
             return Err(AddressError::IndexFull);
         }
-        if self.buckets.get(&address).is_some_and(|bucket| {
-            bucket.len() >= self.encoder.budget.max_bucket_entries
-        }) {
+        if self
+            .buckets
+            .get(&address)
+            .is_some_and(|bucket| bucket.len() >= self.encoder.budget.max_bucket_entries)
+        {
             return Err(AddressError::BucketFull);
         }
         self.entries.insert(segment);
@@ -314,8 +345,7 @@ mod dacr_latent_tests {
 
     #[test]
     fn dacr_latent_learns_signal_and_generalizes_heldout_nuisance() {
-        let (learned, accounting) =
-            DiscreteAddress::train_pairwise(&pairs(), budget()).unwrap();
+        let (learned, accounting) = DiscreteAddress::train_pairwise(&pairs(), budget()).unwrap();
         assert_eq!(learned.features(), &CLASS_BITS);
         assert_eq!(accounting.same_pairs, 8);
         assert_eq!(accounting.different_pairs, 24);
@@ -325,8 +355,12 @@ mod dacr_latent_tests {
         let mut fixed_index = CandidateIndex::new(fixed, stream, 3).unwrap();
         for class in 0..CLASSES {
             let key = sample(class, 0b01001);
-            learned_index.insert(id(stream, (class + 1) as u64), &key).unwrap();
-            fixed_index.insert(id(stream, (class + 1) as u64), &key).unwrap();
+            learned_index
+                .insert(id(stream, (class + 1) as u64), &key)
+                .unwrap();
+            fixed_index
+                .insert(id(stream, (class + 1) as u64), &key)
+                .unwrap();
         }
         let mut learned_recall = 0;
         let mut fixed_recall = 0;
@@ -338,7 +372,11 @@ mod dacr_latent_tests {
             assert!(accounting.candidates_returned <= 8);
             learned_recall += usize::from(hits.contains(&expected));
             fixed_recall += usize::from(
-                fixed_index.lookup(stream, 3, &query).unwrap().0.contains(&expected),
+                fixed_index
+                    .lookup(stream, 3, &query)
+                    .unwrap()
+                    .0
+                    .contains(&expected),
             );
         }
         assert_eq!(learned_recall, 8);
@@ -351,10 +389,16 @@ mod dacr_latent_tests {
         let mut key = sample(1, 2);
         key.known.set(4, false).unwrap();
         assert!(key.value.get(4).unwrap()); // unknown != known false
-        assert_eq!(encoder.encode(&key), Err(AddressError::UnknownSelectedFeature));
+        assert_eq!(
+            encoder.encode(&key),
+            Err(AddressError::UnknownSelectedFeature)
+        );
         let stream = ContextStreamId::new(92).unwrap();
         let mut index = CandidateIndex::new(encoder, stream, 1).unwrap();
-        assert_eq!(index.insert(id(stream, 1), &key), Err(AddressError::UnknownSelectedFeature));
+        assert_eq!(
+            index.insert(id(stream, 1), &key),
+            Err(AddressError::UnknownSelectedFeature)
+        );
         assert_eq!(index.len(), 0);
     }
 
@@ -368,7 +412,10 @@ mod dacr_latent_tests {
         let mut index = CandidateIndex::new(encoder, stream, 1).unwrap();
         index.insert(id(stream, 1), &sample(0, 0)).unwrap();
         index.insert(id(stream, 2), &sample(4, 0)).unwrap();
-        assert_eq!(index.insert(id(stream, 3), &sample(5, 0)), Err(AddressError::BucketFull));
+        assert_eq!(
+            index.insert(id(stream, 3), &sample(5, 0)),
+            Err(AddressError::BucketFull)
+        );
         assert_eq!(index.len(), 2);
         let (candidates, accounting) = index.lookup(stream, 1, &sample(1, 0)).unwrap();
         assert_eq!(candidates, vec![id(stream, 1), id(stream, 2)]);
@@ -383,8 +430,14 @@ mod dacr_latent_tests {
         let mut index = CandidateIndex::new(encoder, stream, 2).unwrap();
         let key = sample(0, 0);
         index.insert(id(stream, 1), &key).unwrap();
-        assert_eq!(index.insert(id(stream, 1), &key), Err(AddressError::DuplicateSegment));
-        assert_eq!(index.insert(id(other, 1), &key), Err(AddressError::WrongStream));
+        assert_eq!(
+            index.insert(id(stream, 1), &key),
+            Err(AddressError::DuplicateSegment)
+        );
+        assert_eq!(
+            index.insert(id(other, 1), &key),
+            Err(AddressError::WrongStream)
+        );
         assert_eq!(index.lookup(stream, 3, &key), Err(AddressError::WrongEpoch));
         assert_eq!(index.lookup(other, 2, &key), Err(AddressError::WrongStream));
         assert_eq!(index.len(), 1);
@@ -392,7 +445,10 @@ mod dacr_latent_tests {
         bad.address_bits = 0;
         assert_eq!(bad.validate::<BITS>(), Err(AddressError::InvalidBudget));
         assert_eq!(budget().validate::<65>(), Err(AddressError::InvalidBudget));
-        assert_eq!(DiscreteAddress::<BITS>::train_pairwise(&[], budget()).err(), Some(AddressError::InvalidBudget));
+        assert_eq!(
+            DiscreteAddress::<BITS>::train_pairwise(&[], budget()).err(),
+            Some(AddressError::InvalidBudget)
+        );
     }
 
     #[test]
@@ -407,8 +463,16 @@ mod dacr_latent_tests {
             Some(AddressError::InsufficientPairs)
         );
         let no_signal = vec![
-            PairConstraint { left: sample(0, 0), right: sample(0, 0), same: true },
-            PairConstraint { left: sample(0, 0), right: sample(0, 0), same: false },
+            PairConstraint {
+                left: sample(0, 0),
+                right: sample(0, 0),
+                same: true,
+            },
+            PairConstraint {
+                left: sample(0, 0),
+                right: sample(0, 0),
+                same: false,
+            },
         ];
         assert_eq!(
             DiscreteAddress::train_pairwise(&no_signal, budget()).err(),
