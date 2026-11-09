@@ -546,7 +546,6 @@ mod dacr_latent_tests {
     }
 }
 
-
 #[cfg(test)]
 mod dacr_rebind_tests {
     use super::*;
@@ -569,11 +568,14 @@ mod dacr_rebind_tests {
 
     fn fixture(epoch: u64, bucket_entries: usize) -> (ContextStreamId, CandidateIndex<16>) {
         let stream = ContextStreamId::new(136).unwrap();
-        let encoder =
-            DiscreteAddress::fixed(vec![0, 1], budget(bucket_entries)).unwrap();
+        let encoder = DiscreteAddress::fixed(vec![0, 1], budget(bucket_entries)).unwrap();
         let mut index = CandidateIndex::new(encoder, stream, epoch).unwrap();
-        index.insert(ContextSegmentId::new(stream, 1).unwrap(), &key(0)).unwrap();
-        index.insert(ContextSegmentId::new(stream, 2).unwrap(), &key(1)).unwrap();
+        index
+            .insert(ContextSegmentId::new(stream, 1).unwrap(), &key(0))
+            .unwrap();
+        index
+            .insert(ContextSegmentId::new(stream, 2).unwrap(), &key(1))
+            .unwrap();
         (stream, index)
     }
 
@@ -587,15 +589,28 @@ mod dacr_rebind_tests {
         index.rebind(segment, 7, 8, &key(0), &key(2)).unwrap();
         assert_eq!(index.epoch(), 8);
         assert_eq!(index.len(), 2);
-        assert_eq!(index.lookup(stream, 7, &key(2)), Err(AddressError::WrongEpoch));
+        assert_eq!(
+            index.lookup(stream, 7, &key(2)),
+            Err(AddressError::WrongEpoch)
+        );
         assert!(index.lookup(stream, 8, &key(0)).unwrap().0.is_empty());
         assert_eq!(index.lookup(stream, 8, &key(2)).unwrap().0, vec![segment]);
         assert_eq!(index.lookup(stream, 8, &key(1)).unwrap().0, vec![other]);
-        assert_eq!(index.lookup(stream, 8, &key(2)).unwrap().1.address_buckets_probed, 1);
+        assert_eq!(
+            index
+                .lookup(stream, 8, &key(2))
+                .unwrap()
+                .1
+                .address_buckets_probed,
+            1
+        );
         let (_, mut replay) = fixture(7, 2);
         replay.rebind(segment, 7, 8, &key(0), &key(2)).unwrap();
         for code in 0..4 {
-            assert_eq!(index.lookup(stream, 8, &key(code)), replay.lookup(stream, 8, &key(code)));
+            assert_eq!(
+                index.lookup(stream, 8, &key(code)),
+                replay.lookup(stream, 8, &key(code))
+            );
         }
     }
 
@@ -642,7 +657,10 @@ mod dacr_rebind_tests {
         let (stream, mut index) = fixture(3, 1);
         let segment = ContextSegmentId::new(stream, 1).unwrap();
         let other = ContextSegmentId::new(stream, 2).unwrap();
-        assert_eq!(index.rebind(segment, 3, 4, &key(0), &key(1)), Err(AddressError::BucketFull));
+        assert_eq!(
+            index.rebind(segment, 3, 4, &key(0), &key(1)),
+            Err(AddressError::BucketFull)
+        );
         assert_eq!(index.epoch(), 3);
         assert_eq!(index.lookup(stream, 3, &key(0)).unwrap().0, vec![segment]);
         assert_eq!(index.lookup(stream, 3, &key(1)).unwrap().0, vec![other]);
@@ -662,6 +680,10 @@ mod dacr_rebind_tests {
             Err(AddressError::WrongEpoch)
         );
         assert_eq!(index.epoch(), u64::MAX);
-        assert_eq!(index.lookup(stream, u64::MAX, &key(0)).unwrap().0, vec![segment]);
+        assert_eq!(
+            index.lookup(stream, u64::MAX, &key(0)).unwrap().0,
+            vec![segment]
+        );
     }
 }
+
