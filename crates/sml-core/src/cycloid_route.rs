@@ -122,7 +122,7 @@ impl CycloidGraph {
             || edges.is_empty()
             || edges.len() > MAX_CYCLOID_EDGES
             || nodes[0] != CycloidNode::Entry
-            || nodes[1..].iter().any(|node| *node == CycloidNode::Entry)
+            || nodes[1..].contains(&CycloidNode::Entry)
         {
             return Err(CycloidError::InvalidGraph);
         }
@@ -250,7 +250,7 @@ impl CycloidSearch<'_> {
         bytes: u64,
         path: &mut Vec<CycloidNodeId>,
     ) -> Result<(), CycloidError> {
-        if path.len() - 1 >= usize::from(self.budget.max_hops) {
+        if path.len() > usize::from(self.budget.max_hops) {
             return Ok(());
         }
         // Index iteration avoids holding an immutable edge-slice borrow during
