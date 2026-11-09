@@ -73,7 +73,12 @@ fn patch(root: &Path) -> Result<(), String> {
     let path = root.join("examples/debug/debug.cpp");
     let source = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let marker = "    print_tokenized_prompt(ctx, tokens, params.prompt);";
-    if source.matches(marker).count() != 1 || source.contains("MEM_BPB3K_FIDELITY_DUMP") {
+    if source.matches(marker).count() != 1
+        || source.matches("static bool run(llama_context * ctx, const common_params & params) {").count() != 1
+        || source.matches("    auto llama_init = common_init_from_params(params);").count() != 1
+        || source.matches("#include <cstdlib>").count() != 1
+        || source.contains("MEM_BPB3K_FIDELITY_DUMP")
+    {
         return Err("STOP_FIDELITY_SOURCE_DRIFT".into());
     }
     fs::write(
