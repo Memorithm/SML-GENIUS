@@ -73,6 +73,7 @@ pub mod calibrated_delay_readout;
 pub mod candidate;
 pub mod char_baselines;
 pub mod circuit;
+pub mod cycloid_route;
 pub mod context_ledger;
 pub mod crypto_features;
 pub mod crypto_strategy;
