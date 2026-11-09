@@ -65,6 +65,7 @@ pub enum AddressError {
     DuplicateSegment,
     IndexFull,
     BucketFull,
+    SourceAddressMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,6 +236,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         self.entries.is_empty()
     }
 
+    /// Epoch of the currently published segment-to-address bindings.
+    #[must_use]
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
     pub fn insert(
         &mut self,
         segment: ContextSegmentId,
@@ -262,6 +269,59 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         }
         self.entries.insert(segment);
         self.buckets.entry(address).or_default().push(segment);
+        Ok(())
+    }
+
+    /// Atomically reassigns an existing candidate to a new SBG address and
+    /// publishes the immediate successor epoch.
+    ///
+    /// All validation precedes mutation: wrong source, stale epoch, unknown
+    /// selected bits, incorrect old address and full destination buckets leave
+    /// all source bindings untouched. Reading still requires exact epoch
+    /// admission and never upgrades candidates to verified source evidence.
+    pub fn rebind(
+        &mut self,
+        segment: ContextSegmentId,
+        expected_epoch: u64,
+        next_epoch: u64,
+        old_key: &SbgAddress<BITS>,
+        new_key: &SbgAddress<BITS>,
+    ) -> Result<(), AddressError> {
+        if segment.stream_id != self.stream {
+            return Err(AddressError::WrongStream);
+        }
+        if expected_epoch != self.epoch || self.epoch.checked_add(1) != Some(next_epoch) {
+            return Err(AddressError::WrongEpoch);
+        }
+        if segment.segment_id == 0 || !self.entries.contains(&segment) {
+            return Err(AddressError::InvalidSegment);
+        }
+        let old_address = self.encoder.encode(old_key)?;
+        let new_address = self.encoder.encode(new_key)?;
+        let old_position = self
+            .buckets
+            .get(&old_address)
+            .and_then(|bucket| bucket.iter().position(|&candidate| candidate == segment))
+            .ok_or(AddressError::SourceAddressMismatch)?;
+        if old_address != new_address {
+            if self
+                .buckets
+                .get(&new_address)
+                .is_some_and(|bucket| bucket.len() >= self.encoder.budget.max_bucket_entries)
+            {
+                return Err(AddressError::BucketFull);
+            }
+            let old_bucket = self
+                .buckets
+                .get_mut(&old_address)
+                .ok_or(AddressError::SourceAddressMismatch)?;
+            old_bucket.remove(old_position);
+            if old_bucket.is_empty() {
+                self.buckets.remove(&old_address);
+            }
+            self.buckets.entry(new_address).or_default().push(segment);
+        }
+        self.epoch = next_epoch;
         Ok(())
     }
 
