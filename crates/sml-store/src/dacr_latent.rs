@@ -76,6 +76,27 @@ pub struct TrainingAccounting {
     pub observed_feature_comparisons: usize,
 }
 
+/// Opt-in minimum per-coordinate evidence, counting only pairs where the
+/// selected feature is known on BOTH sides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BalancedPairwisePolicy {
+    pub min_same_observed: usize,
+    pub min_different_observed: usize,
+}
+
+/// Auditable integer evidence for one retained coordinate. Its positive
+/// advantage is exactly `numerator / denominator`; no floating-point scoring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BalancedFeatureEvidence {
+    pub bit: usize,
+    pub same_observed: usize,
+    pub different_observed: usize,
+    pub same_disagreements: usize,
+    pub different_disagreements: usize,
+    pub advantage_numerator: u128,
+    pub advantage_denominator: u128,
+}
+
 /// Immutable hard-address encoder. The only inference work is reading the
 /// selected known bits: no learned real-valued weights remain after freeze.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +190,120 @@ impl<const BITS: usize> DiscreteAddress<BITS> {
             },
             accounting,
         ))
+    }
+
+    /// Class-balanced feature learning with explicit known-mask support.
+    ///
+    /// Retains only bits for which the fraction of *different*-pair
+    /// disagreements exceeds that of *same*-pair disagreements, using exact
+    /// bounded integer ratios and a deterministic tie break. This is an
+    /// opt-in alternative to the unchanged raw-count learner above.
+    pub fn train_pairwise_balanced(
+        pairs: &[PairConstraint<BITS>],
+        budget: AddressBudget,
+        policy: BalancedPairwisePolicy,
+    ) -> Result<(Self, TrainingAccounting, Vec<BalancedFeatureEvidence>), AddressError> {
+        budget.validate::<BITS>()?;
+        if budget.max_pairs > 1_000_000
+            || pairs.is_empty()
+            || pairs.len() > budget.max_pairs
+            || policy.min_same_observed == 0
+            || policy.min_different_observed == 0
+        {
+            return Err(AddressError::InvalidBudget);
+        }
+        #[derive(Clone, Copy, Default)]
+        struct Observations {
+            same_seen: usize,
+            different_seen: usize,
+            same_disagreed: usize,
+            different_disagreed: usize,
+        }
+        let mut observed = vec![Observations::default(); BITS];
+        let mut accounting = TrainingAccounting {
+            same_pairs: 0,
+            different_pairs: 0,
+            observed_feature_comparisons: 0,
+        };
+        for pair in pairs {
+            if pair.same {
+                accounting.same_pairs += 1;
+            } else {
+                accounting.different_pairs += 1;
+            }
+            for (bit, counts) in observed.iter_mut().enumerate() {
+                if !pair
+                    .left
+                    .known
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                    || !pair
+                        .right
+                        .known
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?
+                {
+                    continue;
+                }
+                accounting.observed_feature_comparisons += 1;
+                let disagreed = pair
+                    .left
+                    .value
+                    .get(bit)
+                    .map_err(|_| AddressError::InvalidFeature)?
+                    != pair
+                        .right
+                        .value
+                        .get(bit)
+                        .map_err(|_| AddressError::InvalidFeature)?;
+                if pair.same {
+                    counts.same_seen += 1;
+                    counts.same_disagreed += usize::from(disagreed);
+                } else {
+                    counts.different_seen += 1;
+                    counts.different_disagreed += usize::from(disagreed);
+                }
+            }
+        }
+        if accounting.same_pairs == 0 || accounting.different_pairs == 0 {
+            return Err(AddressError::InsufficientPairs);
+        }
+        let mut eligible = Vec::new();
+        for (bit, counts) in observed.into_iter().enumerate() {
+            if counts.same_seen < policy.min_same_observed
+                || counts.different_seen < policy.min_different_observed
+            {
+                continue;
+            }
+            let positive = (counts.different_disagreed as u128) * (counts.same_seen as u128);
+            let negative = (counts.same_disagreed as u128) * (counts.different_seen as u128);
+            if positive <= negative {
+                continue;
+            }
+            eligible.push(BalancedFeatureEvidence {
+                bit,
+                same_observed: counts.same_seen,
+                different_observed: counts.different_seen,
+                same_disagreements: counts.same_disagreed,
+                different_disagreements: counts.different_disagreed,
+                advantage_numerator: positive - negative,
+                advantage_denominator: (counts.same_seen as u128) * (counts.different_seen as u128),
+            });
+        }
+        eligible.sort_unstable_by(|left, right| {
+            let left_rate = left.advantage_numerator * right.advantage_denominator;
+            let right_rate = right.advantage_numerator * left.advantage_denominator;
+            right_rate
+                .cmp(&left_rate)
+                .then_with(|| left.bit.cmp(&right.bit))
+        });
+        if eligible.len() < budget.address_bits {
+            return Err(AddressError::InsufficientSignal);
+        }
+        eligible.truncate(budget.address_bits);
+        eligible.sort_unstable_by_key(|entry| entry.bit);
+        let features = eligible.iter().map(|entry| entry.bit).collect();
+        Ok((Self { features, budget }, accounting, eligible))
     }
 
     pub fn encode(&self, sbg: &SbgAddress<BITS>) -> Result<u16, AddressError> {
@@ -695,6 +830,213 @@ mod dacr_partial_tests {
         assert_eq!(
             index.lookup_partial(stream, 17, &query, 0, 2, 2),
             Err(AddressError::UnknownSelectedFeature)
+        );
+    }
+}
+
+#[cfg(test)]
+mod dacr_balanced_tests {
+    use super::*;
+
+    const BITS: usize = 16;
+
+    fn sample(bits: u64) -> SbgAddress<BITS> {
+        SbgAddress {
+            value: SemanticBitField::from_words(vec![bits]).unwrap(),
+            known: SemanticBitField::ones().unwrap(),
+        }
+    }
+
+    fn pair(left: SbgAddress<BITS>, right: SbgAddress<BITS>, same: bool) -> PairConstraint<BITS> {
+        PairConstraint { left, right, same }
+    }
+
+    fn budget() -> AddressBudget {
+        AddressBudget {
+            address_bits: 1,
+            max_pairs: 36,
+            max_entries: 2,
+            max_bucket_entries: 2,
+        }
+    }
+
+    fn policy() -> BalancedPairwisePolicy {
+        BalancedPairwisePolicy {
+            min_same_observed: 4,
+            min_different_observed: 32,
+        }
+    }
+
+    fn imbalanced_pairs() -> Vec<PairConstraint<BITS>> {
+        let mut pairs = Vec::new();
+        // Same-label examples always disagree on nuisance coordinate 1.
+        for _ in 0..4 {
+            pairs.push(pair(sample(0), sample(1 << 1), true));
+        }
+        // Overrepresented different-label comparisons also disagree on the
+        // nuisance, so a raw count incorrectly rewards coordinate 1.
+        for _ in 0..24 {
+            pairs.push(pair(sample(0), sample(1 << 1), false));
+        }
+        for _ in 0..4 {
+            pairs.push(pair(sample(0), sample(1 << 4), false));
+        }
+        for _ in 0..4 {
+            pairs.push(pair(sample(0), sample(1 << 15), false));
+        }
+        pairs
+    }
+
+    #[test]
+    fn dacr_balanced_corrects_imbalanced_pair_signal_with_frozen_holdout() {
+        let pairs = imbalanced_pairs();
+        assert_eq!(pairs.len(), 36);
+        let (legacy, _) = DiscreteAddress::train_pairwise(&pairs, budget()).unwrap();
+        assert_eq!(legacy.features(), &[1]);
+        let (balanced, accounting, evidence) =
+            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), policy()).unwrap();
+        assert_eq!(balanced.features(), &[4]);
+        assert_eq!(accounting.same_pairs, 4);
+        assert_eq!(accounting.different_pairs, 32);
+        assert_eq!(accounting.observed_feature_comparisons, 36 * BITS);
+        assert_eq!(
+            evidence,
+            vec![BalancedFeatureEvidence {
+                bit: 4,
+                same_observed: 4,
+                different_observed: 32,
+                same_disagreements: 0,
+                different_disagreements: 4,
+                advantage_numerator: 16,
+                advantage_denominator: 128,
+            }]
+        );
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), policy()).unwrap(),
+            (balanced.clone(), accounting, evidence)
+        );
+        let stream = ContextStreamId::new(119).unwrap();
+        let mut legacy_index = CandidateIndex::new(legacy, stream, 7).unwrap();
+        let mut balanced_index = CandidateIndex::new(balanced, stream, 7).unwrap();
+        for (class, word) in [0_u64, 1_u64 << 4].into_iter().enumerate() {
+            let id = ContextSegmentId::new(stream, (class + 1) as u64).unwrap();
+            legacy_index.insert(id, &sample(word)).unwrap();
+            balanced_index.insert(id, &sample(word)).unwrap();
+        }
+        let mut legacy_found = 0;
+        let mut balanced_found = 0;
+        // TEST nuisance bit 1 = 1, whereas all indexed sources had bit 1 = 0.
+        for (class, word) in [1_u64 << 1, (1_u64 << 1) | (1_u64 << 4)]
+            .into_iter()
+            .enumerate()
+        {
+            let expected = ContextSegmentId::new(stream, (class + 1) as u64).unwrap();
+            legacy_found += usize::from(
+                legacy_index
+                    .lookup(stream, 7, &sample(word))
+                    .unwrap()
+                    .0
+                    .contains(&expected),
+            );
+            let (candidates, work) = balanced_index.lookup(stream, 7, &sample(word)).unwrap();
+            balanced_found += usize::from(candidates.contains(&expected));
+            assert_eq!(candidates, vec![expected]);
+            assert_eq!(work.address_buckets_probed, 1);
+            assert_eq!(work.candidates_returned, 1);
+        }
+        assert_eq!(legacy_found, 0);
+        assert_eq!(balanced_found, 2);
+    }
+
+    #[test]
+    fn dacr_balanced_observes_both_known_masks_and_support_floors() {
+        let mut hidden_positive_value = sample(1 << 4);
+        hidden_positive_value.known.set(4, false).unwrap();
+        assert!(hidden_positive_value.value.get(4).unwrap());
+        let pairs = vec![
+            pair(sample(0), sample(0), true),
+            pair(hidden_positive_value, sample(0), true),
+            pair(sample(0), sample(1 << 4), false),
+        ];
+        let caps = AddressBudget {
+            max_pairs: 3,
+            ..budget()
+        };
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(
+                &pairs,
+                caps,
+                BalancedPairwisePolicy {
+                    min_same_observed: 2,
+                    min_different_observed: 1,
+                },
+            )
+            .err(),
+            Some(AddressError::InsufficientSignal)
+        );
+        let (model, work, evidence) = DiscreteAddress::train_pairwise_balanced(
+            &pairs,
+            caps,
+            BalancedPairwisePolicy {
+                min_same_observed: 1,
+                min_different_observed: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(model.features(), &[4]);
+        assert_eq!(evidence[0].same_observed, 1);
+        assert_eq!(evidence[0].different_observed, 1);
+        assert_eq!(evidence[0].same_disagreements, 0);
+        assert_eq!(evidence[0].different_disagreements, 1);
+        assert_eq!(work.observed_feature_comparisons, 3 * BITS - 1);
+        let mut unknown = sample(1 << 4);
+        unknown.known.set(4, false).unwrap();
+        assert_eq!(
+            model.encode(&unknown),
+            Err(AddressError::UnknownSelectedFeature)
+        );
+    }
+
+    #[test]
+    fn dacr_balanced_rejects_invalid_or_one_label_protocols() {
+        let pairs = imbalanced_pairs();
+        let bad_policy = BalancedPairwisePolicy {
+            min_same_observed: 0,
+            ..policy()
+        };
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&pairs, budget(), bad_policy).err(),
+            Some(AddressError::InvalidBudget)
+        );
+        let bad_caps = AddressBudget {
+            max_pairs: 1_000_001,
+            ..budget()
+        };
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&pairs, bad_caps, policy()).err(),
+            Some(AddressError::InvalidBudget)
+        );
+        let too_few = AddressBudget {
+            max_pairs: 35,
+            ..budget()
+        };
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&pairs, too_few, policy()).err(),
+            Some(AddressError::InvalidBudget)
+        );
+        let same = pairs.iter().filter(|p| p.same).cloned().collect::<Vec<_>>();
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&same, budget(), policy()).err(),
+            Some(AddressError::InsufficientPairs)
+        );
+        let different = pairs
+            .iter()
+            .filter(|p| !p.same)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            DiscreteAddress::train_pairwise_balanced(&different, budget(), policy()).err(),
+            Some(AddressError::InsufficientPairs)
         );
     }
 }
