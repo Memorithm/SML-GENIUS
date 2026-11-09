@@ -21,8 +21,10 @@
 //! - safe relative fixture path accepted; confined regular file under root OK
 //! - `byte_len 0` → `BadValue` (protocol: size must be > 0)
 
+#[cfg(unix)]
+use sml_store::g1_realtext_corpus::confine_regular_file;
 use sml_store::g1_realtext_corpus::{
-    assert_safe_relative_path, confine_regular_file, load_pinned, parse_manifest, RealTextError,
+    assert_safe_relative_path, load_pinned, parse_manifest, RealTextError,
 };
 
 const MANIFEST: &str = include_str!("fixtures/g1_realtext/tiny.manifest");
