@@ -89,3 +89,69 @@ unchanged model/source identities. Do not interrupt running services.
 Transferable observations on compiler optimization must be replicated
 under SciRust or FLAT-ATTENTION's own data/layout contracts before reuse.
 No external GPU dependencies are introduced.
+
+
+## First measured run — 2026-11-10
+
+Exact benchmark [GitHub Actions 42853509550](https://github.com/Memorithm/SML-GENIUS/actions/runs/42853509550),
+at head 1f276f21aa3154c021dc7e6dc50f8c9c33074644.
+Compiled with Clang 18.1.3, GCC 13.3.0 and Rustc 1.89.0,
+Haswell-compatible target flags.
+
+**Compiler evidence**: Clang explicitly reported a vectorized loop
+at source line 59 with vectorization width 8 and interleave factor 4.
+GCC reported the same source line vectorized with **32-byte vectors**.
+The negative control disabled both Clang loop and SLP vectorizers.
+There is no confirmed Rustc per-function vectorization report yet:
+Rustc was built with opt-level=3 and target-cpu=haswell, but its
+generated hot-loop disassembly must still be examined before labeling
+it vectorized.
+
+The independent original-Q3 wire oracle passed **6144** signed-integer
+candidate checks (96 blocks × 16 activation fixtures × 4 compilers).
+The original upstream C AVX2 test passed its 896 cases, and the tiled
+oracle its 112 cases. All **1024** 1-superblock, unity-FP16/f32-scale
+model-equivalent FP32 candidate results matched stock bit for bit.
+All **80** five-way timing samples were retained.
+
+Descriptive median nanoseconds **per fully timed original-Q3_K dot**:
+
+| Rows | Stock Q3_K AVX2 | Clang O3 vectorized | Clang O3 no-vector | GCC O3 auto | Rustc O3 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 40.00 | 1199.25 | 1352.00 | 1129.25 | 1134.25 |
+| 32 | 18.31 | 858.72 | 766.16 | 664.59 | 841.27 |
+| 256 | 17.63 | 669.97 | 771.45 | 614.93 | 597.41 |
+| 1024 | **17.59** | **663.29** | **775.40** | **620.51** | **599.05** |
+
+For 1024 rows, Clang's auto-vectorized candidate takes
+(775.40 - 663.29) / 775.40 = **14.46% less time** than the same
+source compiled with both vectorizers disabled. Yet it is
+663.29 / 17.59 = **37.71x slower** than the genuinely optimized
+stock Q3_K kernel. The Rust O3 source is approximately
+599.05 / 17.59 = **34.06x slower** than stock, regardless of whether
+Rustc vectorized its particular loop.
+
+This **does not** show that auto-vectorization is intrinsically
+37.71x inferior to SIMD intrinsics. The C/Rust candidates choose a
+different expensive *decode-to-256-i16-array-then-dot* algorithm.
+The comparison establishes:
+(1) compiler vectorization can help the same C algorithm,
+(2) vectorizing the final reduction is not enough to pay for
+complete per-row dense decoding, and
+(3) a performance-competitive candidate would need a fused
+packed-weight vectorization pathway without materializing this array,
+or a separately justified reusable predecoded format whose **extra
+storage/bandwidth** is honestly measured.
+
+At 32 rows, the Clang O3 vectorized variant was *slower* than its
+no-vector control in this session (858.72 vs 766.16 ns/dot), illustrating
+that a single hosted-runner median is not a universal speed theorem.
+No outlying sample was removed and no favorable subset promoted.
+
+**Decision**: do not promote any auto-vectorized dense-decode kernel.
+A further study should first separate decoding cost and product-loop
+cost with an explicit paired ablation, using the same stock baseline,
+then investigate compiler-assisted vectorizable Q3_K unpacking
+without an intermediate 512-byte block buffer. Any physical Dell
+measurements need prior RemoteOps admission and independent model-wide
+numeric verification.
