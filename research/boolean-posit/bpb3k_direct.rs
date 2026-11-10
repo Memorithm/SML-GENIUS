@@ -220,6 +220,192 @@ pub fn dot_bpb3k_q8(raw: &[u8], q8: &[u8]) -> Result<Q8DirectDot, Q8DotError> {
     })
 }
 
+/// Bitplane-transposed signed-Q8_K activation codes, reusable across any number
+/// of BPB3-K weight rows. Original Q8_K metadata is preserved verbatim.
+///
+/// The 16 x 8 u16 planes represent exactly 256 input bytes (256 bytes of
+/// prepared masks), plus the original four-byte Q8_K f32 scale. Unlike a
+/// per-row transpose, preparation is paid once per activation superblock.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreparedQ8Bitplanes {
+    subgroup_planes: [[u16; 8]; 16],
+    activation_scale_f32_bits: u32,
+}
+
+/// Prepare one complete Q8_K block once, for repeated dot products against
+/// multiple BPB3-K rows. No allocation, unsafe code or floating-point math.
+pub fn prepare_q8_bitplanes(q8: &[u8]) -> Result<PreparedQ8Bitplanes, Q8DotError> {
+    if q8.len() != Q8_K_BYTES {
+        return Err(Q8DotError::WrongActivationLength { actual: q8.len() });
+    }
+    let mut subgroup_planes = [[0u16; 8]; 16];
+    for (subgroup, planes) in subgroup_planes.iter_mut().enumerate() {
+        let start = 4 + subgroup * LANES_PER_SUBGROUP;
+        for (lane, &value) in q8[start..start + LANES_PER_SUBGROUP].iter().enumerate() {
+            for (bit, plane) in planes.iter_mut().enumerate() {
+                *plane |= u16::from((value >> bit) & 1) << lane;
+            }
+        }
+    }
+    Ok(PreparedQ8Bitplanes {
+        subgroup_planes,
+        activation_scale_f32_bits: u32::from_le_bytes(q8[..4].try_into().unwrap()),
+    })
+}
+
+/// Popcount-only signed Q3_K integer subgroup product using prepared Q8_K.
+///
+/// A Q3_K signed coefficient q in [-4,+3] is exactly the three-bit signed
+/// two's-complement expression
+///
+///   q = (b0 XOR sign) + 2 * (b1 XOR sign) - 4 * sign.
+///
+/// This replaces the original five counts per activation plane with only
+/// three. The Q8_K sign plane (bit 7) has negative weight -128, while bits
+/// 0..6 retain their positive powers of two.
+#[inline]
+fn prepared_signed_subgroup_dot(sign: u16, bit0: u16, bit1: u16, a: &[u16; 8]) -> i32 {
+    let signed_low = bit0 ^ sign;
+    let signed_high = bit1 ^ sign;
+    let mut total = 0i32;
+    for (bit, &mask) in a.iter().enumerate() {
+        let accum = (signed_low & mask).count_ones() as i32
+            + 2 * (signed_high & mask).count_ones() as i32
+            - 4 * (sign & mask).count_ones() as i32;
+        if bit == 7 {
+            total -= accum << bit;
+        } else {
+            total += accum << bit;
+        }
+    }
+    debug_assert!(total.abs() <= (LANES_PER_SUBGROUP * 4 * 128) as i32);
+    total
+}
+
+/// Exact integer dot using a previously prepared Q8_K activation block.
+///
+/// Intended for reusing one 256-byte transposition across many weight rows.
+/// Does not change ggml's stock FP32 accumulation order or qualify a model
+/// runtime. It preserves the source weight scale and activation f32 bits.
+pub fn dot_bpb3k_q8_prepared(
+    raw: &[u8],
+    prepared: &PreparedQ8Bitplanes,
+) -> Result<Q8DirectDot, Q8DotError> {
+    if raw.len() != bpb3k::BYTES {
+        return Err(Q8DotError::WrongWeightLength { actual: raw.len() });
+    }
+    let scales = &raw[bpb3k::PLANES_BYTES..bpb3k::PLANES_BYTES + 12];
+    let mut total = 0i32;
+    for group in 0..GROUPS {
+        let off = group * 24;
+        let negative = read_u64_le(raw, off);
+        let bit0 = read_u64_le(raw, off + 8);
+        let bit1 = read_u64_le(raw, off + 16);
+        for local in 0..SUBGROUPS_PER_GROUP {
+            let subgroup = group * SUBGROUPS_PER_GROUP + local;
+            let shift = local * LANES_PER_SUBGROUP;
+            let sum = prepared_signed_subgroup_dot(
+                (negative >> shift) as u16,
+                (bit0 >> shift) as u16,
+                (bit1 >> shift) as u16,
+                &prepared.subgroup_planes[subgroup],
+            );
+            total += sum * signed_subgroup_scale(scales, subgroup);
+        }
+    }
+    debug_assert!(total.abs() <= 4_194_304);
+    Ok(Q8DirectDot {
+        weighted_integer: total,
+        global_scale_f16_bits: u16::from_le_bytes([raw[108], raw[109]]),
+        activation_scale_f32_bits: prepared.activation_scale_f32_bits,
+    })
+}
+
+/// Precomputed Q8_K subset sums: 16 subgroups × 2 octets × 256 masks,
+/// sixteen KiB per activation block, plus four bytes of unchanged Q8 scale.
+///
+/// This is a separate CPU research candidate. It deliberately trades a
+/// substantially larger *temporary* activation plan for fewer popcounts and
+/// fewer mask reductions when the same Q8_K vector feeds many weight rows.
+/// No GGUF storage reduction, memory-bandwidth gain or CPU speedup is assumed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreparedQ8ByteTables {
+    selected_sums: [[[i16; 256]; 2]; 16],
+    activation_scale_f32_bits: u32,
+}
+
+/// Build exact sums of the eight signed activation codes selected by each
+/// possible 8-bit mask. Dynamic programming fills each table from the mask
+/// with its least significant set bit removed, without saturating arithmetic.
+///
+/// Maximum magnitude is 8*128=1024, safe in i16. The full plan is 16 KiB;
+/// no heap allocation occurs. Preparation must be included in performance
+/// comparisons; use only if shared across multiple rows.
+pub fn prepare_q8_byte_tables(q8: &[u8]) -> Result<PreparedQ8ByteTables, Q8DotError> {
+    if q8.len() != Q8_K_BYTES {
+        return Err(Q8DotError::WrongActivationLength { actual: q8.len() });
+    }
+    let mut selected_sums = [[[0i16; 256]; 2]; 16];
+    for (subgroup, halves) in selected_sums.iter_mut().enumerate() {
+        for (half, table) in halves.iter_mut().enumerate() {
+            let base = 4 + subgroup * LANES_PER_SUBGROUP + half * 8;
+            for mask in 1usize..256 {
+                let bit = mask.trailing_zeros() as usize;
+                table[mask] = table[mask ^ (1 << bit)] + i16::from(q8[base + bit] as i8);
+            }
+        }
+    }
+    Ok(PreparedQ8ByteTables {
+        selected_sums,
+        activation_scale_f32_bits: u32::from_le_bytes(q8[..4].try_into().unwrap()),
+    })
+}
+
+#[inline]
+fn selected_signed_q8_sum(halves: &[[i16; 256]; 2], mask: u16) -> i32 {
+    i32::from(halves[0][(mask & 255) as usize]) + i32::from(halves[1][(mask >> 8) as usize])
+}
+
+/// Exact signed Q3_K integer product using two precomputed 8-bit tables
+/// per 16-weight subgroup. Each signed coefficient obeys
+/// q=(bit0 XOR sign)+2*(bit1 XOR sign)-4*sign, so the dot performs three
+/// mask lookups per subgroup (two 8-bit lookups per mask) and sixteen
+/// original signed Q3_K scale multiplications, without per-bit popcounts.
+pub fn dot_bpb3k_q8_byte_tables(
+    raw: &[u8],
+    prepared: &PreparedQ8ByteTables,
+) -> Result<Q8DirectDot, Q8DotError> {
+    if raw.len() != bpb3k::BYTES {
+        return Err(Q8DotError::WrongWeightLength { actual: raw.len() });
+    }
+    let scales = &raw[bpb3k::PLANES_BYTES..bpb3k::PLANES_BYTES + 12];
+    let mut total = 0i32;
+    for group in 0..GROUPS {
+        let base = group * 24;
+        let negative = read_u64_le(raw, base);
+        let bit0 = read_u64_le(raw, base + 8);
+        let bit1 = read_u64_le(raw, base + 16);
+        for local in 0..SUBGROUPS_PER_GROUP {
+            let subgroup = group * SUBGROUPS_PER_GROUP + local;
+            let shift = local * LANES_PER_SUBGROUP;
+            let sign = (negative >> shift) as u16;
+            let low = (bit0 >> shift) as u16;
+            let high = (bit1 >> shift) as u16;
+            let table = &prepared.selected_sums[subgroup];
+            let sum = selected_signed_q8_sum(table, low ^ sign)
+                + 2 * selected_signed_q8_sum(table, high ^ sign)
+                - 4 * selected_signed_q8_sum(table, sign);
+            total += sum * signed_subgroup_scale(scales, subgroup);
+        }
+    }
+    debug_assert!(total.abs() <= 4_194_304);
+    Ok(Q8DirectDot {
+        weighted_integer: total,
+        global_scale_f16_bits: u16::from_le_bytes([raw[108], raw[109]]),
+        activation_scale_f32_bits: prepared.activation_scale_f32_bits,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,6 +505,155 @@ mod tests {
             };
         }
         block
+    }
+
+    #[test]
+    fn q8_byte_tables_match_original_and_both_existing_boolean_paths() {
+        for case in 0..96usize {
+            let q3 = q3_fixture(case, [0x3c00, 0xbc00, 0x8000, 0x7e01][case % 4]);
+            let bpb = bpb3k::q3_to_bpb3k(&q3).unwrap();
+            for pattern in 0..16 {
+                let q8 = q8_fixture(case, pattern, 0x7fc12345);
+                let byte_tables = prepare_q8_byte_tables(&q8).unwrap();
+                let bitplanes = prepare_q8_bitplanes(&q8).unwrap();
+                let actual = dot_bpb3k_q8_byte_tables(&bpb, &byte_tables).unwrap();
+                assert_eq!(
+                    actual.weighted_integer,
+                    q3_q8_integer_oracle(&q3, &q8),
+                    "case={case} pattern={pattern}"
+                );
+                assert_eq!(actual, dot_bpb3k_q8(&bpb, &q8).unwrap());
+                assert_eq!(actual, dot_bpb3k_q8_prepared(&bpb, &bitplanes).unwrap());
+                assert_eq!(actual.activation_scale_f32_bits, 0x7fc12345);
+            }
+        }
+    }
+
+    #[test]
+    fn q8_byte_tables_all_signed_codes_across_256_weight_rows() {
+        let mut q8 = q8_fixture(0, 0, 0x7f800000);
+        for (i, code) in q8[4..260].iter_mut().enumerate() {
+            *code = i as u8;
+        }
+        let byte_tables = prepare_q8_byte_tables(&q8).unwrap();
+        for case in 0..256 {
+            let q3 = q3_fixture(case, (case as u16) ^ 0x8001);
+            let bpb = bpb3k::q3_to_bpb3k(&q3).unwrap();
+            let actual = dot_bpb3k_q8_byte_tables(&bpb, &byte_tables).unwrap();
+            assert_eq!(actual.weighted_integer, q3_q8_integer_oracle(&q3, &q8));
+            assert_eq!(actual.global_scale_f16_bits, (case as u16) ^ 0x8001);
+            assert_eq!(actual.activation_scale_f32_bits, 0x7f800000);
+        }
+    }
+
+    #[test]
+    fn q8_byte_tables_fail_closed_on_bad_lengths_and_keep_extremes() {
+        let mut q3 = [0u8; bpb3k::BYTES];
+        q3[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
+        let bpb = bpb3k::q3_to_bpb3k(&q3).unwrap();
+        let mut q8 = q8_fixture(0, 0, 0x3f800000);
+        for (code, expected) in [(128u8, -4_194_304i32), (127u8, 4_161_536i32)] {
+            q8[4..260].fill(code);
+            let table = prepare_q8_byte_tables(&q8).unwrap();
+            assert_eq!(
+                dot_bpb3k_q8_byte_tables(&bpb, &table)
+                    .unwrap()
+                    .weighted_integer,
+                expected
+            );
+            for len in [0usize, 96, 109, 111] {
+                assert_eq!(
+                    dot_bpb3k_q8_byte_tables(&vec![0u8; len], &table),
+                    Err(Q8DotError::WrongWeightLength { actual: len })
+                );
+            }
+        }
+        for len in [0usize, 4, 260, 291, 293] {
+            assert_eq!(
+                prepare_q8_byte_tables(&vec![0u8; len]),
+                Err(Q8DotError::WrongActivationLength { actual: len })
+            );
+        }
+    }
+
+    #[test]
+    fn prepared_q8_matches_original_q3_and_nonprepared_across_signed_domain() {
+        let scale_bits = [0x3c00, 0xbc00, 0x8000, 0x0001, 0x7e01];
+        let activation_bits = [0x3f800000, 0xbf800000, 0x80000000, 0x7fc12345];
+        for case in 0..96 {
+            let q3 = q3_fixture(case, scale_bits[case % scale_bits.len()]);
+            let weight = bpb3k::q3_to_bpb3k(&q3).unwrap();
+            for pattern in 0..16 {
+                let activation = q8_fixture(
+                    case,
+                    pattern,
+                    activation_bits[(case + pattern) % activation_bits.len()],
+                );
+                let prepared = prepare_q8_bitplanes(&activation).unwrap();
+                let candidate = dot_bpb3k_q8_prepared(&weight, &prepared).unwrap();
+                assert_eq!(
+                    candidate,
+                    dot_bpb3k_q8(&weight, &activation).unwrap(),
+                    "case={case} pattern={pattern}"
+                );
+                assert_eq!(
+                    candidate.weighted_integer,
+                    q3_q8_integer_oracle(&q3, &activation),
+                    "case={case} pattern={pattern}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn prepared_q8_reuses_one_activation_across_distinct_weight_rows() {
+        let mut activation = q8_fixture(17, 7, 0x7fc12345);
+        for i in 0..256 {
+            activation[4 + i] = i as u8; // Every 8-bit pattern, exactly once.
+        }
+        let prepared = prepare_q8_bitplanes(&activation).unwrap();
+        for case in 0..256 {
+            let q3 = q3_fixture(case, (case as u16) ^ 0x8001);
+            let bpb = bpb3k::q3_to_bpb3k(&q3).unwrap();
+            let calculated = dot_bpb3k_q8_prepared(&bpb, &prepared).unwrap();
+            assert_eq!(
+                calculated.weighted_integer,
+                q3_q8_integer_oracle(&q3, &activation)
+            );
+            assert_eq!(calculated.global_scale_f16_bits, (case as u16) ^ 0x8001);
+            assert_eq!(calculated.activation_scale_f32_bits, 0x7fc12345);
+        }
+    }
+
+    #[test]
+    fn prepared_q8_preserves_signed_extremes_and_rejects_bad_lengths() {
+        let mut raw_q3 = [0u8; bpb3k::BYTES];
+        raw_q3[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
+        let weights = bpb3k::q3_to_bpb3k(&raw_q3).unwrap();
+        let mut q8 = q8_fixture(0, 0, 0x7f800000);
+        for (code, expected) in [(128u8, -4_194_304i32), (127, 4_161_536), (0, 0)] {
+            q8[4..260].fill(code);
+            let prepared = prepare_q8_bitplanes(&q8).unwrap();
+            assert_eq!(
+                dot_bpb3k_q8_prepared(&weights, &prepared)
+                    .unwrap()
+                    .weighted_integer,
+                expected
+            );
+            assert_eq!(prepared.activation_scale_f32_bits, 0x7f800000);
+            for bad in [0usize, 96, 109, 111, 256] {
+                assert_eq!(
+                    dot_bpb3k_q8_prepared(&vec![0u8; bad], &prepared),
+                    Err(Q8DotError::WrongWeightLength { actual: bad })
+                );
+            }
+        }
+        for bad in [0usize, 1, 260, 291, 293] {
+            assert_eq!(
+                prepare_q8_bitplanes(&vec![0u8; bad]),
+                Err(Q8DotError::WrongActivationLength { actual: bad })
+            );
+        }
     }
 
     #[test]
