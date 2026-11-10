@@ -89,12 +89,9 @@ fn measure(w: &[Weight], q8: &[u8; pshufb::Q8_K_BYTES], simd: bool) -> (u128, i6
     for _ in 0..REPEATS {
         for row in w {
             if simd {
-                let v = pshufb::dot_bpb3k_q8_pshufb(
-                    black_box(&row.bpb3),
-                    black_box(q8),
-                )
-                .unwrap()
-                .weighted_integer;
+                let v = pshufb::dot_bpb3k_q8_pshufb(black_box(&row.bpb3), black_box(q8))
+                    .unwrap()
+                    .weighted_integer;
                 checksum += i64::from(black_box(v));
             } else {
                 let v = stock(black_box(&row.q3), black_box(q8));
