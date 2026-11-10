@@ -344,94 +344,65 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     if observed_sha != GGML_SHA {
         return Err("STOP_UPSTREAM_PIN_DRIFT".into());
     }
+    let common = root.join("ggml/src/ggml-common.h");
     let core = root.join("ggml/src/ggml.c");
     let cpu = root.join("ggml/src/ggml-cpu/ggml-cpu.c");
-    let bridge = root.join("ggml/src/ggml-bpb3k-experimental.h");
     let tiled = root.join("ggml/src/ggml-cpu/tiled/tiled.cpp");
-    let cpu_cmake = root.join("ggml/src/ggml-cpu/CMakeLists.txt");
+    let cmake = root.join("ggml/src/ggml-cpu/CMakeLists.txt");
+    let bridge = root.join("ggml/src/ggml-bpb3k-q4-146-experimental.h");
     if bridge.exists() {
-        return Err("STOP_BPB_BRIDGE_ALREADY_EXISTS".into());
+        return Err("STOP_Q4_BRIDGE_EXISTS".into());
     }
-    let a = fs::read_to_string(&core).map_err(|e| e.to_string())?;
-    let b = fs::read_to_string(&cpu).map_err(|e| e.to_string())?;
-    let t = fs::read_to_string(&tiled).map_err(|e| e.to_string())?;
-    let cmake = fs::read_to_string(&cpu_cmake).map_err(|e| e.to_string())?;
-    let dot_dispatch = "    ggml_vec_dot_t const vec_dot      = type_traits_cpu[type].vec_dot;";
-    if b.matches(dot_dispatch).count() != 1 {
-        return Err("STOP_STOCK_ORDER_DISPATCH_LAYOUT_DRIFT".into());
-    }
-    if cmake
-        .matches("    ggml_add_backend_library(${GGML_CPU_NAME})")
-        .count()
-        != 1
+    // Preserve field NAMES so unused upstream functions still compile,
+    // while changing stride to 146. Live CPU .to_float/.vec_dot dispatch
+    // must use our implementations; stock Q3_K cannot read Q4 bytes.
+    substitute_once(
+        &common,
+        "    ggml_half d;           // super-block scale\n} block_q3_K;\nstatic_assert(sizeof(block_q3_K) == sizeof(ggml_half) + QK_K / 4 + QK_K / 8 + 12, \"wrong q3_K block size/padding\");",
+        "    ggml_half d;           // original named field, unused with Q4 surrogate\n    uint8_t experimental_q4_146_tail[36];\n} block_q3_K;\nstatic_assert(sizeof(block_q3_K) == 146, \"experimental Q4-146 block stride\");",
+    )?;
+    let core_text = fs::read_to_string(&core).map_err(|e| e.to_string())?;
+    let cpu_text = fs::read_to_string(&cpu).map_err(|e| e.to_string())?;
+    let tiled_text = fs::read_to_string(&tiled).map_err(|e| e.to_string())?;
+    if core_text.matches(".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,").count() != 1
+        || cpu_text.matches(".vec_dot                  = ggml_vec_dot_q3_K_q8_K,").count() != 1
+        || tiled_text.matches("        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:").count() != 1
     {
-        return Err("STOP_CMAKE_TARGET_LAYOUT_DRIFT".into());
-    }
-
-    for (src, expected) in [
-        (
-            &a,
-            ".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,",
-        ),
-        (&b, ".vec_dot                  = ggml_vec_dot_q3_K_q8_K,"),
-    ] {
-        if src.matches(expected).count() != 1 {
-            return Err("STOP_TRAIT_LAYOUT_DRIFT".into());
-        }
-    }
-    // The optimized tiled CPU path can otherwise read BPB3-K as stock Q3_K,
-    // corrupting the prompt processing and attention state without an error.
-    let tiled_gate: &str =
-        "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:";
-    if t.matches(tiled_gate).count() != 1 {
-        return Err("STOP_TILED_Q3_K_GATE_DRIFT".into());
+        return Err("STOP_Q4_TRAITS_OR_TILED_DRIFT".into());
     }
     fs::write(&bridge, C_BRIDGE).map_err(|e| e.to_string())?;
     substitute_once(
         &core,
         "#include <assert.h>",
-        "#include <assert.h>\n#define MEM_BPB3K_DEQUANT 1\n#include \"ggml-bpb3k-experimental.h\"",
+        "#include <assert.h>\n#define MEM_BPB3K_DEQUANT 1\n#include \"ggml-bpb3k-q4-146-experimental.h\"",
     )?;
     substitute_once(
         &cpu,
         "#include <assert.h>",
-        "#include <assert.h>\n#define MEM_BPB3K_DOT 1\n#include \"../ggml-bpb3k-experimental.h\"",
+        "#include <assert.h>\n#define MEM_BPB3K_DOT 1\n#include \"../ggml-bpb3k-q4-146-experimental.h\"",
     )?;
     substitute_once(
         &core,
         ".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,",
-        ".to_float                 = (ggml_to_float_t) mem_bpb3k_dequant,",
+        ".to_float                 = (ggml_to_float_t) mem_q4_146_dequant,",
     )?;
     substitute_once(
         &cpu,
         ".vec_dot                  = ggml_vec_dot_q3_K_q8_K,",
-        ".vec_dot                  = mem_bpb3k_dot_q8,",
+        ".vec_dot                  = mem_q4_146_vec_dot,",
     )?;
     substitute_once(
         &tiled,
-        tiled_gate,
-        "        case GGML_TYPE_Q4_K:\n        /* Q3_K surrogate is BPB3-K; only the patched direct vec_dot may decode it. */\n        case GGML_TYPE_Q2_K:",
-    )?;
-
-    // Upstream ggml has float tmp[32] and only even-row guards. nrows=4
-    // smashes that stack buffer; nrows=2 is a safe 2x2 tile.
-    substitute_once(
-        &cpu,
-        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 1,",
-        ".vec_dot                  = mem_bpb3k_dot_q8,\n        .vec_dot_type             = GGML_TYPE_Q8_K,\n        .nrows                    = 2,",
+        "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:",
+        "        case GGML_TYPE_Q4_K:\n        /* Experimental Q4-146 surrogate MUST bypass stock Q3_K tiled unpack. */\n        case GGML_TYPE_Q2_K:",
     )?;
     substitute_once(
-        &cpu,
-        dot_dispatch,
-        "    ggml_vec_dot_t const vec_dot = (type == GGML_TYPE_Q3_K &&\n        mem_bpb3k_stock_tiled_enabled(params->use_ref, ne11, src0->extra != NULL))\n        ? mem_bpb3k_dot_q8_stock_tiled : type_traits_cpu[type].vec_dot;",
-    )?;
-    substitute_once(
-        &cpu_cmake,
+        &cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
-        "    ggml_add_backend_library(${GGML_CPU_NAME})\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \"${MEM_BPB3K_RUST_STATICLIB}\")\n        message(FATAL_ERROR \"BPB3K Rust kernel staticlib required\")\n    endif()\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \"${MEM_BPB3K_RUST_STATICLIB}\")",
+        "    ggml_add_backend_library(${GGML_CPU_NAME})\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \"${MEM_BPB3K_RUST_STATICLIB}\")\n        message(FATAL_ERROR \"Q4-146 Rust staticlib required\")\n    endif()\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \"${MEM_BPB3K_RUST_STATICLIB}\")",
     )?;
-    println!("PASS_BPB3K_CPU_TILED_BYPASS_CLOSED=Q3_K");
-    println!("PASS_BPB3K_PINNED_GGML_PATCH source={} modified=ggml.c,ggml-cpu.c,ggml-cpu/tiled/tiled.cpp header=ggml-bpb3k-experimental.h only_cpu=true", observed_sha);
+    println!("PASS_BPB3K_Q4_GGML_PATCH original_ggml_sha={} q3_surrogate_block_bytes=146 rust_q4_dot=true stock_q3_tiled_bypass=true",
+        observed_sha);
     Ok(())
 }
 fn run() -> Result<(), String> {
@@ -439,7 +410,7 @@ fn run() -> Result<(), String> {
     match args.as_slice() {
         [_, mode, root, sha] if mode == "patch" => patch(Path::new(root), sha),
         [_, mode, source, dest] if mode == "transcode" => transcode(Path::new(source), Path::new(dest)),
-        _ => Err("USAGE: bpb3k_full_runtime patch <llama-source-root> <sha> | transcode <original-gguf> <new-disposable-gguf>".into()),
+        _ => Err("USAGE: bpb3k_q4_full_runtime patch <source> <pinned-sha> | transcode <original-gguf> <ephemeral-q4-146-gguf>".into()),
     }
 }
 fn main() {
@@ -457,9 +428,9 @@ mod tests {
         assert!(patch(&root, "wrongsha").is_err());
     }
     #[test]
-    fn c_bridge_exposes_both_correct_hot_path_symbols() {
-        assert!(C_BRIDGE.contains("extern void mem_bpb3k_dot_q8"));
-        assert!(C_BRIDGE.contains("mem_bpb3k_dequant"));
-        assert!(!C_BRIDGE.contains("static void mem_bpb3k_dot_q8"));
+    fn c_bridge_exposes_q4_146_only() {
+        assert!(C_BRIDGE.contains("extern void mem_q4_146_vec_dot"));
+        assert!(C_BRIDGE.contains("mem_q4_146_dequant"));
+        assert!(!C_BRIDGE.contains("ggml_vec_dot_q3_K_q8_K"));
     }
 }
