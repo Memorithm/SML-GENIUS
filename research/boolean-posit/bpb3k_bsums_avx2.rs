@@ -141,7 +141,7 @@ mod x86 {
                     let plus_four = _mm256_or_si256(b0x, _mm256_or_si256(b1x, not_s));
 
                     let input = _mm256_loadu_si256(
-                        a.as_ptr().add(4 + group * 64 + pair * 32) as *const __m256i,
+                        a.as_ptr().add(4 + group * 64 + pair * 32) as *const __m256i
                     );
                     let pair_products = _mm256_maddubs_epi16(plus_four, input);
 
@@ -155,10 +155,7 @@ mod x86 {
                         _mm_set1_epi16(scale1),
                         1,
                     );
-                    acc = _mm256_add_epi32(
-                        acc,
-                        _mm256_madd_epi16(pair_products, scale_vec),
-                    );
+                    acc = _mm256_add_epi32(acc, _mm256_madd_epi16(pair_products, scale_vec));
                 }
             }
 
@@ -275,9 +272,8 @@ mod tests {
             let low = (w[32 + half * 32 + i % 32] >> (quadrant * 2)) & 3;
             let sign = (w[i % 32] >> (half * 4 + quadrant)) & 1;
             let signed = i32::from(low) - if sign == 0 { 4 } else { 0 };
-            acc += signed
-                * i32::from(subgroup_scale(&w[96..108], i / 16))
-                * i32::from(a[4 + i] as i8);
+            acc +=
+                signed * i32::from(subgroup_scale(&w[96..108], i / 16)) * i32::from(a[4 + i] as i8);
         }
         acc
     }
