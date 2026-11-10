@@ -1,0 +1,92 @@
+name: BPB3-K paired i8-scale shuffle vs baseline 114B and optimized stock Q3_K
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_preencoded114_pairshuffle_avx2.rs'
+      - 'research/boolean-posit/bpb3k_pairshuffle114_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_PAIRSHUFFLE114.md'
+      - '.github/workflows/bpb3k-pairshuffle114-avx2.yml'
+  push:
+    paths:
+      - 'research/boolean-posit/bpb3k_preencoded114_pairshuffle_avx2.rs'
+      - 'research/boolean-posit/bpb3k_pairshuffle114_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_PAIRSHUFFLE114.md'
+      - '.github/workflows/bpb3k-pairshuffle114-avx2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-reused-q8-microtiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head without saved credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+      - name: Format and independent signed original-Q3 oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustfmt --edition 2021 --check \
+            research/boolean-posit/bpb3k_preencoded114_pairshuffle_avx2.rs \
+            research/boolean-posit/bpb3k_pairshuffle114_stock_bench.rs
+          rustup run 1.89.0 rustc --edition=2021 -D warnings --test \
+            research/boolean-posit/bpb3k_preencoded114_pairshuffle_avx2.rs \
+            -o "$RUNNER_TEMP/bpb3k-pairshuffle114-test"
+          "$RUNNER_TEMP/bpb3k-pairshuffle114-test" --nocapture
+      - name: Audit Haswell-compatible generated arithmetic instructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Generic Rust kernels are instantiated only when called. Compile
+          # the benchmark, which instantiates N=1,2,4; an unused library
+          # compilation would contain no such vectorized function.
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            --emit=asm research/boolean-posit/bpb3k_pairshuffle114_stock_bench.rs \
+            -o "$RUNNER_TEMP/bpb3k-pairshuffle114.s"
+          # Gather actual instruction counts. Generic functions may be
+          # inlined and combined with other modules: a raw global grep
+          # cannot establish per-function behavior or register spilling.
+          for instruction in vpshufb vpmaddubsw vpmaddwd vpbroadcastd vpopcnt; do
+            count="$(grep -Eic "$instruction" "$RUNNER_TEMP/bpb3k-pairshuffle114.s" || true)"
+            echo "BPB3K_PAIRSHUFFLE_ASM_INSTRUCTION=$instruction count=$count"
+          done
+          if grep -Eiq 'vpopcnt' "$RUNNER_TEMP/bpb3k-pairshuffle114.s"; then
+            echo 'STOP_BPB3K_PAIRSHUFFLE_UNSUPPORTED_AVX512_VPOPCNT'
+            exit 1
+          fi
+          echo 'BPB3K_PAIRSHUFFLE_ASM_SPILLS=NOT_QUALIFIED'
+          echo 'BPB3K_PAIRSHUFFLE_ASM_SOURCE=MONOMORPHIZED_BENCH_COMPILATION_NOT_PER_FUNCTION_AUDIT'
+      - name: Pin and compile unmodified original ggml AVX2 C and tiled oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/bpb3k-native"
+          git -C "$RUNNER_TEMP/bpb3k-native" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/bpb3k-native" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/bpb3k-native" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3k-native" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh "$RUNNER_TEMP/bpb3k-native" "$RUNNER_TEMP/bpb3k-stocklib-pairshuffle" fused_v2_stock
+      - name: Compile independent optimized original-vs-batch2-vs-batch4 benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            research/boolean-posit/bpb3k_pairshuffle114_stock_bench.rs \
+            -L "native=$RUNNER_TEMP/bpb3k-stocklib-pairshuffle" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-pairshuffle114-bench"
+      - name: Verify 1024 exact rows and retain 162 balanced three-way timings
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 120s "$RUNNER_TEMP/bpb3k-pairshuffle114-bench" | tee "$RUNNER_TEMP/bpb3k-pairshuffle114-bench.txt"
+          grep -q '^PASS_BPB3K_PAIRSHUFFLE_ORACLE ' "$RUNNER_TEMP/bpb3k-pairshuffle114-bench.txt"
+          test "$(grep -c '^BPB3K_PAIRSHUFFLE_RAW ' "$RUNNER_TEMP/bpb3k-pairshuffle114-bench.txt")" = 216
+          test "$(grep -c '^BPB3K_PAIRSHUFFLE_SUMMARY ' "$RUNNER_TEMP/bpb3k-pairshuffle114-bench.txt")" = 9
+          grep -q '^BPB3K_PAIRSHUFFLE_VERDICT=DIAGNOSTIC ' "$RUNNER_TEMP/bpb3k-pairshuffle114-bench.txt"
