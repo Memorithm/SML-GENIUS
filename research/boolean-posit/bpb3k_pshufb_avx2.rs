@@ -62,14 +62,12 @@ mod x86 {
         zero: __m256i,
         ones: __m256i,
     ) -> __m256i {
-        unsafe {
-            let vleft = _mm_cvtsi32_si128(i32::from(left));
-            let vright = _mm_cvtsi32_si128(i32::from(right));
-            let packed = _mm256_inserti128_si256(_mm256_castsi128_si256(vleft), vright, 1);
-            let per_lane_byte = _mm256_shuffle_epi8(packed, byte_selector);
-            let test = _mm256_and_si256(per_lane_byte, bit_selector);
-            _mm256_andnot_si256(_mm256_cmpeq_epi8(test, zero), ones)
-        }
+        let vleft = _mm_cvtsi32_si128(i32::from(left));
+        let vright = _mm_cvtsi32_si128(i32::from(right));
+        let packed = _mm256_inserti128_si256(_mm256_castsi128_si256(vleft), vright, 1);
+        let per_lane_byte = _mm256_shuffle_epi8(packed, byte_selector);
+        let test = _mm256_and_si256(per_lane_byte, bit_selector);
+        _mm256_andnot_si256(_mm256_cmpeq_epi8(test, zero), ones)
     }
 
     /// Process eight 32-element pairs directly in AVX2 integer registers.
