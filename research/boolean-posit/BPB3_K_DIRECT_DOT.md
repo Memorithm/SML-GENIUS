@@ -213,3 +213,47 @@ tokens, real allocation and activation reuse inside ggml, and a
 prospectively admitted **RemoteOps** paired physical test. The previous
 physical v2 campaigns remain category E due to third-party CPU
 contamination; their thresholds and original records are unchanged.
+
+
+### Native optimized-stock comparison (separately preregistered)
+
+The second hosted comparison uses the **original ggml AVX2 C
+ggml_vec_dot_q3_K_q8_K** function extracted without semantic modifications
+from pinned llama.cpp commit
+f7591a6a01f9273de03331732bdc0b39721168be. The source is checked
+against git HEAD before compiling, via the existing independent
+run_bpb3k_stock_oracle.sh. The comparison executable is
+bpb3k_prepared_stock_bench.rs.
+
+Both competitors consume the same 256 signed Q8_K codes and the same
+logical Q3_K weights. Q3_K and lossless BPB3-K representations each
+occupy exactly 110 bytes per 256 coefficients; source transcode occurs
+before timing. The native stock kernel sees original Q3_K and packed
+Q8_K, while the Boolean candidate sees BPB3-K plus one shared Q8
+prepared plan. Activation Q8_K bsums are computed consistently.
+For this first **single-superblock kernel parity** experiment, both
+block scales are frozen to exactly 1.0f32. This permits a direct
+bit-exact FP32 result comparison to the candidate's integer result,
+since all bounded integer sums are exactly representable. It does
+**not** establish arbitrary-scale/multi-block stock FMA parity.
+Inputs exercise all 256 signed Q8 codes once.
+
+For weight-row counts 1/32/256/1024, the first correctness gate tests
+all 1024 weight rows, then three untimed warmups and 16 alternating
+AB/BA paired rounds with four repetitions per timed invocation.
+The candidate's activation preparation cost is **inside** each
+measurement window; stock requires no such preparation.
+The full set of raw paired nanosecond times and descriptive median
+ns/dot plus stock/candidate ratios are retained in the hosted CI log.
+The upstream C compilation flags and ISA are recorded in the script.
+No favorable result is required to make CI green; CI only requires
+compilation, exact-unit-scale semantic equivalence, non-truncated
+samples, and successful bounded execution.
+
+**Limits:** This comparison is single-threaded, synthetic, one-block,
+with unit FP32 scales on a GitHub hosted runner, not a native Dell
+measurement or a SmolLM2 model run. Even a kernel-level win over the
+original C stock is not tokens/sec superiority. No model deployment,
+extrapolation to multiple blocks, DRAM claim, or production promotion
+is permitted without a separately admitted full-model experiment
+using the existing stock-order floating-point gate and RemoteOps.
