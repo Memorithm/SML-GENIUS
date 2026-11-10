@@ -97,7 +97,7 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         // this qualification harness. It is NOT free and not part of a
         // production zero-scan or physical speedup claim.
         assert_eq!(
-            reconstructed,
+            reconstructed.as_slice(),
             journal.routing().words(),
             "dirty producer failed to reconstruct exact native R state"
         );
