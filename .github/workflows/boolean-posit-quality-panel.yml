@@ -1,0 +1,50 @@
+name: BPB-3 independent quantization quality panel
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-quality-panel.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/**'
+      - '.github/workflows/boolean-posit-quality-panel.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-independent-panel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.89
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+          rustc --version
+      - name: Check formatting
+        run: rustfmt --edition 2021 --check research/boolean-posit/quantization_panel.rs research/boolean-posit/mxfp4.rs
+      - name: Test exact oracle and control parity
+        run: |
+          rustc --edition 2021 --test research/boolean-posit/quantization_panel.rs -o "$RUNNER_TEMP/bpb3-panel-test"
+          "$RUNNER_TEMP/bpb3-panel-test"
+      - name: Produce deterministic standalone panel
+        run: |
+          rustc --edition 2021 -O research/boolean-posit/quantization_panel.rs -o "$RUNNER_TEMP/bpb3-panel"
+          "$RUNNER_TEMP/bpb3-panel" | tee "$RUNNER_TEMP/bpb3-quality-panel.csv"
+          grep -q '^protocol=bpb3-independent-quantization-panel-v2' "$RUNNER_TEMP/bpb3-quality-panel.csv"
+          test "$(grep -c ',BPB-3,' "$RUNNER_TEMP/bpb3-quality-panel.csv")" -eq 4
+          test "$(grep -c ',INT3_symmetric,' "$RUNNER_TEMP/bpb3-quality-panel.csv")" -eq 4
+          test "$(grep -c ',MXFP4_E2M1_E8M0,34,4.25000,' "$RUNNER_TEMP/bpb3-quality-panel.csv")" -eq 4
+      - name: Retain inspectable synthetic observations
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-quality-panel-${{ github.sha }}
+          path: ${{ runner.temp }}/bpb3-quality-panel.csv
+          retention-days: 30

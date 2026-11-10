@@ -21,6 +21,18 @@ Admit a real-text corpus to G1 retrieval runs beyond the synthetic fixture
 5. **Leakage:** identical text in train and eval => refusal. (Exact-duplicate
    check only; near-duplicate detection is a documented gap, to be added before
    any reported result.)
+6. **Provenance metadata (G2):** `source` and `license` must be informative.
+   A trimmed value equal (ASCII case-insensitive) to `UNPINNED`, `TODO`,
+   `UNKNOWN`, `N/A`, `NA`, `NONE`, `NULL`, `TBD`, `-`, `?`, or containing no
+   ASCII alphanumeric character, is refused (`BadValue`). Committed manifests
+   (`g1-pes2o7-v1`, tiny, smoke) remain admissible.
+7. **Split fingerprint (G2):** `PinnedRealTextCorpus::split_fingerprint{,_hex}`
+   = SHA-256 over a length-prefixed preimage (`<len>:<bytes>\n` per field) of
+   `G1_REALTEXT_SPLIT_FINGERPRINT v1`, `corpus_id`, `sha256`, `split_mod`,
+   `eval_residue`, then `train`/count/byte-sorted ids and `eval`/count/
+   byte-sorted ids. A run should record it to identify the exact split used.
+   It is an identity, not a quality measurement; it binds the pinned bytes, so
+   re-ordered corpus lines (new pin) give a new fingerprint.
 
 ## Harness entry points
 - Loader: `load_pinned(manifest_text, corpus_bytes) -> PinnedRealTextCorpus`
@@ -72,7 +84,14 @@ Frozen before any real-text number is seen. Changing anything is v2.
 ## Flagged real-text arm (`g1_latency_rss --realtext <MANIFEST> <CORPUS>`)
 Opt-in only; no default corpus and no pin in the repo. Missing args, file
 errors, length/SHA mismatch, near-duplicate or zero-query refusal => exit 2
-with `G1_LAT_REFUSE`. Meta: `synthetic=false arm=realtext derivation=v1
+with `G1_LAT_REFUSE`. **Path confinement (CLI):** both `<MANIFEST>` and
+`<CORPUS>` must be relative paths under the process CWD; absolute / `..` /
+empty paths are refused (`UnsafePath`). After the lexical check,
+`confine_regular_file` walks each component with `symlink_metadata`, refuses
+any symlink (including mid-path directory symlinks), requires a regular file,
+and checks that the canonical path stays under the canonical CWD
+(`SymlinkEscape`). Lexical `Path::components` alone is not filesystem
+confinement. Meta: `synthetic=false arm=realtext derivation=v1
 corpus_id=.. sha256=.. key=simhash64-sha256-v1`, refused by
 `g1_latency_aggregate`. Rows: dist `realtext`, same columns plus `gold@1`
 (top-1 segment == derived target). `R@1` remains "top-1 distance == oracle

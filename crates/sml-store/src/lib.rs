@@ -18,6 +18,9 @@ pub mod context_ingest;
 pub mod context_retrieve;
 pub mod context_retrieve_bench;
 pub mod context_semantic_ingest;
+pub mod ctx2_infer;
+pub mod dacr_exact;
+pub mod dacr_latent;
 pub mod delta_kv_context;
 pub mod g1_latency_aggregate;
 pub mod g1_realtext_corpus;
@@ -26,6 +29,11 @@ pub mod g1_realtext_key;
 pub mod longctx_b1;
 pub mod observed_history;
 pub mod raw_context;
+pub mod working_context;
+pub mod working_context_anchor;
+pub mod working_context_anchor_provenance;
+pub mod working_context_envelope;
+pub mod working_context_wire;
 
 use std::{fmt, fs::File, io, path::Path};
 

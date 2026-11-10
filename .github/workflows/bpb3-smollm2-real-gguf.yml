@@ -1,0 +1,67 @@
+name: BPB3-K real trained-model SmolLM2 oracle (hosted)
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/smollm2_real_gguf.rs'
+      - '.github/workflows/bpb3-smollm2-real-gguf.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/smollm2_real_gguf.rs'
+      - '.github/workflows/bpb3-smollm2-real-gguf.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-gguf-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Identify exact SML source
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "SML_SOURCE_SHA=$SOURCE_SHA"
+      - name: Compile and test no-dependency Rust real-weight verifier
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup component add rustfmt --toolchain 1.89.0
+          rustfmt +1.89.0 --edition 2021 --config skip_children=true --check research/boolean-posit/smollm2_real_gguf.rs
+          mkdir -p "$RUNNER_TEMP/bpb-smol"
+          cp research/boolean-posit/{smollm2_real_gguf.rs,bpb3k.rs,bpb3k_direct.rs,gguf_k.rs,q3k_direct.rs} "$RUNNER_TEMP/bpb-smol/"
+          cd "$RUNNER_TEMP/bpb-smol"
+          rustc +1.89.0 --edition=2021 -D warnings --test smollm2_real_gguf.rs -o tests
+          ./tests
+          rustc +1.89.0 --edition=2021 -D warnings -O smollm2_real_gguf.rs -o run-model
+      - name: Fetch one exact real trained SmolLM2 GGUF; verify published SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb-smol"
+          curl -fL --retry 3 --connect-timeout 20 --max-time 400 --output model.gguf \
+            'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q3_K_S.gguf?download=true'
+          echo '7add77b8d3736d6b2fd21dc96e69be026f19bde843e9988b43cef1315fc5eebe  model.gguf' | sha256sum --check --status
+          echo 'REAL_MODEL_SHA256_VERIFIED=7add77b8d3736d6b2fd21dc96e69be026f19bde843e9988b43cef1315fc5eebe'
+      - name: Run real GGUF BPB3-K parity and non-competitive diagnostics
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb-smol"
+          ./run-model model.gguf | tee result.txt
+          grep -q '^PASS_REAL_MODEL_ORACLE blocks=' result.txt
+          grep -q 'status=NON_COMPETITIVE_MICROKERNEL_ONLY' result.txt
+          grep -q '^STOP_MODEL_SUPERIORITY_NOT_QUALIFIED ' result.txt
+      - name: Retain bounded non-secret evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-smollm2-real-model-${{ github.sha }}
+          path: ${{ runner.temp }}/bpb-smol/result.txt
+          if-no-files-found: warn
+          retention-days: 30

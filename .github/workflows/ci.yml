@@ -41,6 +41,46 @@ jobs:
           components: rustfmt
       - name: Format
         run: cargo fmt --all -- --check
+      - name: BPB3-K direct bitplane oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
+          "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
+      - name: Q3_K / BPB3-K independent paired direct dot parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/q3k_direct.rs research/boolean-posit/bpb3k_q3k_paired.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_q3k_paired.rs -o "$RUNNER_TEMP/bpb3k-q3k-paired-tests"
+          "$RUNNER_TEMP/bpb3k-q3k-paired-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/q3k_direct.rs -o "$RUNNER_TEMP/libq3k_direct.rlib"
+      - name: BPB3-M 128-weight reversible microblock and direct dot oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3m.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3m.rs -o "$RUNNER_TEMP/bpb3m-tests"
+          "$RUNNER_TEMP/bpb3m-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3m.rs -o "$RUNNER_TEMP/libbpb3m.rlib"
+      - name: BPB3-X reversible Elastic 64/128/256 layout oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3x.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/bpb3x-tests"
+          "$RUNNER_TEMP/bpb3x-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3x.rs -o "$RUNNER_TEMP/libbpb3x.rlib"
+      - name: BPB3-X selective segments against independent direct K baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3k_partial.rs
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_partial.rs -o "$RUNNER_TEMP/bpb3k-partial-tests"
+          "$RUNNER_TEMP/bpb3k-partial-tests" --nocapture
+          rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_partial.rs -o "$RUNNER_TEMP/libbpb3k_partial.rlib"
 
   rust:
     needs: fmt
@@ -381,7 +421,11 @@ jobs:
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
-        run: cargo test --locked -p sml-store -- --nocapture
+        # The earlier `cargo test --locked --workspace` already executes the
+        # full sml-store suite. Re-running all of it with --nocapture is both
+        # redundant and potentially expensive for unrelated context fixtures.
+        # Keep explicit, inspectable evidence for the mapped-store contract.
+        run: cargo test --locked -p sml-store --test mapped_store -- --nocapture
       - name: Context streaming ingest evidence
         run: cargo test --locked -p sml-store --test context_ingest -- --nocapture
       - name: Context semantic/provenance emission evidence

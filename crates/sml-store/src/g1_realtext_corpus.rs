@@ -24,8 +24,22 @@
 //! `== r` -> eval, else train. Fail-closed: an unpinned or mismatching SHA, a
 //! wrong length, a duplicate id, or identical text appearing in both train and
 //! eval (exact-duplicate leakage) is an error, never a warning.
+//!
+//! Provenance metadata (G2): `source` and `license` must be informative.
+//! After trimming, a value that matches (ASCII case-insensitive) one of
+//! [`PLACEHOLDER_METADATA`] (`UNPINNED`, `TODO`, `UNKNOWN`, `N/A`, `NA`,
+//! `NONE`, `NULL`, `TBD`, `-`, `?`) or that contains no ASCII alphanumeric
+//! character at all is refused with `BadValue { key, value }`.
+//!
+//! Split fingerprint (G2): [`PinnedRealTextCorpus::split_fingerprint`] is a
+//! SHA-256 over a domain-separated, length-prefixed preimage of `corpus_id`,
+//! `sha256`, `split_mod`, `eval_residue`, and the byte-sorted train and eval
+//! doc ids. It identifies *which split* a run used; it is not a quality
+//! measurement.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 use crate::raw_context::sha256_raw_bytes;
 
@@ -39,6 +53,15 @@ const KEYS: [&str; 7] = [
     "split_mod",
     "eval_residue",
 ];
+
+/// Non-informative `source` / `license` values refused by [`parse_manifest`]
+/// (trimmed, ASCII case-insensitive).
+pub const PLACEHOLDER_METADATA: [&str; 10] = [
+    "UNPINNED", "TODO", "UNKNOWN", "N/A", "NA", "NONE", "NULL", "TBD", "-", "?",
+];
+
+/// Domain tag of the split-fingerprint preimage (versioned).
+pub const SPLIT_FINGERPRINT_DOMAIN: &str = "G1_REALTEXT_SPLIT_FINGERPRINT v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RealTextError {
@@ -84,6 +107,19 @@ pub enum RealTextError {
         train_id: String,
         eval_id: String,
     },
+    /// Absolute path, empty path, or non-`Normal` component (`..`, `.`, prefix, root).
+    UnsafePath {
+        path: String,
+    },
+    /// Symlink component, non-regular file, or path that resolves outside the
+    /// allowed root. Lexical `Path::components` alone cannot detect this.
+    SymlinkEscape {
+        path: String,
+    },
+    /// Filesystem error while confining a path (missing entry, permission, …).
+    PathIo {
+        path: String,
+    },
     Hash,
 }
 
@@ -126,6 +162,82 @@ impl PinnedRealTextCorpus {
     pub fn eval(&self) -> &[RealTextDoc] {
         &self.eval
     }
+
+    /// Deterministic SHA-256 identity of the admitted split; see
+    /// [`split_fingerprint_of`]. Because the pinned `sha256` is part of the
+    /// preimage, re-ordering corpus lines (new bytes, new pin) yields a new
+    /// fingerprint even when split membership is unchanged; for a fixed pin
+    /// the result is independent of document order.
+    pub fn split_fingerprint(&self) -> Result<[u8; 32], RealTextError> {
+        let m = &self.manifest;
+        let ids = |docs: &[RealTextDoc]| -> Vec<String> {
+            docs.iter().map(|d| d.doc_id.clone()).collect()
+        };
+        split_fingerprint_of(
+            &m.corpus_id,
+            &m.sha256_hex,
+            m.split_mod,
+            m.eval_residue,
+            &ids(&self.train),
+            &ids(&self.eval),
+        )
+    }
+
+    /// Lowercase hex of [`Self::split_fingerprint`].
+    pub fn split_fingerprint_hex(&self) -> Result<String, RealTextError> {
+        let bytes = self.split_fingerprint()?;
+        Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    }
+}
+
+/// Split fingerprint over explicit parts (order of the id slices is ignored).
+///
+/// Preimage: each field encoded as `<decimal byte length>:<bytes>\n`, in
+/// order: [`SPLIT_FINGERPRINT_DOMAIN`], `corpus_id`, `sha256_hex`,
+/// `split_mod`, `eval_residue`, `train`, train count, each train id
+/// (byte-sorted), `eval`, eval count, each eval id (byte-sorted).
+pub fn split_fingerprint_of<S: AsRef<str>>(
+    corpus_id: &str,
+    sha256_hex: &str,
+    split_mod: u64,
+    eval_residue: u64,
+    train_ids: &[S],
+    eval_ids: &[S],
+) -> Result<[u8; 32], RealTextError> {
+    fn field(out: &mut Vec<u8>, bytes: &[u8]) {
+        out.extend_from_slice(bytes.len().to_string().as_bytes());
+        out.push(b':');
+        out.extend_from_slice(bytes);
+        out.push(b'\n');
+    }
+    let mut pre = Vec::new();
+    field(&mut pre, SPLIT_FINGERPRINT_DOMAIN.as_bytes());
+    field(&mut pre, corpus_id.as_bytes());
+    field(&mut pre, sha256_hex.as_bytes());
+    field(&mut pre, split_mod.to_string().as_bytes());
+    field(&mut pre, eval_residue.to_string().as_bytes());
+    for (tag, ids) in [("train", train_ids), ("eval", eval_ids)] {
+        let mut sorted: Vec<&str> = ids.iter().map(AsRef::as_ref).collect();
+        sorted.sort_unstable();
+        field(&mut pre, tag.as_bytes());
+        field(&mut pre, sorted.len().to_string().as_bytes());
+        for id in sorted {
+            field(&mut pre, id.as_bytes());
+        }
+    }
+    sha256_raw_bytes(&pre)
+        .map(|h| *h.bytes())
+        .map_err(|_| RealTextError::Hash)
+}
+
+/// True if a provenance value is a placeholder or carries no alphanumeric content.
+#[must_use]
+pub fn is_placeholder_metadata(value: &str) -> bool {
+    let v = value.trim();
+    !v.bytes().any(|b| b.is_ascii_alphanumeric())
+        || PLACEHOLDER_METADATA
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(v))
 }
 
 fn is_pinned_hex(s: &str) -> bool {
@@ -202,15 +314,117 @@ pub fn parse_manifest(text: &str) -> Result<RealTextManifest, RealTextError> {
             value: eval_residue.to_string(),
         });
     }
+    let byte_len = num("byte_len")?;
+    // Protocol: corpus size must be > 0 (empty bytes + empty-hash is nonsense).
+    if byte_len == 0 {
+        return Err(RealTextError::BadValue {
+            key: "byte_len",
+            value: "0".to_owned(),
+        });
+    }
+    let meta = |key: &'static str| -> Result<&str, RealTextError> {
+        let v = get(key)?;
+        if is_placeholder_metadata(v) {
+            return Err(RealTextError::BadValue {
+                key,
+                value: v.to_owned(),
+            });
+        }
+        Ok(v)
+    };
+    let source = meta("source")?;
+    let license = meta("license")?;
     Ok(RealTextManifest {
         corpus_id: corpus_id.to_owned(),
-        source: get("source")?.to_owned(),
-        license: get("license")?.to_owned(),
+        source: source.to_owned(),
+        license: license.to_owned(),
         sha256_hex: sha.to_owned(),
-        byte_len: num("byte_len")?,
+        byte_len,
         split_mod,
         eval_residue,
     })
+}
+
+/// Refuse absolute paths and any non-`Normal` component (`..` / root / prefix /
+/// lone `.`). Empty paths are also refused. Mid-path `.` is elided by
+/// `Path::components` and is therefore treated as a normal relative path.
+///
+/// **Not sufficient for filesystem confinement:** a relative name like
+/// `escape.tsv` passes this check even when it is a symlink that points
+/// outside the allowed root. Call [`confine_regular_file`] before `fs::read`.
+pub fn assert_safe_relative_path(path: &Path) -> Result<(), RealTextError> {
+    let display = path.to_string_lossy().into_owned();
+    if display.is_empty() {
+        return Err(RealTextError::UnsafePath { path: display });
+    }
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+    {
+        return Err(RealTextError::UnsafePath { path: display });
+    }
+    Ok(())
+}
+
+/// Resolve `relative` under `root` as a regular, non-symlink file that cannot
+/// escape `root` via symlink (descriptor-relative walk).
+///
+/// Steps (fail-closed, matching publication / corpus-overlap style):
+/// 1. [`assert_safe_relative_path`] (lexical).
+/// 2. `root` must be a non-symlink directory; canonicalize it.
+/// 3. Walk each `Normal` component under that root with `symlink_metadata`;
+///    any symlink component is refused (`SymlinkEscape`).
+/// 4. Final entry must be a regular non-symlink file.
+/// 5. `canonicalize(final).starts_with(root)` (defence in depth).
+///
+/// A path that would pass pure lexical `Path::components` checks but escape
+/// via symlink is therefore refused. Intended for CLI `--realtext` args.
+pub fn confine_regular_file(root: &Path, relative: &Path) -> Result<PathBuf, RealTextError> {
+    assert_safe_relative_path(relative)?;
+    let display = relative.to_string_lossy().into_owned();
+    let root_display = root.to_string_lossy().into_owned();
+    let root_meta = fs::symlink_metadata(root).map_err(|_| RealTextError::PathIo {
+        path: root_display.clone(),
+    })?;
+    if !root_meta.is_dir() || root_meta.file_type().is_symlink() {
+        return Err(RealTextError::SymlinkEscape { path: root_display });
+    }
+    let root_canon =
+        fs::canonicalize(root).map_err(|_| RealTextError::PathIo { path: root_display })?;
+    let mut path = root_canon.clone();
+    for component in relative.components() {
+        let Component::Normal(value) = component else {
+            // Unreachable after assert_safe_relative_path; keep fail-closed.
+            return Err(RealTextError::UnsafePath {
+                path: display.clone(),
+            });
+        };
+        path.push(value);
+        let meta = fs::symlink_metadata(&path).map_err(|_| RealTextError::PathIo {
+            path: display.clone(),
+        })?;
+        if meta.file_type().is_symlink() {
+            return Err(RealTextError::SymlinkEscape {
+                path: display.clone(),
+            });
+        }
+    }
+    let meta = fs::symlink_metadata(&path).map_err(|_| RealTextError::PathIo {
+        path: display.clone(),
+    })?;
+    if !meta.is_file() {
+        return Err(RealTextError::SymlinkEscape {
+            path: display.clone(),
+        });
+    }
+    let canon = fs::canonicalize(&path).map_err(|_| RealTextError::PathIo {
+        path: display.clone(),
+    })?;
+    if !canon.starts_with(&root_canon) {
+        return Err(RealTextError::SymlinkEscape { path: display });
+    }
+    Ok(canon)
 }
 
 /// Deterministic split bucket of a document id.

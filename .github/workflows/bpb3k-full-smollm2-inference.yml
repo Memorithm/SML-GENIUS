@@ -1,0 +1,295 @@
+name: BPB3-K full SmolLM2 native CPU inference (experimental)
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_full_runtime.rs'
+      - 'research/boolean-posit/bpb3k_cpu_kernels.rs'
+      - 'research/boolean-posit/bpb3k_fidelity.rs'
+      - 'research/boolean-posit/bpb3k_kernel_bench.rs'
+      - 'research/boolean-posit/bpb3k_stock_oracle.rs'
+      - 'research/boolean-posit/bpb3k_tiled_oracle.cpp'
+      - 'research/boolean-posit/run_bpb3k_stock_oracle.sh'
+      - 'research/boolean-posit/run_bpb3k_fidelity.sh'
+      - '.github/workflows/bpb3k-full-smollm2-inference.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3k_full_runtime.rs'
+      - '.github/workflows/bpb3k-full-smollm2-inference.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-trained-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Preflight syntax of every Bash run block before expensive builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path(".github/workflows/bpb3k-full-smollm2-inference.yml")
+          lines=p.read_text().splitlines()
+          blocks=[]
+          active=None
+          for ln in lines:
+              if ln=="        run: |":
+                  active=[]
+                  blocks.append(active)
+              elif active is not None:
+                  if ln.startswith("          ") or not ln.strip():
+                      active.append(ln[10:] if ln.startswith("          ") else "")
+                  else:
+                      active=None
+          for i,block in enumerate(blocks):
+              r=subprocess.run(["bash","-n"],input="\n".join(block)+"\n",text=True,capture_output=True)
+              if r.returncode:
+                  raise SystemExit(f"STOP_BPB3K_SHELL_SYNTAX block={i} error={r.stderr}")
+          print(f"PASS_BPB3K_BASH_PREFLIGHT blocks={len(blocks)}")
+          PY
+      - name: Rust 1.89 adapter and oracle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup component add rustfmt --toolchain 1.89.0
+          mkdir -p "$RUNNER_TEMP/bpb3k"
+          cp research/boolean-posit/{bpb3k_full_runtime.rs,bpb3k_cpu_kernels.rs,bpb3k_fidelity.rs,bpb3k_kernel_bench.rs,bpb3k.rs,gguf_k.rs} "$RUNNER_TEMP/bpb3k/"
+          cd "$RUNNER_TEMP/bpb3k"
+          rustfmt +1.89.0 --edition 2021 --config skip_children=true bpb3k_full_runtime.rs
+          echo "FORMATTED_BEGIN"
+          cat bpb3k_full_runtime.rs
+          echo "FORMATTED_END"
+          rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_full_runtime.rs -o selftest
+          ./selftest
+          rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_full_runtime.rs -o bpb3k-adapter
+          rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_cpu_kernels.rs -o cpu-kernel-tests
+          ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=fused_v2 ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=fused_v2_i16 ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=stock_vector ./cpu-kernel-tests
+          MEM_BPB3K_KERNEL=fused_v2_stock ./cpu-kernel-tests
+          rustfmt +1.89.0 --edition 2021 --check --config skip_children=true bpb3k_cpu_kernels.rs bpb3k_fidelity.rs bpb3k_kernel_bench.rs
+          rustfmt +1.89.0 --edition 2021 --check --config skip_children=true "$GITHUB_WORKSPACE/research/boolean-posit/bpb3k_stock_oracle.rs"
+          rustc +1.89.0 --edition=2021 -D warnings --test bpb3k_fidelity.rs -o fidelity-tests
+          ./fidelity-tests
+          rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_fidelity.rs -o bpb3k-fidelity
+          rustc +1.89.0 --edition=2021 -D warnings -O bpb3k_kernel_bench.rs -o kernel-bench
+          rustc +1.89.0 --edition=2021 -D warnings -C opt-level=3 -C relocation-model=pic \
+            --crate-type staticlib bpb3k_cpu_kernels.rs -o libmem_bpb3k.a
+          test -s libmem_bpb3k.a
+
+      - name: Fetch exact upstream ggml source and patch all Q3_K CPU paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          git init -q "$RUNNER_TEMP/bpb3k/llama"
+          git -C "$RUNNER_TEMP/bpb3k/llama" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 10s 240s git -C "$RUNNER_TEMP/bpb3k/llama" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/bpb3k/llama" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3k/llama" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          "$RUNNER_TEMP/bpb3k/bpb3k-adapter" patch "$RUNNER_TEMP/bpb3k/llama" f7591a6a01f9273de03331732bdc0b39721168be
+          "$RUNNER_TEMP/bpb3k/bpb3k-fidelity" patch-debug "$RUNNER_TEMP/bpb3k/llama"
+          grep -q 'mem_bpb3k_dot_q8' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml-cpu/ggml-cpu.c"
+          grep -q 'mem_bpb3k_dequant' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml.c"
+          grep -q 'Q3_K surrogate is BPB3-K' "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml-cpu/tiled/tiled.cpp"
+      - name: Build true BPB3-K runtime with patched ggml direct matmul
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/bpb3k/llama" -B "$RUNNER_TEMP/bpb3k/llama/build" \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF \
+            -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/bpb3k/libmem_bpb3k.a"
+          cmake --build "$RUNNER_TEMP/bpb3k/llama/build" -j 3 --target llama-cli llama-bench llama-debug
+      - name: Download SHA-verified real SmolLM2 and transcode all Q3_K tensors
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          curl -fL --retry 2 --connect-timeout 20 --max-time 300 -o original.gguf \
+            'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q3_K_S.gguf?download=true'
+          echo '7add77b8d3736d6b2fd21dc96e69be026f19bde843e9988b43cef1315fc5eebe  original.gguf' | sha256sum -c -
+          ./bpb3k-adapter transcode original.gguf experimental-bpb3k.gguf | tee provenance.txt
+          grep -q '^PASS_BPB3K_REAL_GGUF ' provenance.txt
+          test "$(stat -c %s original.gguf)" = "$(stat -c %s experimental-bpb3k.gguf)"
+      - name: Four genuine SmolLM2 inference paths — scalar SIMD tile2 hybrid fused
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          grep -q 'BPB3K_REAL_GGUF' provenance.txt
+          for kernel in scalar simd tiled hybrid fused fused_v2 fused_v2_stock; do
+            echo "BPB3K_MODE_BEGIN=$kernel"
+            MEM_BPB3K_KERNEL="$kernel" timeout -k 10s 180s ./llama/build/bin/llama-cli \
+              -m experimental-bpb3k.gguf -ngl 0 -t 2 -c 256 -n 16 \
+              -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+              2>&1 | tee "full-model-$kernel.txt"
+            test "${PIPESTATUS[0]}" -eq 0
+            grep -Fq "BPB3K_DIRECT_DOT_EXECUTED kernel=" "full-model-$kernel.txt" || {
+              echo "STOP_BPB3K_KERNEL_NOT_EXECUTED mode=$kernel"; exit 1;
+            }
+            grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$kernel.txt" || {
+              echo "STOP_BPB3K_MODEL_SEMANTIC_MISMATCH mode=$kernel"; exit 1;
+            }
+            if [[ "$kernel" == simd || "$kernel" == hybrid || "$kernel" == fused || "$kernel" == fused_v2 || "$kernel" == fused_v2_stock ]]; then
+              grep -Fq 'avx2=true' "full-model-$kernel.txt" || {
+                echo "STOP_BPB3K_SIMD_NOT_ACTUALLY_QUALIFIED mode=$kernel"; exit 1;
+              }
+            fi
+            echo "PASS_BPB3K_FULL_MODEL_MODE=$kernel prompt_canary=matched"
+          done
+      - name: Run exact-source stock llama.cpp control on the original unmodified GGUF
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          git -C llama worktree add --detach "$RUNNER_TEMP/bpb3k/stock" f7591a6a01f9273de03331732bdc0b39721168be
+          test "$(git -C stock rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          test ! -e stock/ggml/src/ggml-bpb3k-experimental.h
+          ./bpb3k-fidelity patch-debug "$RUNNER_TEMP/bpb3k/stock"
+          cmake -S stock -B stock/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build stock/build -j 3 --target llama-cli llama-bench llama-debug
+          timeout -k 10s 180s ./stock/build/bin/llama-cli \
+            -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
+            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+            2>&1 | tee stock-original-inference.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          echo "PASS_STOCK_LLAMA_MODEL_CONTROL original=sha256_pinned_file same_prompts=true same_threads=true same_seed=true"
+          # Separate the numerical effect of ggml's reference Q3_K vec_dot
+          # from the accelerated tiled implementation on the same hardware.
+          GGML_CPU_TILED_MM=0 timeout -k 10s 180s ./stock/build/bin/llama-cli \
+            -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
+            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+            2>&1 | tee stock-vector-reference.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          echo "PASS_STOCK_SCALAR_Q3_K_REFERENCE execution=complete"
+
+          # One fixed semantic canary is necessary, not sufficient, for quality.
+          # Fail closed: native program success is NOT an equivalent LLM result.
+          grep -Fq 'In mathematics, two plus two equals 4.' stock-original-inference.txt || {
+            echo STOP_STOCK_SEMANTIC_CANARY_UNAVAILABLE
+            exit 1
+          }
+          for mode in scalar simd tiled hybrid fused fused_v2 fused_v2_stock; do
+            grep -Fq 'In mathematics, two plus two equals 4.' "full-model-$mode.txt" || {
+              echo "STOP_BPB3K_REAL_MODEL_NUMERICAL_QUALITY_MISMATCH kernel=$mode"
+              exit 1
+            }
+          done
+          # All four independently initialized inference processes must match
+          # the trained reference. One prompt does not certify full logits.
+          echo 'PASS_BPB3K_REAL_MODEL_SEMANTIC_CANARY=matched'
+
+      - name: Bounded first-divergent operator fingerprints (diagnostic only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          for mode in stock fused_v2 stock_vector fused_v2_stock; do
+            if [[ "$mode" == stock ]]; then
+              binary=./stock/build/bin/llama-debug
+              model=original.gguf
+            else
+              binary=./llama/build/bin/llama-debug
+              model=experimental-bpb3k.gguf
+            fi
+            MEM_BPB3K_LAYER_TRACE=1 MEM_BPB3K_KERNEL="$mode" \
+              MEM_BPB3K_FIDELITY_DUMP="$RUNNER_TEMP/bpb3k/optrace-$mode.bin" \
+              timeout -k 10s 180s "$binary" -m "$model" -ngl 0 -t 2 -c 128 -n 8 \
+                -p 'La capitale de la France est' --save-logits \
+                >"optrace-$mode.log" 2>&1
+            grep -q 'PASS_BPB3K_FIDELITY_DUMP' "optrace-$mode.log"
+            grep -q '^BPB3K_LAYER seq=' "optrace-$mode.log"
+          done
+          python3 - <<'PY' | tee optrace-summary.txt
+          from pathlib import Path
+          logs = {}
+          for mode in ("stock", "fused_v2", "stock_vector", "fused_v2_stock"):
+              rows = [line.strip() for line in Path(f"optrace-{mode}.log").read_text().splitlines()
+                      if line.startswith("BPB3K_LAYER seq=")]
+              if not rows:
+                  raise SystemExit(f"STOP_BPB3K_LAYER_TRACE_EMPTY mode={mode}")
+              logs[mode] = rows
+              print(f"BPB3K_LAYER_COUNT mode={mode} count={len(rows)}")
+          for mode in ("fused_v2", "stock_vector", "fused_v2_stock"):
+              left, right = logs["stock"], logs[mode]
+              for i, (a, b) in enumerate(zip(left, right)):
+                  if a != b:
+                      print(f"BPB3K_FIRST_DIVERGENCE mode={mode} index={i}")
+                      print(f"BPB3K_STOCK_OPERATOR {a}")
+                      print(f"BPB3K_FUSED_OPERATOR mode={mode} {b}")
+                      break
+              else:
+                  if len(left) != len(right):
+                      print(f"BPB3K_LAYER_LENGTH_MISMATCH mode={mode} stock={len(left)} fused={len(right)}")
+                  else:
+                      print(f"BPB3K_LAYER_TRACE_IDENTICAL mode={mode} bounded=true")
+          print("BPB3K_TRACE_VERDICT=DIAGNOSTIC_ONLY no_qualification_or_threshold_change")
+          PY
+      - name: Independent original AVX2 C oracle for the diagnostic stock-vector order
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh "$RUNNER_TEMP/bpb3k/stock" "$RUNNER_TEMP/bpb3k/stock-oracle" fused_v2_stock "$RUNNER_TEMP/bpb3k/llama/ggml/src/ggml-bpb3k-experimental.h"
+
+      - name: Full vocabulary logits, deterministic token IDs and fresh-process reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/boolean-posit/run_bpb3k_fidelity.sh "$RUNNER_TEMP/bpb3k" "$RUNNER_TEMP/bpb3k/experimental-bpb3k.gguf" | tee "$RUNNER_TEMP/bpb3k/fidelity-summary.txt"
+          cd "$RUNNER_TEMP/bpb3k"
+          for mode in fused fused_v2_i16 fused_v2 fused_v2_stock; do
+            MEM_BPB3K_KERNEL="$mode" ./kernel-bench | tee "kernel-diagnostic-$mode.txt"
+          done
+
+      - name: Same-host unmodified optimized Q3_K full-model benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          timeout -k 10s 180s ./stock/build/bin/llama-bench \
+            -m original.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
+            2>&1 | tee bench-stock-q3k.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          echo 'PASS_STOCK_OPTIMIZED_Q3_K_SAME_HOST_BENCH=true'
+      - name: Paired whole-model performance diagnostics — four kernel modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/bpb3k"
+          for mode in scalar simd tiled hybrid fused fused_v2 fused_v2_stock; do
+            echo "BPB3K_BENCH_MODE=$mode"
+            MEM_BPB3K_KERNEL="$mode" timeout -k 10s 180s ./llama/build/bin/llama-bench \
+              -m experimental-bpb3k.gguf -ngl 0 -t 2 -p 64 -n 32 -r 3 \
+              2>&1 | tee "bench-$mode.txt"
+            test "${PIPESTATUS[0]}" -eq 0
+            echo "PASS_BPB3K_BENCH_MODE=$mode"
+          done
+          echo 'BPB3K_BENCH_VERDICT=DIAGNOSTIC no full-model scientific superiority claim without physical equal-quality replication'
+      - name: Retain bounded evidence only; never upload nonstandard experimental GGUF
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3k-full-inference-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/bpb3k/provenance.txt
+            ${{ runner.temp }}/bpb3k/full-model-*.txt
+            ${{ runner.temp }}/bpb3k/bench-*.txt
+            ${{ runner.temp }}/bpb3k/stock-original-inference.txt
+            ${{ runner.temp }}/bpb3k/stock-vector-reference.txt
+            ${{ runner.temp }}/bpb3k/fidelity/
+            ${{ runner.temp }}/bpb3k/fidelity-summary.txt
+            ${{ runner.temp }}/bpb3k/kernel-diagnostic-*.txt
+            ${{ runner.temp }}/bpb3k/optrace-*.log
+            ${{ runner.temp }}/bpb3k/optrace-summary.txt
+          if-no-files-found: warn
+          retention-days: 30

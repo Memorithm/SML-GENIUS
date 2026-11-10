@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "agent": "grok",
+  "status": "NOT_CONNECTED",
+  "timestamp_utc": "2026-11-07T18:47:28Z",
+  "last_report_utc": "2026-11-07T18:47:28Z",
+  "last_successful_code_commit_utc": "2026-11-07T18:38:22Z",
+  "run_id": "20261107T184728Z",
+  "runner": "grok-box (authoring via parent-delegated G5 CONTEXT-2 golden-wire executor); bench target: none (repo self-hosted runners total_count=0); wake is Grok Bot executor only - NOT RemoteOps->Grok CONNECTED proof",
+  "milestone": "G5 CONTEXT-2 wire qualification",
+  "task": "G5 CONTEXT-2 golden snapshot wire fixtures PR #859 (code 0dc9a2f1): 4 SWC2 v1 golden hex fixtures + 17 tests (encode==golden, decode roundtrip/restore continuation, typed rejections); test-only, no src change",
+  "base_sha": "a6c45a118dd9c07a48c015d72205c2f19b589d4c",
+  "head_sha": "0dc9a2f1a7759862a6718a3280ee983eaf2f1463",
+  "head_sha_note": "head_sha = code/test commit; the docs-only report commit on top is the PR tip",
+  "branch": "grok/g5-context2-golden-wire-20261107",
+  "tests": {
+    "code_changed": true,
+    "fmt": "pass",
+    "clippy_workspace_all_targets_D_warnings": "pass",
+    "cargo_test_locked_workspace": "2387 passed, 0 failed, 3 ignored (pre-push hook on 0dc9a2f1)",
+    "new_golden_suite": "crates/sml-store/tests/working_context_wire_golden.rs 17 passed",
+    "exact_head_ci": "pending at report time (PR just opened)"
+  },
+  "metrics": "NOT_MEASURED: format qualification only (golden bytes + typed rejections); no model-quality, context-span, latency or throughput claim.",
+  "blocked_reason": "RemoteOps->Grok half-hour loop NOT_CONNECTED; Dell/Thor self-hosted SML runners total_count=0; LONGCTX-B1 BLOCKED (user choices filler/B-lex/B-attn). Merge gated on exact-head required CI SUCCESS.",
+  "qualification": "NOT_QUALIFIED",
+  "waiting_on": [
+    "Exact-head required CI SUCCESS on PR #859",
+    "Dell/Thor self-hosted runner registration",
+    "LONGCTX-B1 filler/B-lex/B-attn user choices"
+  ],
+  "pr_url": "https://github.com/Memorithm/SML-GENIUS/pull/859"
+}
