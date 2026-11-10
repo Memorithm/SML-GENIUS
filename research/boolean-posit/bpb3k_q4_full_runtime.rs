@@ -184,9 +184,7 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
         return Err("STOP_FIRST_TENSOR_NOT_AT_DATA_START".into());
     }
     for adjacent in tensors.windows(2) {
-        if adjacent[0].offset == adjacent[1].offset
-            || adjacent[1].offset % alignment != 0
-        {
+        if adjacent[0].offset == adjacent[1].offset || adjacent[1].offset % alignment != 0 {
             return Err("STOP_OVERLAPPING_OR_UNALIGNED_TENSORS".into());
         }
     }
@@ -196,9 +194,13 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
     // Validate every 110-byte source Q3_K segment and the offset graph
     // before creating the output. Zero source tensor payloads are rejected.
     for (i, tensor) in tensors.iter().enumerate() {
-        let from = start.checked_add(tensor.offset).ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
+        let from = start
+            .checked_add(tensor.offset)
+            .ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
         let end = if let Some(next) = tensors.get(i + 1) {
-            start.checked_add(next.offset).ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
+            start
+                .checked_add(next.offset)
+                .ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
         } else {
             file_len
         };
@@ -209,7 +211,8 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
             if tensor.values == 0 || tensor.values % 256 != 0 {
                 return Err("STOP_Q3_TENSOR_SIZE".into());
             }
-            let bytes = (tensor.values / 256).checked_mul(110)
+            let bytes = (tensor.values / 256)
+                .checked_mul(110)
                 .ok_or("STOP_Q3_SOURCE_BYTES_OVERFLOW")?;
             if bytes > end - from {
                 return Err("STOP_Q3_SOURCE_TRUNCATED".into());
@@ -218,7 +221,10 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
     }
 
     let result = (|| {
-        let mut output = OpenOptions::new().write(true).create_new(true).open(dest)
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dest)
             .map_err(|e| e.to_string())?;
         input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
         let copied = std::io::copy(&mut input.by_ref().take(start), &mut output)
@@ -236,18 +242,27 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
             let new_offset = pos - start;
             // Rewrite the original GGUF v3 tensor offset field only.
             // Tensor shapes, names, types and all other metadata remain.
-            output.seek(SeekFrom::Start(tensor.offset_field))
+            output
+                .seek(SeekFrom::Start(tensor.offset_field))
                 .map_err(|e| e.to_string())?;
-            output.write_all(&new_offset.to_le_bytes()).map_err(|e| e.to_string())?;
+            output
+                .write_all(&new_offset.to_le_bytes())
+                .map_err(|e| e.to_string())?;
             output.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
 
-            let from = start.checked_add(tensor.offset).ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
+            let from = start
+                .checked_add(tensor.offset)
+                .ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
             let end = if let Some(next) = tensors.get(i + 1) {
-                start.checked_add(next.offset).ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
+                start
+                    .checked_add(next.offset)
+                    .ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
             } else {
                 file_len
             };
-            input.seek(SeekFrom::Start(from)).map_err(|e| e.to_string())?;
+            input
+                .seek(SeekFrom::Start(from))
+                .map_err(|e| e.to_string())?;
             if tensor.kind == Q3_K {
                 let blocks = tensor.values / 256;
                 for _ in 0..blocks {
@@ -258,8 +273,10 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
                 }
                 blocks_done += blocks;
                 tensors_done += 1;
-                println!("BPB3K_Q4_REAL_TENSOR name={} blocks={} coefficients={}",
-                    tensor.name, blocks, tensor.values);
+                println!(
+                    "BPB3K_Q4_REAL_TENSOR name={} blocks={} coefficients={}",
+                    tensor.name, blocks, tensor.values
+                );
             } else {
                 // Copy non-Q3 tensor bytes, including its source padding,
                 // without decoding or quantizing any pre-trained weights.
@@ -276,7 +293,8 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
                 let pad = (alignment - (end - start) % alignment) % alignment;
                 if pad > 0 {
                     let zeros = [0u8; 4096];
-                    output.write_all(&zeros[..pad as usize])
+                    output
+                        .write_all(&zeros[..pad as usize])
                         .map_err(|e| e.to_string())?;
                 }
             }
@@ -481,14 +499,21 @@ mod tests {
         assert_eq!(tensors.len(), 2);
         assert_eq!(tensors[0].offset, 0);
         assert_eq!(tensors[1].offset, 160);
-        assert_eq!(&encoded[data_start as usize..data_start as usize + 146], &expected);
-        assert_eq!(&encoded[data_start as usize + 160..data_start as usize + 224], &other);
+        assert_eq!(
+            &encoded[data_start as usize..data_start as usize + 146],
+            &expected
+        );
+        assert_eq!(
+            &encoded[data_start as usize + 160..data_start as usize + 224],
+            &other
+        );
         let second_offset = u64::from_le_bytes(
-            encoded[offset_positions[1]..offset_positions[1] + 8].try_into().unwrap()
+            encoded[offset_positions[1]..offset_positions[1] + 8]
+                .try_into()
+                .unwrap(),
         );
         assert_eq!(second_offset, 160);
         assert_eq!(std::fs::read(&src).unwrap(), source);
         std::fs::remove_dir_all(root).unwrap();
     }
-
 }
