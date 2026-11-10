@@ -4,6 +4,7 @@ on:
     paths:
       - 'research/boolean-posit/bpb3k_q4_pair228_avx2.rs'
       - 'research/boolean-posit/bpb3k_q4_pair228_stock_bench.rs'
+      - 'research/boolean-posit/bpb3k_q4_streaming_stock_bench.rs'
       - 'research/boolean-posit/bpb3k_preencoded114_avx2.rs'
       - 'research/boolean-posit/BPB3_K_Q4_PAIR228.md'
       - '.github/workflows/bpb3k-q4-pair228-avx2.yml'
@@ -36,6 +37,7 @@ jobs:
           rustup run 1.89.0 rustfmt --edition 2021 --check \
             research/boolean-posit/bpb3k_q4_pair228_avx2.rs \
             research/boolean-posit/bpb3k_q4_pair228_stock_bench.rs \
+            research/boolean-posit/bpb3k_q4_streaming_stock_bench.rs \
             research/boolean-posit/bpb3k_preencoded114_avx2.rs
           rustup run 1.89.0 rustc --edition=2021 -D warnings --test \
             research/boolean-posit/bpb3k_q4_pair228_avx2.rs \
@@ -85,3 +87,17 @@ jobs:
           test "$(grep -c '^Q4_SUMMARY ' "$RUNNER_TEMP/bpb3k-q4-pair228-result.txt")" = 3
           test "$(grep -c '^PAIR228_SUMMARY ' "$RUNNER_TEMP/bpb3k-q4-pair228-result.txt")" = 3
           grep -q '^Q4_PAIR228_VERDICT=DIAGNOSTIC ' "$RUNNER_TEMP/bpb3k-q4-pair228-result.txt"
+
+      - name: Build and run 262144-row independent contiguous weight streaming arrays
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            research/boolean-posit/bpb3k_q4_streaming_stock_bench.rs \
+            -L "native=$RUNNER_TEMP/bpb3k-original-stock" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-q4-stream-bench"
+          timeout -k 5s 120s "$RUNNER_TEMP/bpb3k-q4-stream-bench" | tee "$RUNNER_TEMP/bpb3k-q4-stream-result.txt"
+          grep -q '^PASS_Q4_STREAM_ORACLE ' "$RUNNER_TEMP/bpb3k-q4-stream-result.txt"
+          test "$(grep -c '^Q4_STREAM_RAW ' "$RUNNER_TEMP/bpb3k-q4-stream-result.txt")" = 12
+          grep -q '^Q4_STREAM_SUMMARY ' "$RUNNER_TEMP/bpb3k-q4-stream-result.txt"
+          grep -q '^Q4_STREAM_VERDICT=DIAGNOSTIC ' "$RUNNER_TEMP/bpb3k-q4-stream-result.txt"
