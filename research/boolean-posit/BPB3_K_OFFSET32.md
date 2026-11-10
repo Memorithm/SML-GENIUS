@@ -76,3 +76,47 @@ broadcast/shuffle primitive could be useful in SciRust but only
 after destination-specific ABI, license, provenance and numeric
 requalification. FLAT-ATTENTION has different hardware scheduling
 needs and is not an automatic beneficiary.
+
+
+## Observed unsigned-offset result — 2026-11-10
+
+[Exact-head workflow 42858994036](https://github.com/Memorithm/SML-GENIUS/actions/runs/42858994036),
+head fb159bcb32a7b7094610526aaec8ee14959d8c85, succeeded.
+
+- 24 Rust tests with original signed-Q3 integer oracle and
+  prior PSHUFB comparison, original AVX2 C 896 independent cases,
+  original tiled C++ 112 cases, and 1024 unit-scale
+  original-Q3 FP32 bit-exact rows passed.
+- Generated Haswell code contains VPBROADCASTD, VPSHUFB,
+  VPMADDUBSW and VPMADDWD, with no AVX-512 popcount.
+- All 96 paired original Q3_K stock / first broadcast32 /
+  unsigned-offset broadcast32 timing triplets were recorded
+  with exact checksums.
+
+Descriptive median nanoseconds/dot on the **same hosted run**:
+
+| Rows | Original Q3_K AVX2 stock | First broadcast32 | Unsigned-offset broadcast32 |
+|---:|---:|---:|---:|
+| 1 | 31.00 | 42.00 | 40.00 |
+| 32 | 24.85 | 32.26 | 33.16 |
+| 256 | 26.23 | 37.00 | 36.58 |
+| 1024 | **21.59** | **31.91** | **32.88** |
+
+On the 1024-row batch the new representation remained
+**32.88 / 21.59 = 1.5229x slower** than native Q3_K,
+and was **(32.88 / 31.91 - 1) = 3.04% slower** than the
+earlier signed-magnitude broadcast32 kernel on the same
+controlled measurements. There were small opposite
+comparisons for one and 256 rows; no gain is claimed across
+sizes or hardware.
+
+**Conclusion:** unsigned-offset coding proves that all original
+signed three-bit coefficients and all original scales can be
+represented losslessly using the original 110-byte Q3_K budget,
+and it removes redundant sign XORs in the SIMD arithmetic.
+It did NOT improve the largest-row benchmark. This can reflect
+instruction scheduling, extra conversion/layout concerns or
+other microarchitectural factors; the precise attribution is
+not established by the available data. Keep the candidate
+as research and do not select it for the runtime based on
+algebraic instruction counts alone.
