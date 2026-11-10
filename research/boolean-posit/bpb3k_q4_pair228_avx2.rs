@@ -9,11 +9,9 @@
 //! No changes to inference or model defaults.
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[cfg(test)]
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod bpb3k;
-#[cfg(test)]
 #[path = "bpb3k_preencoded114_avx2.rs"]
 #[allow(dead_code)]
 mod previous;
