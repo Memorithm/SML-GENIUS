@@ -31,7 +31,7 @@ jobs:
           rustup run 1.89.0 rustfmt --edition 2021 --check \
             research/boolean-posit/bpb3k_q4_full_runtime.rs research/boolean-posit/bpb3k_q4_ggml_ffi.rs
           mkdir -p "$RUNNER_TEMP/q4-smollm2"
-          cp research/boolean-posit/{bpb3k_q4_full_runtime.rs,bpb3k_q4_ggml_ffi.rs,bpb3k_q4_pair228_avx2.rs,bpb3k_preencoded114_avx2.rs,bpb3k.rs,gguf_k.rs,bpb3k_fidelity.rs} "$RUNNER_TEMP/q4-smollm2/"
+          cp research/boolean-posit/{bpb3k_q4_full_runtime.rs,bpb3k_q4_ggml_ffi.rs,bpb3k_q4_pair228_avx2.rs,bpb3k_preencoded114_avx2.rs,bpb3k_pshufb_avx2.rs,bpb3k.rs,gguf_k.rs,bpb3k_fidelity.rs} "$RUNNER_TEMP/q4-smollm2/"
           cd "$RUNNER_TEMP/q4-smollm2"
           rustup run 1.89.0 rustc --edition=2021 -D warnings --test bpb3k_q4_full_runtime.rs -o adapter-tests
           ./adapter-tests --nocapture
