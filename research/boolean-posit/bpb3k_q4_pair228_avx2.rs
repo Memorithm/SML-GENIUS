@@ -258,10 +258,7 @@ pub struct DotLanes {
     pub q8_scale_f32_bits: u32,
 }
 
-pub fn dot_q4_lanes<const N: usize>(
-    weights: &[u8],
-    activation: &[u8],
-) -> Result<DotLanes, Error> {
+pub fn dot_q4_lanes<const N: usize>(weights: &[u8], activation: &[u8]) -> Result<DotLanes, Error> {
     if N != Q4_BYTES && N != Q4_PADDED_BYTES {
         return Err(Error::BadWeightsLen(N));
     }
