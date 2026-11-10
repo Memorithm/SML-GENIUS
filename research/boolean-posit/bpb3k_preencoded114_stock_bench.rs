@@ -9,12 +9,12 @@ mod batch;
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
-#[path = "bpb3k_preencoded130_avx2.rs"]
-#[allow(dead_code)]
-mod preencoded;
 #[path = "bpb3k_preencoded114_avx2.rs"]
 #[allow(dead_code)]
 mod narrow;
+#[path = "bpb3k_preencoded130_avx2.rs"]
+#[allow(dead_code)]
+mod preencoded;
 
 use std::ffi::c_void;
 use std::hint::black_box;
