@@ -142,3 +142,87 @@ factor from these microbenchmarks. The next scientifically
 necessary test is a model-scale, streaming memory and
 exact-FP32 qualification under RemoteOps, using identical
 original model weights and activation traces.
+
+
+## Follow-up: independent large contiguous-weight streaming — 2026-11-10
+
+The first cache-oriented result was **replicated** by
+[GitHub Actions run 42884848086](https://github.com/Memorithm/SML-GENIUS/actions/runs/42884848086),
+exact head e59272ff8701ce91498c0c68ad4f48d5183f5952.
+The entire workflow succeeded: 34 Rust tests, original
+optimized C AVX2 and C++ tiled oracles, 1024 original
+single-block plus 512 genuine two-block unit-scale C
+FP32 bit-exact rows, all original 72 + 72 paired microbench
+raw records and an **additional 12** four-arm streaming
+raw records. The streamed checksums cover all 262,144
+distinct deterministic source rows. The kernel outputs
+were also independently compared at intervals and the
+last row against original C Q3_K stock. No upstream
+model files were changed.
+
+The additional streaming experiment uses **four separate,
+contiguous arrays** rather than interleaving different
+candidate formats per row. Total weight-array footprints:
+original 110B: 28,835,840 bytes;
+previous 114B: 29,884,416 bytes;
+Q4-146: 38,273,024 bytes;
+Q4-160: 41,943,040 bytes.
+All candidates use the *same signed Q8_K activation*
+repeatedly, with a unit FP16/f32 scale and one original
+256-coefficient superblock per output row.
+No physical memory-bandwidth counters or Dell
+cache-miss measurements were obtained; the experiment
+is called "streaming" because of the contiguous read
+pattern, **NOT because DRAM bandwidth saturation
+has been verified**.
+
+### Repeat, single-block synthetic ns per row, same-run
+
+| Rows | Original Q3_K C | Previous BPB3-K 114 | Q4-146 | Q4-160 |
+|---:|---:|---:|---:|---:|
+| 32 | 27.46 | 35.36 | **17.37** | 17.60 |
+| 256 | 18.33 | 26.15 | 12.89 | **12.84** |
+| 1024 | 18.60 | 26.18 | **13.16** | 13.89 |
+| **262,144 streaming** | **17.27** | 24.89 | 11.81 | **11.72** |
+
+At 1,024 synthetic rows, Q4-146 uses
+(18.60 - 13.16)/18.60 = **29.25% less time**
+versus true optimized original C stock, a **1.413x**
+throughput factor. For the streamed 262,144
+separate contiguous weights, Q4-146 achieves
+(17.27 - 11.81)/17.27 = **31.62% less time**,
+**1.462x** stock throughput despite the larger
+weight-array footprint. This is evidence that the
+first hosted speed improvement was not solely an
+artifact of keeping 1024 rows in cache, although
+cache/DRAM event attribution remains unknown.
+Q4-160 is 0.09 ns/row ahead at the large streamed
+size but 0.73 ns/row behind for 1024 rows and uses
+3,670,016 more bytes at this streamed row count.
+These small cross-size differences do not warrant
+declaring padding generally beneficial.
+
+### Repeat, genuine two-block 512-coefficient control (ns/pair)
+
+| Pairs | Q3_K native C 512 | Two original 114B calls | Pair228 fused |
+|---:|---:|---:|---:|
+| 16 | **47.11** | 81.69 | 65.25 |
+| 128 | **46.49** | 79.44 | 64.49 |
+| 512 | **40.18** | 67.47 | 59.90 |
+
+At 512 pairs, fused228 is 11.22% lower time than
+the two separate114 reference calls, but still
+59.90/40.18 = **1.491x slower** than unchanged
+native optimized Q3_K C for the same 512 weights.
+It is NOT the best candidate for promotion.
+
+**Research decision:** Q4-146 remains our currently
+strongest demonstrated arithmetic candidate versus
+genuine original stock Q3_K in these hosted,
+unit-scale, single-superblock workloads. It requires
+32.73% more weight storage, model-load conversion,
+and independent full-model arbitrary-scale/multiblock
+FP32 and physical Dell throughput checks before
+any runtime use. Never claim tokens-per-second or
+model-quality improvement from this synthetic
+benchmark, despite the attractive numerical result.
