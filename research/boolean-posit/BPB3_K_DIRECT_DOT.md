@@ -257,3 +257,28 @@ original C stock is not tokens/sec superiority. No model deployment,
 extrapolation to multiple blocks, DRAM claim, or production promotion
 is permitted without a separately admitted full-model experiment
 using the existing stock-order floating-point gate and RemoteOps.
+
+
+### Second kernel candidate — reusable signed-Q8 byte-subset tables
+
+The two's-complement coefficient identity also permits a prepared-lookup
+variant in **dot_bpb3k_q8_byte_tables**. Instead of performing 384
+population counts per row, it prepares all 256 possible 8-lane subset
+sums for each of two halves of each 16-lane Q8 subgroup. This produces
+16 × 2 × 256 signed-i16 entries, **16,384 temporary bytes per Q8
+activation superblock**. A row then needs only three 16-bit-mask sums
+per subgroup: each is two signed-i16 lookups. Its memory cost is greater
+than the 260-byte bitplane plan, while its per-row instruction pattern
+is different. Original Q3_K/BPB3-K model weight payloads are unchanged.
+
+An additional standalone benchmark
+**bpb3k_prepared_lut_bench.rs** applies the **same** independent SHA-pinned
+upstream AVX2 reference and source/activation fixtures as the previous
+stock/bitplane comparison: one Q3_K superblock, all 256 signed Q8
+activation codes, unity FP16/f32 scales for exact-f32 oracle comparison,
+1/32/256/1024 rows, 3 warmups, 16 alternating AB/BA paired rounds,
+four repetitions per invocation, all raw timings retained. It **includes
+the full 16 KiB table preparation inside every candidate timed batch**,
+not just lookup cost. The variant is research-only and has no
+full-model or native Dell inference claim. It will be rejected as a
+performance candidate if real measurements do not support it.
