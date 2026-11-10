@@ -321,7 +321,6 @@ pub fn dot_bpb3k_q8_prepared(
     })
 }
 
-
 /// Precomputed Q8_K subset sums: 16 subgroups × 2 octets × 256 masks,
 /// sixteen KiB per activation block, plus four bytes of unchanged Q8 scale.
 ///
@@ -352,8 +351,7 @@ pub fn prepare_q8_byte_tables(q8: &[u8]) -> Result<PreparedQ8ByteTables, Q8DotEr
             let base = 4 + subgroup * LANES_PER_SUBGROUP + half * 8;
             for mask in 1usize..256 {
                 let bit = mask.trailing_zeros() as usize;
-                table[mask] =
-                    table[mask ^ (1 << bit)] + i16::from(q8[base + bit] as i8);
+                table[mask] = table[mask ^ (1 << bit)] + i16::from(q8[base + bit] as i8);
             }
         }
     }
@@ -365,8 +363,7 @@ pub fn prepare_q8_byte_tables(q8: &[u8]) -> Result<PreparedQ8ByteTables, Q8DotEr
 
 #[inline]
 fn selected_signed_q8_sum(halves: &[[i16; 256]; 2], mask: u16) -> i32 {
-    i32::from(halves[0][(mask & 255) as usize])
-        + i32::from(halves[1][(mask >> 8) as usize])
+    i32::from(halves[0][(mask & 255) as usize]) + i32::from(halves[1][(mask >> 8) as usize])
 }
 
 /// Exact signed Q3_K integer product using two precomputed 8-bit tables
@@ -510,7 +507,6 @@ mod tests {
         block
     }
 
-
     #[test]
     fn q8_byte_tables_match_original_and_both_existing_boolean_paths() {
         for case in 0..96usize {
@@ -527,10 +523,7 @@ mod tests {
                     "case={case} pattern={pattern}"
                 );
                 assert_eq!(actual, dot_bpb3k_q8(&bpb, &q8).unwrap());
-                assert_eq!(
-                    actual,
-                    dot_bpb3k_q8_prepared(&bpb, &bitplanes).unwrap()
-                );
+                assert_eq!(actual, dot_bpb3k_q8_prepared(&bpb, &bitplanes).unwrap());
                 assert_eq!(actual.activation_scale_f32_bits, 0x7fc12345);
             }
         }
