@@ -5,12 +5,12 @@
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
-#[path = "bpb3k_pshufb_avx2.rs"]
-#[allow(dead_code)]
-mod pshufb;
 #[path = "bpb3k_hand_asm.rs"]
 #[allow(dead_code)]
 mod hand;
+#[path = "bpb3k_pshufb_avx2.rs"]
+#[allow(dead_code)]
+mod pshufb;
 
 use std::ffi::c_void;
 use std::hint::black_box;
@@ -100,12 +100,16 @@ fn measure(w: &[Weight], q8: &[u8; pshufb::Q8_K_BYTES], mode: usize) -> (u128, i
         for row in w {
             let value = match mode {
                 0 => stock(black_box(&row.q3), black_box(q8)) as i32,
-                1 => pshufb::dot_bpb3k_q8_pshufb(black_box(&row.bpb3), black_box(q8))
-                    .unwrap()
-                    .weighted_integer,
-                2 => hand::dot_bpb3k_q8_hand_asm(black_box(&row.bpb3), black_box(q8))
-                    .unwrap()
-                    .weighted_integer,
+                1 => {
+                    pshufb::dot_bpb3k_q8_pshufb(black_box(&row.bpb3), black_box(q8))
+                        .unwrap()
+                        .weighted_integer
+                }
+                2 => {
+                    hand::dot_bpb3k_q8_hand_asm(black_box(&row.bpb3), black_box(q8))
+                        .unwrap()
+                        .weighted_integer
+                }
                 _ => unreachable!(),
             };
             checksum += i64::from(black_box(value));
@@ -169,14 +173,24 @@ fn main() {
             assert_eq!(a.1, b.1);
             assert_eq!(a.1, c.1);
         }
-        let mut times = [Vec::with_capacity(ROUNDS), Vec::with_capacity(ROUNDS), Vec::with_capacity(ROUNDS)];
+        let mut times = [
+            Vec::with_capacity(ROUNDS),
+            Vec::with_capacity(ROUNDS),
+            Vec::with_capacity(ROUNDS),
+        ];
         for round in 0..ROUNDS {
             let mut result = [(0u128, 0i64); 3];
             for mode in ORDERS[round % ORDERS.len()] {
                 result[mode] = measure(rows, &q8, mode);
             }
-            assert_eq!(result[0].1, result[1].1, "STOP_BPB3K_HAND_ASM_CHECKSUM_RUST round={round}");
-            assert_eq!(result[0].1, result[2].1, "STOP_BPB3K_HAND_ASM_CHECKSUM_ASM round={round}");
+            assert_eq!(
+                result[0].1, result[1].1,
+                "STOP_BPB3K_HAND_ASM_CHECKSUM_RUST round={round}"
+            );
+            assert_eq!(
+                result[0].1, result[2].1,
+                "STOP_BPB3K_HAND_ASM_CHECKSUM_ASM round={round}"
+            );
             for mode in 0..3 {
                 times[mode].push(result[mode].0);
             }
