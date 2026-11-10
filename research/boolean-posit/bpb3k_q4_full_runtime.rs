@@ -433,4 +433,62 @@ mod tests {
         assert!(C_BRIDGE.contains("mem_q4_146_dequant"));
         assert!(!C_BRIDGE.contains("ggml_vec_dot_q3_K_q8_K"));
     }
+    #[test]
+    fn real_gguf_header_tensor_offsets_relocated_losslessly() {
+        // Genuine GGUF v3 envelope with a 256-code original Q3_K tensor
+        // followed by a 16-element F32 tensor whose payload MUST survive.
+        let mut header = Vec::<u8>::new();
+        header.extend_from_slice(b"GGUF");
+        header.extend_from_slice(&3u32.to_le_bytes());
+        header.extend_from_slice(&2u64.to_le_bytes()); // tensors
+        header.extend_from_slice(&0u64.to_le_bytes()); // metadata
+        let mut offset_positions = Vec::new();
+        for (name, kind, count, offset) in [
+            ("q3.weights", 11u32, 256u64, 0u64),
+            ("f32.bias", 0u32, 16u64, 128u64),
+        ] {
+            header.extend_from_slice(&(name.len() as u64).to_le_bytes());
+            header.extend_from_slice(name.as_bytes());
+            header.extend_from_slice(&1u32.to_le_bytes());
+            header.extend_from_slice(&count.to_le_bytes());
+            header.extend_from_slice(&kind.to_le_bytes());
+            offset_positions.push(header.len());
+            header.extend_from_slice(&offset.to_le_bytes());
+        }
+        header.resize((header.len() + 31) & !31, 0);
+        let mut source = header;
+        let mut weights = [0u8; 110];
+        for (i, b) in weights.iter_mut().enumerate() {
+            *b = (i * 41 + 7) as u8;
+        }
+        weights[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
+        source.extend_from_slice(&weights);
+        source.resize(source.len() + 18, 0);
+        let other: [u8; 64] = std::array::from_fn(|i| (i * 13 + 23) as u8);
+        source.extend_from_slice(&other);
+        let expected = q4::transcode_q4::<146>(&weights).unwrap();
+        let tag = format!("bpb3k-q4-gguf-{}-{}", std::process::id(), source.len());
+        let root = std::env::temp_dir().join(tag);
+        std::fs::create_dir(&root).unwrap();
+        let src = root.join("source.gguf");
+        let dst = root.join("converted.gguf");
+        std::fs::write(&src, &source).unwrap();
+        transcode(&src, &dst).unwrap();
+        let encoded = std::fs::read(&dst).unwrap();
+        let mut check = File::open(&dst).unwrap();
+        let (data_start, alignment, tensors) = tensors(&mut check, encoded.len() as u64).unwrap();
+        assert_eq!(alignment, 32);
+        assert_eq!(tensors.len(), 2);
+        assert_eq!(tensors[0].offset, 0);
+        assert_eq!(tensors[1].offset, 160);
+        assert_eq!(&encoded[data_start as usize..data_start as usize + 146], &expected);
+        assert_eq!(&encoded[data_start as usize + 160..data_start as usize + 224], &other);
+        let second_offset = u64::from_le_bytes(
+            encoded[offset_positions[1]..offset_positions[1] + 8].try_into().unwrap()
+        );
+        assert_eq!(second_offset, 160);
+        assert_eq!(std::fs::read(&src).unwrap(), source);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
 }
