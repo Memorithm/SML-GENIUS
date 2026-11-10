@@ -152,3 +152,133 @@ The additional Boolean operations may outweigh saved scalar products;
 **no improvement is presumed**. Existing stock-ordered
 fused_v2_stock remains the qualified experimental model candidate,
 and the BPB3-K storage budget is unchanged.
+
+
+## DIRECT-Q8-PREP — prepared activation bitplanes (2026-11-10)
+
+A distinct, research-only candidate now exposes
+**prepare_q8_bitplanes(q8)** and **dot_bpb3k_q8_prepared(weights, prepared)**.
+It transposes the exact 256 signed Q8_K codes **once per activation
+block**, producing 16 subgroups × eight 16-bit masks (256 bytes), plus
+four bytes of unchanged f32 activation-scale bits. The original 292-byte
+Q8_K source remains unchanged. Prepacked data is **additional temporary
+state**, not a compression or reduction of source DRAM bytes.
+
+The signed Q3_K weight coefficient q in [-4,+3] also has an equivalent
+three-bit two's-complement identity:
+
+    q = (bit0 XOR sign) + 2*(bit1 XOR sign) - 4*sign
+
+The prepared path computes a signed Q8 integer subgroup dot with **three
+popcounts per activation bitplane**, rather than five. Its 16 signed
+Q3_K subscales are still multiplied in integer arithmetic. It preserves
+the precise full signed Q8_K domain and the raw FP16 and f32 scale bits.
+No dense weight tensor is materialized; no heap allocation occurs in
+the prepare/dot APIs. Both original scalar and prepared APIs remain
+independently addressable. Neither changes the model runtime.
+
+Independent correctness tests compare prepared results, the prior
+unprepared Q8 Boolean result, and an oracle reading the **original**
+(untranscoded) Q3_K wire bits for 96 deterministic weight fixtures × 16
+activation patterns, plus all 256 signed byte codes over 256 distinct
+weight rows, extreme [-4,+3] Q3 and [-128,+127] Q8 values,
+malformed input lengths, and FP16/FP32 metadata preservation.
+
+### Diagnostic performance protocol (frozen before observing results)
+
+The standalone **bpb3k_prepared_bench.rs**, executed by the dedicated
+hosted CI workflow, measures **two implementations of the same integer
+operation**: legacy unprepared Q8 (transpose for every weight row) versus
+the new prepared path (transpose once per activation batch).
+It generates deterministic source Q3_K weight blocks and losslessly
+transcodes them. It runs matched workloads with 1, 32, 256 and 1024
+weight rows, four repetitions per invocation, three warmup passes, and
+16 paired AB/BA alternate-order rounds per row count. Preparation
+overhead is **included in each candidate timed invocation**. It records
+all paired raw nanosecond durations, checks exact checksums, and reports
+only descriptive median ns/dot and the legacy/prepared ratio.
+
+A figure above 1.0 indicates a faster prepared candidate **only for this
+standalone synthetic hosted-runner workload**. There is **no hardcoded
+speed threshold**, no retrospective exclusion of slow timings, and no
+substitution of this benchmark for the full SmolLM2 optimized Q3_K stock
+comparison. SIMD/AVX2 effects and source reads are not isolated here.
+CI validates compilation, correctness, and bounded execution; a
+numerical or runtime performance success does not promote the kernel
+to production or claim a physical Dell speedup.
+
+A subsequent model experiment must verify exact source/weight identity,
+matching stock AVX2/tiled floating-point reductions, all logits and
+tokens, real allocation and activation reuse inside ggml, and a
+prospectively admitted **RemoteOps** paired physical test. The previous
+physical v2 campaigns remain category E due to third-party CPU
+contamination; their thresholds and original records are unchanged.
+
+
+### Native optimized-stock comparison (separately preregistered)
+
+The second hosted comparison uses the **original ggml AVX2 C
+ggml_vec_dot_q3_K_q8_K** function extracted without semantic modifications
+from pinned llama.cpp commit
+f7591a6a01f9273de03331732bdc0b39721168be. The source is checked
+against git HEAD before compiling, via the existing independent
+run_bpb3k_stock_oracle.sh. The comparison executable is
+bpb3k_prepared_stock_bench.rs.
+
+Both competitors consume the same 256 signed Q8_K codes and the same
+logical Q3_K weights. Q3_K and lossless BPB3-K representations each
+occupy exactly 110 bytes per 256 coefficients; source transcode occurs
+before timing. The native stock kernel sees original Q3_K and packed
+Q8_K, while the Boolean candidate sees BPB3-K plus one shared Q8
+prepared plan. Activation Q8_K bsums are computed consistently.
+For this first **single-superblock kernel parity** experiment, both
+block scales are frozen to exactly 1.0f32. This permits a direct
+bit-exact FP32 result comparison to the candidate's integer result,
+since all bounded integer sums are exactly representable. It does
+**not** establish arbitrary-scale/multi-block stock FMA parity.
+Inputs exercise all 256 signed Q8 codes once.
+
+For weight-row counts 1/32/256/1024, the first correctness gate tests
+all 1024 weight rows, then three untimed warmups and 16 alternating
+AB/BA paired rounds with four repetitions per timed invocation.
+The candidate's activation preparation cost is **inside** each
+measurement window; stock requires no such preparation.
+The full set of raw paired nanosecond times and descriptive median
+ns/dot plus stock/candidate ratios are retained in the hosted CI log.
+The upstream C compilation flags and ISA are recorded in the script.
+No favorable result is required to make CI green; CI only requires
+compilation, exact-unit-scale semantic equivalence, non-truncated
+samples, and successful bounded execution.
+
+**Limits:** This comparison is single-threaded, synthetic, one-block,
+with unit FP32 scales on a GitHub hosted runner, not a native Dell
+measurement or a SmolLM2 model run. Even a kernel-level win over the
+original C stock is not tokens/sec superiority. No model deployment,
+extrapolation to multiple blocks, DRAM claim, or production promotion
+is permitted without a separately admitted full-model experiment
+using the existing stock-order floating-point gate and RemoteOps.
+
+
+### Second kernel candidate — reusable signed-Q8 byte-subset tables
+
+The two's-complement coefficient identity also permits a prepared-lookup
+variant in **dot_bpb3k_q8_byte_tables**. Instead of performing 384
+population counts per row, it prepares all 256 possible 8-lane subset
+sums for each of two halves of each 16-lane Q8 subgroup. This produces
+16 × 2 × 256 signed-i16 entries, **16,384 temporary bytes per Q8
+activation superblock**. A row then needs only three 16-bit-mask sums
+per subgroup: each is two signed-i16 lookups. Its memory cost is greater
+than the 260-byte bitplane plan, while its per-row instruction pattern
+is different. Original Q3_K/BPB3-K model weight payloads are unchanged.
+
+An additional standalone benchmark
+**bpb3k_prepared_lut_bench.rs** applies the **same** independent SHA-pinned
+upstream AVX2 reference and source/activation fixtures as the previous
+stock/bitplane comparison: one Q3_K superblock, all 256 signed Q8
+activation codes, unity FP16/f32 scales for exact-f32 oracle comparison,
+1/32/256/1024 rows, 3 warmups, 16 alternating AB/BA paired rounds,
+four repetitions per invocation, all raw timings retained. It **includes
+the full 16 KiB table preparation inside every candidate timed batch**,
+not just lookup cost. The variant is research-only and has no
+full-model or native Dell inference claim. It will be rejected as a
+performance candidate if real measurements do not support it.
