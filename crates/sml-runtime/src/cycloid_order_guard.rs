@@ -79,9 +79,7 @@ impl From<CycloidDispatchError> for CycloidOrderGuardError {
 }
 
 fn quantiles(values: &mut [u128]) -> Result<(u128, u128), CycloidOrderGuardError> {
-    if values.len() < usize::from(MIN_CYCLOID_BALANCED_PAIRS)
-        || values.contains(&0)
-    {
+    if values.len() < usize::from(MIN_CYCLOID_BALANCED_PAIRS) || values.contains(&0) {
         return Err(CycloidOrderGuardError::InvalidTime);
     }
     values.sort_unstable();
