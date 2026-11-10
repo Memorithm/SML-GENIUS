@@ -191,9 +191,7 @@ impl FrozenCycloidAccess {
                     .map_err(|_| CycloidDispatchError::ArithmeticOverflow)?,
             )
             .ok_or(CycloidDispatchError::ArithmeticOverflow)?;
-        if header.payload_bytes == 0
-            || header.payload_bytes > MAX_CYCLOID_PROFILE_PAYLOAD_BYTES
-        {
+        if header.payload_bytes == 0 || header.payload_bytes > MAX_CYCLOID_PROFILE_PAYLOAD_BYTES {
             return Err(CycloidDispatchError::InvalidSample);
         }
 
