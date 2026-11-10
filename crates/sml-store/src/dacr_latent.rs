@@ -4,7 +4,7 @@
 //! Source-exact answers must be checked independently through CONTEXT-1c / DACR-1.
 //! No token attention, memory scan, trained language model, or speed claim.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use sml_core::{
     context_ledger::{ContextSegmentId, ContextStreamId},
@@ -341,7 +341,8 @@ pub struct CandidateIndex<const BITS: usize> {
     stream: ContextStreamId,
     epoch: u64,
     entries: BTreeSet<ContextSegmentId>,
-    buckets: BTreeMap<u16, Vec<ContextSegmentId>>,
+    /// Exactly 2^address_bits slots. Address decoding is a direct offset.
+    buckets: Vec<Vec<ContextSegmentId>>,
 }
 
 impl<const BITS: usize> CandidateIndex<BITS> {
@@ -353,12 +354,13 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         if epoch == 0 {
             return Err(AddressError::WrongEpoch);
         }
+        let address_slots = 1_usize << encoder.budget.address_bits;
         Ok(Self {
             encoder,
             stream,
             epoch,
             entries: BTreeSet::new(),
-            buckets: BTreeMap::new(),
+            buckets: vec![Vec::new(); address_slots],
         })
     }
 
@@ -370,6 +372,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Number of preallocated direct-address slots, including empty ones.
+    #[must_use]
+    pub fn address_slot_count(&self) -> usize {
+        self.buckets.len()
     }
 
     /// Frozen maximum admitted source IDs, independent of current index size.
@@ -396,15 +404,11 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         if self.entries.len() >= self.encoder.budget.max_entries {
             return Err(AddressError::IndexFull);
         }
-        if self
-            .buckets
-            .get(&address)
-            .is_some_and(|bucket| bucket.len() >= self.encoder.budget.max_bucket_entries)
-        {
+        if self.buckets[address as usize].len() >= self.encoder.budget.max_bucket_entries {
             return Err(AddressError::BucketFull);
         }
         self.entries.insert(segment);
-        self.buckets.entry(address).or_default().push(segment);
+        self.buckets[address as usize].push(segment);
         Ok(())
     }
 
@@ -423,7 +427,7 @@ impl<const BITS: usize> CandidateIndex<BITS> {
             return Err(AddressError::WrongEpoch);
         }
         let address = self.encoder.encode(key)?;
-        let hits = self.buckets.get(&address).cloned().unwrap_or_default();
+        let hits = self.buckets[address as usize].clone();
         let accounting = CandidateAccounting {
             address_buckets_probed: 1,
             candidates_returned: hits.len() as u64,
@@ -493,12 +497,11 @@ impl<const BITS: usize> CandidateIndex<BITS> {
                     address |= 1_u16 << position;
                 }
             }
-            if let Some(bucket) = self.buckets.get(&address) {
-                if bucket.len() > max_candidates - hits.len() {
-                    return Err(AddressError::CandidateOverflow);
-                }
-                hits.extend_from_slice(bucket);
+            let bucket = &self.buckets[address as usize];
+            if bucket.len() > max_candidates - hits.len() {
+                return Err(AddressError::CandidateOverflow);
             }
+            hits.extend_from_slice(bucket);
         }
         let accounting = CandidateAccounting {
             address_buckets_probed: probe_count as u64,
@@ -701,6 +704,134 @@ mod dacr_latent_tests {
         assert_eq!(
             DiscreteAddress::train_pairwise(&no_signal, budget()).err(),
             Some(AddressError::InsufficientSignal)
+        );
+    }
+}
+
+#[cfg(test)]
+mod dacr_dense_address_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn sbg(address: u16) -> SbgAddress<16> {
+        SbgAddress {
+            value: SemanticBitField::<16>::from_words(vec![u64::from(address)]).unwrap(),
+            known: SemanticBitField::<16>::ones().unwrap(),
+        }
+    }
+
+    fn budget(bits: usize, entries: usize, bucket: usize) -> AddressBudget {
+        AddressBudget {
+            address_bits: bits,
+            max_pairs: 1,
+            max_entries: entries,
+            max_bucket_entries: bucket,
+        }
+    }
+
+    #[test]
+    fn dacr_dense_256_addresses_match_independent_map_oracle() {
+        let stream = ContextStreamId::new(127).unwrap();
+        let encoder = DiscreteAddress::fixed((0..8).collect(), budget(8, 256, 1)).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, 19).unwrap();
+        let mut oracle = BTreeMap::<u16, Vec<ContextSegmentId>>::new();
+        assert_eq!(index.address_slot_count(), 256);
+        assert_eq!(index.len(), 0);
+        for address in (0..256_u16).rev() {
+            let segment = ContextSegmentId::new(stream, u64::from(address) + 1).unwrap();
+            index.insert(segment, &sbg(address)).unwrap();
+            oracle.entry(address).or_default().push(segment);
+        }
+        assert_eq!(index.len(), 256);
+        assert!(!index.is_empty());
+        for address in 0..256_u16 {
+            let expected = oracle.get(&address).unwrap();
+            let (candidates, counters) = index.lookup(stream, 19, &sbg(address)).unwrap();
+            assert_eq!(&candidates, expected);
+            assert_eq!(counters.address_buckets_probed, 1);
+            assert_eq!(counters.candidates_returned, 1);
+            assert_eq!(
+                index.lookup(stream, 19, &sbg(address)).unwrap(),
+                (candidates, counters)
+            );
+        }
+        let duplicate = ContextSegmentId::new(stream, 1).unwrap();
+        assert_eq!(
+            index.insert(duplicate, &sbg(4)),
+            Err(AddressError::DuplicateSegment)
+        );
+        assert_eq!(
+            index.insert(ContextSegmentId::new(stream, 257).unwrap(), &sbg(0)),
+            Err(AddressError::IndexFull)
+        );
+        assert_eq!(index.len(), 256);
+        assert_eq!(index.address_slot_count(), 256);
+    }
+
+    #[test]
+    fn dacr_dense_bounded_collisions_retain_insertion_order() {
+        let stream = ContextStreamId::new(128).unwrap();
+        let encoder = DiscreteAddress::fixed(vec![0, 1], budget(2, 3, 2)).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, 21).unwrap();
+        assert_eq!(index.address_slot_count(), 4);
+        let first = ContextSegmentId::new(stream, 1).unwrap();
+        let second = ContextSegmentId::new(stream, 2).unwrap();
+        let third = ContextSegmentId::new(stream, 3).unwrap();
+        let fourth = ContextSegmentId::new(stream, 4).unwrap();
+        index.insert(first, &sbg(0)).unwrap();
+        index.insert(second, &sbg(0)).unwrap();
+        assert_eq!(index.insert(third, &sbg(0)), Err(AddressError::BucketFull));
+        assert_eq!(index.len(), 2);
+        assert_eq!(
+            index.lookup(stream, 21, &sbg(0)).unwrap().0,
+            vec![first, second]
+        );
+        index.insert(third, &sbg(1)).unwrap();
+        assert_eq!(index.insert(fourth, &sbg(2)), Err(AddressError::IndexFull));
+        assert_eq!(index.len(), 3);
+        assert_eq!(
+            index.lookup(stream, 21, &sbg(0)).unwrap().0,
+            vec![first, second]
+        );
+        let (empty, counters) = index.lookup(stream, 21, &sbg(3)).unwrap();
+        assert!(empty.is_empty());
+        assert_eq!(counters.address_buckets_probed, 1);
+        assert_eq!(counters.candidates_returned, 0);
+    }
+
+    #[test]
+    fn dacr_dense_unknown_stream_epoch_and_invalid_budgets_fail_closed() {
+        let stream = ContextStreamId::new(129).unwrap();
+        let other = ContextStreamId::new(130).unwrap();
+        let encoder = DiscreteAddress::fixed(vec![0, 1], budget(2, 2, 2)).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, 4).unwrap();
+        index
+            .insert(ContextSegmentId::new(stream, 1).unwrap(), &sbg(2))
+            .unwrap();
+        let mut unknown = sbg(3);
+        unknown.known.set(0, false).unwrap();
+        assert!(unknown.value.get(0).unwrap());
+        assert_eq!(
+            index.lookup(stream, 4, &unknown),
+            Err(AddressError::UnknownSelectedFeature)
+        );
+        assert_eq!(
+            index.lookup(other, 4, &sbg(2)),
+            Err(AddressError::WrongStream)
+        );
+        assert_eq!(
+            index.lookup(stream, 5, &sbg(2)),
+            Err(AddressError::WrongEpoch)
+        );
+        assert_eq!(index.len(), 1);
+        assert_eq!(index.address_slot_count(), 4);
+        assert_eq!(
+            DiscreteAddress::<16>::fixed(vec![], budget(0, 1, 1)).err(),
+            Some(AddressError::InvalidBudget)
+        );
+        assert_eq!(
+            DiscreteAddress::<16>::fixed((0..9).collect(), budget(9, 1, 1)).err(),
+            Some(AddressError::InvalidBudget)
         );
     }
 }
