@@ -5,6 +5,7 @@ on:
     paths:
       - 'research/boolean-posit/bpb3k_direct.rs'
       - 'research/boolean-posit/bpb3k_prepared_bench.rs'
+      - 'research/boolean-posit/bpb3k_prepared_stock_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - 'research/boolean-posit/BPB3_K_DIRECT_DOT.md'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'research/boolean-posit/bpb3k_direct.rs'
       - 'research/boolean-posit/bpb3k_prepared_bench.rs'
+      - 'research/boolean-posit/bpb3k_prepared_stock_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - '.github/workflows/bpb3k-direct-dot.yml'
@@ -24,7 +26,7 @@ permissions:
 jobs:
   exact-oracle:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - name: Checkout exact PR head without persistent credentials
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -35,7 +37,7 @@ jobs:
       - name: Install pinned research toolchain
         run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
       - name: Verify Rust formatting
-        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs research/boolean-posit/bpb3k_prepared_bench.rs
+        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs research/boolean-posit/bpb3k_prepared_bench.rs research/boolean-posit/bpb3k_prepared_stock_bench.rs
       - name: Build direct-dot test oracle (warnings denied)
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
       - name: Execute independent Q3_K dot parity and regression tests
@@ -53,3 +55,32 @@ jobs:
           set -euo pipefail
           timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-q8-prepared-bench" | tee "$RUNNER_TEMP/bpb3k-q8-prepared-bench.txt"
           grep -q '^BPB3K_Q8_BENCH_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-q8-prepared-bench.txt"
+
+      - name: Fetch SHA-pinned unchanged upstream Q3_K AVX2 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          git init -q "$RUNNER_TEMP/ggml-pinned"
+          git -C "$RUNNER_TEMP/ggml-pinned" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/ggml-pinned" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/ggml-pinned" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/ggml-pinned" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh "$RUNNER_TEMP/ggml-pinned" "$RUNNER_TEMP/bpb3k-stock-oracle" fused_v2_stock
+      - name: Compile stock-vs-prepared exact-operand benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=native \
+            research/boolean-posit/bpb3k_prepared_stock_bench.rs \
+            -L "native=$RUNNER_TEMP/bpb3k-stock-oracle" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-prepared-stock-bench"
+      - name: Stock AVX2 C vs prepared Boolean Q8 on the same 256 signed codes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-prepared-stock-bench" | tee "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt"
+          grep -q '^PASS_BPB3K_STOCK_Q8_SINGLE_BLOCK_ORACLE ' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt"
+          test "$(grep -c '^BPB3K_STOCK_COMPARE_SUMMARY ' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt")" = 4
+          test "$(grep -c '^BPB3K_STOCK_COMPARE_RAW ' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt")" = 64
+          grep -q '^BPB3K_STOCK_COMPARE_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt"
