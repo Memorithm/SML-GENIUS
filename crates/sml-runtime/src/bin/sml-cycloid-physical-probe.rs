@@ -19,7 +19,8 @@ use std::{
 
 use sml_core::{
     elastic_weights::{
-        ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier, WeightPrecision,
+        ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier,
+        WeightPrecision,
     },
     mor::MorDecision,
     PageId,
@@ -46,10 +47,7 @@ impl TemporaryDirectory {
             .map(PathBuf::from)
             .unwrap_or_else(env::temp_dir);
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let path = parent.join(format!(
-            "sml-cycloid-probe-{}-{nanos}",
-            std::process::id()
-        ));
+        let path = parent.join(format!("sml-cycloid-probe-{}-{nanos}", std::process::id()));
         fs::create_dir(&path)?;
         Ok(Self(path))
     }
@@ -100,10 +98,7 @@ fn arguments() -> Result<(u8, usize), Box<dyn Error>> {
         .next()
         .ok_or("usage: sml-cycloid-physical-probe <pairs 3..16> <payload_kib 64..1024>")?
         .parse()?;
-    let kib: usize = args
-        .next()
-        .ok_or("missing payload_kib")?
-        .parse()?;
+    let kib: usize = args.next().ok_or("missing payload_kib")?.parse()?;
     if args.next().is_some() {
         return Err("unexpected additional CLI arguments".into());
     }
@@ -137,13 +132,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         .checked_mul(8)
         .ok_or("parameter overflow")?;
     let payload = synthetic_payload(payload_bytes);
-    let artifact = build_weight_artifact(
-        PageId(0),
-        0,
-        WeightPrecision::Boolean,
-        parameters,
-        &payload,
-    )?;
+    let artifact =
+        build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, parameters, &payload)?;
 
     // The temporary directory is created atomically, owned only by this
     // invocation, and removed on normal success/error; no production paths.
@@ -177,11 +167,15 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut runtime = ElasticRamRuntime::new(planner)?;
     let catalog = WeightArtifactCatalog::from_retained_bytes(vec![artifact])?;
     let planned = runtime.planner().plan_cycle(&[PageId(0)], 1)?;
-    let stage = runtime.stage(&planned, &catalog, RamMaterializationBudget {
-        max_files_read: 1,
-        max_total_payload_bytes: u64::try_from(payload_bytes)?,
-        max_total_artifact_bytes: u64::try_from(payload_bytes + 64)?,
-    })?;
+    let stage = runtime.stage(
+        &planned,
+        &catalog,
+        RamMaterializationBudget {
+            max_files_read: 1,
+            max_total_payload_bytes: u64::try_from(payload_bytes)?,
+            max_total_artifact_bytes: u64::try_from(payload_bytes + 64)?,
+        },
+    )?;
     runtime.commit(stage)?;
 
     let observations = collect_balanced_mor_page_profiles(
