@@ -4,8 +4,9 @@
 //! four groups of three u64 bitplanes and the inherited ggml Q3_K scales.
 //! No 256-element dense weight buffer is materialized.
 //!
-//! Supported inputs are bipolar only (+1/-1, bit 1 meaning -1).
-//! No arbitrary activations, SIMD, GPU, or end-to-end attention are claimed.
+//! Two independently guarded APIs: the original bipolar (±1) popcount dot,
+//! and a new signed-Q8_K (−128..127) popcount bitplane dot. Neither path
+//! establishes SIMD speed, end-to-end model parity, or attention replacement.
 //!
 //! Official upstream pin: ggml-org/llama.cpp
 //! f7591a6a01f9273de03331732bdc0b39721168be.
@@ -375,13 +376,8 @@ mod tests {
         let q8 = [0u8; Q8_K_BYTES];
         for len in [0, 1, 96, 109, 111, 256] {
             assert_eq!(
-                dot_bpb3k_q8(&weights[..0], &q8[..0]),
-                Err(Q8DotError::WrongWeightLength { actual: 0 }));
-            let mut bad = vec![0u8; len];
-            assert_eq!(
-                dot_bpb3k_q8(&bad, &q8),
+                dot_bpb3k_q8(&vec![0u8; len], &q8),
                 Err(Q8DotError::WrongWeightLength { actual: len }));
-            bad.clear();
         }
         for len in [0, 1, 4, 260, 291, 293, 512] {
             assert_eq!(
