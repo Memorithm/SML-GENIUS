@@ -96,6 +96,7 @@ pub enum CycloidDispatchError {
     InvalidRelayCost,
     PageNotSelected,
     PageNotResident,
+    BorrowRequiresResidentMode,
     IdentityMismatch,
     StalePlannerGeneration { expected: u64, actual: u64 },
     InvalidFileType,
@@ -297,6 +298,52 @@ impl FrozenCycloidAccess {
     #[must_use]
     pub const fn planner_generation(&self) -> u64 {
         self.planner_generation
+    }
+
+    /// Borrow the original resident page bytes without allocating or copying.
+    ///
+    /// Unlike `read`, this path does not recompute CRC32C for every access:
+    /// `ElasticRamRuntime::commit` already verifies the page CRC, and
+    /// `freeze` independently revalidates the exact disk/RAM source bytes.
+    /// The private page payload is immutable through this shared reference;
+    /// Rust's borrow checker forbids a new RAM commit while this slice lives.
+    ///
+    /// The frozen access must specifically select VerifiedResident. There is
+    /// no filesystem/zero-copy fallback and no hidden dynamic replanning.
+    /// Caller must not construe this API as a measured throughput gain.
+    pub fn borrow_committed_resident<'a>(
+        &self,
+        runtime: &'a ElasticRamRuntime,
+        decision: &MorDecision,
+    ) -> Result<&'a [u8], CycloidDispatchError> {
+        if self.mode != CycloidAccessMode::VerifiedResident {
+            return Err(CycloidDispatchError::BorrowRequiresResidentMode);
+        }
+        if self.contract != CYCLOID_FROZEN_ACCESS_CONTRACT {
+            return Err(CycloidDispatchError::IdentityMismatch);
+        }
+        let page = self.expected_header.page_id;
+        if !decision.selected_experts.contains(&page) {
+            return Err(CycloidDispatchError::PageNotSelected);
+        }
+        let current_generation = runtime.planner().generation();
+        if current_generation != self.planner_generation {
+            return Err(CycloidDispatchError::StalePlannerGeneration {
+                expected: self.planner_generation,
+                actual: current_generation,
+            });
+        }
+        let resident = runtime
+            .ram_page(page)
+            .ok_or(CycloidDispatchError::PageNotResident)?;
+        if resident.header != self.expected_header
+            || u64::try_from(resident.payload().len())
+                .map_err(|_| CycloidDispatchError::ArithmeticOverflow)?
+                != self.expected_header.payload_bytes
+        {
+            return Err(CycloidDispatchError::IdentityMismatch);
+        }
+        Ok(resident.payload())
     }
 
     /// Execute the frozen selection with no graph search or profile refresh.
@@ -611,6 +658,104 @@ mod tests {
         resident.commit(stage).unwrap();
         assert!(matches!(
             choice.read(&resident, &mor(PageId(0))),
+            Err(CycloidDispatchError::StalePlannerGeneration { .. })
+        ));
+        fs::remove_file(artifact.path).unwrap();
+    }
+
+    #[test]
+    fn committed_ram_borrow_is_exact_same_allocation_without_copy() {
+        let resident = runtime();
+        let artifact = authorized_file();
+        let frozen = FrozenCycloidAccess::freeze(
+            &resident,
+            &mor(PageId(0)),
+            &artifact,
+            &samples(1_000, 100),
+            budget(),
+            10,
+            20,
+        )
+        .unwrap();
+        assert_eq!(frozen.mode(), CycloidAccessMode::VerifiedResident);
+        let borrowed = frozen
+            .borrow_committed_resident(&resident, &mor(PageId(0)))
+            .unwrap();
+        let authoritative = resident.ram_page(PageId(0)).unwrap().payload();
+        assert_eq!(borrowed, &[0xa5]);
+        assert!(core::ptr::eq(borrowed.as_ptr(), authoritative.as_ptr()));
+        assert_eq!(borrowed.len(), authoritative.len());
+        // Two borrows reuse the same allocation instead of redoing a Vec copy.
+        let another = frozen
+            .borrow_committed_resident(&resident, &mor(PageId(0)))
+            .unwrap();
+        assert!(core::ptr::eq(borrowed.as_ptr(), another.as_ptr()));
+        fs::remove_file(artifact.path).unwrap();
+    }
+
+    #[test]
+    fn borrow_rejects_direct_file_mode_and_mor_reselection() {
+        let resident = runtime();
+        let artifact = authorized_file();
+        let direct = FrozenCycloidAccess::freeze(
+            &resident,
+            &mor(PageId(0)),
+            &artifact,
+            &samples(50, 100),
+            budget(),
+            10,
+            20,
+        )
+        .unwrap();
+        assert_eq!(
+            direct.borrow_committed_resident(&resident, &mor(PageId(0))),
+            Err(CycloidDispatchError::BorrowRequiresResidentMode)
+        );
+        let indirect = FrozenCycloidAccess::freeze(
+            &resident,
+            &mor(PageId(0)),
+            &artifact,
+            &samples(1_000, 100),
+            budget(),
+            10,
+            20,
+        )
+        .unwrap();
+        assert_eq!(
+            indirect.borrow_committed_resident(&resident, &mor(PageId(1))),
+            Err(CycloidDispatchError::PageNotSelected)
+        );
+        fs::remove_file(artifact.path).unwrap();
+    }
+
+    #[test]
+    fn changed_ram_generation_revokes_future_borrows() {
+        let mut resident = runtime();
+        let artifact = authorized_file();
+        let frozen = FrozenCycloidAccess::freeze(
+            &resident,
+            &mor(PageId(0)),
+            &artifact,
+            &samples(1_000, 100),
+            budget(),
+            10,
+            20,
+        )
+        .unwrap();
+        assert_eq!(
+            frozen
+                .borrow_committed_resident(&resident, &mor(PageId(0)))
+                .unwrap(),
+            &[0xa5]
+        );
+        let catalog = WeightArtifactCatalog::from_retained_bytes(vec![]).unwrap();
+        let plan = resident.planner().plan_cycle(&[PageId(0)], 2).unwrap();
+        let stage = resident
+            .stage(&plan, &catalog, RamMaterializationBudget::default())
+            .unwrap();
+        resident.commit(stage).unwrap();
+        assert!(matches!(
+            frozen.borrow_committed_resident(&resident, &mor(PageId(0))),
             Err(CycloidDispatchError::StalePlannerGeneration { .. })
         ));
         fs::remove_file(artifact.path).unwrap();
