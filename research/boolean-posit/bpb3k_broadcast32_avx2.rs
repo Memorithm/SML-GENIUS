@@ -79,27 +79,9 @@ mod x86 {
             for group in 0..4usize {
                 for pair in 0..2usize {
                     let offset = group * 24 + pair * 4;
-                    let sign = expand32(
-                        read_u32(weight, offset),
-                        selector,
-                        bits,
-                        zero,
-                        ones,
-                    );
-                    let b0 = expand32(
-                        read_u32(weight, offset + 8),
-                        selector,
-                        bits,
-                        zero,
-                        ones,
-                    );
-                    let b1 = expand32(
-                        read_u32(weight, offset + 16),
-                        selector,
-                        bits,
-                        zero,
-                        ones,
-                    );
+                    let sign = expand32(read_u32(weight, offset), selector, bits, zero, ones);
+                    let b0 = expand32(read_u32(weight, offset + 8), selector, bits, zero, ones);
+                    let b1 = expand32(read_u32(weight, offset + 16), selector, bits, zero, ones);
 
                     // Signed code q = (b0 XOR s) + 2*(b1 XOR s) - 4*s.
                     // Map to 0..7 and subtract 4 times signed Q8 before
@@ -107,10 +89,7 @@ mod x86 {
                     let bit0 = _mm256_xor_si256(b0, sign);
                     let bit1 = _mm256_slli_epi16(_mm256_xor_si256(b1, sign), 1);
                     let positive = _mm256_slli_epi16(_mm256_xor_si256(sign, ones), 2);
-                    let unsigned_q = _mm256_or_si256(
-                        bit0,
-                        _mm256_or_si256(bit1, positive),
-                    );
+                    let unsigned_q = _mm256_or_si256(bit0, _mm256_or_si256(bit1, positive));
 
                     let q8 = _mm256_loadu_si256(
                         activation.as_ptr().add(4 + group * 64 + pair * 32) as *const __m256i,
@@ -127,10 +106,7 @@ mod x86 {
                         _mm_set1_epi16(s1),
                         1,
                     );
-                    acc = _mm256_add_epi32(
-                        acc,
-                        _mm256_madd_epi16(signed_pairs, scale_vec),
-                    );
+                    acc = _mm256_add_epi32(acc, _mm256_madd_epi16(signed_pairs, scale_vec));
                 }
             }
 
@@ -231,9 +207,8 @@ mod tests {
             let low = (w[32 + half * 32 + i % 32] >> (quadrant * 2)) & 3;
             let sign = (w[i % 32] >> (half * 4 + quadrant)) & 1;
             let signed = i32::from(low) - if sign == 0 { 4 } else { 0 };
-            acc += signed
-                * i32::from(subgroup_scale(&w[96..108], i / 16))
-                * i32::from(a[4 + i] as i8);
+            acc +=
+                signed * i32::from(subgroup_scale(&w[96..108], i / 16)) * i32::from(a[4 + i] as i8);
         }
         acc
     }
