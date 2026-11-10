@@ -17,6 +17,7 @@ pub mod dec11_capacity;
 pub mod dec12_router;
 pub mod dec13_scope;
 pub mod dec14_anchor;
+pub mod dec15_polarity;
 pub mod dec2_text;
 pub mod dec3_lm;
 pub mod dec4_instr;
