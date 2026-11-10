@@ -120,8 +120,10 @@ mod simd {
     use super::*;
     use core::arch::x86_64::*;
 
+    // Each SIMD lane must remain separate until the final horizontal sum:
+    // stock ggml Q3_K performs FMA per lane across all superblocks.
     #[target_feature(enable = "avx2")]
-    pub(super) unsafe fn q4<const N: usize>(weights: &[u8], activation: &[u8]) -> i32 {
+    pub(super) unsafe fn q4_lanes<const N: usize>(weights: &[u8], activation: &[u8]) -> [i32; 8] {
         unsafe {
             let mut acc = _mm256_setzero_si256();
             let nibble_mask = _mm256_set1_epi8(15);
@@ -151,8 +153,14 @@ mod simd {
             }
             let mut lanes = [0i32; 8];
             _mm256_storeu_si256(lanes.as_mut_ptr().cast(), acc);
-            lanes.iter().sum()
+            lanes
         }
+    }
+
+    #[target_feature(enable = "avx2")]
+    pub(super) unsafe fn q4<const N: usize>(weights: &[u8], activation: &[u8]) -> i32 {
+        let lanes = unsafe { q4_lanes::<N>(weights, activation) };
+        lanes.iter().sum()
     }
 
     #[target_feature(enable = "avx2")]
@@ -237,6 +245,46 @@ mod simd {
             }
             out
         }
+    }
+}
+
+/// Eight integer accumulators in ggml AVX2 lane order. Unlike the scalar
+/// integer result, these preserve the original Q3_K per-lane FMA ordering
+/// across multiple Q8_K blocks in the full model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DotLanes {
+    pub lanes: [i32; 8],
+    pub global_scale_f16_bits: u16,
+    pub q8_scale_f32_bits: u32,
+}
+
+pub fn dot_q4_lanes<const N: usize>(
+    weights: &[u8],
+    activation: &[u8],
+) -> Result<DotLanes, Error> {
+    if N != Q4_BYTES && N != Q4_PADDED_BYTES {
+        return Err(Error::BadWeightsLen(N));
+    }
+    if weights.len() != N {
+        return Err(Error::BadWeightsLen(weights.len()));
+    }
+    if activation.len() != Q8_BYTES {
+        return Err(Error::BadActivationsLen(activation.len()));
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if !std::is_x86_feature_detected!("avx2") {
+            return Err(Error::UnsupportedCpu);
+        }
+        Ok(DotLanes {
+            lanes: unsafe { simd::q4_lanes::<N>(weights, activation) },
+            global_scale_f16_bits: u16::from_le_bytes(weights[N - 2..N].try_into().unwrap()),
+            q8_scale_f32_bits: u32::from_le_bytes(activation[..4].try_into().unwrap()),
+        })
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        Err(Error::UnsupportedCpu)
     }
 }
 
