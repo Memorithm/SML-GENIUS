@@ -1,0 +1,172 @@
+name: BPB3-K Q4-146 actual full SmolLM2 inference against stock Q3_K
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q4-full-smollm2.yml'
+      - 'research/boolean-posit/bpb3k_q4_full_runtime.rs'
+      - 'research/boolean-posit/bpb3k_q4_ggml_ffi.rs'
+      - 'research/boolean-posit/BPB3_K_Q4_FULL_MODEL.md'
+  push:
+    paths:
+      - '.github/workflows/bpb3k-q4-full-smollm2.yml'
+      - 'research/boolean-posit/bpb3k_q4_full_runtime.rs'
+      - 'research/boolean-posit/bpb3k_q4_ggml_ffi.rs'
+permissions:
+  contents: read
+jobs:
+  actual-trained-smollm2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Compile and qualify Rust 1.89 GGUF parser, converter and live SIMD ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup run 1.89.0 rustfmt --edition 2021 --check \
+            research/boolean-posit/bpb3k_q4_full_runtime.rs research/boolean-posit/bpb3k_q4_ggml_ffi.rs
+          mkdir -p "$RUNNER_TEMP/q4-smollm2"
+          cp research/boolean-posit/{bpb3k_q4_full_runtime.rs,bpb3k_q4_ggml_ffi.rs,bpb3k_q4_pair228_avx2.rs,bpb3k_preencoded114_avx2.rs,bpb3k.rs,gguf_k.rs,bpb3k_fidelity.rs} "$RUNNER_TEMP/q4-smollm2/"
+          cd "$RUNNER_TEMP/q4-smollm2"
+          rustup run 1.89.0 rustc --edition=2021 -D warnings --test bpb3k_q4_full_runtime.rs -o adapter-tests
+          ./adapter-tests --nocapture
+          rustup run 1.89.0 rustc --edition=2021 -D warnings --test bpb3k_q4_ggml_ffi.rs -o ffi-tests
+          ./ffi-tests
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O bpb3k_q4_full_runtime.rs -o q4-adapter
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            -C relocation-model=pic --crate-type staticlib bpb3k_q4_ggml_ffi.rs -o libq4.a
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O bpb3k_fidelity.rs -o fidelity
+      - name: Pin original C ggml, patch only transient Q4 candidate and build both CPU runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          git init -q llama
+          git -C llama remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C llama fetch --depth 1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C llama checkout -q --detach FETCH_HEAD
+          test "$(git -C llama rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          git -C llama worktree add --detach ../stock f7591a6a01f9273de03331732bdc0b39721168be
+          ./q4-adapter patch "$PWD/llama" f7591a6a01f9273de03331732bdc0b39721168be | tee patch.txt
+          grep -q '^PASS_BPB3K_Q4_GGML_PATCH ' patch.txt
+          test ! -e stock/ggml/src/ggml-bpb3k-q4-146-experimental.h
+          ./fidelity patch-debug "$PWD/llama"
+          ./fidelity patch-debug "$PWD/stock"
+          cmake -S llama -B llama/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON \
+            -DMEM_BPB3K_RUST_STATICLIB="$PWD/libq4.a"
+          cmake --build llama/build -j 3 --target llama-cli llama-bench llama-debug
+          cmake -S stock -B stock/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build stock/build -j 3 --target llama-cli llama-bench llama-debug
+          sha256sum llama/build/bin/llama-cli stock/build/bin/llama-cli | tee binary-hashes.txt
+      - name: Fetch exact trained SmolLM2 GGUF and construct disposable 146B all-tensor re-layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          timeout -k 5s 360s curl -fL --retry 3 --connect-timeout 20 --max-time 350 \
+            -o original.gguf 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q3_K_S.gguf?download=true'
+          echo '7add77b8d3736d6b2fd21dc96e69be026f19bde843e9988b43cef1315fc5eebe  original.gguf' | sha256sum -c -
+          ./q4-adapter transcode original.gguf EXPERIMENTAL-Q4-146.gguf | tee conversion.txt
+          grep -q '^PASS_BPB3K_Q4_REAL_GGUF ' conversion.txt
+          test "$(stat -c %s EXPERIMENTAL-Q4-146.gguf)" -gt "$(stat -c %s original.gguf)"
+          sha256sum original.gguf EXPERIMENTAL-Q4-146.gguf | tee model-hashes.txt
+      - name: Run full real model, native stock and Rust Q4-146 with same prompts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          timeout -k 10s 180s ./stock/build/bin/llama-cli \
+            -m original.gguf -ngl 0 -t 2 -c 256 -n 16 \
+            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+            > stock-output.txt 2>&1
+          timeout -k 10s 180s ./llama/build/bin/llama-cli \
+            -m EXPERIMENTAL-Q4-146.gguf -ngl 0 -t 2 -c 256 -n 16 \
+            -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
+            > q4-output.txt 2>&1
+          grep -q 'BPB3K_Q4_146_REAL_DOT_EXECUTED' q4-output.txt
+          grep -Fq 'In mathematics, two plus two equals 4.' stock-output.txt
+          grep -Fq 'In mathematics, two plus two equals 4.' q4-output.txt
+          echo PASS_Q4_FULL_LIVE_SMOLLM2_DECODE=true | tee canary.txt
+      - name: Four full-vocabulary logits dumps and frozen exact-token tolerance comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          fail=0
+          for case in arithmetic french; do
+            if [[ "$case" == arithmetic ]]; then phrase='In mathematics, two plus two equals'; else phrase='La capitale de la France est'; fi
+            for arm in stock q4; do
+              if [[ "$arm" == stock ]]; then
+                exe=./stock/build/bin/llama-debug; model=original.gguf
+              else
+                exe=./llama/build/bin/llama-debug; model=EXPERIMENTAL-Q4-146.gguf
+              fi
+              MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
+                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -c 256 -b 512 -ub 512 -n 8 -p "$phrase" --save-logits \
+                >"logits-$case-$arm.log" 2>&1 || fail=1
+              grep -q 'PASS_BPB3K_FIDELITY_DUMP' "logits-$case-$arm.log" || fail=1
+            done
+            ./fidelity compare "logits-$case-stock.bin" "logits-$case-q4.bin" stock \
+              >"comparison-$case.txt" 2>&1 || fail=1
+            cat "comparison-$case.txt" || true
+          done
+          if [[ "$fail" == 0 ]]; then echo Q4_LOGITS=QUALIFIED_FROZEN_STOCK_TOLERANCE | tee verdict.txt; else echo Q4_LOGITS=REJECTED | tee verdict.txt; fi
+      - name: Twelve alternating paired complete model CPU throughput and RSS sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          for round in $(seq 1 12); do
+            if (( round % 2 == 0 )); then order='q4 stock'; else order='stock q4'; fi
+            for arm in $order; do
+              if [[ "$arm" == stock ]]; then
+                exe=./stock/build/bin/llama-bench; model=original.gguf
+              else
+                exe=./llama/build/bin/llama-bench; model=EXPERIMENTAL-Q4-146.gguf
+              fi
+              /usr/bin/time -f 'MAX_RSS_KIB=%M ELAPSED_S=%e' -o "resource-$round-$arm.txt" \
+                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -p 64 -n 32 -r 2 \
+                >"bench-$round-$arm.txt" 2>&1
+              grep -q '| ' "bench-$round-$arm.txt"
+              echo "Q4_FULL_MODEL_BENCH pair=$round arm=$arm"
+            done
+          done
+          test "$(ls bench-*-stock.txt | wc -l)" -eq 12
+          test "$(ls bench-*-q4.txt | wc -l)" -eq 12
+          echo Q4_PAIRED_RUNS=12 | tee bench-verdict.txt
+      - name: Independent fidelity gate after retaining all performance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q4-smollm2"
+          grep -q '^Q4_LOGITS=QUALIFIED_FROZEN_STOCK_TOLERANCE' verdict.txt
+          grep -q '^Q4_PAIRED_RUNS=12' bench-verdict.txt
+          echo PASS_Q4_146_FULL_MODEL=HOSTED_ONLY_PHYSICAL_DELL_NOT_QUALIFIED
+      - name: Retain audit evidence, never distribute nonstandard model or raw logits
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bpb3k-q4-smollm2-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/q4-smollm2/patch.txt
+            ${{ runner.temp }}/q4-smollm2/conversion.txt
+            ${{ runner.temp }}/q4-smollm2/model-hashes.txt
+            ${{ runner.temp }}/q4-smollm2/binary-hashes.txt
+            ${{ runner.temp }}/q4-smollm2/stock-output.txt
+            ${{ runner.temp }}/q4-smollm2/q4-output.txt
+            ${{ runner.temp }}/q4-smollm2/comparison-*.txt
+            ${{ runner.temp }}/q4-smollm2/verdict.txt
+            ${{ runner.temp }}/q4-smollm2/bench-*.txt
+            ${{ runner.temp }}/q4-smollm2/resource-*.txt
+            ${{ runner.temp }}/q4-smollm2/bench-verdict.txt
+          if-no-files-found: warn
+          retention-days: 21
