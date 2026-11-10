@@ -9,14 +9,24 @@ Can a learned sparse mapping predict which already-qualified MOR expert
 pages are associated with new SBG `R` fronts, with less downstream page
 work than always preparing all expert pages?
 
-The `semantic::rae_learned_route` module fits a deterministic one-page
-hard association from each rising R-coordinate using genuine
+The `semantic::rae_learned_route` module fits deterministic
+hard associations from each rising R-coordinate using genuine
 `SbgRaeNativeFrame` labels. Training counts how often a feature rises
 in a TRAIN frame and how often the native MOR selects each original
-PageId simultaneously. The winning page is the largest co-occurrence
+PageId simultaneously. Candidates are ordered by the largest co-occurrence
 count, ties resolved by smaller original PageId.
 
-The model only freezes a feature -> page assignment if:
+The original `train` method retains the one-page-per-front control.
+The separately configured `train_with_fanout` can retain up to
+`RAE_MAX_LEARNED_FANOUT = 8` TRAIN-ranked expert pages per rising feature.
+It preserves original MOR PageIds, sorts by highest observed co-occurrence
+and then ascending ID, and applies the same frozen exposure/precision gate
+to each candidate. Increasing fan-out raises emitted page work and
+can improve multi-expert recall, but cannot rescue a required page when
+no front arrives. Exact per-frame missed/extra page counts report the
+trade-off; no model quality gain is assumed.
+
+The model only freezes a feature -> page association if:
 - the feature has at least the configured number of TRAIN rising exposures;
 - its observed conditional co-occurrence ratio reaches a predeclared
   integer parts-per-million threshold.
@@ -50,9 +60,9 @@ sparse assignments with bit-packed output masks and original page IDs.
 
 ## Explicit limitations
 
-A single event feature can correlate with multiple experts; this first
-one-to-one map may lose necessary pages and is not an exact substitute
-for distributed SBG/MOR scoring. It is a deliberately falsifiable
+A single event feature can correlate with multiple experts; even the
+bounded one-to-many variant may lose necessary pages and is not an exact
+substitute for distributed SBG/MOR scoring. It is a deliberately falsifiable
 candidate. No speedup follows from event count alone: feature-state
 generation/scanning, TRAIN, map storage, page scheduling, cache residency,
 and fallback must all be accounted for.
