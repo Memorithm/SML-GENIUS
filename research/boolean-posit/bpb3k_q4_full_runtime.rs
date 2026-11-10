@@ -227,8 +227,11 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
             .open(dest)
             .map_err(|e| e.to_string())?;
         input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-        let copied = std::io::copy(&mut std::io::Read::by_ref(&mut input).take(start), &mut output)
-            .map_err(|e| e.to_string())?;
+        let copied = std::io::copy(
+            &mut std::io::Read::by_ref(&mut input).take(start),
+            &mut output,
+        )
+        .map_err(|e| e.to_string())?;
         if copied != start {
             return Err("STOP_GGUF_HEADER_SHORT_COPY".into());
         }
@@ -281,8 +284,11 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
                 // Copy non-Q3 tensor bytes, including its source padding,
                 // without decoding or quantizing any pre-trained weights.
                 let len = end - from;
-                let copied = std::io::copy(&mut std::io::Read::by_ref(&mut input).take(len), &mut output)
-                    .map_err(|e| e.to_string())?;
+                let copied = std::io::copy(
+                    &mut std::io::Read::by_ref(&mut input).take(len),
+                    &mut output,
+                )
+                .map_err(|e| e.to_string())?;
                 if copied != len {
                     return Err("STOP_NONQ3_COPY_TRUNCATED".into());
                 }
