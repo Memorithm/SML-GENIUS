@@ -9,6 +9,7 @@ on:
       - '.github/workflows/bpb3k-hand-asm.yml'
   push:
     paths:
+      - 'research/boolean-posit/BPB3_K_HAND_ASM.md'
       - 'research/boolean-posit/bpb3k_avx2_hand.S'
       - 'research/boolean-posit/bpb3k_hand_asm.rs'
       - 'research/boolean-posit/bpb3k_hand_asm_stock_bench.rs'
