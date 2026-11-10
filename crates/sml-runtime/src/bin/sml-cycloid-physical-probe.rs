@@ -102,8 +102,7 @@ fn arguments() -> Result<(u8, usize), Box<dyn Error>> {
     if args.next().is_some() {
         return Err("unexpected additional CLI arguments".into());
     }
-    if pairs < MIN_CYCLOID_BALANCED_PAIRS
-        || pairs > MAX_PAIRS
+    if !(MIN_CYCLOID_BALANCED_PAIRS..=MAX_PAIRS).contains(&pairs)
         || pairs > MAX_CYCLOID_BALANCED_PAIRS
         || !(MIN_PAYLOAD_KIB..=MAX_PAYLOAD_KIB).contains(&kib)
     {
