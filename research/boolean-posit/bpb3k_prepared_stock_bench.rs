@@ -3,12 +3,12 @@
 //! This is not a SmolLM2 tokens/second or DRAM result.
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[path = "bpb3k.rs"]
-#[allow(dead_code)]
-mod wire;
 #[path = "bpb3k_direct.rs"]
 #[allow(dead_code)]
 mod direct;
+#[path = "bpb3k.rs"]
+#[allow(dead_code)]
+mod wire;
 
 use std::ffi::c_void;
 use std::hint::black_box;
