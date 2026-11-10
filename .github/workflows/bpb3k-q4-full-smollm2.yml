@@ -93,9 +93,14 @@ jobs:
             -p 'In mathematics, two plus two equals' --temp 0 --seed 42 \
             > q4-output.txt 2>&1
           grep -q 'BPB3K_Q4_146_REAL_DOT_EXECUTED' q4-output.txt
-          grep -Fq 'In mathematics, two plus two equals 4.' stock-output.txt
-          grep -Fq 'In mathematics, two plus two equals 4.' q4-output.txt
-          echo PASS_Q4_FULL_LIVE_SMOLLM2_DECODE=true | tee canary.txt
+          # Preserve an actual behavioral failure and continue to independent
+          # full-vocabulary logits. Never misreport a bad answer as success.
+          if grep -Fq 'In mathematics, two plus two equals 4.' stock-output.txt &&
+             grep -Fq 'In mathematics, two plus two equals 4.' q4-output.txt; then
+            echo 'Q4_CANARY=QUALIFIED_STOCK_AND_Q4' | tee canary.txt
+          else
+            echo 'Q4_CANARY=REJECTED_OUTPUT_DIVERGENCE' | tee canary.txt
+          fi
       - name: Four full-vocabulary logits dumps and frozen exact-token tolerance comparison
         shell: bash
         run: |
@@ -148,6 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/q4-smollm2"
+          grep -q '^Q4_CANARY=QUALIFIED_STOCK_AND_Q4' canary.txt
           grep -q '^Q4_LOGITS=QUALIFIED_FROZEN_STOCK_TOLERANCE' verdict.txt
           grep -q '^Q4_PAIRED_RUNS=12' bench-verdict.txt
           echo PASS_Q4_146_FULL_MODEL=HOSTED_ONLY_PHYSICAL_DELL_NOT_QUALIFIED
@@ -163,6 +169,7 @@ jobs:
             ${{ runner.temp }}/q4-smollm2/binary-hashes.txt
             ${{ runner.temp }}/q4-smollm2/stock-output.txt
             ${{ runner.temp }}/q4-smollm2/q4-output.txt
+            ${{ runner.temp }}/q4-smollm2/canary.txt
             ${{ runner.temp }}/q4-smollm2/comparison-*.txt
             ${{ runner.temp }}/q4-smollm2/verdict.txt
             ${{ runner.temp }}/q4-smollm2/bench-*.txt
