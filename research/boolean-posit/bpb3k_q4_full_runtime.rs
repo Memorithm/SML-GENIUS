@@ -300,76 +300,35 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
 // Temporary ggml CPU bridge is generated from Rust, compiled into a pinned
 // source checkout, and excluded from all ordinary llama.cpp deployments.
 const C_BRIDGE: &str = r#"
-#ifndef MEMORITHM_EXPERIMENTAL_BPB3K_H
-#define MEMORITHM_EXPERIMENTAL_BPB3K_H
+#ifndef MEM_BPB3K_Q4_146_EXPERIMENTAL_H
+#define MEM_BPB3K_Q4_146_EXPERIMENTAL_H
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
-#include <stdio.h>
-#include <stdatomic.h>
-#include <stdlib.h>
-
-static uint64_t mem_bpb3k_load64(const uint8_t *v) {
-    uint64_t x;
-    memcpy(&x, v, 8);
-#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    x = __builtin_bswap64(x);
-#endif
-    return x;
-}
-static int mem_bpb3k_subscale(const uint8_t *sc, int g) {
-    unsigned low = g < 8 ? (sc[g] & 15) : (sc[g - 8] >> 4);
-    unsigned high = (sc[8 + g % 4] >> (2 * (g / 4))) & 3;
-    return (int) (low | (high << 4)) - 32;
-}
-static int mem_bpb3k_coeff(const uint8_t *v, int i) {
-    int group = i / 64, lane = i % 64;
-    uint64_t neg = mem_bpb3k_load64(v + group * 24);
-    uint64_t lo = mem_bpb3k_load64(v + group * 24 + 8);
-    uint64_t hi = mem_bpb3k_load64(v + group * 24 + 16);
-    int mag = (int) ((lo >> lane) & 1) + 2 * (int) ((hi >> lane) & 1);
-    return ((neg >> lane) & 1) ? -(mag + 1) : mag;
-}
 #ifdef MEM_BPB3K_DEQUANT
-static void mem_bpb3k_dequant(const block_q3_K *x, float *y, int64_t k) {
+static void mem_q4_146_dequant(const block_q3_K *x, float *y, int64_t k) {
     assert(k % 256 == 0);
     for (int64_t b = 0; b < k / 256; ++b) {
-        const uint8_t *v = (const uint8_t *) &x[b];
-        uint16_t bits;
-        memcpy(&bits, v + 108, sizeof(bits));
-        const float d = ggml_fp16_to_fp32(bits);
+        const uint8_t *w = (const uint8_t *) &x[b];
+        uint16_t d_bits;
+        memcpy(&d_bits, w + 144, sizeof(d_bits));
+        const float d = ggml_fp16_to_fp32(d_bits);
         for (int i = 0; i < 256; ++i) {
-            const int value = mem_bpb3k_coeff(v, i);
-            const int scale = mem_bpb3k_subscale(v + 96, i / 16);
+            const int group = i / 32;
+            const int lane = i % 16;
+            const uint8_t packed = w[16 * group + lane];
+            const int value = ((i % 32) < 16
+                ? (packed & 15) : (packed >> 4)) - 4;
+            const int scale = (int) (int8_t) w[128 + i / 16];
             y[b * 256 + i] = d * (float) scale * (float) value;
         }
     }
 }
 #endif
 #ifdef MEM_BPB3K_DOT
-// Rust staticlib supplies the exact ggml ABI; no C SIMD implementation.
-extern void mem_bpb3k_dot_q8(int n, float *s, size_t bs,
-                             const void *vx, size_t bx, const void *vy,
-                             size_t by, int nrc);
-extern void mem_bpb3k_dot_q8_stock_tiled(int n, float *s, size_t bs,
-                             const void *vx, size_t bx, const void *vy,
-                             size_t by, int nrc);
-extern int mem_bpb3k_uses_stock_order(void);
-// Match the pinned stock's admission, including its explicit diagnostic
-// environment switches. This selects arithmetic only; BPB3-K bytes never
-// reach the upstream Q3_K decoder or the stock tiled weight repacker.
-static int mem_bpb3k_stock_tiled_enabled(int use_ref, int64_t columns, int has_extra) {
-#if defined(__AVX2__) && defined(__FMA__)
-    if (use_ref || has_extra || !mem_bpb3k_uses_stock_order()) { return 0; }
-    const char * enabled = getenv("GGML_CPU_TILED_MM");
-    const char * forced = getenv("GGML_CPU_TILED_MM_FORCE");
-    return (enabled == NULL || atoi(enabled) != 0) &&
-        (columns >= 8 || (forced != NULL && atoi(forced) == 1));
-#else
-    (void) use_ref; (void) columns; (void) has_extra;
-    return 0;
-#endif
-}
+// Links to independently compiled Rust AVX2 implementation.
+extern void mem_q4_146_vec_dot(int n, float *s, size_t bs,
+    const void *vx, size_t bx, const void *vy, size_t by, int nrc);
 #endif
 #endif
 "#;
