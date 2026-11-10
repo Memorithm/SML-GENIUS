@@ -56,7 +56,11 @@ fn original_weights() -> Vec<Weights> {
             original[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
             let packed = codec::q3_to_bpb3k(&original).unwrap();
             let offset = offset32::bpb3k_to_offset_planes(&packed).unwrap();
-            Weights { original, packed, offset }
+            Weights {
+                original,
+                packed,
+                offset,
+            }
         })
         .collect()
 }
