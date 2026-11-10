@@ -6,6 +6,7 @@
 //! Weight pages. It does not emulate VRAM and does not synthesize richer weights.
 
 pub mod artifact;
+pub mod cycloid_access;
 pub mod ram;
 
 pub use artifact::{
