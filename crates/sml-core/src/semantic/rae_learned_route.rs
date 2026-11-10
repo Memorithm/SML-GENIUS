@@ -120,6 +120,9 @@ impl RaeTrainedEventRouter {
 
         for (index, frame) in frames.iter().enumerate() {
             validate_frame(frame, BITS, expert_count, index)?;
+            if index > 0 {
+                validate_transition(&frames[index - 1], frame, index)?;
+            }
             for feature in set_indices(&frame.rising_words) {
                 exposures[feature] += 1;
                 for page_id in &frame.selected_experts {
@@ -236,6 +239,9 @@ impl RaeTrainedEventRouter {
         let mut per_frame = Vec::with_capacity(frames.len());
         for (index, frame) in frames.iter().enumerate() {
             validate_frame(frame, self.feature_width, self.expert_count, index)?;
+            if index > 0 {
+                validate_transition(&frames[index - 1], frame, index)?;
+            }
             let predicted = self.predict(&frame.rising_words)?;
             let counts = count_page_set_errors(&predicted, &frame.required_pages_words);
             totals.accumulate(counts);
@@ -329,6 +335,31 @@ fn validate_frame(
     Ok(())
 }
 
+/// Confirm that adjacent native snapshots truly contain the declared
+/// 0 -> 1 / 1 -> 0 transitions. The first frame remains relative to its
+/// collector-owned baseline, which must be verified by the trace producer.
+fn validate_transition(
+    previous: &SbgRaeNativeFrame,
+    current: &SbgRaeNativeFrame,
+    index: usize,
+) -> Result<(), RaeLearnError> {
+    if current.cycle <= previous.cycle {
+        return Err(RaeLearnError::MalformedFrame { index });
+    }
+    for (((&old, &new), &rise), &fall) in previous
+        .routing_words
+        .iter()
+        .zip(&current.routing_words)
+        .zip(&current.rising_words)
+        .zip(&current.falling_words)
+    {
+        if rise != (new & !old) || fall != (old & !new) {
+            return Err(RaeLearnError::MalformedFrame { index });
+        }
+    }
+    Ok(())
+}
+
 fn set_indices(words: &[u64]) -> impl Iterator<Item = usize> + '_ {
     words
         .iter()
@@ -362,7 +393,13 @@ fn count_page_set_errors(selected: &[u64], required: &[u64]) -> RaeHoldoutCounts
 mod tests {
     use super::*;
 
-    fn frame(cycle: u64, active: u64, rising: u64, required: u64) -> SbgRaeNativeFrame {
+    fn frame(
+        cycle: u64,
+        active: u64,
+        rising: u64,
+        falling: u64,
+        required: u64,
+    ) -> SbgRaeNativeFrame {
         let selected_experts = (0..2)
             .filter(|bit| required & (1_u64 << bit) != 0)
             .map(PageId)
@@ -371,11 +408,11 @@ mod tests {
             cycle,
             routing_words: vec![active],
             rising_words: vec![rising],
-            falling_words: vec![0],
+            falling_words: vec![falling],
             required_pages_words: vec![required],
             selected_experts,
             rising_routing_bits: u64::from(rising.count_ones()),
-            falling_routing_bits: 0,
+            falling_routing_bits: u64::from(falling.count_ones()),
             active_routing_bits: u64::from(active.count_ones()),
             context_invalidated: false,
         }
@@ -392,16 +429,19 @@ mod tests {
     #[test]
     fn learns_frozen_hard_event_to_page_and_detects_held_high_miss() {
         let train = [
-            frame(1, 1, 1, 0b10),
-            frame(2, 1, 1, 0b10),
-            frame(3, 1, 1, 0b10),
-            frame(4, 2, 2, 0b01),
+            frame(1, 1, 1, 0, 0b10),
+            frame(2, 0, 0, 1, 0),
+            frame(3, 1, 1, 0, 0b10),
+            frame(4, 0, 0, 1, 0),
+            frame(5, 1, 1, 0, 0b10),
+            frame(6, 0, 0, 1, 0),
+            frame(7, 2, 2, 0, 0b01),
         ];
         let learned = RaeTrainedEventRouter::train::<8>("train-A", 2, policy(), &train).unwrap();
         assert_eq!(learned.learned_feature_count(), 1);
         assert_eq!(learned.association(0).unwrap().page_id, PageId(1));
         assert_eq!(learned.predict(&[0b01]).unwrap(), vec![0b10]);
-        let holdout = [frame(5, 1, 1, 0b10), frame(6, 1, 0, 0b10)];
+        let holdout = [frame(8, 1, 1, 0, 0b10), frame(9, 1, 0, 0, 0b10)];
         let report = learned.evaluate("holdout-A", &holdout).unwrap();
         assert_eq!(report.frames, 2);
         assert_eq!(report.totals.required_pages, 2);
@@ -412,7 +452,11 @@ mod tests {
 
     #[test]
     fn exact_vote_ties_resolve_by_original_page_id() {
-        let train = [frame(1, 1, 1, 0b01), frame(2, 1, 1, 0b10)];
+        let train = [
+            frame(1, 1, 1, 0, 0b01),
+            frame(2, 0, 0, 1, 0),
+            frame(3, 1, 1, 0, 0b10),
+        ];
         let chosen = RaeTrainedEventRouter::train::<8>(
             "train-tie",
             2,
@@ -429,7 +473,7 @@ mod tests {
 
     #[test]
     fn source_identity_and_max_associations_are_enforced() {
-        let train = [frame(1, 3, 3, 0b01)];
+        let train = [frame(1, 3, 3, 0, 0b01)];
         assert_eq!(
             RaeTrainedEventRouter::train::<8>("train", 2, policy(), &train[..0]),
             Err(RaeLearnError::EmptyFrameSet)
@@ -465,13 +509,13 @@ mod tests {
 
     #[test]
     fn malformed_event_masks_and_inconsistent_mor_masks_are_refused() {
-        let mut invalid = frame(1, 1, 1, 0b10);
+        let mut invalid = frame(1, 1, 1, 0, 0b10);
         invalid.rising_words[0] = 0b10;
         assert_eq!(
             RaeTrainedEventRouter::train::<8>("t", 2, policy(), &[invalid]),
             Err(RaeLearnError::MalformedFrame { index: 0 })
         );
-        let mut inconsistent = frame(1, 1, 1, 0b10);
+        let mut inconsistent = frame(1, 1, 1, 0, 0b10);
         inconsistent.required_pages_words[0] = 0b01;
         assert_eq!(
             RaeTrainedEventRouter::train::<8>("t", 2, policy(), &[inconsistent]),
