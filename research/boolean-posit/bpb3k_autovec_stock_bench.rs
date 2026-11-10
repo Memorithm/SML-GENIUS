@@ -57,9 +57,7 @@ fn q3_subscale(q3: &[u8; WEIGHT_BYTES], subgroup: usize) -> i32 {
 fn oracle(q3: &[u8; WEIGHT_BYTES], q8: &[u8; Q8_BYTES]) -> i32 {
     let mut result = 0i32;
     for i in 0..256 {
-        result += q3_quant(q3, i)
-            * q3_subscale(q3, i / 16)
-            * i32::from(q8[4 + i] as i8);
+        result += q3_quant(q3, i) * q3_subscale(q3, i / 16) * i32::from(q8[4 + i] as i8);
     }
     result
 }
@@ -96,8 +94,20 @@ fn activation_fixture(case: usize, pattern: usize, bits: u32) -> [u8; Q8_BYTES] 
             1 => 127,
             2 => 128,
             3 => 255,
-            4 => if i & 1 == 0 { 127 } else { 128 },
-            5 => if i & 1 == 0 { 1 } else { 255 },
+            4 => {
+                if i & 1 == 0 {
+                    127
+                } else {
+                    128
+                }
+            }
+            5 => {
+                if i & 1 == 0 {
+                    1
+                } else {
+                    255
+                }
+            }
             6 => i as u8,
             _ => {
                 let mut x = (case as u32) ^ (i as u32).wrapping_mul(0x9e37_79b9);
@@ -113,8 +123,7 @@ fn activation_fixture(case: usize, pattern: usize, bits: u32) -> [u8; Q8_BYTES] 
             .iter()
             .map(|&code| i16::from(code as i8))
             .sum();
-        q8[260 + 2 * subgroup..262 + 2 * subgroup]
-            .copy_from_slice(&signed_sum.to_le_bytes());
+        q8[260 + 2 * subgroup..262 + 2 * subgroup].copy_from_slice(&signed_sum.to_le_bytes());
     }
     q8
 }
@@ -169,7 +178,10 @@ fn crosscheck_signed_domain() {
             let q8 = activation_fixture(case, pattern, [0x3f800000, 0x7fc12345][pattern % 2]);
             let expected = oracle(&weight, &q8);
             for (mode, actual) in tested_modes(&weight, &q8).iter().enumerate() {
-                assert_eq!(*actual, expected, "STOP_AUTOVEC_Q3_ORACLE case={case} pattern={pattern} mode={mode}");
+                assert_eq!(
+                    *actual, expected,
+                    "STOP_AUTOVEC_Q3_ORACLE case={case} pattern={pattern} mode={mode}"
+                );
                 tests += 1;
             }
         }
@@ -227,11 +239,21 @@ fn main() {
         (0..ROWS).map(|case| weight_fixture(case, 0x3c00)).collect();
     for (case, q3) in weights.iter().enumerate() {
         let stock_result = stock(q3, &q8);
-        assert!(stock_result.is_finite(), "STOP_BPB3K_AUTOVEC_NONFINITE case={case}");
+        assert!(
+            stock_result.is_finite(),
+            "STOP_BPB3K_AUTOVEC_NONFINITE case={case}"
+        );
         let expected = oracle(q3, &q8) as f32;
-        assert_eq!(stock_result.to_bits(), expected.to_bits(), "STOP_BPB3K_AUTOVEC_STOCK_PARITY case={case}");
+        assert_eq!(
+            stock_result.to_bits(),
+            expected.to_bits(),
+            "STOP_BPB3K_AUTOVEC_STOCK_PARITY case={case}"
+        );
         for (mode, result) in tested_modes(q3, &q8).iter().enumerate() {
-            assert_eq!(*result, expected as i32, "STOP_BPB3K_AUTOVEC_COMPILER_PARITY case={case} mode={mode}");
+            assert_eq!(
+                *result, expected as i32,
+                "STOP_BPB3K_AUTOVEC_COMPILER_PARITY case={case} mode={mode}"
+            );
         }
     }
     println!("PASS_BPB3K_AUTOVEC_STOCK rows=1024 unit_FP16_FP32_scale=true exact_bits=true signed_codes=256");
@@ -251,7 +273,10 @@ fn main() {
                 times[mode] = measure(batch, &q8, mode);
             }
             for mode in 1..MODES {
-                assert_eq!(times[0].1, times[mode].1, "STOP_BPB3K_AUTOVEC_TIMED_PARITY rows={count} round={round} mode={mode}");
+                assert_eq!(
+                    times[0].1, times[mode].1,
+                    "STOP_BPB3K_AUTOVEC_TIMED_PARITY rows={count} round={round} mode={mode}"
+                );
             }
             for mode in 0..MODES {
                 samples[mode].push(times[mode].0);
