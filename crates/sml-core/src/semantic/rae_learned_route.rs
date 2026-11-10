@@ -809,4 +809,65 @@ mod tests {
         );
     }
 
+    #[test]
+    fn persistent_and_contextual_recheck_restore_held_pages_with_cost() {
+        let train = [
+            frame(1, 1, 1, 0, 0b10),
+            frame(2, 0, 0, 1, 0b01),
+            frame(3, 1, 1, 0, 0b10),
+        ];
+        let learner = RaeTrainedEventRouter::train::<8>(
+            "train-recheck",
+            2,
+            RaeTrainPolicy {
+                minimum_exposures: 2,
+                minimum_precision_ppm: RAE_LEARNING_PPM,
+                max_associations: 2,
+            },
+            &train,
+        )
+        .unwrap();
+        let mut invalidated = frame(6, 1, 0, 0, 0b10);
+        invalidated.context_invalidated = true;
+        let holdout = [
+            frame(4, 1, 1, 0, 0b10),
+            frame(5, 1, 0, 0, 0b10),
+            invalidated,
+        ];
+        let rising = learner
+            .evaluate_with_policy("heldout-recheck", &holdout, RaeReplayPolicy::RisingOnly)
+            .unwrap();
+        let active = learner
+            .evaluate_with_policy(
+                "heldout-recheck",
+                &holdout,
+                RaeReplayPolicy::PersistentActive,
+            )
+            .unwrap();
+        let hybrid = learner
+            .evaluate_with_policy(
+                "heldout-recheck",
+                &holdout,
+                RaeReplayPolicy::RisingWithContextRecheck,
+            )
+            .unwrap();
+        assert_eq!(rising.totals.selected_pages, 1);
+        assert_eq!(rising.totals.missed_required_pages, 2);
+        assert_eq!(active.totals.selected_pages, 3);
+        assert_eq!(active.totals.missed_required_pages, 0);
+        assert_eq!(hybrid.totals.selected_pages, 2);
+        assert_eq!(hybrid.totals.missed_required_pages, 1);
+
+        // Unrelated MOR page despite a held-high source:
+        // even persistent-active replay can omit required work.
+        let unrelated = frame(7, 1, 0, 0, 0b01);
+        let selected = learner
+            .predict_frame(&unrelated, RaeReplayPolicy::PersistentActive)
+            .unwrap();
+        assert_eq!(selected, vec![0b10]);
+        let counts = count_page_set_errors(&selected, &unrelated.required_pages_words);
+        assert_eq!(counts.missed_required_pages, 1);
+        assert_eq!(counts.extra_selected_pages, 1);
+    }
+
 }
