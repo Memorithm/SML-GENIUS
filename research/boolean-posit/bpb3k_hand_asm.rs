@@ -153,6 +153,8 @@ mod tests {
             for offset in 0..32 {
                 padded_w[offset..offset + 110].copy_from_slice(&weights);
                 padded_a[31 - offset..31 - offset + Q8_K_BYTES].copy_from_slice(&activation);
+                let original_buffer_w = padded_w.clone();
+                let original_buffer_a = padded_a.clone();
                 let result = dot_bpb3k_q8_hand_asm(
                     &padded_w[offset..offset + 110],
                     &padded_a[31 - offset..31 - offset + Q8_K_BYTES],
@@ -161,6 +163,8 @@ mod tests {
                 assert_eq!(result.weighted_integer, oracle, "case={case} offset={offset}");
                 assert_eq!(result.global_scale_f16_bits, (case as u16) ^ 0x8001);
                 assert_eq!(result.activation_scale_f32_bits, 0x7fc12345);
+                assert_eq!(padded_w, original_buffer_w, "weights overwritten offset={offset}");
+                assert_eq!(padded_a, original_buffer_a, "Q8 overwritten offset={offset}");
             }
         }
     }
