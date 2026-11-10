@@ -99,3 +99,41 @@ Potential reuse in SciRust requires its own SIMD/cross-platform ABI
 test and verification of the Q8_K cached-sum consistency contract.
 FLAT-ATTENTION has separate quantization and scheduling constraints;
 there is no automatic application of this optimization.
+
+
+## Observed result — 2026-11-10
+
+The exact source [GitHub Actions run 42857019682](https://github.com/Memorithm/SML-GENIUS/actions/runs/42857019682)
+succeeded on head 91652bbd829f564102cfd043dea4ac0346299869.
+Twenty-six Rust tests passed, including the independent original-Q3
+signed integer oracle, all 32 unaligned byte offsets, malformed
+lengths and corrupted cached-sum admission checks. Pinned unchanged
+upstream C AVX2 (896 cases) and tiled C++ (112 cases) oracles passed.
+All 1024 one-superblock FP32 unit-scale rows matched the genuine stock
+and previous PSHUFB bit for bit. The compiler produced Haswell AVX2
+VPSHUFB/VPMADDUBSW/VPMADDWD and no AVX512 VPOPCNT. All 96 paired
+three-way timing records passed checksum parity.
+
+Descriptive medians in nanoseconds/dot, all on this same hosted runner:
+
+| Rows | Original stock AVX2 | Previous PSHUFB | Q8 cached-sum correction |
+|---:|---:|---:|---:|
+| 1 | 25.00 | 45.00 | 45.00 |
+| 32 | 17.68 | 40.38 | 38.19 |
+| 256 | 11.75 | 24.74 | 26.09 |
+| 1024 | **11.77** | **27.42** | **28.62** |
+
+On the largest controlled batch, the Q8 cached-sum approach was
+**4.38% slower** in time than prior PSHUFB
+(28.62/27.42 = 1.0438) and **2.43x slower** than native Q3_K
+(28.62/11.77 = 2.4316). At 32 rows there was a small opposite
+trend, 38.19 vs 40.38 ns/dot. This cannot be promoted as a
+general speed improvement without replication and profiling.
+
+Outcome: the algebraic instruction reduction alone did NOT
+supply a throughput improvement at 1024 rows. Extra scale-vector
+construction and cached-sum loads may offset the saved SIMD
+operations, but detailed instruction and physical counter
+attribution is not proven. This remains a rigorously documented
+negative candidate; do not alter runtime defaults or run a
+contaminated Dell speed campaign to seek a favorable sample.
