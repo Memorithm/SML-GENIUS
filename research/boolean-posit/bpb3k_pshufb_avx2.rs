@@ -11,6 +11,7 @@ mod codec;
 const WEIGHT_BYTES: usize = 110;
 pub const Q8_K_BYTES: usize = 292;
 const SUBGROUPS_PER_GROUP: usize = 4;
+#[cfg(test)]
 const SUBGROUP_LANES: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
