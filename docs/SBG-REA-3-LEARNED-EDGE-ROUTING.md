@@ -58,6 +58,26 @@ sparse assignments with bit-packed output masks and original page IDs.
 - Native MOR remains the full model-owned baseline. No inference-time
   skipped model computation is authorized by this research module.
 
+## Paired frozen policy replay
+
+The same TRAIN-frozen association map supports three counterfactual policies:
+
+- `RisingOnly`: select pages for current 0 -> 1 R transitions;
+- `PersistentActive`: select pages for every currently high R bit,
+  including held-high features with no fresh impulse;
+- `RisingWithContextRecheck`: select rising pages and additionally
+  re-evaluate currently active features on an explicit trusted context
+  invalidation.
+
+`evaluate_with_policy` compares these policies against precisely the
+same independent native MOR masks, with selected, required, missed and
+extra original-page counts. The persistent policy can recover a held-high
+page missed by rising-only selection, but incurs work on held state.
+A context recheck does not guarantee correctness: the newly required
+page could have **no corresponding currently active feature**. No
+policy is allowed to suppress MOR until such residual dependencies
+are independently qualified with a fail-safe native fallback.
+
 ## Explicit limitations
 
 A single event feature can correlate with multiple experts; even the
