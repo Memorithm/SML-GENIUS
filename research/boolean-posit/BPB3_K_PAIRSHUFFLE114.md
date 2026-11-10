@@ -68,3 +68,45 @@ rather than hiding it or changing the baseline. Even if faster
 than baseline114, genuine stock Q3_K must independently be
 beaten at model-level before any promotion. No RemoteOps Dell
 job is part of this hosted-only research proposal.
+
+
+## Observed same-run outcome, 10 November 2026
+
+[Exact-head dedicated workflow 42878397655](https://github.com/Memorithm/SML-GENIUS/actions/runs/42878397655)
+on SHA d264b4b8148e031f43e4d4493a73eae39760038b completed
+successfully: 24 Rust tests passed (including manually populated
+six-bit signed -32/+31 alternating scales, all 32 misalignments
+and preserved input sentinels), 896 unchanged upstream C AVX2
+and 112 C++ tiled oracle cases, and 1,024 original-wire
+Q3_K bitwise FP32 one-block unit-scale comparisons. All 216
+balanced four-way raw records passed integer checksum parity.
+
+Descriptive medians, nanoseconds **per output row** on the same
+hosted runner. Lower is faster.
+
+| Rows | Tile | Original Q3_K C stock | Packed110 BPB3-K | Paired-shuffle114 | Standard114 |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 1 | 45.96 | 73.89 | 54.43 | 53.27 |
+| 32 | 2 | 27.62 | 50.09 | 32.55 | 31.01 |
+| 32 | 4 | 27.59 | 46.84 | 36.81 | 36.08 |
+| 256 | 1 | 26.49 | 40.60 | 32.58 | 31.86 |
+| 256 | 2 | 27.50 | 69.89 | 37.08 | 46.41 |
+| 256 | 4 | 23.53 | 49.50 | 43.90 | 42.92 |
+| 1024 | 1 | 23.54 | 39.45 | 31.09 | 30.14 |
+| 1024 | 2 | 23.57 | 53.24 | 32.41 | 29.51 |
+| 1024 | 4 | **23.55** | 45.25 | **35.78** | 38.57 |
+
+At 1,024 rows / four-way tile, pair-shuffle gives
+(38.57-35.78)/38.57 = **7.23% less per-row time**
+than the same 114-byte baseline, but original stock C Q3_K
+still runs 35.78/23.55 = **1.519x faster**.
+At 1,024 rows / two-way tile, pair-shuffle **regresses**
+32.41/29.51-1 = **9.83%** versus standard114.
+There is also a negative comparison at one-way tile.
+Therefore this is a *mixed* result, not broad superiority.
+
+Source-level removal of one scale-byte scalar load is not
+proof that the compiler generated a faster per-function
+instruction sequence. Further performance work needs actual
+physical counters, spilling analysis and qualified full-model
+FP32 fidelity. Retain as experiment; do not activate runtime.
