@@ -20,6 +20,7 @@ pub mod mor_hierarchy_majority;
 pub mod mor_hierarchy_train;
 pub mod mor_routing;
 pub mod rae_dirty_journal;
+pub mod rae_learned_route;
 pub mod rae_native_trace;
 pub mod recurrent;
 pub mod rising_edge;
