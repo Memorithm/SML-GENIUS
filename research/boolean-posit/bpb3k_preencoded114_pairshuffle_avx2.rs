@@ -33,6 +33,7 @@ pub struct BatchDot<const N: usize> {
     pub q8_f32_scale_bits: u32,
 }
 
+#[cfg(test)]
 #[inline]
 fn scale(w: &[u8], subgroup: usize) -> i16 {
     i16::from(w[96 + subgroup] as i8)
