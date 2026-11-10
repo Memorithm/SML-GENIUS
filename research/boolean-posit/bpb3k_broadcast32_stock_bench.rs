@@ -3,15 +3,15 @@
 //! Same Q3_K original source weights; Q3->BPB3 conversion outside timing.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[path = "bpb3k_broadcast32_avx2.rs"]
+#[allow(dead_code)]
+mod broadcast32;
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
 #[path = "bpb3k_pshufb_avx2.rs"]
 #[allow(dead_code)]
 mod old;
-#[path = "bpb3k_broadcast32_avx2.rs"]
-#[allow(dead_code)]
-mod broadcast32;
 
 use std::ffi::c_void;
 use std::hint::black_box;
@@ -101,18 +101,19 @@ fn measure(rows: &[Weights], activation: &[u8; 292], mode: usize) -> (u128, i64)
         for row in rows {
             let result = match mode {
                 0 => stock(black_box(&row.original), black_box(activation)) as i32,
-                1 => old::dot_bpb3k_q8_pshufb(
-                    black_box(&row.packed),
-                    black_box(activation),
-                )
-                .unwrap()
-                .weighted_integer,
-                2 => broadcast32::dot_bpb3k_q8_broadcast32(
-                    black_box(&row.packed),
-                    black_box(activation),
-                )
-                .unwrap()
-                .weighted_integer,
+                1 => {
+                    old::dot_bpb3k_q8_pshufb(black_box(&row.packed), black_box(activation))
+                        .unwrap()
+                        .weighted_integer
+                }
+                2 => {
+                    broadcast32::dot_bpb3k_q8_broadcast32(
+                        black_box(&row.packed),
+                        black_box(activation),
+                    )
+                    .unwrap()
+                    .weighted_integer
+                }
                 _ => unreachable!(),
             };
             checksum += i64::from(black_box(result));
