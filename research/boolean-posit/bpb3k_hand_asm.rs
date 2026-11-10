@@ -18,10 +18,7 @@ unsafe extern "C" {
 /// The input buffers may be unaligned. Exactly 110 and 292 bytes must exist.
 /// Returns raw FP16/FP32 block-scale bits without applying floating-point
 /// reductions, and a fully signed, exact integer accumulation.
-pub fn dot_bpb3k_q8_hand_asm(
-    weights: &[u8],
-    activation: &[u8],
-) -> Result<SimdQ8Dot, PshufbError> {
+pub fn dot_bpb3k_q8_hand_asm(weights: &[u8], activation: &[u8]) -> Result<SimdQ8Dot, PshufbError> {
     if weights.len() != 110 {
         return Err(PshufbError::WrongWeightLength {
             actual: weights.len(),
@@ -75,8 +72,20 @@ mod tests {
                 1 => 127,
                 2 => 128,
                 3 => 255,
-                4 => if i % 2 == 0 { 127 } else { 128 },
-                5 => if i % 2 == 0 { 1 } else { 255 },
+                4 => {
+                    if i % 2 == 0 {
+                        127
+                    } else {
+                        128
+                    }
+                }
+                5 => {
+                    if i % 2 == 0 {
+                        1
+                    } else {
+                        255
+                    }
+                }
                 6 => i as u8,
                 _ => {
                     let mut x = (case as u32) ^ (i as u32).wrapping_mul(0x9e37_79b9);
@@ -126,10 +135,12 @@ mod tests {
             for pattern in 0..16 {
                 let activation = q8(case, pattern, [0x3f800000, 0x7fc12345][pattern % 2]);
                 let original_dot = original_q3_integer_oracle(&original, &activation);
-                let instrinsics =
-                    pshufb::dot_bpb3k_q8_pshufb(&converted, &activation).unwrap();
+                let instrinsics = pshufb::dot_bpb3k_q8_pshufb(&converted, &activation).unwrap();
                 let assembly = dot_bpb3k_q8_hand_asm(&converted, &activation).unwrap();
-                assert_eq!(assembly.weighted_integer, original_dot, "case={case} pattern={pattern}");
+                assert_eq!(
+                    assembly.weighted_integer, original_dot,
+                    "case={case} pattern={pattern}"
+                );
                 assert_eq!(assembly, instrinsics, "case={case} pattern={pattern}");
             }
         }
@@ -160,11 +171,20 @@ mod tests {
                     &padded_a[31 - offset..31 - offset + Q8_K_BYTES],
                 )
                 .unwrap();
-                assert_eq!(result.weighted_integer, oracle, "case={case} offset={offset}");
+                assert_eq!(
+                    result.weighted_integer, oracle,
+                    "case={case} offset={offset}"
+                );
                 assert_eq!(result.global_scale_f16_bits, (case as u16) ^ 0x8001);
                 assert_eq!(result.activation_scale_f32_bits, 0x7fc12345);
-                assert_eq!(padded_w, original_buffer_w, "weights overwritten offset={offset}");
-                assert_eq!(padded_a, original_buffer_a, "Q8 overwritten offset={offset}");
+                assert_eq!(
+                    padded_w, original_buffer_w,
+                    "weights overwritten offset={offset}"
+                );
+                assert_eq!(
+                    padded_a, original_buffer_a,
+                    "Q8 overwritten offset={offset}"
+                );
             }
         }
     }
