@@ -244,8 +244,7 @@ pub fn profile_same_mor_page_ordered(
             .ok_or(CycloidPageProfileError::ArithmeticOverflow)?;
         let mut bytes = Vec::new();
         file.take(limit).read_to_end(&mut bytes)?;
-        if u64::try_from(bytes.len())
-            .map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
+        if u64::try_from(bytes.len()).map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
             != expected_file_bytes
         {
             return Err(CycloidPageProfileError::ArtifactLengthMismatch);
@@ -406,7 +405,6 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
-
     #[test]
     fn both_read_orders_execute_and_verify_identical_bytes() {
         let runtime = resident_runtime();
@@ -446,15 +444,26 @@ mod tests {
         assert_eq!(batch.pairs, 3);
         assert_eq!(batch.samples.len(), 6);
         assert_eq!(
-            batch.samples.iter().filter(|item| item.order == CycloidProbeOrder::FileThenRam).count(),
+            batch
+                .samples
+                .iter()
+                .filter(|item| item.order == CycloidProbeOrder::FileThenRam)
+                .count(),
             3
         );
         assert_eq!(
-            batch.samples.iter().filter(|item| item.order == CycloidProbeOrder::RamThenFile).count(),
+            batch
+                .samples
+                .iter()
+                .filter(|item| item.order == CycloidProbeOrder::RamThenFile)
+                .count(),
             3
         );
         assert_eq!(batch.profile_values().len(), 6);
-        assert!(batch.samples.iter().all(|item| item.profile.byte_exact_match));
+        assert!(batch
+            .samples
+            .iter()
+            .all(|item| item.profile.byte_exact_match));
         assert_eq!(batch.samples[0].order, CycloidProbeOrder::FileThenRam);
         assert_eq!(batch.samples[1].order, CycloidProbeOrder::RamThenFile);
         assert_eq!(batch.samples[2].order, CycloidProbeOrder::RamThenFile);
