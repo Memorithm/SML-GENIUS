@@ -152,3 +152,64 @@ The additional Boolean operations may outweigh saved scalar products;
 **no improvement is presumed**. Existing stock-ordered
 fused_v2_stock remains the qualified experimental model candidate,
 and the BPB3-K storage budget is unchanged.
+
+
+## DIRECT-Q8-PREP — prepared activation bitplanes (2026-11-10)
+
+A distinct, research-only candidate now exposes
+**prepare_q8_bitplanes(q8)** and **dot_bpb3k_q8_prepared(weights, prepared)**.
+It transposes the exact 256 signed Q8_K codes **once per activation
+block**, producing 16 subgroups × eight 16-bit masks (256 bytes), plus
+four bytes of unchanged f32 activation-scale bits. The original 292-byte
+Q8_K source remains unchanged. Prepacked data is **additional temporary
+state**, not a compression or reduction of source DRAM bytes.
+
+The signed Q3_K weight coefficient q in [-4,+3] also has an equivalent
+three-bit two's-complement identity:
+
+    q = (bit0 XOR sign) + 2*(bit1 XOR sign) - 4*sign
+
+The prepared path computes a signed Q8 integer subgroup dot with **three
+popcounts per activation bitplane**, rather than five. Its 16 signed
+Q3_K subscales are still multiplied in integer arithmetic. It preserves
+the precise full signed Q8_K domain and the raw FP16 and f32 scale bits.
+No dense weight tensor is materialized; no heap allocation occurs in
+the prepare/dot APIs. Both original scalar and prepared APIs remain
+independently addressable. Neither changes the model runtime.
+
+Independent correctness tests compare prepared results, the prior
+unprepared Q8 Boolean result, and an oracle reading the **original**
+(untranscoded) Q3_K wire bits for 96 deterministic weight fixtures × 16
+activation patterns, plus all 256 signed byte codes over 256 distinct
+weight rows, extreme [-4,+3] Q3 and [-128,+127] Q8 values,
+malformed input lengths, and FP16/FP32 metadata preservation.
+
+### Diagnostic performance protocol (frozen before observing results)
+
+The standalone **bpb3k_prepared_bench.rs**, executed by the dedicated
+hosted CI workflow, measures **two implementations of the same integer
+operation**: legacy unprepared Q8 (transpose for every weight row) versus
+the new prepared path (transpose once per activation batch).
+It generates deterministic source Q3_K weight blocks and losslessly
+transcodes them. It runs matched workloads with 1, 32, 256 and 1024
+weight rows, four repetitions per invocation, three warmup passes, and
+16 paired AB/BA alternate-order rounds per row count. Preparation
+overhead is **included in each candidate timed invocation**. It records
+all paired raw nanosecond durations, checks exact checksums, and reports
+only descriptive median ns/dot and the legacy/prepared ratio.
+
+A figure above 1.0 indicates a faster prepared candidate **only for this
+standalone synthetic hosted-runner workload**. There is **no hardcoded
+speed threshold**, no retrospective exclusion of slow timings, and no
+substitution of this benchmark for the full SmolLM2 optimized Q3_K stock
+comparison. SIMD/AVX2 effects and source reads are not isolated here.
+CI validates compilation, correctness, and bounded execution; a
+numerical or runtime performance success does not promote the kernel
+to production or claim a physical Dell speedup.
+
+A subsequent model experiment must verify exact source/weight identity,
+matching stock AVX2/tiled floating-point reductions, all logits and
+tokens, real allocation and activation reuse inside ggml, and a
+prospectively admitted **RemoteOps** paired physical test. The previous
+physical v2 campaigns remain category E due to third-party CPU
+contamination; their thresholds and original records are unchanged.
