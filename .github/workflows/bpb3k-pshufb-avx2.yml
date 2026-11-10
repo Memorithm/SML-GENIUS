@@ -1,0 +1,78 @@
+name: BPB3-K AVX2 PSHUFB research oracle and stock comparison
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_pshufb_avx2.rs'
+      - 'research/boolean-posit/bpb3k_pshufb_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_PSHUFB_AVX2.md'
+      - '.github/workflows/bpb3k-pshufb-avx2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3k_pshufb_avx2.rs'
+      - 'research/boolean-posit/bpb3k_pshufb_stock_bench.rs'
+      - '.github/workflows/bpb3k-pshufb-avx2.yml'
+permissions:
+  contents: read
+jobs:
+  exact-synthetic-comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust compiler and formatter
+        run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+      - name: Format, unit oracle and optimized standalone library
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_pshufb_avx2.rs research/boolean-posit/bpb3k_pshufb_stock_bench.rs
+          rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_pshufb_avx2.rs -o "$RUNNER_TEMP/bpb3k-pshufb-tests"
+          "$RUNNER_TEMP/bpb3k-pshufb-tests" --nocapture
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_pshufb_avx2.rs -o "$RUNNER_TEMP/libbpb3k_pshufb.rlib"
+      - name: Haswell ISA static assembly audit (not physical performance)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell --emit=asm \
+            --crate-type lib research/boolean-posit/bpb3k_pshufb_avx2.rs -o "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          grep -Eiq 'vpshufb' "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          grep -Eiq 'vpmaddubsw' "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          grep -Eiq 'vpmaddwd' "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          ! grep -Eiq 'vpopcnt' "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          echo 'PASS_BPB3K_HASWELL_ISA pshufb=true maddubs=true maddwd=true vpopcnt=false'
+          grep -i -m 8 'vpshufb' "$RUNNER_TEMP/bpb3k-pshufb-haswell.s"
+          echo 'BPB3K_SPILL_VERDICT=NOT_QUALIFIED awaits_function_specific_asm_and_perf'
+      - name: Build independently pinned upstream AVX2 C oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          git init -q "$RUNNER_TEMP/bpb3k-upstream"
+          git -C "$RUNNER_TEMP/bpb3k-upstream" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/bpb3k-upstream" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/bpb3k-upstream" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3k-upstream" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh "$RUNNER_TEMP/bpb3k-upstream" "$RUNNER_TEMP/bpb3k-stocklib" fused_v2_stock
+      - name: Compile candidate with actual Haswell AVX2 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            research/boolean-posit/bpb3k_pshufb_stock_bench.rs \
+            -L "native=$RUNNER_TEMP/bpb3k-stocklib" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-pshufb-stock-bench"
+      - name: Compare original AVX2 and candidate with identical operands
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-pshufb-stock-bench" | tee "$RUNNER_TEMP/bpb3k-pshufb-stock-bench.txt"
+          grep -q '^PASS_BPB3K_PSHUFB_STOCK_ORACLE ' "$RUNNER_TEMP/bpb3k-pshufb-stock-bench.txt"
+          test "$(grep -c '^BPB3K_PSHUFB_SUMMARY ' "$RUNNER_TEMP/bpb3k-pshufb-stock-bench.txt")" = 4
+          test "$(grep -c '^BPB3K_PSHUFB_RAW ' "$RUNNER_TEMP/bpb3k-pshufb-stock-bench.txt")" = 64
+          grep -q '^BPB3K_PSHUFB_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-pshufb-stock-bench.txt"
