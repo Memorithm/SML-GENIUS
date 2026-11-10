@@ -7,6 +7,7 @@
 
 pub mod artifact;
 pub mod cycloid_access;
+pub mod cycloid_dispatch;
 pub mod ram;
 
 pub use artifact::{
