@@ -69,10 +69,7 @@ mod x86 {
     }
 
     #[target_feature(enable = "avx2")]
-    pub(super) unsafe fn dot<const N: usize>(
-        weights: [&[u8]; N],
-        activation: &[u8],
-    ) -> [i32; N] {
+    pub(super) unsafe fn dot<const N: usize>(weights: [&[u8]; N], activation: &[u8]) -> [i32; N] {
         unsafe {
             // The selector visits the four contiguous source bytes per
             // bitplane and expands their eight bits into 32 coefficient
@@ -111,10 +108,7 @@ mod x86 {
                         let b0 = _mm256_xor_si256(low, sign);
                         let b1 = _mm256_slli_epi16(_mm256_xor_si256(high, sign), 1);
                         let positive = _mm256_slli_epi16(_mm256_xor_si256(sign, one), 2);
-                        let unsigned_q = _mm256_or_si256(
-                            b0,
-                            _mm256_or_si256(b1, positive),
-                        );
+                        let unsigned_q = _mm256_or_si256(b0, _mm256_or_si256(b1, positive));
                         let signed_pairs = _mm256_sub_epi16(
                             _mm256_maddubs_epi16(unsigned_q, input),
                             four_times_q8,
@@ -179,8 +173,7 @@ pub fn dot_bpb3k_q8_batch<const N: usize>(
         debug_assert!(integer_dots.iter().all(|v| v.abs() <= 4_194_304));
         let mut f16_scale_bits = [0u16; N];
         for row in 0..N {
-            f16_scale_bits[row] =
-                u16::from_le_bytes([weights[row][108], weights[row][109]]);
+            f16_scale_bits[row] = u16::from_le_bytes([weights[row][108], weights[row][109]]);
         }
         Ok(BatchDot {
             integer_dots,
@@ -201,25 +194,34 @@ mod tests {
     fn q3(case: usize) -> [u8; WEIGHT_BYTES] {
         let mut original: [u8; WEIGHT_BYTES] =
             std::array::from_fn(|i| (i * 73 + i / 4 * 19 + case * 41) as u8);
-        original[108..110].copy_from_slice(
-            &[0x3c00u16, 0xbc00, 0x7e01, 0x8000][case % 4].to_le_bytes(),
-        );
+        original[108..110]
+            .copy_from_slice(&[0x3c00u16, 0xbc00, 0x7e01, 0x8000][case % 4].to_le_bytes());
         original
     }
 
     fn q8(case: usize, pattern: usize) -> [u8; Q8_K_BYTES] {
         let mut input = [0u8; Q8_K_BYTES];
-        input[..4].copy_from_slice(
-            &[0x3f800000u32, 0x7fc12345u32][pattern % 2].to_le_bytes(),
-        );
+        input[..4].copy_from_slice(&[0x3f800000u32, 0x7fc12345u32][pattern % 2].to_le_bytes());
         for i in 0..256 {
             input[4 + i] = match pattern % 8 {
                 0 => 0,
                 1 => 127,
                 2 => 128,
                 3 => 255,
-                4 => if i % 2 == 0 { 127 } else { 128 },
-                5 => if i % 2 == 0 { 1 } else { 255 },
+                4 => {
+                    if i % 2 == 0 {
+                        127
+                    } else {
+                        128
+                    }
+                }
+                5 => {
+                    if i % 2 == 0 {
+                        1
+                    } else {
+                        255
+                    }
+                }
                 6 => i as u8,
                 _ => {
                     let mut x = (case as u32) ^ (i as u32).wrapping_mul(0x9e37_79b9);
@@ -243,8 +245,7 @@ mod tests {
                 let low = (original[32 + half * 32 + lane] >> (2 * plane)) & 3;
                 let sign = (original[lane] >> (half * 4 + plane)) & 1;
                 let signed = i32::from(low) - if sign == 0 { 4 } else { 0 };
-                signed * i32::from(scale(original, i / 16))
-                    * i32::from(activation[4 + i] as i8)
+                signed * i32::from(scale(original, i / 16)) * i32::from(activation[4 + i] as i8)
             })
             .sum()
     }
@@ -255,17 +256,13 @@ mod tests {
             return;
         }
         for case in 0..96 {
-            let original: [[u8; WEIGHT_BYTES]; 4] =
-                std::array::from_fn(|row| q3(case * 4 + row));
+            let original: [[u8; WEIGHT_BYTES]; 4] = std::array::from_fn(|row| q3(case * 4 + row));
             let converted: [[u8; WEIGHT_BYTES]; 4] =
                 original.each_ref().map(|w| codec::q3_to_bpb3k(w).unwrap());
             for pattern in 0..16 {
                 let activation = q8(case, pattern);
-                let actual = dot_bpb3k_q8_batch(
-                    converted.each_ref().map(|w| &w[..]),
-                    &activation,
-                )
-                .unwrap();
+                let actual =
+                    dot_bpb3k_q8_batch(converted.each_ref().map(|w| &w[..]), &activation).unwrap();
                 for row in 0..4 {
                     assert_eq!(
                         actual.integer_dots[row],
@@ -299,8 +296,7 @@ mod tests {
         if !std::is_x86_feature_detected!("avx2") {
             return;
         }
-        let original: [[u8; WEIGHT_BYTES]; 4] =
-            std::array::from_fn(|row| q3(row + 11));
+        let original: [[u8; WEIGHT_BYTES]; 4] = std::array::from_fn(|row| q3(row + 11));
         let packed = original.each_ref().map(|w| codec::q3_to_bpb3k(w).unwrap());
         let input = q8(3, 6);
         for (row, expected) in original.iter().enumerate() {
@@ -339,7 +335,10 @@ mod tests {
         );
         assert_eq!(
             dot_bpb3k_q8_batch([&correct[..], &correct[..109]], &a),
-            Err(BatchError::WrongWeightLength { row: 1, actual: 109 })
+            Err(BatchError::WrongWeightLength {
+                row: 1,
+                actual: 109
+            })
         );
     }
 
