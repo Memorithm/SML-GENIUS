@@ -11,10 +11,10 @@
 
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
-mod bpb3k;
+pub(crate) mod bpb3k;
 #[path = "bpb3k_preencoded114_avx2.rs"]
 #[allow(dead_code)]
-mod previous;
+pub(crate) mod previous;
 
 pub const Q3_BYTES: usize = 110;
 pub const Q4_BYTES: usize = 146;
