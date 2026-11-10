@@ -50,16 +50,19 @@ jobs:
           rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
             --emit=asm research/boolean-posit/bpb3k_batch4_stock_bench.rs \
             -o "$RUNNER_TEMP/bpb3k-batch4.s"
-          grep -Eiq 'vpshufb' "$RUNNER_TEMP/bpb3k-batch4.s"
-          grep -Eiq 'vpmaddubsw' "$RUNNER_TEMP/bpb3k-batch4.s"
-          grep -Eiq 'vpmaddwd' "$RUNNER_TEMP/bpb3k-batch4.s"
-          ! grep -Eiq 'vpopcnt' "$RUNNER_TEMP/bpb3k-batch4.s"
-          if grep -Eiq 'vpbroadcastd' "$RUNNER_TEMP/bpb3k-batch4.s"; then
-            echo 'PASS_BPB3K_BATCH4_HASWELL_SIMD=VPBROADCASTD'
-          else
-            echo 'BPB3K_BATCH4_NO_VPBROADCASTD_NEEDS_CODEGEN_REVIEW'
+          # Gather actual instruction counts. Generic functions may be
+          # inlined and combined with other modules: a raw global grep
+          # cannot establish per-function behavior or register spilling.
+          for instruction in vpshufb vpmaddubsw vpmaddwd vpbroadcastd vpopcnt; do
+            count="$(grep -Eic "$instruction" "$RUNNER_TEMP/bpb3k-batch4.s" || true)"
+            echo "BPB3K_BATCH4_ASM_INSTRUCTION=$instruction count=$count"
+          done
+          if grep -Eiq 'vpopcnt' "$RUNNER_TEMP/bpb3k-batch4.s"; then
+            echo 'STOP_BPB3K_BATCH4_UNSUPPORTED_AVX512_VPOPCNT'
+            exit 1
           fi
           echo 'BPB3K_BATCH4_ASM_SPILLS=NOT_QUALIFIED'
+          echo 'BPB3K_BATCH4_ASM_SOURCE=MONOMORPHIZED_BENCH_COMPILATION_NOT_PER_FUNCTION_AUDIT'
       - name: Pin and compile unmodified original ggml AVX2 C and tiled oracle
         shell: bash
         run: |
