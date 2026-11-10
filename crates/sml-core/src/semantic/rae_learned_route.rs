@@ -8,7 +8,10 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use crate::{semantic::rae_native_trace::SbgRaeNativeFrame, PageId};
+use crate::{
+    semantic::rae_native_trace::{SbgRaeNativeFrame, SBG_RAE_MAX_EXPERTS, SBG_RAE_MAX_FRAMES},
+    PageId,
+};
 
 pub const RAE_LEARNING_PPM: u32 = 1_000_000;
 
@@ -39,6 +42,7 @@ pub enum RaeLearnError {
     InvalidDatasetIdentity,
     IdenticalTrainingAndEvaluationIdentity,
     EmptyFrameSet,
+    TooManyFrames,
     MalformedFrame { index: usize },
     TooManyAssociations,
 }
@@ -114,6 +118,9 @@ impl RaeTrainedEventRouter {
         validate_identity(train_dataset_id)?;
         if frames.is_empty() {
             return Err(RaeLearnError::EmptyFrameSet);
+        }
+        if frames.len() > SBG_RAE_MAX_FRAMES {
+            return Err(RaeLearnError::TooManyFrames);
         }
         let mut exposures = vec![0_u64; BITS];
         let mut votes = BTreeMap::<(usize, u32), u64>::new();
@@ -234,6 +241,9 @@ impl RaeTrainedEventRouter {
         if frames.is_empty() {
             return Err(RaeLearnError::EmptyFrameSet);
         }
+        if frames.len() > SBG_RAE_MAX_FRAMES {
+            return Err(RaeLearnError::TooManyFrames);
+        }
 
         let mut totals = RaeHoldoutCounts::default();
         let mut per_frame = Vec::with_capacity(frames.len());
@@ -256,7 +266,11 @@ impl RaeTrainedEventRouter {
 }
 
 fn validate_dimensions(features: usize, experts: usize) -> Result<(), RaeLearnError> {
-    if features == 0 || features > 65_536 || experts == 0 || experts > 65_536 {
+    if features == 0
+        || features > SBG_RAE_MAX_EXPERTS
+        || experts == 0
+        || experts > SBG_RAE_MAX_EXPERTS
+    {
         return Err(RaeLearnError::InvalidDimensions);
     }
     Ok(())
