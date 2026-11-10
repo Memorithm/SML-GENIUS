@@ -404,7 +404,7 @@ mod tests {
         required: u64,
     ) -> SbgRaeNativeFrame {
         let selected_experts = (0..2)
-            .filter(|bit| required & (1_u64 << bit) != 0)
+            .filter(|bit| required & (1_u64 << *bit) != 0)
             .map(PageId)
             .collect();
         SbgRaeNativeFrame {
