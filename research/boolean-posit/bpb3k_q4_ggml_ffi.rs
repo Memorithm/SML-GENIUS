@@ -35,9 +35,9 @@ fn f16_to_f32(bits: u16) -> f32 {
 /// C ABI mirrors ggml_vec_dot_q3_K_q8_K for one row. The Rust SIMD
 /// implementation reads only Q4-146 and original Q8_K (292 bytes) and
 /// never calls stock ggml Q3_K. The signed integer dot is exact;
-/// the scalar FP32 sum is NOT an assertion of matching ggml's FMA
-/// eight-lane multiblock accumulation order. Whole-model logits and
-/// tokens MUST be qualified independently against optimized stock.
+/// its per-lane FP32 FMA and final reduction follow the original ggml
+/// AVX2 multiblock accumulation order. Whole-model logits and tokens
+/// remain subject to independent exact-head qualification.
 #[no_mangle]
 pub unsafe extern "C" fn mem_q4_146_vec_dot(
     n: c_int,
@@ -68,17 +68,32 @@ pub unsafe extern "C" fn mem_q4_146_vec_dot(
     // tensor data spans exactly n/256 blocks; Q8_K is unchanged.
     let weights = unsafe { std::slice::from_raw_parts(vx.cast::<u8>(), blocks * 146) };
     let activations = unsafe { std::slice::from_raw_parts(vy.cast::<u8>(), blocks * 292) };
-    let mut output = 0f32;
+    // Original optimized ggml Q3_K performs eight independent FP32 FMA
+    // chains, each surviving across ALL superblocks, then hsum_float_8.
+    // Summing each 256-weight block first changes the FP32 reduction graph
+    // and can flip full-model tokens despite identical integer products.
+    let mut accumulators = [0f32; 8];
     for i in 0..blocks {
         let w = &weights[146 * i..146 * (i + 1)];
         let a = &activations[292 * i..292 * (i + 1)];
-        let dot = match q4::dot_q4::<146>(w, a) {
+        let dot = match q4::dot_q4_lanes::<146>(w, a) {
             Ok(dot) => dot,
             Err(_) => std::process::abort(),
         };
         let d = f32::from_bits(dot.q8_scale_f32_bits) * f16_to_f32(dot.global_scale_f16_bits);
-        output = d.mul_add(dot.integer as f32, output);
+        for (acc, integer) in accumulators.iter_mut().zip(dot.lanes) {
+            *acc = d.mul_add(integer as f32, *acc);
+        }
     }
+    // Same association as original ggml hsum_float_8 (upper half + lower
+    // half; then lane 0+2 and 1+3; then final lane 0+1).
+    let halves = [
+        accumulators[0] + accumulators[4],
+        accumulators[1] + accumulators[5],
+        accumulators[2] + accumulators[6],
+        accumulators[3] + accumulators[7],
+    ];
+    let output = (halves[0] + halves[2]) + (halves[1] + halves[3]);
     // SAFETY: ggml provides a writable result float for nrc=1.
     unsafe { result.write_unaligned(output) };
 }
