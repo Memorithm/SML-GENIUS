@@ -1,11 +1,10 @@
-//! Research-only Rust GGUF BPB3-K adapter for a SHA-pinned llama.cpp CPU runtime.
-//! A BPB3-K payload is NOT a standard GGUF Q3_K payload. Both the transformed
-//! ephemeral GGUF and the matching patched ggml must be used together.
-//! NEVER distribute the transformed file as a conforming Q3_K GGUF.
+//! Research-only GGUF Q3_K converter into NONSTANDARD 146-byte Q4-146.
+//! The ephemeral artifact is readable ONLY by matching patched ggml.
+//! No modification of the original model or deployment is permitted.
 #![forbid(unsafe_code)]
-#[path = "bpb3k.rs"]
+#[path = "bpb3k_q4_pair228_avx2.rs"]
 #[allow(dead_code)]
-mod bpb3k;
+mod q4;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -23,6 +22,7 @@ struct Tensor {
     kind: u32,
     values: u64,
     offset: u64,
+    offset_field: u64,
 }
 fn read<const N: usize>(f: &mut File) -> Result<[u8; N], String> {
     let mut out = [0u8; N];
@@ -100,7 +100,7 @@ fn skip_value(f: &mut File, ty: u32, limit: u64) -> Result<(), String> {
         _ => Err("STOP_UNKNOWN_METADATA_TYPE".into()),
     }
 }
-fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
+fn tensors(f: &mut File, file_len: u64) -> Result<(u64, u64, Vec<Tensor>), String> {
     if read::<4>(f)? != *b"GGUF" {
         return Err("STOP_NOT_GGUF".into());
     }
@@ -143,12 +143,14 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
                 .ok_or("STOP_VALUES_OVERFLOW")?;
         }
         let kind = u32le(f)?;
+        let offset_field = f.stream_position().map_err(|e| e.to_string())?;
         let offset = u64le(f)?;
         entries.push(Tensor {
             name,
             kind,
             values,
             offset,
+            offset_field,
         });
     }
     let header = f.stream_position().map_err(|e| e.to_string())?;
@@ -159,7 +161,7 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, Vec<Tensor>), String> {
     if start > file_len {
         return Err("STOP_TRUNCATED_TENSOR_DATA".into());
     }
-    Ok((start, entries))
+    Ok((start, alignment, entries))
 }
 fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
     if source == dest {
