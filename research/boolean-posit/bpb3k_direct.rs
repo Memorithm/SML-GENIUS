@@ -112,7 +112,6 @@ pub fn dot_bpb3k_bipolar(raw: &[u8], input_negative: &[u64; GROUPS]) -> Result<D
     })
 }
 
-
 /// Full ggml Q8_K superblock: f32 scale, 256 signed i8 codes and 16 i16
 /// cached subtotals. Subtotals are not needed for this exact direct dot.
 pub const Q8_K_BYTES: usize = 4 + 256 + 32;
@@ -162,8 +161,7 @@ fn signed_q8_subgroup_dot(sign: u16, bit0: u16, bit1: u16, q8: &[u8]) -> i32 {
         let s = sign & activation;
         let low = bit0 & activation;
         let high = bit1 & activation;
-        let weight_sum = low.count_ones() as i32
-            - 2 * (s & bit0).count_ones() as i32
+        let weight_sum = low.count_ones() as i32 - 2 * (s & bit0).count_ones() as i32
             + 2 * high.count_ones() as i32
             - 4 * (s & bit1).count_ones() as i32
             - s.count_ones() as i32;
@@ -203,8 +201,8 @@ pub fn dot_bpb3k_q8(raw: &[u8], q8: &[u8]) -> Result<Q8DirectDot, Q8DotError> {
         for within in 0..SUBGROUPS_PER_GROUP {
             let subgroup = group * SUBGROUPS_PER_GROUP + within;
             let shift = within * LANES_PER_SUBGROUP;
-            let act = &q8[4 + subgroup * LANES_PER_SUBGROUP
-                ..4 + (subgroup + 1) * LANES_PER_SUBGROUP];
+            let act =
+                &q8[4 + subgroup * LANES_PER_SUBGROUP..4 + (subgroup + 1) * LANES_PER_SUBGROUP];
             let sum = signed_q8_subgroup_dot(
                 (negative >> shift) as u16,
                 (low >> shift) as u16,
@@ -268,7 +266,6 @@ mod tests {
             .sum()
     }
 
-
     fn q3_q8_integer_oracle(q3: &[u8; bpb3k::BYTES], q8: &[u8; Q8_K_BYTES]) -> i32 {
         // Independent, original Q3_K address arithmetic. Never inspects the
         // BPB3-K planes or the Boolean-popcount implementation.
@@ -297,8 +294,20 @@ mod tests {
                 1 => 127,
                 2 => 128,
                 3 => 255,
-                4 => if i % 2 == 0 { 127 } else { 128 },
-                5 => if i % 2 == 0 { 1 } else { 255 },
+                4 => {
+                    if i % 2 == 0 {
+                        127
+                    } else {
+                        128
+                    }
+                }
+                5 => {
+                    if i % 2 == 0 {
+                        1
+                    } else {
+                        255
+                    }
+                }
                 6 => (i as u8).wrapping_add(case as u8),
                 _ => {
                     let mut v = (case as u32) ^ (i as u32).wrapping_mul(0x9e37_79b9);
@@ -316,9 +325,14 @@ mod tests {
     fn q8_boolean_all_signed_codes_and_scale_metadata_match_original_q3_oracle() {
         // Scale metadata crosses every sign/zero/subnormal/NaN bit pattern
         // without imposing a floating-point reduction contract.
-        let meta = [(0x3c00, 0x3f800000), (0xbc00, 0xbf800000),
-            (1, 0x00000001), (0x8000, 0x80000000),
-            (0x7c00, 0x7f800000), (0x7e01, 0x7fc12345)];
+        let meta = [
+            (0x3c00, 0x3f800000),
+            (0xbc00, 0xbf800000),
+            (1, 0x00000001),
+            (0x8000, 0x80000000),
+            (0x7c00, 0x7f800000),
+            (0x7e01, 0x7fc12345),
+        ];
         for case in 0..96 {
             let (weight_scale, activation_scale) = meta[case % meta.len()];
             let raw = q3_fixture(case, weight_scale);
@@ -326,9 +340,11 @@ mod tests {
             for pattern in 0..16 {
                 let activation = q8_fixture(case, pattern, activation_scale);
                 let result = dot_bpb3k_q8(&converted, &activation).unwrap();
-                assert_eq!(result.weighted_integer,
+                assert_eq!(
+                    result.weighted_integer,
                     q3_q8_integer_oracle(&raw, &activation),
-                    "case={case} pattern={pattern}");
+                    "case={case} pattern={pattern}"
+                );
                 assert_eq!(result.global_scale_f16_bits, weight_scale);
                 assert_eq!(result.activation_scale_f32_bits, activation_scale);
             }
@@ -344,8 +360,13 @@ mod tests {
         let mut activations = q8_fixture(0, 0, 0x3f800000);
         for (code, expected) in [(128u8, -4_194_304i32), (127, 4_161_536), (0, 0)] {
             activations[4..260].fill(code);
-            assert_eq!(dot_bpb3k_q8(&weights, &activations).unwrap().weighted_integer,
-                expected, "activation={code}");
+            assert_eq!(
+                dot_bpb3k_q8(&weights, &activations)
+                    .unwrap()
+                    .weighted_integer,
+                expected,
+                "activation={code}"
+            );
         }
     }
 
@@ -377,12 +398,14 @@ mod tests {
         for len in [0, 1, 96, 109, 111, 256] {
             assert_eq!(
                 dot_bpb3k_q8(&vec![0u8; len], &q8),
-                Err(Q8DotError::WrongWeightLength { actual: len }));
+                Err(Q8DotError::WrongWeightLength { actual: len })
+            );
         }
         for len in [0, 1, 4, 260, 291, 293, 512] {
             assert_eq!(
                 dot_bpb3k_q8(&weights, &vec![0u8; len]),
-                Err(Q8DotError::WrongActivationLength { actual: len }));
+                Err(Q8DotError::WrongActivationLength { actual: len })
+            );
         }
     }
 
