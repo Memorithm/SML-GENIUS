@@ -23,7 +23,6 @@ use sml_core::{
         CycloidBudget, CycloidEdge, CycloidError, CycloidGraph, CycloidNode, CycloidNodeId,
         CycloidPlan,
     },
-    elastic_weights::WeightPrecision,
     mor::MorDecision,
     PageId,
 };
@@ -404,6 +403,7 @@ mod tests {
 
     use sml_core::elastic_weights::{
         ElasticWeightPage, ElasticWeightPlanner, ElasticWeightPolicy, ResidencyTier,
+        WeightPrecision,
     };
 
     use crate::{
