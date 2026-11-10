@@ -1,0 +1,118 @@
+name: BPB3-K Clang GCC Rustc auto-vectorization vs pinned optimized Q3_K
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_auto_vectorize.c'
+      - 'research/boolean-posit/bpb3k_autovec_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_AUTOVEC.md'
+      - '.github/workflows/bpb3k-autovec.yml'
+  push:
+    paths:
+      - 'research/boolean-posit/bpb3k_auto_vectorize.c'
+      - 'research/boolean-posit/bpb3k_autovec_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_AUTOVEC.md'
+      - '.github/workflows/bpb3k-autovec.yml'
+permissions:
+  contents: read
+jobs:
+  exact-original-q3-compiler-comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout pinned experimental head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin Rust compiler and inspect system compilers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup run 1.89.0 rustc --version
+          clang --version | head -1
+          gcc --version | head -1
+          rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_autovec_stock_bench.rs
+      - name: Compile exact same C source with Clang O3 automatic SIMD
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -std=c11 -O3 -march=haswell -Wall -Wextra -Werror \
+            -Rpass=loop-vectorize -Rpass-missed=loop-vectorize \
+            -DMEM_AUTOVEC_SYMBOL=mem_q3_clang_auto \
+            -c research/boolean-posit/bpb3k_auto_vectorize.c \
+            -o "$RUNNER_TEMP/bpb3k-clang-auto.o" \
+            2> "$RUNNER_TEMP/clang-vectorization-report.txt"
+          cat "$RUNNER_TEMP/clang-vectorization-report.txt"
+          if grep -Eiq 'vectorized loop' "$RUNNER_TEMP/clang-vectorization-report.txt"; then
+            echo 'BPB3K_CLANG_LOOP_VECTORIZE_REPORT=VECTORIZED'
+          else
+            echo 'BPB3K_CLANG_LOOP_VECTORIZE_REPORT=NOT_REPORTED'
+          fi
+          objdump -d -M intel "$RUNNER_TEMP/bpb3k-clang-auto.o" > "$RUNNER_TEMP/bpb3k-clang-auto.asm"
+          grep -E '^0000.*<mem_q3_clang_auto>:' "$RUNNER_TEMP/bpb3k-clang-auto.asm"
+          nm -g "$RUNNER_TEMP/bpb3k-clang-auto.o" | grep -q 'mem_q3_clang_auto$'
+      - name: Compile no-SIMD-loop Clang O3 negative control
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -std=c11 -O3 -march=haswell -Wall -Wextra -Werror \
+            -fno-vectorize -fno-slp-vectorize \
+            -DMEM_AUTOVEC_SYMBOL=mem_q3_clang_novec \
+            -c research/boolean-posit/bpb3k_auto_vectorize.c \
+            -o "$RUNNER_TEMP/bpb3k-clang-novec.o"
+          nm -g "$RUNNER_TEMP/bpb3k-clang-novec.o" | grep -q 'mem_q3_clang_novec$'
+      - name: Compile identical original-Q3 source with GCC O3 vectorizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=c11 -O3 -march=haswell -Wall -Wextra -Werror \
+            -fopt-info-vec-optimized="$RUNNER_TEMP/gcc-vectorization-report.txt" \
+            -DMEM_AUTOVEC_SYMBOL=mem_q3_gcc_auto \
+            -c research/boolean-posit/bpb3k_auto_vectorize.c \
+            -o "$RUNNER_TEMP/bpb3k-gcc-auto.o"
+          if test -e "$RUNNER_TEMP/gcc-vectorization-report.txt"; then
+            cat "$RUNNER_TEMP/gcc-vectorization-report.txt"
+          fi
+          if test -s "$RUNNER_TEMP/gcc-vectorization-report.txt"; then
+            echo 'BPB3K_GCC_VECTORIZE_REPORT=OPTIMIZED_LOOPS_REPORTED'
+          else
+            echo 'BPB3K_GCC_VECTORIZE_REPORT=NOT_REPORTED'
+          fi
+          objdump -d -M intel "$RUNNER_TEMP/bpb3k-gcc-auto.o" > "$RUNNER_TEMP/bpb3k-gcc-auto.asm"
+          nm -g "$RUNNER_TEMP/bpb3k-gcc-auto.o" | grep -q 'mem_q3_gcc_auto$'
+      - name: Compile unchanged SHA-pinned original Q3_K C oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/bpb3k-pinned-upstream"
+          git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh \
+            "$RUNNER_TEMP/bpb3k-pinned-upstream" "$RUNNER_TEMP/bpb3k-native-stock" fused_v2_stock
+      - name: Compile native-Haswell Rustc O3 candidate with all four C/C++ comparators
+        shell: bash
+        run: |
+          set -euo pipefail
+          ar rcs "$RUNNER_TEMP/libbpb3k-compilers.a" \
+            "$RUNNER_TEMP/bpb3k-clang-auto.o" \
+            "$RUNNER_TEMP/bpb3k-clang-novec.o" \
+            "$RUNNER_TEMP/bpb3k-gcc-auto.o"
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -C opt-level=3 -C target-cpu=haswell \
+            research/boolean-posit/bpb3k_autovec_stock_bench.rs \
+            -L "native=$RUNNER_TEMP" -l static=bpb3k-compilers \
+            -L "native=$RUNNER_TEMP/bpb3k-native-stock" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-autovec-bench"
+      - name: Exact original-wire integer domain and fully paired five-way synthetic benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-autovec-bench" | tee "$RUNNER_TEMP/bpb3k-autovec-bench.txt"
+          grep -q '^PASS_BPB3K_AUTOVEC_ORACLE ' "$RUNNER_TEMP/bpb3k-autovec-bench.txt"
+          grep -q '^PASS_BPB3K_AUTOVEC_STOCK ' "$RUNNER_TEMP/bpb3k-autovec-bench.txt"
+          test "$(grep -c '^BPB3K_AUTOVEC_RAW ' "$RUNNER_TEMP/bpb3k-autovec-bench.txt")" = 80
+          test "$(grep -c '^BPB3K_AUTOVEC_SUMMARY ' "$RUNNER_TEMP/bpb3k-autovec-bench.txt")" = 4
+          grep -q '^BPB3K_AUTOVEC_VERDICT=DIAGNOSTIC ' "$RUNNER_TEMP/bpb3k-autovec-bench.txt"
