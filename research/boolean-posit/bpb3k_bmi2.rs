@@ -5,6 +5,11 @@
 //! f32 FMA/reduction order mirrors the pinned upstream Q3_K AVX2 vector path.
 //! Research-only: no default model switch, speedup or physical claim.
 
+#[cfg(test)]
+#[path = "bpb3k.rs"]
+#[allow(dead_code)]
+mod wire;
+
 const WEIGHT_BLOCK: usize = 110;
 const ACTIVATION_BLOCK: usize = 292;
 
@@ -84,7 +89,7 @@ mod x86 {
     // position of eight output i8 coefficients. Two's-complement sign
     // extension uses 0xFC for all negative Q3_K coefficients [-4,-1].
     #[target_feature(enable = "bmi2")]
-    unsafe fn decode8(sign: u64, low: u64, high: u64, chunk: usize) -> u64 {
+    pub(super) unsafe fn decode8(sign: u64, low: u64, high: u64, chunk: usize) -> u64 {
         let shift = chunk * 8;
         let s = (sign >> shift) as u8;
         let l = (low >> shift) as u8 ^ s;
@@ -161,10 +166,6 @@ mod x86 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[path = "bpb3k.rs"]
-    #[allow(dead_code)]
-    mod wire;
-
     fn scalar_stock_vector(weights: &[u8], acts: &[u8]) -> f32 {
         let mut lanes = [0f32; 8];
         for (w, a) in weights
@@ -205,6 +206,7 @@ mod tests {
                    Err(Bmi2Error::InvalidActivationLength(291)));
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn bmi2_matches_independent_scalar_stock_vector_order() {
         if !cfg!(target_arch = "x86_64") {
