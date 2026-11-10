@@ -18,6 +18,7 @@ pub mod context_ingest;
 pub mod context_retrieve;
 pub mod context_retrieve_bench;
 pub mod context_semantic_ingest;
+pub mod ctx2_infer;
 pub mod dacr_exact;
 pub mod dacr_latent;
 pub mod delta_kv_context;

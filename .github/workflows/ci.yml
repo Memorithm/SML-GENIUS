@@ -421,7 +421,11 @@ jobs:
       - name: Native RAM materialization evidence
         run: cargo test --locked -p sml-runtime -- --nocapture
       - name: Mapped semantic store evidence
-        run: cargo test --locked -p sml-store -- --nocapture
+        # The earlier `cargo test --locked --workspace` already executes the
+        # full sml-store suite. Re-running all of it with --nocapture is both
+        # redundant and potentially expensive for unrelated context fixtures.
+        # Keep explicit, inspectable evidence for the mapped-store contract.
+        run: cargo test --locked -p sml-store --test mapped_store -- --nocapture
       - name: Context streaming ingest evidence
         run: cargo test --locked -p sml-store --test context_ingest -- --nocapture
       - name: Context semantic/provenance emission evidence
