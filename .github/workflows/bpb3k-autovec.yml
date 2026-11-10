@@ -97,11 +97,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ar rcs "$RUNNER_TEMP/libbpb3k-compilers.a" \
+            "$RUNNER_TEMP/bpb3k-clang-auto.o" \
+            "$RUNNER_TEMP/bpb3k-clang-novec.o" \
+            "$RUNNER_TEMP/bpb3k-gcc-auto.o"
           rustup run 1.89.0 rustc --edition=2021 -D warnings -C opt-level=3 -C target-cpu=haswell \
             research/boolean-posit/bpb3k_autovec_stock_bench.rs \
-            -C link-arg="$RUNNER_TEMP/bpb3k-clang-auto.o" \
-            -C link-arg="$RUNNER_TEMP/bpb3k-clang-novec.o" \
-            -C link-arg="$RUNNER_TEMP/bpb3k-gcc-auto.o" \
+            -L "native=$RUNNER_TEMP" -l static=bpb3k-compilers \
             -L "native=$RUNNER_TEMP/bpb3k-native-stock" -l static=original_q3 \
             -o "$RUNNER_TEMP/bpb3k-autovec-bench"
       - name: Exact original-wire integer domain and fully paired five-way synthetic benchmark
