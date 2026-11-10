@@ -16,6 +16,15 @@ use crate::{
 pub const RAE_LEARNING_PPM: u32 = 1_000_000;
 pub const RAE_MAX_LEARNED_FANOUT: usize = 8;
 
+/// Counterfactual scheduling policies using one frozen TRAIN-only map.
+/// None can authorize skipping native SBG/MOR without separate guarantees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RaeReplayPolicy {
+    RisingOnly,
+    PersistentActive,
+    RisingWithContextRecheck,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RaeTrainPolicy {
     pub minimum_exposures: u64,
@@ -267,12 +276,48 @@ impl RaeTrainedEventRouter {
         Ok(selected)
     }
 
-    /// Score the frozen model against an *independent* original-page MOR
-    /// reference. The split-ID check is not a proof of true data independence.
+    /// Replay a frozen learned map for one sampled frame. Persistent-active
+    /// replay can restore held-high pages at the cost of extra selections.
+    /// Context recheck only activates when a trusted context flag is present.
+    /// Neither mode establishes an exact MOR survivor guarantee.
+    pub fn predict_frame(
+        &self,
+        frame: &SbgRaeNativeFrame,
+        policy: RaeReplayPolicy,
+    ) -> Result<Vec<u64>, RaeLearnError> {
+        validate_frame(frame, self.feature_width, self.expert_count, 0)?;
+        match policy {
+            RaeReplayPolicy::RisingOnly => self.predict(&frame.rising_words),
+            RaeReplayPolicy::PersistentActive => self.predict(&frame.routing_words),
+            RaeReplayPolicy::RisingWithContextRecheck => {
+                let mut wakes = self.predict(&frame.rising_words)?;
+                if frame.context_invalidated {
+                    let active = self.predict(&frame.routing_words)?;
+                    for (wake, page) in wakes.iter_mut().zip(active) {
+                        *wake |= page;
+                    }
+                }
+                Ok(wakes)
+            }
+        }
+    }
+
+    /// Backward-compatible rising-only counterfactual holdout baseline.
     pub fn evaluate(
         &self,
         holdout_dataset_id: &str,
         frames: &[SbgRaeNativeFrame],
+    ) -> Result<RaeHoldoutReport, RaeLearnError> {
+        self.evaluate_with_policy(holdout_dataset_id, frames, RaeReplayPolicy::RisingOnly)
+    }
+
+    /// Score any of the three frozen policies against the SAME original MOR
+    /// masks. Dataset identity alone cannot prove independent partitions.
+    pub fn evaluate_with_policy(
+        &self,
+        holdout_dataset_id: &str,
+        frames: &[SbgRaeNativeFrame],
+        policy: RaeReplayPolicy,
     ) -> Result<RaeHoldoutReport, RaeLearnError> {
         validate_identity(holdout_dataset_id)?;
         if holdout_dataset_id == self.train_dataset_id {
@@ -292,7 +337,7 @@ impl RaeTrainedEventRouter {
             if index > 0 {
                 validate_transition(&frames[index - 1], frame, index)?;
             }
-            let predicted = self.predict(&frame.rising_words)?;
+            let predicted = self.predict_frame(frame, policy)?;
             let counts = count_page_set_errors(&predicted, &frame.required_pages_words);
             totals.accumulate(counts);
             per_frame.push(counts);
