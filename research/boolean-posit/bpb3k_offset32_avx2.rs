@@ -140,10 +140,7 @@ mod x86 {
 
 /// Safe CPU dispatch around the original exact 110/292-byte ABI.
 /// Does not interpret arbitrary multiblock FP32 accumulation order.
-pub fn dot_bpb3k_q8_offset32(
-    weights: &[u8],
-    activation: &[u8],
-) -> Result<SimdQ8Dot, PshufbError> {
+pub fn dot_bpb3k_q8_offset32(weights: &[u8], activation: &[u8]) -> Result<SimdQ8Dot, PshufbError> {
     if weights.len() != WEIGHT_BYTES {
         return Err(PshufbError::WrongWeightLength {
             actual: weights.len(),
@@ -270,17 +267,13 @@ mod tests {
         for (code, expected) in [(128u8, -4_194_304), (127u8, 4_161_536), (0u8, 0)] {
             a[4..260].fill(code);
             assert_eq!(
-                dot_bpb3k_q8_offset32(&packed, &a)
-                    .unwrap()
-                    .weighted_integer,
+                dot_bpb3k_q8_offset32(&packed, &a).unwrap().weighted_integer,
                 expected
             );
         }
         a = q8(0, 6, 0x3f800000);
         assert_eq!(
-            dot_bpb3k_q8_offset32(&packed, &a)
-                .unwrap()
-                .weighted_integer,
+            dot_bpb3k_q8_offset32(&packed, &a).unwrap().weighted_integer,
             original_q3_oracle(&original, &a)
         );
     }
