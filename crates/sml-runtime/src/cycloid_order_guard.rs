@@ -220,13 +220,8 @@ pub fn collect_and_freeze_order_guarded(
     relay_lookup_ns: u64,
     online_dispatch_ns: u64,
 ) -> Result<(GuardedCycloidAccess, CycloidBalancedProfiles), CycloidOrderGuardError> {
-    let panel = collect_balanced_mor_page_profiles(
-        runtime,
-        decision,
-        artifact,
-        max_payload_bytes,
-        pairs,
-    )?;
+    let panel =
+        collect_balanced_mor_page_profiles(runtime, decision, artifact, max_payload_bytes, pairs)?;
     let chosen = freeze_order_guarded(
         runtime,
         decision,
