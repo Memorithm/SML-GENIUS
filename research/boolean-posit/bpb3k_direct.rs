@@ -220,7 +220,6 @@ pub fn dot_bpb3k_q8(raw: &[u8], q8: &[u8]) -> Result<Q8DirectDot, Q8DotError> {
     })
 }
 
-
 /// Bitplane-transposed signed-Q8_K activation codes, reusable across any number
 /// of BPB3-K weight rows. Original Q8_K metadata is preserved verbatim.
 ///
@@ -422,7 +421,6 @@ mod tests {
         }
         block
     }
-
 
     #[test]
     fn prepared_q8_matches_original_q3_and_nonprepared_across_signed_domain() {
