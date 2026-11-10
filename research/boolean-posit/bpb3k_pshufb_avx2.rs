@@ -3,6 +3,11 @@
 //! Research-only, single-block exact-integer dot. No model/runtime dispatch.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[cfg(test)]
+#[path = "bpb3k.rs"]
+#[allow(dead_code)]
+mod codec;
+
 const WEIGHT_BYTES: usize = 110;
 pub const Q8_K_BYTES: usize = 292;
 const SUBGROUPS_PER_GROUP: usize = 4;
@@ -186,9 +191,6 @@ pub fn dot_bpb3k_q8_pshufb(weights: &[u8], activation: &[u8]) -> Result<SimdQ8Do
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[path = "bpb3k.rs"]
-    mod codec;
-
     fn q3(case: usize, fp16: u16) -> [u8; WEIGHT_BYTES] {
         let mut v: [u8; WEIGHT_BYTES] =
             std::array::from_fn(|i| (i * 73 + i / 4 * 19 + case * 41) as u8);
