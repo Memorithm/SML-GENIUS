@@ -107,7 +107,7 @@ fn time_arm<const N: usize>(
     for _ in 0..REPEATS {
         for tile in rows.chunks_exact(N) {
             if mode == 2 {
-                let refs: [&[u8]; N] = std::array::from_fn(|i| &tile[i].packed);
+                let refs: [&[u8]; N] = std::array::from_fn(|i| &tile[i].packed[..]);
                 let actual = batch::dot_bpb3k_q8_batch(black_box(refs), black_box(a)).unwrap();
                 for value in actual.integer_dots {
                     checksum += i64::from(black_box(value));
