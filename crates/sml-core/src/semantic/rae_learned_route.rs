@@ -539,4 +539,117 @@ mod tests {
             Err(RaeLearnError::MalformedFrame { index: 0 })
         );
     }
+    #[test]
+    fn genuine_sbg_mor_trace_trains_a_frozen_event_route_and_exposes_hold_miss() {
+        use crate::{
+            mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId},
+            mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
+            semantic::{
+                rae_native_trace::SbgRaeNativeTrace,
+                rising_edge::SbgNativeRouteContext,
+                SemanticBitField, SemanticExpertSignature, SemanticMorBridge, SemanticMorTopK,
+                SemanticRouterSignature, SemanticState,
+            },
+        };
+
+        let registry = MorRouterRegistry::new(
+            vec![
+                RouterSpecialization {
+                    router_id: RouterId(0),
+                    experts: vec![PageId(0)],
+                },
+                RouterSpecialization {
+                    router_id: RouterId(1),
+                    experts: vec![PageId(1)],
+                },
+            ],
+            MorRegistryPolicy {
+                expert_count: 2,
+                max_routers: 2,
+                max_edges: 2,
+                max_fanout: 1,
+                require_full_coverage: true,
+            },
+        )
+        .unwrap();
+        let bridge = SemanticMorBridge::new(
+            vec![
+                SemanticRouterSignature {
+                    router_id: RouterId(0),
+                    signature: SemanticBitField::<8>::zeroed().unwrap(),
+                },
+                SemanticRouterSignature {
+                    router_id: RouterId(1),
+                    signature: SemanticBitField::<8>::ones().unwrap(),
+                },
+            ],
+            vec![
+                SemanticExpertSignature {
+                    page_id: PageId(0),
+                    signature: SemanticBitField::<8>::zeroed().unwrap(),
+                },
+                SemanticExpertSignature {
+                    page_id: PageId(1),
+                    signature: SemanticBitField::<8>::ones().unwrap(),
+                },
+            ],
+            SemanticMorTopK::One,
+        )
+        .unwrap();
+        let engine = MixtureOfRouters::new(MorPolicy::default()).unwrap();
+        let baseline = SemanticState::<8>::zeroed().unwrap();
+        let mut trace = SbgRaeNativeTrace::new(&baseline, 0, 2).unwrap();
+
+        // Actual SBG->MOR is invoked for every source state, including
+        // the final held-high cycle with no new rising front.
+        for (index, high) in [true, false, true, false, true, false, true, true]
+            .into_iter()
+            .enumerate()
+        {
+            let mut state = baseline.clone();
+            if high {
+                state.routing = SemanticBitField::ones().unwrap();
+            }
+            trace
+                .capture(
+                    (index + 1) as u64,
+                    &state,
+                    SbgNativeRouteContext {
+                        bridge: &bridge,
+                        registry: &registry,
+                        engine: &engine,
+                        runtime_hints: &[],
+                        previous_route: &PreviousRoute::default(),
+                    },
+                    false,
+                )
+                .unwrap();
+        }
+
+        assert_eq!(trace.frames().len(), 8);
+        assert_eq!(trace.frames()[6].required_pages_words, vec![0b10]);
+        assert_eq!(trace.frames()[6].rising_words, vec![0xff]);
+        assert_eq!(trace.frames()[7].required_pages_words, vec![0b10]);
+        assert_eq!(trace.frames()[7].rising_words, vec![0]);
+
+        let model = RaeTrainedEventRouter::train::<8>(
+            "synthetic-native-train",
+            2,
+            RaeTrainPolicy {
+                minimum_exposures: 3,
+                minimum_precision_ppm: RAE_LEARNING_PPM,
+                max_associations: 16,
+            },
+            &trace.frames()[..6],
+        )
+        .unwrap();
+        assert_eq!(model.learned_feature_count(), 8);
+        let heldout = model
+            .evaluate("synthetic-native-holdout", &trace.frames()[6..])
+            .unwrap();
+        assert_eq!(heldout.totals.required_pages, 2);
+        assert_eq!(heldout.totals.selected_pages, 1);
+        assert_eq!(heldout.totals.missed_required_pages, 1);
+    }
+
 }
