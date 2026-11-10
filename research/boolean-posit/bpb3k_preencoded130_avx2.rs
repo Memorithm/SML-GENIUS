@@ -51,9 +51,7 @@ fn packed_scale(packed: &[u8], subgroup: usize) -> i16 {
 
 /// One-time lossless transcode, 110 B BPB3-K -> 130 B scale-preencoded.
 /// All bitplane bytes (0..96) and FP16 raw bits remain unchanged.
-pub fn preencode_scales(
-    packed: &[u8],
-) -> Result<[u8; WEIGHT_BYTES], BatchError> {
+pub fn preencode_scales(packed: &[u8]) -> Result<[u8; WEIGHT_BYTES], BatchError> {
     if packed.len() != PACKED_WEIGHT_BYTES {
         return Err(BatchError::WrongWeightLength {
             row: 0,
@@ -213,7 +211,6 @@ pub fn dot_bpb3k_q8_batch<const N: usize>(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,7 +223,8 @@ mod tests {
         for case in 0..96 {
             let mut original: [u8; 110] =
                 std::array::from_fn(|i| (i * 73 + i / 4 * 19 + case * 41) as u8);
-            original[108..110].copy_from_slice(&[0x3c00u16, 0xbc00, 0x7e01, 0x8000][case % 4].to_le_bytes());
+            original[108..110]
+                .copy_from_slice(&[0x3c00u16, 0xbc00, 0x7e01, 0x8000][case % 4].to_le_bytes());
             let packed = codec::q3_to_bpb3k(&original).unwrap();
             let expanded = preencode_scales(&packed).unwrap();
             assert_eq!(&expanded[..96], &packed[..96]);
@@ -240,9 +238,14 @@ mod tests {
                 *a = i.wrapping_add(case) as u8;
             }
             let actual = dot_bpb3k_q8_batch([&expanded[..]; 4], &activation).unwrap();
-            let original_dot = old::dot_bpb3k_q8_pshufb(&packed, &activation).unwrap().weighted_integer;
+            let original_dot = old::dot_bpb3k_q8_pshufb(&packed, &activation)
+                .unwrap()
+                .weighted_integer;
             assert_eq!(actual.integer_dots, [original_dot; 4]);
-            assert_eq!(actual.f16_scale_bits, [u16::from_le_bytes([original[108], original[109]]); 4]);
+            assert_eq!(
+                actual.f16_scale_bits,
+                [u16::from_le_bytes([original[108], original[109]]); 4]
+            );
             assert_eq!(actual.q8_f32_scale_bits, 0x7fc12345);
         }
     }
@@ -260,7 +263,10 @@ mod tests {
         let expanded = preencode_scales(&raw).unwrap();
         assert_eq!(
             dot_bpb3k_q8_batch([&expanded[..129]], &a),
-            Err(BatchError::WrongWeightLength { row: 0, actual: 129 })
+            Err(BatchError::WrongWeightLength {
+                row: 0,
+                actual: 129
+            })
         );
         assert_eq!(
             dot_bpb3k_q8_batch([&expanded[..]], &a[..291]),
