@@ -80,7 +80,7 @@ impl From<CycloidDispatchError> for CycloidOrderGuardError {
 
 fn quantiles(values: &mut [u128]) -> Result<(u128, u128), CycloidOrderGuardError> {
     if values.len() < usize::from(MIN_CYCLOID_BALANCED_PAIRS)
-        || values.iter().any(|value| *value == 0)
+        || values.contains(&0)
     {
         return Err(CycloidOrderGuardError::InvalidTime);
     }
@@ -206,6 +206,13 @@ pub fn freeze_order_guarded(
     })
 }
 
+/// Bounded acquisition inputs for a real counterbalanced source-read panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CycloidBalancedAcquisition {
+    pub max_payload_bytes: u64,
+    pub pairs: u8,
+}
+
 /// Actually collect new paired reads and return the panel with its optional
 /// qualified frozen decision. No caller-injected timing samples enter this
 /// method. Lookup and dispatch overheads are STILL caller-declared, not
@@ -214,14 +221,18 @@ pub fn collect_and_freeze_order_guarded(
     runtime: &ElasticRamRuntime,
     decision: &MorDecision,
     artifact: &WeightArtifactEntry,
-    max_payload_bytes: u64,
-    pairs: u8,
+    acquisition: CycloidBalancedAcquisition,
     budget: CycloidBudget,
     relay_lookup_ns: u64,
     online_dispatch_ns: u64,
 ) -> Result<(GuardedCycloidAccess, CycloidBalancedProfiles), CycloidOrderGuardError> {
-    let panel =
-        collect_balanced_mor_page_profiles(runtime, decision, artifact, max_payload_bytes, pairs)?;
+    let panel = collect_balanced_mor_page_profiles(
+        runtime,
+        decision,
+        artifact,
+        acquisition.max_payload_bytes,
+        acquisition.pairs,
+    )?;
     let chosen = freeze_order_guarded(
         runtime,
         decision,
