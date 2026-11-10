@@ -402,6 +402,99 @@ mod tests {
     use super::*;
 
     #[test]
+    fn paired_borrow_batches_execute_on_same_committed_page() {
+        let payload = vec![0xa5; 64];
+        let artifact =
+            build_weight_artifact(PageId(0), 0, WeightPrecision::Boolean, 512, &payload).unwrap();
+        let temporary = TemporaryDirectory::create().unwrap();
+        let path = temporary.0.join("borrow-test.smlwgt");
+        fs::write(&path, &artifact).unwrap();
+        let entry = WeightArtifactEntry {
+            page_id: PageId(0),
+            representation_version: 0,
+            precision: WeightPrecision::Boolean,
+            path,
+        };
+        let planner = ElasticWeightPlanner::new(
+            vec![
+                ElasticWeightPage::new(
+                    PageId(0),
+                    512,
+                    WeightPrecision::Boolean,
+                    ResidencyTier::Disk,
+                    0,
+                )
+                .unwrap(),
+            ],
+            ElasticWeightPolicy {
+                ram_limit_bytes: 64,
+                vram_limit_bytes: 0,
+                max_active_parameters: 512,
+                ternary_threshold_ppm: 500_000,
+                residual4_threshold_ppm: 900_000,
+                vram_threshold_ppm: 1_000_000,
+            },
+        )
+        .unwrap();
+        let mut runtime = ElasticRamRuntime::new(planner).unwrap();
+        let catalog = WeightArtifactCatalog::from_retained_bytes(vec![artifact]).unwrap();
+        let plan = runtime.planner().plan_cycle(&[PageId(0)], 1).unwrap();
+        let staged = runtime
+            .stage(&plan, &catalog, RamMaterializationBudget::default())
+            .unwrap();
+        runtime.commit(staged).unwrap();
+
+        let selection = selected_page();
+        let samples = [CycloidPageProfile {
+            page_id: PageId(0),
+            representation_version: 0,
+            precision: WeightPrecision::Boolean,
+            payload_bytes: 64,
+            artifact_bytes_read: 128,
+            file_read_verify_ns: 1_000_000,
+            resident_copy_verify_ns: 1,
+            byte_exact_match: true,
+        }; 5];
+        let frozen = FrozenCycloidAccess::freeze(
+            &runtime,
+            &selection,
+            &entry,
+            &samples,
+            CycloidBudget {
+                max_hops: 3,
+                max_expansions: 20,
+                max_read_bytes: 128,
+            },
+            1,
+            1,
+        )
+        .unwrap();
+        assert_eq!(frozen.mode(), CycloidAccessMode::VerifiedResident);
+        assert_eq!(
+            frozen
+                .borrow_committed_resident(&runtime, &selection)
+                .unwrap(),
+            payload
+        );
+        let (borrow_first, copy_second) =
+            timed_resident_pair(&runtime, &selection, &frozen, true).unwrap();
+        let (borrow_second, copy_first) =
+            timed_resident_pair(&runtime, &selection, &frozen, false).unwrap();
+        let borrow_summary = quantiles(&[borrow_first, borrow_second]).unwrap();
+        let copy_summary = quantiles(&[copy_first, copy_second]).unwrap();
+        assert!(borrow_summary.p95_ns >= borrow_summary.median_ns);
+        assert!(copy_summary.p95_ns >= copy_summary.median_ns);
+        let authoritative = runtime.ram_page(PageId(0)).unwrap().payload();
+        assert!(std::ptr::eq(
+            frozen
+                .borrow_committed_resident(&runtime, &selection)
+                .unwrap()
+                .as_ptr(),
+            authoritative.as_ptr()
+        ));
+    }
+
+    #[test]
     fn quantiles_are_deterministic_for_small_frozen_panel() {
         let values = [300, 100, 400, 200, 500];
         assert_eq!(
