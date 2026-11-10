@@ -101,26 +101,13 @@ impl<const BITS: usize> SbgRoutingDirtyJournal<BITS> {
     /// words because whole-field replacement cannot enumerate changed words
     /// without reading both versions. No false O(number-of-events) claim.
     pub fn replace(&mut self, next: SemanticBitField<BITS>) -> usize {
+        let previous = core::mem::replace(&mut self.routing, next);
         let mut changed = 0;
-        for (index, (&old, &new)) in self
-            .routing
-            .words()
-            .iter()
-            .zip(next.words())
-            .enumerate()
-        {
-            if old != new {
-                changed += 1;
-            }
-            // Recording is deferred until after iteration; see below.
-            let _ = index;
+        for (index, &old) in previous.words().iter().enumerate() {
+            let new = self.routing.words()[index];
+            changed += usize::from(old != new);
+            self.record_change(index, old, new);
         }
-        // Inspect once for exact pending baseline handling. The point
-        // mutation path is the intended sparse path; replacement is dense.
-        for index in 0..self.routing.words().len() {
-            self.record_change(index, self.routing.words()[index], next.words()[index]);
-        }
-        self.routing = next;
         changed
     }
 
