@@ -8,9 +8,9 @@
 //! must scan its words once to identify differences; callers must not infer
 //! that every SML state change already produces a dirty-word notice.
 
+use core::fmt;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use core::fmt;
 
 use super::{SemanticBitField, SemanticBitFieldError};
 
@@ -185,11 +185,14 @@ mod tests {
                 Ok::<(), &'static str>(())
             })
             .unwrap();
-        assert_eq!(captured, vec![
-            SbgDirtyRoutingWord { index: 0, next: 1 },
-            SbgDirtyRoutingWord { index: 1, next: 1 },
-            SbgDirtyRoutingWord { index: 2, next: 2 },
-        ]);
+        assert_eq!(
+            captured,
+            vec![
+                SbgDirtyRoutingWord { index: 0, next: 1 },
+                SbgDirtyRoutingWord { index: 1, next: 1 },
+                SbgDirtyRoutingWord { index: 2, next: 2 },
+            ]
+        );
         assert_eq!(counts.dirty_words, 3);
         assert_eq!(counts.total_words, 3);
         assert_eq!(journal.pending_word_count(), 0);
@@ -224,10 +227,12 @@ mod tests {
             })
         );
         let mut value = 0;
-        journal.flush(8, |words| {
-            value = words[0].next;
-            Ok::<(), ()>(())
-        }).unwrap();
+        journal
+            .flush(8, |words| {
+                value = words[0].next;
+                Ok::<(), ()>(())
+            })
+            .unwrap();
         assert_eq!(value, 1);
         assert_eq!(journal.pending_word_count(), 0);
     }
@@ -237,19 +242,35 @@ mod tests {
         let mut journal = SbgRoutingDirtyJournal::new(SemanticBitField::<70>::zeroed().unwrap(), 0);
         assert_eq!(journal.replace(SemanticBitField::<70>::ones().unwrap()), 2);
         let mut output = Vec::new();
-        journal.flush(1, |words| {
-            output.extend_from_slice(words);
-            Ok::<(), ()>(())
-        }).unwrap();
-        assert_eq!(output, vec![
-            SbgDirtyRoutingWord { index: 0, next: u64::MAX },
-            SbgDirtyRoutingWord { index: 1, next: 0b11_1111 },
-        ]);
-        assert_eq!(journal.replace(SemanticBitField::<70>::zeroed().unwrap()), 2);
-        journal.flush(2, |words| {
-            assert_eq!(words.len(), 2);
-            Ok::<(), ()>(())
-        }).unwrap();
+        journal
+            .flush(1, |words| {
+                output.extend_from_slice(words);
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+        assert_eq!(
+            output,
+            vec![
+                SbgDirtyRoutingWord {
+                    index: 0,
+                    next: u64::MAX
+                },
+                SbgDirtyRoutingWord {
+                    index: 1,
+                    next: 0b11_1111
+                },
+            ]
+        );
+        assert_eq!(
+            journal.replace(SemanticBitField::<70>::zeroed().unwrap()),
+            2
+        );
+        journal
+            .flush(2, |words| {
+                assert_eq!(words.len(), 2);
+                Ok::<(), ()>(())
+            })
+            .unwrap();
     }
 
     #[test]
@@ -258,10 +279,7 @@ mod tests {
         let before = journal.clone();
         assert_eq!(
             journal.set(1, true),
-            Err(SemanticBitFieldError::IndexOutOfRange {
-                index: 1,
-                width: 1,
-            })
+            Err(SemanticBitFieldError::IndexOutOfRange { index: 1, width: 1 })
         );
         assert_eq!(journal, before);
     }
