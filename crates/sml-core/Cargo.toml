@@ -16,6 +16,10 @@ icm = []
 # GROK-ICM-5 experimental document ranking (NOT BEIR-validated). See docs/SML-GROK-ICM-5-*.
 icm-rank = ["icm"]
 [[example]]
+name = "sbg_rae_dirty_mor"
+test = true
+
+[[example]]
 name = "baf_focus_compare"
 test = true
 
