@@ -76,6 +76,7 @@ pub mod circuit;
 pub mod context_ledger;
 pub mod crypto_features;
 pub mod crypto_strategy;
+pub mod cycloid_route;
 pub mod delta_kv;
 pub mod delta_kv_adaptive;
 pub mod delta_kv_controls;
