@@ -85,3 +85,45 @@ The source is written independently against the publicly documented
 Intel and x86-64 SysV ABI instruction contracts, with external llama.cpp
 used only as an independent oracle; license/provenance must still be
 reviewed for any planned transfer into SciRust.
+
+
+## Observed CI results — 2026-11-10 (no retroactive change to protocol)
+
+[Exact-source CI run 42851204567](https://github.com/Memorithm/SML-GENIUS/actions/runs/42851204567),
+source head 810b6b33cd9e169da48f5b75cb5f648e75fa551b:
+the standalone hand-assembler oracle completed successfully.
+24 Rust unit tests succeeded (including the existing PSHUFB tests),
+the independent original AVX2 oracle ran 896 cases and the original
+tiled oracle 112 cases. A 1,024-row Q3_K-vs-Rust-vs-asm
+unit-scale, single-superblock bitwise-FP32 oracle succeeded.
+All 72 synthetic timed triplets were recorded. The exact function
+object disassembly contains VPSHUFB, VPMADDUBSW and VPMADDWD, no
+VPOPCNT and no stack memory references or push/pop instructions.
+
+Medians in nanoseconds per product, identical runner / corpus:
+
+| Rows | Original stock AVX2 | Rust AVX2 intrinsic | Handwritten AVX2 |
+|---:|---:|---:|---:|
+| 1 | 45.00 | 87.75 | 62.50 |
+| 32 | 37.18 | 90.88 | 54.95 |
+| 256 | 35.56 | 81.29 | 51.14 |
+| 1024 | **23.93** | **52.86** | **43.29** |
+
+At 1,024 rows handwritten assembly is faster than the Rust intrinsics
+on this single hosted experiment by **52.86 / 43.29 = 1.221x**,
+or approximately 18.1% lower time per product. However the
+original native stock is **43.29 / 23.93 = 1.809x faster** than
+the assembly candidate. Timing noise and host variations prohibit
+extrapolation beyond these paired observations.
+
+The assembly hypothesis is supported for *improving the experimental
+Rust candidate*, but is **rejected as currently meeting the target of
+beating the optimized stock Q3_K kernel**. Do not initiate a
+CPU-intensive, interruptive Dell campaign for this candidate merely
+to seek a favorable result. Next justified work is code-size,
+critical-dependency and port-profile analysis, with pre-registered
+changes and fresh paired controls. Lack of hand-function stack loads
+does not prove that surrounding Rust/ggml code never spills.
+
+The CI checks described here are a diagnostic test of the exact
+assembly, not the full-model CI required for merging the stacked PR.
