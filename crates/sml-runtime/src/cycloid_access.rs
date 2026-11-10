@@ -46,6 +46,7 @@ pub enum CycloidPageProfileError {
     PageNotResident,
     ArtifactIdentityMismatch,
     NotRegularFile,
+    FileReplaced,
     ArtifactLengthMismatch,
     ResidentChecksumMismatch,
     PayloadMismatch,
@@ -74,20 +75,120 @@ impl From<WeightArtifactError> for CycloidPageProfileError {
     }
 }
 
-/// Perform exactly one bounded filesystem read and one RAM copy, on the same
-/// retained page identity, and require byte-for-byte agreement. No timing
-/// conclusion should be drawn from one observation; caller must run paired
-/// repetitions and reversal of read order under RemoteOps for claims.
-///
-/// The disk path must be independently authorized by the caller. CRC32C is
-/// corruption detection, NOT publisher authentication. A changed file or
-/// symlink is rejected rather than silently trusted.
+/// The order of two independently verified, physically executed source reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CycloidProbeOrder {
+    FileThenRam,
+    RamThenFile,
+}
+
+impl CycloidProbeOrder {
+    #[must_use]
+    pub const fn reverse(self) -> Self {
+        match self {
+            Self::FileThenRam => Self::RamThenFile,
+            Self::RamThenFile => Self::FileThenRam,
+        }
+    }
+}
+
+/// Retains the order so results cannot be accidentally presented as randomized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CycloidOrderedProfile {
+    pub order: CycloidProbeOrder,
+    pub profile: CycloidPageProfile,
+}
+
+pub const MIN_CYCLOID_BALANCED_PAIRS: u8 = 3;
+pub const MAX_CYCLOID_BALANCED_PAIRS: u8 = 64;
+
+/// A bounded deterministic AB/BA collection of actual file/RAM read timings.
+/// Every pair contains each order exactly once; between pairs, the leading
+/// order alternates. This is **counterbalancing**, not randomization, a
+/// hardware performance claim, or a substitute for independent repetitions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CycloidBalancedProfiles {
+    pub pairs: u8,
+    pub samples: Vec<CycloidOrderedProfile>,
+}
+
+impl CycloidBalancedProfiles {
+    /// Strip order metadata only when the caller separately retains the
+    /// experimental protocol/provenance. A frozen path selector accepts
+    /// CycloidPageProfile observations, not presentation conclusions.
+    #[must_use]
+    pub fn profile_values(&self) -> Vec<CycloidPageProfile> {
+        self.samples.iter().map(|sample| sample.profile).collect()
+    }
+}
+
+pub fn collect_balanced_mor_page_profiles(
+    runtime: &ElasticRamRuntime,
+    selected: &MorDecision,
+    artifact: &WeightArtifactEntry,
+    max_payload_bytes: u64,
+    pairs: u8,
+) -> Result<CycloidBalancedProfiles, CycloidPageProfileError> {
+    if !(MIN_CYCLOID_BALANCED_PAIRS..=MAX_CYCLOID_BALANCED_PAIRS).contains(&pairs) {
+        return Err(CycloidPageProfileError::InvalidBudget);
+    }
+    let mut samples = Vec::with_capacity(usize::from(pairs) * 2);
+    for pair in 0..pairs {
+        let first = if pair % 2 == 0 {
+            CycloidProbeOrder::FileThenRam
+        } else {
+            CycloidProbeOrder::RamThenFile
+        };
+        samples.push(profile_same_mor_page_ordered(
+            runtime,
+            selected,
+            artifact,
+            max_payload_bytes,
+            first,
+        )?);
+        samples.push(profile_same_mor_page_ordered(
+            runtime,
+            selected,
+            artifact,
+            max_payload_bytes,
+            first.reverse(),
+        )?);
+    }
+    Ok(CycloidBalancedProfiles { pairs, samples })
+}
+
+/// Legacy one-pair call preserved for existing clients. Its order is explicitly
+/// FileThenRam; use ordered/balanced collection for comparison evidence.
 pub fn profile_same_mor_page(
     runtime: &ElasticRamRuntime,
     selected: &MorDecision,
     artifact: &WeightArtifactEntry,
     max_payload_bytes: u64,
 ) -> Result<CycloidPageProfile, CycloidPageProfileError> {
+    Ok(profile_same_mor_page_ordered(
+        runtime,
+        selected,
+        artifact,
+        max_payload_bytes,
+        CycloidProbeOrder::FileThenRam,
+    )?
+    .profile)
+}
+
+/// Perform exactly one bounded file read and one resident RAM copy, in the
+/// requested order, requiring byte-for-byte agreement and independent CRC32C
+/// checks. Both observations include their source's parsing/copy and integrity
+/// verification overhead; they are not bare I/O latency counters.
+///
+/// The path must be authorized by the caller; CRC32C does not authenticate
+/// the publisher or attest that the measured samples were made on one host.
+pub fn profile_same_mor_page_ordered(
+    runtime: &ElasticRamRuntime,
+    selected: &MorDecision,
+    artifact: &WeightArtifactEntry,
+    max_payload_bytes: u64,
+    order: CycloidProbeOrder,
+) -> Result<CycloidOrderedProfile, CycloidPageProfileError> {
     if max_payload_bytes == 0 || max_payload_bytes > MAX_CYCLOID_PROFILE_PAYLOAD_BYTES {
         return Err(CycloidPageProfileError::InvalidBudget);
     }
@@ -113,8 +214,9 @@ pub fn profile_same_mor_page(
         .checked_add(header_bytes)
         .ok_or(CycloidPageProfileError::ArithmeticOverflow)?;
 
-    // Use lstat to reject symlink inputs; validate content again after reading
-    // because metadata before open is not an authenticity or immutability proof.
+    // lstat rejects a symlink at the moment of this check. Compare the opened
+    // file's inode/device on Unix to detect a source swap before the open.
+    // Concurrent in-place file mutation is not prevented by these checks.
     let metadata = fs::symlink_metadata(&artifact.path)?;
     if !metadata.file_type().is_file() {
         return Err(CycloidPageProfileError::NotRegularFile);
@@ -123,44 +225,71 @@ pub fn profile_same_mor_page(
         return Err(CycloidPageProfileError::ArtifactLengthMismatch);
     }
 
-    let file_started = Instant::now();
-    let file = File::open(&artifact.path)?;
-    let read_limit = expected_file_bytes
-        .checked_add(1)
-        .ok_or(CycloidPageProfileError::ArithmeticOverflow)?;
-    let mut disk_bytes = Vec::new();
-    file.take(read_limit).read_to_end(&mut disk_bytes)?;
-    if u64::try_from(disk_bytes.len()).map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
-        != expected_file_bytes
-    {
-        return Err(CycloidPageProfileError::ArtifactLengthMismatch);
-    }
-    let parsed = parse_weight_artifact(&disk_bytes)?;
-    let file_read_verify_ns = file_started.elapsed().as_nanos();
-    if parsed.header != resident.header {
-        return Err(CycloidPageProfileError::ArtifactIdentityMismatch);
-    }
+    let file_probe = || -> Result<(Vec<u8>, u128), CycloidPageProfileError> {
+        let started = Instant::now();
+        let file = File::open(&artifact.path)?;
+        let opened = file.metadata()?;
+        if !opened.is_file() || opened.len() != expected_file_bytes {
+            return Err(CycloidPageProfileError::ArtifactLengthMismatch);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
+                return Err(CycloidPageProfileError::FileReplaced);
+            }
+        }
+        let limit = expected_file_bytes
+            .checked_add(1)
+            .ok_or(CycloidPageProfileError::ArithmeticOverflow)?;
+        let mut bytes = Vec::new();
+        file.take(limit).read_to_end(&mut bytes)?;
+        if u64::try_from(bytes.len()).map_err(|_| CycloidPageProfileError::ArithmeticOverflow)?
+            != expected_file_bytes
+        {
+            return Err(CycloidPageProfileError::ArtifactLengthMismatch);
+        }
+        let parsed = parse_weight_artifact(&bytes)?;
+        if parsed.header != resident.header {
+            return Err(CycloidPageProfileError::ArtifactIdentityMismatch);
+        }
+        Ok((bytes, started.elapsed().as_nanos()))
+    };
 
-    let resident_started = Instant::now();
-    let ram_bytes = resident.payload().to_vec();
-    let ram_crc = crc32c(&ram_bytes);
-    let resident_copy_verify_ns = resident_started.elapsed().as_nanos();
-    if ram_crc != resident.header.payload_crc32c {
-        return Err(CycloidPageProfileError::ResidentChecksumMismatch);
-    }
-    if parsed.payload != ram_bytes {
+    let ram_probe = || -> Result<(Vec<u8>, u128), CycloidPageProfileError> {
+        let started = Instant::now();
+        let bytes = resident.payload().to_vec();
+        let checksum = crc32c(&bytes);
+        if checksum != resident.header.payload_crc32c {
+            return Err(CycloidPageProfileError::ResidentChecksumMismatch);
+        }
+        Ok((bytes, started.elapsed().as_nanos()))
+    };
+
+    let ((disk_bytes, file_read_verify_ns), (ram_bytes, resident_copy_verify_ns)) = match order {
+        CycloidProbeOrder::FileThenRam => (file_probe()?, ram_probe()?),
+        CycloidProbeOrder::RamThenFile => {
+            let ram = ram_probe()?;
+            let disk = file_probe()?;
+            (disk, ram)
+        }
+    };
+    if &disk_bytes[WEIGHT_ARTIFACT_HEADER_BYTES..] != ram_bytes.as_slice() {
         return Err(CycloidPageProfileError::PayloadMismatch);
     }
 
-    Ok(CycloidPageProfile {
-        page_id: artifact.page_id,
-        representation_version: artifact.representation_version,
-        precision: artifact.precision,
-        payload_bytes: expected_payload_bytes,
-        artifact_bytes_read: expected_file_bytes,
-        file_read_verify_ns,
-        resident_copy_verify_ns,
-        byte_exact_match: true,
+    Ok(CycloidOrderedProfile {
+        order,
+        profile: CycloidPageProfile {
+            page_id: artifact.page_id,
+            representation_version: artifact.representation_version,
+            precision: artifact.precision,
+            payload_bytes: expected_payload_bytes,
+            artifact_bytes_read: expected_file_bytes,
+            file_read_verify_ns,
+            resident_copy_verify_ns,
+            byte_exact_match: true,
+        },
     })
 }
 
@@ -272,6 +401,88 @@ mod tests {
         assert_eq!(
             profile_same_mor_page(&runtime, &selected(PageId(0)), &artifact, 32),
             Err(CycloidPageProfileError::ArtifactIdentityMismatch)
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn both_read_orders_execute_and_verify_identical_bytes() {
+        let runtime = resident_runtime();
+        let (path, artifact) = temporary_artifact();
+        let file_first = profile_same_mor_page_ordered(
+            &runtime,
+            &selected(PageId(0)),
+            &artifact,
+            32,
+            CycloidProbeOrder::FileThenRam,
+        )
+        .unwrap();
+        let ram_first = profile_same_mor_page_ordered(
+            &runtime,
+            &selected(PageId(0)),
+            &artifact,
+            32,
+            CycloidProbeOrder::RamThenFile,
+        )
+        .unwrap();
+        assert_eq!(file_first.order, CycloidProbeOrder::FileThenRam);
+        assert_eq!(ram_first.order, CycloidProbeOrder::RamThenFile);
+        assert!(file_first.profile.byte_exact_match);
+        assert!(ram_first.profile.byte_exact_match);
+        assert_eq!(file_first.profile.artifact_bytes_read, 65);
+        assert_eq!(ram_first.profile.artifact_bytes_read, 65);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn balanced_pairs_emit_exactly_both_orders_without_dropping_samples() {
+        let runtime = resident_runtime();
+        let (path, artifact) = temporary_artifact();
+        let batch =
+            collect_balanced_mor_page_profiles(&runtime, &selected(PageId(0)), &artifact, 32, 3)
+                .unwrap();
+        assert_eq!(batch.pairs, 3);
+        assert_eq!(batch.samples.len(), 6);
+        assert_eq!(
+            batch
+                .samples
+                .iter()
+                .filter(|item| item.order == CycloidProbeOrder::FileThenRam)
+                .count(),
+            3
+        );
+        assert_eq!(
+            batch
+                .samples
+                .iter()
+                .filter(|item| item.order == CycloidProbeOrder::RamThenFile)
+                .count(),
+            3
+        );
+        assert_eq!(batch.profile_values().len(), 6);
+        assert!(batch
+            .samples
+            .iter()
+            .all(|item| item.profile.byte_exact_match));
+        assert_eq!(batch.samples[0].order, CycloidProbeOrder::FileThenRam);
+        assert_eq!(batch.samples[1].order, CycloidProbeOrder::RamThenFile);
+        assert_eq!(batch.samples[2].order, CycloidProbeOrder::RamThenFile);
+        assert_eq!(batch.samples[3].order, CycloidProbeOrder::FileThenRam);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn malformed_pair_budget_fails_without_source_access() {
+        let runtime = resident_runtime();
+        let (_, artifact) = temporary_artifact();
+        let path = artifact.path.clone();
+        assert_eq!(
+            collect_balanced_mor_page_profiles(&runtime, &selected(PageId(0)), &artifact, 32, 2),
+            Err(CycloidPageProfileError::InvalidBudget)
+        );
+        assert_eq!(
+            collect_balanced_mor_page_profiles(&runtime, &selected(PageId(0)), &artifact, 32, 65),
+            Err(CycloidPageProfileError::InvalidBudget)
         );
         fs::remove_file(path).unwrap();
     }
