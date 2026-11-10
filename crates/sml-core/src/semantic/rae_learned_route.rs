@@ -175,8 +175,8 @@ impl RaeTrainedEventRouter {
         for ((feature, page), hits) in votes {
             let total = exposures[feature];
             debug_assert!(total >= hits);
-            let precision_ppm = ((u128::from(hits) * u128::from(RAE_LEARNING_PPM))
-                / u128::from(total)) as u32;
+            let precision_ppm =
+                ((u128::from(hits) * u128::from(RAE_LEARNING_PPM)) / u128::from(total)) as u32;
             if total < policy.minimum_exposures || precision_ppm < policy.minimum_precision_ppm {
                 continue;
             }
@@ -246,7 +246,10 @@ impl RaeTrainedEventRouter {
 
     #[must_use]
     pub fn learned_feature_count(&self) -> usize {
-        self.assignments.iter().filter(|value| !value.is_empty()).count()
+        self.assignments
+            .iter()
+            .filter(|value| !value.is_empty())
+            .count()
     }
 
     /// Highest-supported original MOR page, for the one-target baseline.
@@ -385,7 +388,11 @@ fn validate_frame(
     index: usize,
 ) -> Result<(), RaeLearnError> {
     let malformed = || RaeLearnError::MalformedFrame { index };
-    for words in [&frame.routing_words, &frame.rising_words, &frame.falling_words] {
+    for words in [
+        &frame.routing_words,
+        &frame.rising_words,
+        &frame.falling_words,
+    ] {
         validate_words(words, feature_width).map_err(|()| malformed())?;
     }
     validate_words(&frame.required_pages_words, expert_count).map_err(|()| malformed())?;
@@ -630,8 +637,7 @@ mod tests {
             mor::{MixtureOfRouters, MorPolicy, PreviousRoute, RouterId},
             mor_registry::{MorRegistryPolicy, MorRouterRegistry, RouterSpecialization},
             semantic::{
-                rae_native_trace::SbgRaeNativeTrace,
-                rising_edge::SbgNativeRouteContext,
+                rae_native_trace::SbgRaeNativeTrace, rising_edge::SbgNativeRouteContext,
                 SemanticBitField, SemanticExpertSignature, SemanticMorBridge, SemanticMorTopK,
                 SemanticRouterSignature, SemanticState,
             },
@@ -749,16 +755,11 @@ mod tests {
             minimum_precision_ppm: RAE_LEARNING_PPM,
             max_associations: 2,
         };
-        let single = RaeTrainedEventRouter::train::<8>("train-multi", 2, threshold, &train)
-            .unwrap();
-        let multi = RaeTrainedEventRouter::train_with_fanout::<8>(
-            "train-multi",
-            2,
-            threshold,
-            2,
-            &train,
-        )
-        .unwrap();
+        let single =
+            RaeTrainedEventRouter::train::<8>("train-multi", 2, threshold, &train).unwrap();
+        let multi =
+            RaeTrainedEventRouter::train_with_fanout::<8>("train-multi", 2, threshold, 2, &train)
+                .unwrap();
         assert_eq!(single.learned_fanout(), 1);
         assert_eq!(multi.learned_fanout(), 2);
         assert_eq!(single.learned_association_count(), 1);
@@ -776,10 +777,7 @@ mod tests {
         assert_eq!(single.predict(&[1]).unwrap(), vec![0b01]);
         assert_eq!(multi.predict(&[1]).unwrap(), vec![0b11]);
 
-        let holdout = [
-            frame(4, 1, 1, 0, 0b11),
-            frame(5, 1, 0, 0, 0b11),
-        ];
+        let holdout = [frame(4, 1, 1, 0, 0b11), frame(5, 1, 0, 0, 0b11)];
         let one = single.evaluate("holdout-multi", &holdout).unwrap();
         let two = multi.evaluate("holdout-multi", &holdout).unwrap();
         assert_eq!(one.totals.required_pages, 4);
@@ -788,13 +786,7 @@ mod tests {
         assert_eq!(two.per_frame[0].missed_required_pages, 0);
         assert_eq!(two.per_frame[1].missed_required_pages, 2);
         assert_eq!(
-            RaeTrainedEventRouter::train_with_fanout::<8>(
-                "train-multi",
-                2,
-                threshold,
-                0,
-                &train
-            ),
+            RaeTrainedEventRouter::train_with_fanout::<8>("train-multi", 2, threshold, 0, &train),
             Err(RaeLearnError::InvalidFanout)
         );
         assert_eq!(
@@ -869,5 +861,4 @@ mod tests {
         assert_eq!(counts.missed_required_pages, 1);
         assert_eq!(counts.extra_selected_pages, 1);
     }
-
 }
