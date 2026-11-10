@@ -290,6 +290,9 @@ fn validate_frame(
         validate_words(words, feature_width).map_err(|()| malformed())?;
     }
     validate_words(&frame.required_pages_words, expert_count).map_err(|()| malformed())?;
+    if frame.selected_experts.is_empty() {
+        return Err(malformed());
+    }
     let mut rebuilt = vec![0_u64; expert_count.div_ceil(64)];
     for page in &frame.selected_experts {
         let index = page.0 as usize;
@@ -430,11 +433,11 @@ mod tests {
     fn learns_frozen_hard_event_to_page_and_detects_held_high_miss() {
         let train = [
             frame(1, 1, 1, 0, 0b10),
-            frame(2, 0, 0, 1, 0),
+            frame(2, 0, 0, 1, 0b01),
             frame(3, 1, 1, 0, 0b10),
-            frame(4, 0, 0, 1, 0),
+            frame(4, 0, 0, 1, 0b01),
             frame(5, 1, 1, 0, 0b10),
-            frame(6, 0, 0, 1, 0),
+            frame(6, 0, 0, 1, 0b01),
             frame(7, 2, 2, 0, 0b01),
         ];
         let learned = RaeTrainedEventRouter::train::<8>("train-A", 2, policy(), &train).unwrap();
