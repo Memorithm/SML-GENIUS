@@ -74,3 +74,38 @@ If the 32-bit broadcast proves superior for the same arithmetic,
 the reusable SIMD technique may be requalified within SciRust.
 Any reuse must preserve the independent destination ABI and exact
 quantization contract.
+
+
+## Observed first broadcast32 run — 2026-11-10
+
+[Exact-head workflow 42858071622](https://github.com/Memorithm/SML-GENIUS/actions/runs/42858071622),
+at SHA daeb66e943403eaf16ed9644a3adcd7d10c228b9, passed.
+
+- 24 Rust tests, original upstream AVX2 C 896 source-independent
+  oracle cases, original tiled C++ 112 cases, and 1024 exact
+  unit-scale FP32 original-Q3 output comparisons passed.
+- Generated Haswell machine code did contain VPBROADCASTD, VPSHUFB,
+  VPMADDUBSW and VPMADDWD and no AVX512 VPOPCNT.
+- All 96 original-source / prior PSHUFB / broadcast32 timed
+  triplets passed checksum parity and were retained.
+
+Descriptive median nanoseconds/dot within this single runner:
+
+| Rows | Original Q3_K stock | Earlier PSHUFB | New broadcast32 |
+|---:|---:|---:|---:|
+| 1 | 47.50 | 90.00 | 67.75 |
+| 32 | 35.23 | 72.16 | 52.98 |
+| 256 | 35.14 | 80.18 | 55.03 |
+| 1024 | **28.04** | **54.08** | **42.44** |
+
+On 1024 rows the optimized broadcast32 decode reduced the
+prior candidate's time by **(54.08 - 42.44) / 54.08 = 21.52%**
+(throughput factor 54.08/42.44 = 1.2743).
+It nonetheless remained **42.44 / 28.04 = 1.5135x slower**
+than the original native optimized Q3_K AVX2 C function.
+
+This is a genuine *within-candidate* improvement in the frozen
+hosted synthetic measurement, not a winning model/inference kernel.
+Follow-up unsigned-offset coding is preregistered and measured
+separately in BPB3_K_OFFSET32.md; do not compare absolute timings
+from different hosted runs as if they were controlled head-to-head.
