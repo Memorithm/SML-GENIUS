@@ -457,7 +457,7 @@ mod tests {
     fn exact_vote_ties_resolve_by_original_page_id() {
         let train = [
             frame(1, 1, 1, 0, 0b01),
-            frame(2, 0, 0, 1, 0),
+            frame(2, 0, 0, 1, 0b01),
             frame(3, 1, 1, 0, 0b10),
         ];
         let chosen = RaeTrainedEventRouter::train::<8>(
