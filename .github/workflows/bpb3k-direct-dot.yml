@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'research/boolean-posit/bpb3k_direct.rs'
+      - 'research/boolean-posit/bpb3k_prepared_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - 'research/boolean-posit/BPB3_K_DIRECT_DOT.md'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'research/boolean-posit/bpb3k_direct.rs'
+      - 'research/boolean-posit/bpb3k_prepared_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - '.github/workflows/bpb3k-direct-dot.yml'
@@ -33,7 +35,7 @@ jobs:
       - name: Install pinned research toolchain
         run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
       - name: Verify Rust formatting
-        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs
+        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs research/boolean-posit/bpb3k_prepared_bench.rs
       - name: Build direct-dot test oracle (warnings denied)
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
       - name: Execute independent Q3_K dot parity and regression tests
@@ -42,3 +44,12 @@ jobs:
           "$RUNNER_TEMP/bpb3k-direct-tests" --nocapture
       - name: Compile optimized standalone Rust library
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings -O --crate-type lib research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/libbpb3k_direct.rlib"
+
+      - name: Build native optimized Q8-prepared amortization diagnostic
+        run: rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=native research/boolean-posit/bpb3k_prepared_bench.rs -o "$RUNNER_TEMP/bpb3k-q8-prepared-bench"
+      - name: Paired standalone Q8 benchmark with unchanged outputs (not model qualification)
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-q8-prepared-bench" | tee "$RUNNER_TEMP/bpb3k-q8-prepared-bench.txt"
+          grep -q '^BPB3K_Q8_BENCH_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-q8-prepared-bench.txt"
