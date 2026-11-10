@@ -115,10 +115,8 @@ mod x86 {
             // Output high bytes start at 0; two signed word shifts then
             // sign-extend each signed-i8 scale to its exact signed i16.
             let scale_select = _mm256_setr_epi8(
-                0, -128, 0, -128, 0, -128, 0, -128,
-                0, -128, 0, -128, 0, -128, 0, -128,
-                1, -128, 1, -128, 1, -128, 1, -128,
-                1, -128, 1, -128, 1, -128, 1, -128,
+                0, -128, 0, -128, 0, -128, 0, -128, 0, -128, 0, -128, 0, -128, 0, -128, 1, -128, 1,
+                -128, 1, -128, 1, -128, 1, -128, 1, -128, 1, -128, 1, -128,
             );
             let mut accumulators = [zero; N];
 
@@ -150,17 +148,13 @@ mod x86 {
                         );
                         // Paired scale bytes are contiguous by design in
                         // the 114-byte format. A single 16-bit load suffices.
-                        let pair_bytes = u16::from_le_bytes([
-                            w[96 + subgroup],
-                            w[96 + subgroup + 1],
-                        ]);
+                        let pair_bytes =
+                            u16::from_le_bytes([w[96 + subgroup], w[96 + subgroup + 1]]);
                         let pair_broadcast = _mm256_set1_epi16(pair_bytes as i16);
                         let pair_i16_zeroextended =
                             _mm256_shuffle_epi8(pair_broadcast, scale_select);
-                        let scales = _mm256_srai_epi16(
-                            _mm256_slli_epi16(pair_i16_zeroextended, 8),
-                            8,
-                        );
+                        let scales =
+                            _mm256_srai_epi16(_mm256_slli_epi16(pair_i16_zeroextended, 8), 8);
                         accumulators[row] = _mm256_add_epi32(
                             accumulators[row],
                             _mm256_madd_epi16(signed_pairs, scales),
@@ -312,16 +306,14 @@ mod tests {
         for subgroup in 0..16 {
             let value = if subgroup % 2 == 0 { 0u8 } else { 63u8 };
             if subgroup < 8 {
-                original[96 + subgroup] =
-                    (original[96 + subgroup] & 0xf0) | (value & 0x0f);
+                original[96 + subgroup] = (original[96 + subgroup] & 0xf0) | (value & 0x0f);
             } else {
                 original[96 + subgroup - 8] =
                     (original[96 + subgroup - 8] & 0x0f) | ((value & 0x0f) << 4);
             }
             let shift = 2 * (subgroup / 4);
             original[104 + subgroup % 4] =
-                (original[104 + subgroup % 4] & !(3 << shift))
-                | (((value >> 4) & 3) << shift);
+                (original[104 + subgroup % 4] & !(3 << shift)) | (((value >> 4) & 3) << shift);
         }
         let baseline = codec::q3_to_bpb3k(&original).unwrap();
         let expanded = preencode_scales(&baseline).unwrap();
@@ -336,7 +328,9 @@ mod tests {
         for i in 0..256 {
             a[4 + i] = i as u8;
         }
-        let oracle = old::dot_bpb3k_q8_pshufb(&baseline, &a).unwrap().weighted_integer;
+        let oracle = old::dot_bpb3k_q8_pshufb(&baseline, &a)
+            .unwrap()
+            .weighted_integer;
         for offset in 0..32 {
             let mut weight_storage = vec![0xa5u8; WEIGHT_BYTES + 64];
             let mut act_storage = vec![0x5au8; Q8_K_BYTES + 64];
@@ -353,5 +347,4 @@ mod tests {
             assert_eq!(act_storage, act_before);
         }
     }
-
 }
