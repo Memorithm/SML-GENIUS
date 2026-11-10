@@ -65,6 +65,7 @@ pub enum AddressError {
     DuplicateSegment,
     IndexFull,
     BucketFull,
+    SourceAddressMismatch,
     ProbeBudget,
     CandidateOverflow,
 }
@@ -386,6 +387,12 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         self.encoder.budget.max_entries
     }
 
+    /// Epoch of the currently published segment-to-address bindings.
+    #[must_use]
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
     pub fn insert(
         &mut self,
         segment: ContextSegmentId,
@@ -409,6 +416,47 @@ impl<const BITS: usize> CandidateIndex<BITS> {
         }
         self.entries.insert(segment);
         self.buckets[address as usize].push(segment);
+        Ok(())
+    }
+
+    /// Atomically reassigns an existing candidate to a new SBG address and
+    /// publishes the immediate successor epoch.
+    ///
+    /// All validation precedes mutation: wrong source, stale epoch, unknown
+    /// selected bits, incorrect old address and full destination buckets leave
+    /// all source bindings untouched. Reading still requires exact epoch
+    /// admission and never upgrades candidates to verified source evidence.
+    pub fn rebind(
+        &mut self,
+        segment: ContextSegmentId,
+        expected_epoch: u64,
+        next_epoch: u64,
+        old_key: &SbgAddress<BITS>,
+        new_key: &SbgAddress<BITS>,
+    ) -> Result<(), AddressError> {
+        if segment.stream_id != self.stream {
+            return Err(AddressError::WrongStream);
+        }
+        if expected_epoch != self.epoch || self.epoch.checked_add(1) != Some(next_epoch) {
+            return Err(AddressError::WrongEpoch);
+        }
+        if segment.segment_id == 0 || !self.entries.contains(&segment) {
+            return Err(AddressError::InvalidSegment);
+        }
+        let old_address = self.encoder.encode(old_key)?;
+        let new_address = self.encoder.encode(new_key)?;
+        let old_position = self.buckets[old_address as usize]
+            .iter()
+            .position(|&candidate| candidate == segment)
+            .ok_or(AddressError::SourceAddressMismatch)?;
+        if old_address != new_address {
+            if self.buckets[new_address as usize].len() >= self.encoder.budget.max_bucket_entries {
+                return Err(AddressError::BucketFull);
+            }
+            self.buckets[old_address as usize].remove(old_position);
+            self.buckets[new_address as usize].push(segment);
+        }
+        self.epoch = next_epoch;
         Ok(())
     }
 
@@ -1168,6 +1216,147 @@ mod dacr_balanced_tests {
         assert_eq!(
             DiscreteAddress::train_pairwise_balanced(&different, budget(), policy()).err(),
             Some(AddressError::InsufficientPairs)
+        );
+    }
+}
+
+#[cfg(test)]
+mod dacr_rebind_tests {
+    use super::*;
+
+    fn key(code: u64) -> SbgAddress<16> {
+        SbgAddress {
+            value: SemanticBitField::<16>::from_words(vec![code]).unwrap(),
+            known: SemanticBitField::<16>::ones().unwrap(),
+        }
+    }
+
+    fn budget(bucket_entries: usize) -> AddressBudget {
+        AddressBudget {
+            address_bits: 2,
+            max_pairs: 1,
+            max_entries: 3,
+            max_bucket_entries: bucket_entries,
+        }
+    }
+
+    fn fixture(epoch: u64, bucket_entries: usize) -> (ContextStreamId, CandidateIndex<16>) {
+        let stream = ContextStreamId::new(136).unwrap();
+        let encoder = DiscreteAddress::fixed(vec![0, 1], budget(bucket_entries)).unwrap();
+        let mut index = CandidateIndex::new(encoder, stream, epoch).unwrap();
+        index
+            .insert(ContextSegmentId::new(stream, 1).unwrap(), &key(0))
+            .unwrap();
+        index
+            .insert(ContextSegmentId::new(stream, 2).unwrap(), &key(1))
+            .unwrap();
+        (stream, index)
+    }
+
+    #[test]
+    fn dacr_rebind_moves_one_segment_and_invalidates_old_epoch() {
+        let (stream, mut index) = fixture(7, 2);
+        let segment = ContextSegmentId::new(stream, 1).unwrap();
+        let other = ContextSegmentId::new(stream, 2).unwrap();
+        assert_eq!(index.epoch(), 7);
+        assert_eq!(index.len(), 2);
+        index.rebind(segment, 7, 8, &key(0), &key(2)).unwrap();
+        assert_eq!(index.epoch(), 8);
+        assert_eq!(index.len(), 2);
+        assert_eq!(
+            index.lookup(stream, 7, &key(2)),
+            Err(AddressError::WrongEpoch)
+        );
+        assert!(index.lookup(stream, 8, &key(0)).unwrap().0.is_empty());
+        assert_eq!(index.lookup(stream, 8, &key(2)).unwrap().0, vec![segment]);
+        assert_eq!(index.lookup(stream, 8, &key(1)).unwrap().0, vec![other]);
+        assert_eq!(
+            index
+                .lookup(stream, 8, &key(2))
+                .unwrap()
+                .1
+                .address_buckets_probed,
+            1
+        );
+        let (_, mut replay) = fixture(7, 2);
+        replay.rebind(segment, 7, 8, &key(0), &key(2)).unwrap();
+        for code in 0..4 {
+            assert_eq!(
+                index.lookup(stream, 8, &key(code)),
+                replay.lookup(stream, 8, &key(code))
+            );
+        }
+    }
+
+    #[test]
+    fn dacr_rebind_refuses_stale_epoch_wrong_address_unknown_bit_and_unregistered_id() {
+        let (stream, mut index) = fixture(12, 2);
+        let segment = ContextSegmentId::new(stream, 1).unwrap();
+        let foreign = ContextSegmentId::new(ContextStreamId::new(137).unwrap(), 1).unwrap();
+        let missing = ContextSegmentId::new(stream, 3).unwrap();
+        let mut unknown = key(1);
+        unknown.known.set(0, false).unwrap();
+        assert!(unknown.value.get(0).unwrap());
+        let invalid = [
+            index.rebind(foreign, 12, 13, &key(0), &key(2)),
+            index.rebind(segment, 11, 12, &key(0), &key(2)),
+            index.rebind(segment, 12, 12, &key(0), &key(2)),
+            index.rebind(segment, 12, 14, &key(0), &key(2)),
+            index.rebind(missing, 12, 13, &key(0), &key(2)),
+            index.rebind(segment, 12, 13, &key(1), &key(2)),
+            index.rebind(segment, 12, 13, &unknown, &key(2)),
+            index.rebind(segment, 12, 13, &key(0), &unknown),
+        ];
+        assert_eq!(
+            invalid,
+            [
+                Err(AddressError::WrongStream),
+                Err(AddressError::WrongEpoch),
+                Err(AddressError::WrongEpoch),
+                Err(AddressError::WrongEpoch),
+                Err(AddressError::InvalidSegment),
+                Err(AddressError::SourceAddressMismatch),
+                Err(AddressError::UnknownSelectedFeature),
+                Err(AddressError::UnknownSelectedFeature),
+            ]
+        );
+        assert_eq!(index.epoch(), 12);
+        assert_eq!(index.len(), 2);
+        assert_eq!(index.lookup(stream, 12, &key(0)).unwrap().0, vec![segment]);
+        assert!(index.lookup(stream, 12, &key(2)).unwrap().0.is_empty());
+    }
+
+    #[test]
+    fn dacr_rebind_destination_full_fails_atomically_but_same_bucket_can_advance_epoch() {
+        let (stream, mut index) = fixture(3, 1);
+        let segment = ContextSegmentId::new(stream, 1).unwrap();
+        let other = ContextSegmentId::new(stream, 2).unwrap();
+        assert_eq!(
+            index.rebind(segment, 3, 4, &key(0), &key(1)),
+            Err(AddressError::BucketFull)
+        );
+        assert_eq!(index.epoch(), 3);
+        assert_eq!(index.lookup(stream, 3, &key(0)).unwrap().0, vec![segment]);
+        assert_eq!(index.lookup(stream, 3, &key(1)).unwrap().0, vec![other]);
+        index.rebind(segment, 3, 4, &key(0), &key(0)).unwrap();
+        assert_eq!(index.epoch(), 4);
+        assert_eq!(index.lookup(stream, 4, &key(0)).unwrap().0, vec![segment]);
+        assert_eq!(index.lookup(stream, 4, &key(1)).unwrap().0, vec![other]);
+        assert_eq!(index.len(), 2);
+    }
+
+    #[test]
+    fn dacr_rebind_epoch_overflow_rejects_before_mutation() {
+        let (stream, mut index) = fixture(u64::MAX, 2);
+        let segment = ContextSegmentId::new(stream, 1).unwrap();
+        assert_eq!(
+            index.rebind(segment, u64::MAX, 0, &key(0), &key(2)),
+            Err(AddressError::WrongEpoch)
+        );
+        assert_eq!(index.epoch(), u64::MAX);
+        assert_eq!(
+            index.lookup(stream, u64::MAX, &key(0)).unwrap().0,
+            vec![segment]
         );
     }
 }
