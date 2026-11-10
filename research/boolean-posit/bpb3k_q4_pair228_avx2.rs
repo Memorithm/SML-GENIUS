@@ -193,18 +193,18 @@ mod simd {
                     // Both Q8 vectors are consumed before either source
                     // block is advanced to its next 32-coefficient pair.
                     let offset = group * 64 + pair * 32;
-                    let in0 = _mm256_loadu_si256(
-                        activation.as_ptr().add(4 + offset).cast::<__m256i>(),
-                    );
+                    let in0 =
+                        _mm256_loadu_si256(activation.as_ptr().add(4 + offset).cast::<__m256i>());
                     let in1 = _mm256_loadu_si256(
-                        activation.as_ptr().add(Q8_BYTES + 4 + offset).cast::<__m256i>(),
+                        activation
+                            .as_ptr()
+                            .add(Q8_BYTES + 4 + offset)
+                            .cast::<__m256i>(),
                     );
                     for (block, input) in [(0usize, in0), (1usize, in1)] {
                         let w = &weights[block * SCALE114_BYTES..(block + 1) * SCALE114_BYTES];
                         let p = group * 24 + pair * 4;
-                        let raw = |at: usize| {
-                            u32::from_le_bytes(w[at..at + 4].try_into().unwrap())
-                        };
+                        let raw = |at: usize| u32::from_le_bytes(w[at..at + 4].try_into().unwrap());
                         let sign = bits32(raw(p), selector, mask, zero, one);
                         let b0 = bits32(raw(p + 8), selector, mask, zero, one);
                         let b1 = bits32(raw(p + 16), selector, mask, zero, one);
@@ -224,10 +224,8 @@ mod simd {
                             _mm_set1_epi16(s1),
                             1,
                         );
-                        acc[block] = _mm256_add_epi32(
-                            acc[block],
-                            _mm256_madd_epi16(paired, scales),
-                        );
+                        acc[block] =
+                            _mm256_add_epi32(acc[block], _mm256_madd_epi16(paired, scales));
                     }
                 }
             }
@@ -323,8 +321,20 @@ mod tests {
                 1 => 127,
                 2 => 128,
                 3 => 255,
-                4 => if i % 2 == 0 { 127 } else { 128 },
-                5 => if i % 2 == 0 { 1 } else { 255 },
+                4 => {
+                    if i % 2 == 0 {
+                        127
+                    } else {
+                        128
+                    }
+                }
+                5 => {
+                    if i % 2 == 0 {
+                        1
+                    } else {
+                        255
+                    }
+                }
                 6 => i as u8,
                 _ => {
                     let mut x = (seed as u32) ^ (i as u32).wrapping_mul(0x9e3779b9);
@@ -364,8 +374,14 @@ mod tests {
             let result160 = dot_q4::<Q4_PADDED_BYTES>(&q4_160, &a0).unwrap();
             assert_eq!(result146.integer, o0, "seed={seed}");
             assert_eq!(result160.integer, o0, "seed={seed}");
-            assert_eq!(result146.global_scale_f16_bits, [0x3c00, 0xbc00, 0x7e01, 0x8000][seed % 4]);
-            assert_eq!(result146.q8_scale_f32_bits, [0x3f800000, 0x7fc12345][seed % 2]);
+            assert_eq!(
+                result146.global_scale_f16_bits,
+                [0x3c00, 0xbc00, 0x7e01, 0x8000][seed % 4]
+            );
+            assert_eq!(
+                result146.q8_scale_f32_bits,
+                [0x3f800000, 0x7fc12345][seed % 2]
+            );
             let pair = transcode_pair228(&w0, &w1).unwrap();
             let mut both_a = [0u8; 2 * Q8_BYTES];
             both_a[..Q8_BYTES].copy_from_slice(&a0);
@@ -387,7 +403,10 @@ mod tests {
         let q3_1 = q3(14, 0x3c00);
         let a = q8(14, 6, 0x3f800000);
         for n in [0, 1, 109, 111, 228] {
-            assert_eq!(transcode_q4::<Q4_BYTES>(&vec![0u8; n]), Err(Error::BadSourceLen(n)));
+            assert_eq!(
+                transcode_q4::<Q4_BYTES>(&vec![0u8; n]),
+                Err(Error::BadSourceLen(n))
+            );
         }
         assert_eq!(transcode_q4::<228>(&q3_0), Err(Error::BadWeightsLen(228)));
         let v146 = transcode_q4::<Q4_BYTES>(&q3_0).unwrap();
@@ -404,15 +423,29 @@ mod tests {
                 dot_q4::<Q4_BYTES>(
                     &wb[offset..offset + Q4_BYTES],
                     &ab[31 - offset..31 - offset + Q8_BYTES]
-                ).unwrap().integer,
+                )
+                .unwrap()
+                .integer,
                 original_integer_dot(&q3_0, &a)
             );
             assert_eq!(wb, wcopy);
             assert_eq!(ab, acopy);
-            assert_eq!(dot_q4::<Q4_PADDED_BYTES>(&v160[..159], &a), Err(Error::BadWeightsLen(159)));
-            assert_eq!(dot_q4::<Q4_BYTES>(&v146, &a[..291]), Err(Error::BadActivationsLen(291)));
+            assert_eq!(
+                dot_q4::<Q4_PADDED_BYTES>(&v160[..159], &a),
+                Err(Error::BadWeightsLen(159))
+            );
+            assert_eq!(
+                dot_q4::<Q4_BYTES>(&v146, &a[..291]),
+                Err(Error::BadActivationsLen(291))
+            );
         }
-        assert_eq!(dot_pair228(&pair[..227], &vec![0; Q8_BYTES * 2]), Err(Error::BadWeightsLen(227)));
-        assert_eq!(dot_pair228(&pair, &vec![0; Q8_BYTES * 2 - 1]), Err(Error::BadActivationsLen(583)));
+        assert_eq!(
+            dot_pair228(&pair[..227], &vec![0; Q8_BYTES * 2]),
+            Err(Error::BadWeightsLen(227))
+        );
+        assert_eq!(
+            dot_pair228(&pair, &vec![0; Q8_BYTES * 2 - 1]),
+            Err(Error::BadActivationsLen(583))
+        );
     }
 }
