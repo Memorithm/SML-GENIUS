@@ -2,12 +2,12 @@
 //! prepared Q8 bitplanes. Not a ggml model/stock-Q3_K performance comparison.
 //! The benchmark reports raw paired measurements; never a promotion gate.
 #![forbid(unsafe_code)]
-#[path = "bpb3k_direct.rs"]
-#[allow(dead_code)]
-mod direct;
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
+#[path = "bpb3k_direct.rs"]
+#[allow(dead_code)]
+mod direct;
 
 use std::hint::black_box;
 use std::time::Instant;
