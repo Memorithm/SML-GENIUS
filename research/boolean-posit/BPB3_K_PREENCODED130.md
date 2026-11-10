@@ -70,3 +70,51 @@ quantization and layout contracts.
 SCALE-1 is a scientifically distinct experiment. It must not be
 retrospectively conflated with the unmodified 110-byte MROW-1
 predeclared benchmark.
+
+
+## Observed hosted run — 2026-11-10
+
+[Workflow run 42875135924](https://github.com/Memorithm/SML-GENIUS/actions/runs/42875135924)
+on source SHA 935a9dd7e77ef26b5f5812dd45c3b34147dbed59
+completed successfully. Twenty-three Rust unit tests, the original
+C AVX2 896 and tiled C++ 112 checks, and all 1,024 original-wire
+unit-scale FP32 model-independent source comparisons passed.
+The actual benchmark emitted 162 raw 3-way timings with exact
+checksums, not just summary medians. Its Haswell assembly contained
+VPSHUFB/VPMADDUBSW/VPMADDWD/VPBROADCASTD, no VPOPCNT.
+The counts were for the complete monomorphized benchmark assembly,
+not a function-scoped instruction/uop or register-spill profile.
+
+Descriptive medians (ns / output row), same hosted runner per row:
+
+| Rows | Tile N | Original Q3_K stock C | 110 B packed AVX2 | 130 B scale-preencoded AVX2 |
+|---:|---:|---:|---:|---:|
+| 32 | 1 | 24.11 | 35.62 | 31.78 |
+| 32 | 2 | 24.27 | 42.89 | 27.47 |
+| 32 | 4 | 36.71 | 67.23 | 56.90 |
+| 256 | 1 | 37.03 | 64.57 | 50.44 |
+| 256 | 2 | 37.46 | 85.20 | 53.88 |
+| 256 | 4 | 37.75 | 74.74 | 63.38 |
+| 1024 | 1 | 33.72 | 53.75 | 46.09 |
+| 1024 | 2 | 32.21 | 58.42 | **39.50** |
+| 1024 | 4 | 25.05 | 41.63 | **35.76** |
+
+For 1,024 output rows and tile N=2, SCALE-1 uses
+(58.42 - 39.50)/58.42 = **32.39% less kernel time** than
+the equal-tile 110-byte packed baseline. However, native original
+Q3_K remains faster: 39.50/32.21 = **1.226x**.
+For N=4, the preencoded layout improves the equal-tile packed
+candidate by (41.63 - 35.76)/41.63 = **14.10% less time**,
+but native stock is 35.76/25.05 = **1.428x faster**.
+All comparisons above are *within the same hosted run*;
+absolute ns/dot measurements from previous sessions cannot be
+pooled because host conditions drift.
+
+The 130-byte representation also permanently adds **20 B of
+weight reads per 256 coefficients** unless a separate cache
+placement strategy avoids their transfer; this may outweigh
+the in-cache kernel gains. Transcode cost and full-model
+memory pressure have not been measured. This is evidence
+that predecoding scales can substantially accelerate our
+experimental kernel, **not** evidence of stock superiority or
+a model throughput benefit. No runtime promotion is authorized.
