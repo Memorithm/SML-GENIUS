@@ -24,7 +24,7 @@ With bounded memory, no model weights, no network, no root access and
 no GPU dependencies, the tool summarizes independent columns for
 \`file_median_ns\`, \`file_p95_ns\`, \`resident_median_ns\` and
 \`resident_p95_ns\`; includes sample cardinalities, byte counts and
-explicit negative model/DRAM claim flags. It fails on invalid inputs
+explicit negative model/DRAM claim flags. It also records separate p50/p95 values for disk and RAM calls under each of the two read orders, exposing order-dependent cache effects instead of hiding them in pooled averages. It fails on invalid inputs
 or integrity mismatches and removes its temporary directory on normal
 exit.
 
