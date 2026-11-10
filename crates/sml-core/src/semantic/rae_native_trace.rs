@@ -205,15 +205,21 @@ mod tests {
 
     fn registry(router_id: u32) -> MorRouterRegistry {
         MorRouterRegistry::new(
-            vec![RouterSpecialization {
-                router_id: RouterId(router_id),
-                experts: vec![PageId(0), PageId(1)],
-            }],
+            vec![
+                RouterSpecialization {
+                    router_id: RouterId(router_id),
+                    experts: vec![PageId(0)],
+                },
+                RouterSpecialization {
+                    router_id: RouterId(router_id + 1),
+                    experts: vec![PageId(1)],
+                },
+            ],
             MorRegistryPolicy {
                 expert_count: 2,
-                max_routers: 1,
+                max_routers: 2,
                 max_edges: 2,
-                max_fanout: 2,
+                max_fanout: 1,
                 require_full_coverage: true,
             },
         )
@@ -222,10 +228,16 @@ mod tests {
 
     fn bridge() -> SemanticMorBridge<8> {
         SemanticMorBridge::new(
-            vec![SemanticRouterSignature {
-                router_id: RouterId(0),
-                signature: SemanticBitField::<8>::zeroed().unwrap(),
-            }],
+            vec![
+                SemanticRouterSignature {
+                    router_id: RouterId(0),
+                    signature: SemanticBitField::<8>::zeroed().unwrap(),
+                },
+                SemanticRouterSignature {
+                    router_id: RouterId(1),
+                    signature: SemanticBitField::<8>::ones().unwrap(),
+                },
+            ],
             vec![
                 SemanticExpertSignature {
                     page_id: PageId(0),
