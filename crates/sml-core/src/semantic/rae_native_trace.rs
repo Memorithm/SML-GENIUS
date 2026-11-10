@@ -50,6 +50,10 @@ impl From<SbgRisingMorError> for SbgRaeTraceError {
 pub struct SbgRaeNativeFrame {
     pub cycle: u64,
     pub routing_words: Vec<u64>,
+    /// Exact 0 -> 1 features; trainable event-to-page links need identities,
+    /// not only aggregate event counts.
+    pub rising_words: Vec<u64>,
+    pub falling_words: Vec<u64>,
     pub required_pages_words: Vec<u64>,
     pub selected_experts: Vec<PageId>,
     pub rising_routing_bits: u64,
@@ -168,6 +172,8 @@ impl<const BITS: usize> SbgRaeNativeTrace<BITS> {
         let frame = SbgRaeNativeFrame {
             cycle,
             routing_words: state.routing.words().to_vec(),
+            rising_words: next_probe.rising_words().to_vec(),
+            falling_words: next_probe.falling_words().to_vec(),
             required_pages_words,
             selected_experts: native.decision.selected_experts,
             rising_routing_bits: edge.rising_routing_bits,
@@ -330,6 +336,8 @@ mod tests {
         let changed = capture(&mut trace, 2, &altered, &bridge, &registry, &engine).unwrap();
         assert_eq!(changed.rising_routing_bits, 8);
         assert_eq!(changed.routing_words, vec![0xff]);
+        assert_eq!(changed.rising_words, vec![0xff]);
+        assert_eq!(changed.falling_words, vec![0]);
         assert_eq!(changed.required_pages_words, vec![0b10]);
         assert_eq!(changed.selected_experts, vec![PageId(1)]);
     }
