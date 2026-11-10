@@ -1,7 +1,7 @@
 //! Research-only GGUF Q3_K converter into NONSTANDARD 146-byte Q4-146.
 //! The ephemeral artifact is readable ONLY by matching patched ggml.
 //! No modification of the original model or deployment is permitted.
-#![forbid(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 #[path = "bpb3k_q4_pair228_avx2.rs"]
 #[allow(dead_code)]
 mod q4;
@@ -227,7 +227,7 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
             .open(dest)
             .map_err(|e| e.to_string())?;
         input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-        let copied = std::io::copy(&mut input.by_ref().take(start), &mut output)
+        let copied = std::io::copy(&mut std::io::Read::by_ref(&mut input).take(start), &mut output)
             .map_err(|e| e.to_string())?;
         if copied != start {
             return Err("STOP_GGUF_HEADER_SHORT_COPY".into());
@@ -281,7 +281,7 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
                 // Copy non-Q3 tensor bytes, including its source padding,
                 // without decoding or quantizing any pre-trained weights.
                 let len = end - from;
-                let copied = std::io::copy(&mut input.by_ref().take(len), &mut output)
+                let copied = std::io::copy(&mut std::io::Read::by_ref(&mut input).take(len), &mut output)
                     .map_err(|e| e.to_string())?;
                 if copied != len {
                     return Err("STOP_NONQ3_COPY_TRUNCATED".into());
