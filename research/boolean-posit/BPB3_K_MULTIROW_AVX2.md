@@ -73,3 +73,50 @@ pinning and no unqualified generalization.
 RemoteOps must own Dell host admission, existing workload controls,
 frequency/topology/NUMA and perf capability checks. SML retains the
 scientific baseline and model results.
+
+
+## Observed hosted result — 2026-11-10
+
+[Exact-head workflow 42873053796](https://github.com/Memorithm/SML-GENIUS/actions/runs/42873053796)
+on SHA 7ae26884b7a80a09aae6f55a9322d9b9b1ef662a
+completed successfully. The independently decoded original Q3_K
+signed-integer oracle, previous PSHUFB reference, 25 Rust unit
+tests, 1,024 exact unit-scale original C FP32 comparisons,
+896 original C AVX2 and 112 C++ tiled oracle cases all passed.
+The Haswell-targeted monomorphized benchmark assembly contained
+VPSHUFB, VPMADDUBSW, VPMADDWD and VPBROADCASTD and no VPOPCNT.
+This global instruction count DOES NOT prove per-function hoisting
+or absence of register spilling.
+
+All 162 balanced three-way samples were retained (three tile
+widths × three row counts × 18 rounds, four repeats per invocation).
+Medians in ns per output weight row, single Q3_K superblock:
+
+| Rows | Tile N | Original ggml Q3_K | Separate prior PSHUFB | Shared-Q8 AVX2 |
+|---:|---:|---:|---:|---:|
+| 32 | 1 | 28.95 | 77.54 | 54.93 |
+| 32 | 2 | 29.11 | 78.80 | 70.49 |
+| 32 | 4 | 28.55 | 78.55 | 61.66 |
+| 256 | 1 | 27.02 | 65.97 | 42.22 |
+| 256 | 2 | 17.78 | 39.79 | 35.23 |
+| 256 | 4 | 17.73 | 39.70 | 30.50 |
+| 1024 | 1 | **17.73** | 40.87 | **28.78** |
+| 1024 | 2 | **17.74** | 43.28 | 36.22 |
+| 1024 | 4 | **17.69** | 43.15 | 31.53 |
+
+At 1,024 rows, N=4 improves over the **previous separate
+PSHUFB** baseline in the SAME N=4 run by 43.15/31.53 = **1.369x**,
+but remains slower than original stock Q3_K by
+31.53/17.69 = **1.782x**. Crucially, N=4 is **slower** per row
+than our N=1 candidate in its own matched run (31.53 vs
+28.78 ns/row). Therefore this result does NOT yet substantiate
+a separate per-row benefit from multirow data reuse, despite the
+source explicitly loading Q8 and bias once per pair across the
+four rows. The multiple output rows may increase register pressure,
+dependency chains or branch/loop overhead; no causal attribution
+has been established on a physical Xeon.
+
+**Decision**: retain as a rigorously proven exact-integer experimental
+AVX2 microtile but do not enable it as the SML runtime default.
+The next preencoded-scale layout must be tested as its own hypothesis,
+including the changed memory budget and conversion amortization.
