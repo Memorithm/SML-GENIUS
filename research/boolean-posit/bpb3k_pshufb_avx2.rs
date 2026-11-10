@@ -78,12 +78,12 @@ mod x86 {
     pub(super) unsafe fn dot(weights: &[u8], activation: &[u8]) -> i32 {
         unsafe {
             let byte_selector = _mm256_setr_epi8(
-                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
-                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                1, 1, 1, 1,
             );
             let bit_selector = _mm256_setr_epi8(
-                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128,
-                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128,
+                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64,
+                -128, 1, 2, 4, 8, 16, 32, 64, -128,
             );
             let zero = _mm256_setzero_si256();
             let ones = _mm256_set1_epi8(1);
@@ -101,17 +101,26 @@ mod x86 {
                     let s = spread(
                         (sign_plane >> shift) as u16,
                         (sign_plane >> (shift + 16)) as u16,
-                        byte_selector, bit_selector, zero, ones,
+                        byte_selector,
+                        bit_selector,
+                        zero,
+                        ones,
                     );
                     let b0 = spread(
                         (low_plane >> shift) as u16,
                         (low_plane >> (shift + 16)) as u16,
-                        byte_selector, bit_selector, zero, ones,
+                        byte_selector,
+                        bit_selector,
+                        zero,
+                        ones,
                     );
                     let b1 = spread(
                         (high_plane >> shift) as u16,
                         (high_plane >> (shift + 16)) as u16,
-                        byte_selector, bit_selector, zero, ones,
+                        byte_selector,
+                        bit_selector,
+                        zero,
+                        ones,
                     );
 
                     // q = (b0 XOR s) + 2*(b1 XOR s) - 4*s.
@@ -123,8 +132,7 @@ mod x86 {
                     let unsigned_q = _mm256_or_si256(low, _mm256_or_si256(high, positive));
 
                     let input = _mm256_loadu_si256(
-                        activation.as_ptr().add(4 + group * 64 + pair * 32)
-                            as *const __m256i,
+                        activation.as_ptr().add(4 + group * 64 + pair * 32) as *const __m256i,
                     );
                     // Adjacent products are far below i16 saturation bounds.
                     let pairs_plus4 = _mm256_maddubs_epi16(unsigned_q, input);
@@ -137,7 +145,8 @@ mod x86 {
                     let b = signed_subgroup_scale(scales, sub1) as i16;
                     let scale_vec = _mm256_inserti128_si256(
                         _mm256_castsi128_si256(_mm_set1_epi16(a)),
-                        _mm_set1_epi16(b), 1,
+                        _mm_set1_epi16(b),
+                        1,
                     );
                     let products = _mm256_madd_epi16(signed_pairs, scale_vec);
                     acc = _mm256_add_epi32(acc, products);
@@ -208,8 +217,20 @@ mod tests {
                 1 => 127,
                 2 => 128,
                 3 => 255,
-                4 => if i % 2 == 0 { 127 } else { 128 },
-                5 => if i % 2 == 0 { 1 } else { 255 },
+                4 => {
+                    if i % 2 == 0 {
+                        127
+                    } else {
+                        128
+                    }
+                }
+                5 => {
+                    if i % 2 == 0 {
+                        1
+                    } else {
+                        255
+                    }
+                }
                 6 => i as u8,
                 _ => {
                     let mut x = (case as u32) ^ (i as u32).wrapping_mul(0x9e37_79b9);
