@@ -175,57 +175,120 @@ fn transcode(source: &Path, dest: &Path) -> Result<(), String> {
     if !(1..=MAX_GGUF).contains(&file_len) {
         return Err("STOP_GGUF_FILE_SIZE".into());
     }
-    let (start, all) = tensors(&mut input, file_len)?;
-    let q3: Vec<_> = all.iter().filter(|x| x.kind == Q3_K).collect();
-    if q3.is_empty() {
+    let (start, alignment, mut tensors) = tensors(&mut input, file_len)?;
+    if tensors.is_empty() {
+        return Err("STOP_NO_TENSORS".into());
+    }
+    tensors.sort_by_key(|t| t.offset);
+    if tensors[0].offset != 0 {
+        return Err("STOP_FIRST_TENSOR_NOT_AT_DATA_START".into());
+    }
+    for adjacent in tensors.windows(2) {
+        if adjacent[0].offset == adjacent[1].offset
+            || adjacent[1].offset % alignment != 0
+        {
+            return Err("STOP_OVERLAPPING_OR_UNALIGNED_TENSORS".into());
+        }
+    }
+    if !tensors.iter().any(|t| t.kind == Q3_K) {
         return Err("STOP_NO_Q3_K_WEIGHTS".into());
     }
-    for x in &q3 {
-        if x.values == 0 || x.values % 256 != 0 {
-            return Err("STOP_MISALIGNED_Q3_VALUES".into());
+    // Validate every 110-byte source Q3_K segment and the offset graph
+    // before creating the output. Zero source tensor payloads are rejected.
+    for (i, tensor) in tensors.iter().enumerate() {
+        let from = start.checked_add(tensor.offset).ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
+        let end = if let Some(next) = tensors.get(i + 1) {
+            start.checked_add(next.offset).ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
+        } else {
+            file_len
+        };
+        if end < from || end > file_len {
+            return Err("STOP_ORIGINAL_TENSOR_OUTSIDE_FILE".into());
         }
-        let bytes = (x.values / 256)
-            .checked_mul(110)
-            .ok_or("STOP_BLOCK_BYTES_OVERFLOW")?;
-        let end = start
-            .checked_add(x.offset)
-            .and_then(|v| v.checked_add(bytes))
-            .ok_or("STOP_BLOCK_END_OVERFLOW")?;
-        if end > file_len {
-            return Err(format!("STOP_TENSOR_OUT_OF_FILE name={}", x.name));
+        if tensor.kind == Q3_K {
+            if tensor.values == 0 || tensor.values % 256 != 0 {
+                return Err("STOP_Q3_TENSOR_SIZE".into());
+            }
+            let bytes = (tensor.values / 256).checked_mul(110)
+                .ok_or("STOP_Q3_SOURCE_BYTES_OVERFLOW")?;
+            if bytes > end - from {
+                return Err("STOP_Q3_SOURCE_TRUNCATED".into());
+            }
         }
     }
-    // Prevalidate metadata before touching the destination. Always keep it transient.
-    fs::copy(source, dest).map_err(|e| e.to_string())?;
+
     let result = (|| {
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(dest)
+        let mut output = OpenOptions::new().write(true).create_new(true).open(dest)
             .map_err(|e| e.to_string())?;
-        let mut processed = 0u64;
-        for tensor in &q3 {
-            let blocks = tensor.values / 256;
-            let at = start
-                .checked_add(tensor.offset)
-                .ok_or("STOP_TENSOR_OFFSET")?;
-            input.seek(SeekFrom::Start(at)).map_err(|e| e.to_string())?;
-            output
-                .seek(SeekFrom::Start(at))
-                .map_err(|e| e.to_string())?;
-            for _ in 0..blocks {
-                let original = read::<110>(&mut input)?;
-                let converted = bpb3k::q3_to_bpb3k(&original).map_err(|e| format!("{e:?}"))?;
-                output.write_all(&converted).map_err(|e| e.to_string())?;
+        input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let copied = std::io::copy(&mut input.by_ref().take(start), &mut output)
+            .map_err(|e| e.to_string())?;
+        if copied != start {
+            return Err("STOP_GGUF_HEADER_SHORT_COPY".into());
+        }
+        let mut blocks_done = 0u64;
+        let mut tensors_done = 0u64;
+        for (i, tensor) in tensors.iter().enumerate() {
+            let pos = output.stream_position().map_err(|e| e.to_string())?;
+            if pos < start || (pos - start) % alignment != 0 {
+                return Err("STOP_NEW_TENSOR_UNALIGNED".into());
             }
-            processed += blocks;
-            println!(
-                "BPB3K_LIVE_TENSOR name={} blocks={} coefficients={}",
-                tensor.name, blocks, tensor.values
-            );
+            let new_offset = pos - start;
+            // Rewrite the original GGUF v3 tensor offset field only.
+            // Tensor shapes, names, types and all other metadata remain.
+            output.seek(SeekFrom::Start(tensor.offset_field))
+                .map_err(|e| e.to_string())?;
+            output.write_all(&new_offset.to_le_bytes()).map_err(|e| e.to_string())?;
+            output.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
+
+            let from = start.checked_add(tensor.offset).ok_or("STOP_SOURCE_OFFSET_OVERFLOW")?;
+            let end = if let Some(next) = tensors.get(i + 1) {
+                start.checked_add(next.offset).ok_or("STOP_NEXT_OFFSET_OVERFLOW")?
+            } else {
+                file_len
+            };
+            input.seek(SeekFrom::Start(from)).map_err(|e| e.to_string())?;
+            if tensor.kind == Q3_K {
+                let blocks = tensor.values / 256;
+                for _ in 0..blocks {
+                    let source = read::<110>(&mut input)?;
+                    let converted = q4::transcode_q4::<146>(&source)
+                        .map_err(|e| format!("STOP_Q4_TRANSCODE_{e:?}"))?;
+                    output.write_all(&converted).map_err(|e| e.to_string())?;
+                }
+                blocks_done += blocks;
+                tensors_done += 1;
+                println!("BPB3K_Q4_REAL_TENSOR name={} blocks={} coefficients={}",
+                    tensor.name, blocks, tensor.values);
+            } else {
+                // Copy non-Q3 tensor bytes, including its source padding,
+                // without decoding or quantizing any pre-trained weights.
+                let len = end - from;
+                let copied = std::io::copy(&mut input.by_ref().take(len), &mut output)
+                    .map_err(|e| e.to_string())?;
+                if copied != len {
+                    return Err("STOP_NONQ3_COPY_TRUNCATED".into());
+                }
+            }
+            // Subsequent tensor payloads retain the original GGUF alignment.
+            if i + 1 < tensors.len() {
+                let end = output.stream_position().map_err(|e| e.to_string())?;
+                let pad = (alignment - (end - start) % alignment) % alignment;
+                if pad > 0 {
+                    let zeros = [0u8; 4096];
+                    output.write_all(&zeros[..pad as usize])
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            if output.stream_position().map_err(|e| e.to_string())? > 1_000_000_000 {
+                return Err("STOP_Q4_NEW_GGUF_TOO_LARGE".into());
+            }
         }
         output.sync_all().map_err(|e| e.to_string())?;
-        println!("PASS_BPB3K_REAL_GGUF all_q3_tensors={} blocks={} bytes_per_block=110 gguf_type_surrogate=Q3_K requires_patched_runtime=true", q3.len(), processed);
+        println!(
+            "PASS_BPB3K_Q4_REAL_GGUF q3_tensors={} blocks={} bytes_per_block=146 unchanged_other_tensor_payloads=true requires_patched_runtime=true",
+            tensors_done, blocks_done
+        );
         Ok(())
     })();
     if result.is_err() {
