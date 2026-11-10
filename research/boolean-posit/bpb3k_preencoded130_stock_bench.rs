@@ -56,7 +56,11 @@ fn weights() -> Vec<Weight> {
             original[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
             let packed = codec::q3_to_bpb3k(&original).unwrap();
             let preencoded = preencoded::preencode_scales(&packed).unwrap();
-            Weight { original, packed, preencoded }
+            Weight {
+                original,
+                packed,
+                preencoded,
+            }
         })
         .collect()
 }
@@ -111,7 +115,10 @@ fn time_arm<const N: usize>(
             match mode {
                 0 => {
                     for row in tile {
-                        checksum += i64::from(black_box(stock(black_box(&row.original), black_box(a)) as i32));
+                        checksum += i64::from(black_box(stock(
+                            black_box(&row.original),
+                            black_box(a),
+                        ) as i32));
                     }
                 }
                 1 => {
@@ -123,7 +130,8 @@ fn time_arm<const N: usize>(
                 }
                 2 => {
                     let refs: [&[u8]; N] = std::array::from_fn(|i| &tile[i].preencoded[..]);
-                    let actual = preencoded::dot_bpb3k_q8_batch(black_box(refs), black_box(a)).unwrap();
+                    let actual =
+                        preencoded::dot_bpb3k_q8_batch(black_box(refs), black_box(a)).unwrap();
                     for value in actual.integer_dots {
                         checksum += i64::from(black_box(value));
                     }
