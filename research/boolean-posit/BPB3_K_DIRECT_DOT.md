@@ -1,7 +1,8 @@
-# BPB3-K DIRECT-1 — direct Boolean bipolar dot-product candidate
+# BPB3-K DIRECT — bitplane popcount dot products (bipolar and Q8_K)
 
-**Status:** research-only CPU scalar/word-parallel candidate. This is not a qualified
-physical CPU speedup, GPU kernel, native model integration, or FLAT-ATTENTION path.
+**Status:** research-only CPU scalar/word-parallel candidates (DIRECT-1 bipolar,
+DIRECT-Q8 general signed activations). Neither is a qualified physical CPU
+speedup, GPU kernel, native model integration, or FLAT-ATTENTION path.
 
 ## Input and output contract
 
@@ -91,3 +92,63 @@ Separately, compare with a competent SIMD/optimized implementation. The
 current BPB3-K and Q3_K **storage footprints are identical**, so no payload
 compression advantage is claimed. Follow-on non-bipolar activation and
 real-model tests require a new contract and independent numerical oracle.
+
+
+## DIRECT-Q8 — signed 8-bit activation generalization (2026-11-10)
+
+The newly implemented **dot_bpb3k_q8** supports the **full signed Q8_K
+activation domain -128..127**, rather than only bipolar inputs. Its inputs
+are one exact 110-byte BPB3-K block and one exact 292-byte Q8_K block
+(4-byte activation f32 scale, 256 signed i8 codes, 32 bytes cached bsums).
+Both scale fields are preserved **as raw bits**, and the output is the exact
+integer product before floating-point scaling. The cached Q8_K bsums are
+not needed and are not read by the Boolean path.
+
+For each weight subgroup of 16, let S be the BPB3-K negative plane,
+B0 and B1 its magnitude planes, and A_k the 16-bit mask of bit k
+from the signed activation bytes (two's-complement). The signed Q3_K
+coefficient remains
+
+    q_i = (1 - 2*S_i) * (B0_i + 2*B1_i) - S_i
+
+The exact contribution from activation bitplane A_k is:
+
+    C_k = popcnt(B0 & A_k) - 2*popcnt(S & B0 & A_k)
+        + 2*popcnt(B1 & A_k) - 4*popcnt(S & B1 & A_k)
+        - popcnt(S & A_k)
+
+All signed activations are thus represented with:
+
+    subgroup_dot = sum(k=0..6, C_k * 2^k) - C_7 * 128
+
+Finally, the subgroup dot is multiplied by its original signed six-bit
+Q3_K scale, and 16 subgroup results are added into one i32 result.
+The safe upper bound is 256 * 4 * 32 * 128 = 4,194,304. This replaces
+256 coefficient-by-activation scalar multiplications with bitplane
+transposition, masks, shifts and population counts. **Sixteen scale
+multiplications per superblock remain**; do not describe it as a
+zero-multiplication algorithm. The prototype performs no heap allocation
+and does not form a dense 256-element weight buffer.
+
+Its scalar test oracle indexes coefficients from the **original
+untranscoded Q3_K bytes** and multiplies every one of the 256 signed
+activation codes independently; it does not call the Boolean dot's weight
+decoder. Further checks cover input length rejection, signed extremes,
+negative Q3_K offsets, FP16 and FP32 raw metadata (including infinities
+and NaN payloads), and agreement with the existing bipolar-only kernel
+when all activation codes are ±1.
+
+### Admission boundary
+
+This is a new, **research-only**, integer-domain building block. Q3_K,
+BPB3-K and their previous runtime modes are unchanged. In particular, a
+mathematically exact integer dot does not certify matching the optimized
+stock ggml floating-point output: the f32 multiplication and accumulation
+order differs between stock AVX2, tiled and generic implementations.
+Separate independent stock-vector/tiled oracles, full-model logit/token
+parity and trusted RemoteOps physical measurements are mandatory before
+using this code as a runtime path or claiming a speed or DRAM advantage.
+The additional Boolean operations may outweigh saved scalar products;
+**no improvement is presumed**. Existing stock-ordered
+fused_v2_stock remains the qualified experimental model candidate,
+and the BPB3-K storage budget is unchanged.
