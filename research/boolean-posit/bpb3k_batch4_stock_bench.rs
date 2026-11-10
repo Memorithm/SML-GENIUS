@@ -3,15 +3,15 @@
 //! Up to four rows per tile. Eight rows are *two* four-row tiles, not an
 //! eight-accumulator kernel. Same input/corpus/runner and whole-load timing.
 #![deny(unsafe_op_in_unsafe_fn)]
+#[path = "bpb3k_batch4_avx2.rs"]
+#[allow(dead_code)]
+mod batch;
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
 #[path = "bpb3k_pshufb_avx2.rs"]
 #[allow(dead_code)]
 mod previous;
-#[path = "bpb3k_batch4_avx2.rs"]
-#[allow(dead_code)]
-mod batch;
 
 use std::ffi::c_void;
 use std::hint::black_box;
@@ -129,11 +129,7 @@ fn time_arm<const N: usize>(
     (begin.elapsed().as_nanos(), black_box(checksum))
 }
 
-fn time_eight(
-    rows: &[Weight],
-    a: &[u8; batch::Q8_K_BYTES],
-    mode: usize,
-) -> (u128, i64) {
+fn time_eight(rows: &[Weight], a: &[u8; batch::Q8_K_BYTES], mode: usize) -> (u128, i64) {
     assert_eq!(rows.len() % 8, 0);
     // Specially note: this is an honest sequence of TWO four-row
     // microtiles, not an eight-way vector kernel.
