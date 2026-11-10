@@ -2,15 +2,15 @@
 //! fused correction. No ggml model integration or physical Dell result.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[path = "bpb3k_bsums_avx2.rs"]
+#[allow(dead_code)]
+mod bsums;
 #[path = "bpb3k.rs"]
 #[allow(dead_code)]
 mod codec;
 #[path = "bpb3k_pshufb_avx2.rs"]
 #[allow(dead_code)]
 mod old;
-#[path = "bpb3k_bsums_avx2.rs"]
-#[allow(dead_code)]
-mod bsums;
 
 use std::ffi::c_void;
 use std::hint::black_box;
@@ -101,12 +101,16 @@ fn measure(weights: &[Weight], q8: &[u8; bsums::Q8_K_BYTES], mode: usize) -> (u1
         for row in weights {
             let v = match mode {
                 0 => stock(black_box(&row.q3), black_box(q8)) as i32,
-                1 => old::dot_bpb3k_q8_pshufb(black_box(&row.bpb3), black_box(q8))
-                    .unwrap()
-                    .weighted_integer,
-                2 => bsums::dot_bpb3k_q8_bsums_avx2(black_box(&row.bpb3), black_box(q8))
-                    .unwrap()
-                    .weighted_integer,
+                1 => {
+                    old::dot_bpb3k_q8_pshufb(black_box(&row.bpb3), black_box(q8))
+                        .unwrap()
+                        .weighted_integer
+                }
+                2 => {
+                    bsums::dot_bpb3k_q8_bsums_avx2(black_box(&row.bpb3), black_box(q8))
+                        .unwrap()
+                        .weighted_integer
+                }
                 _ => unreachable!(),
             };
             checksum += i64::from(black_box(v));
