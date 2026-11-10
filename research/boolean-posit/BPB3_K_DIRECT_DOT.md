@@ -213,3 +213,41 @@ tokens, real allocation and activation reuse inside ggml, and a
 prospectively admitted **RemoteOps** paired physical test. The previous
 physical v2 campaigns remain category E due to third-party CPU
 contamination; their thresholds and original records are unchanged.
+
+
+## Independent optimized Q3_K stock comparator (preregistered before first run)
+
+The follow-up **bpb3k_prepared_stock_bench.rs** compares the prepared
+signed-Q8 Boolean dot with **the unchanged optimized AVX2 C
+ggml_vec_dot_q3_K_q8_K function** extracted from upstream llama.cpp
+commit f7591a6a01f9273de03331732bdc0b39721168be. The pinned
+original C source is checked against git HEAD before it is compiled
+by the existing independent stock-oracle script. That script must
+first pass its own unchanged-source C/Rust oracle fixtures.
+
+For exact arithmetic comparability, each dot uses **one 256-weight
+Q3_K block and one 256-code Q8_K block**, with both global scales
+exactly 1.0. One-block original stock AVX2 FMA accumulation then
+produces a precisely representable integer f32; the benchmark
+asserts that this integer and the Boolean candidate agree across
+all 1024 original Q3_K → BPB3-K losslessly transcoded rows **before
+timing**. No floating-point tolerance is relaxed.
+
+After the correctness preflight it measures 1, 32, 256, 1024 rows;
+4 repetitions per invocation; 3 warmups; 16 paired AB/BA rounds.
+The prepared candidate's **one transposition per batch is inside
+the measured interval**. Every raw duration and exact checksum
+is retained. The median stock/candidate nanoseconds-per-dot
+ratio is descriptive only. A ratio greater than 1 means prepared
+won this exact **standalone synthetic** comparison, not that the
+SmolLM2 model outran its optimized Q3_K baseline.
+
+The experiment excludes real full-model operator scheduling,
+the >=8-token tiled Q3_K branch, activation quantizer overhead,
+cache/NUMA ownership, host-contamination admission, tokens/s and
+DRAM traffic. Its C code is a diagnostic oracle, **not a dependency
+of the SML inference runtime**. A physical Dell measurement must
+still be performed solely through RemoteOps after merged-source
+qualification and with a complete frozen protocol. Source,
+toolchain, ISA support, output identity, warmup/order, raw
+measurements and any failed preconditions must remain auditable.
