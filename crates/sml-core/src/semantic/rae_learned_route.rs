@@ -14,6 +14,7 @@ use crate::{
 };
 
 pub const RAE_LEARNING_PPM: u32 = 1_000_000;
+pub const RAE_MAX_LEARNED_FANOUT: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RaeTrainPolicy {
@@ -38,6 +39,7 @@ impl RaeTrainPolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RaeLearnError {
     InvalidPolicy,
+    InvalidFanout,
     InvalidDimensions,
     InvalidDatasetIdentity,
     IdenticalTrainingAndEvaluationIdentity,
@@ -92,7 +94,8 @@ pub struct RaeTrainedEventRouter {
     feature_width: usize,
     expert_count: usize,
     train_dataset_id: String,
-    assignments: Vec<Option<RaeLearnedAssociation>>,
+    assignments: Vec<Vec<RaeLearnedAssociation>>,
+    learned_fanout: usize,
     observed_associations: usize,
     training_frames: usize,
 }
@@ -113,7 +116,23 @@ impl RaeTrainedEventRouter {
         policy: RaeTrainPolicy,
         frames: &[SbgRaeNativeFrame],
     ) -> Result<Self, RaeLearnError> {
+        Self::train_with_fanout::<BITS>(train_dataset_id, expert_count, policy, 1, frames)
+    }
+
+    /// Learn bounded one-to-many event -> MOR page edges from TRAIN only.
+    /// A higher fan-out may improve native-page recall but increases work.
+    /// Ranking is by integer TRAIN hit count, then smaller original PageId.
+    pub fn train_with_fanout<const BITS: usize>(
+        train_dataset_id: &str,
+        expert_count: usize,
+        policy: RaeTrainPolicy,
+        learned_fanout: usize,
+        frames: &[SbgRaeNativeFrame],
+    ) -> Result<Self, RaeLearnError> {
         let policy = policy.validate()?;
+        if learned_fanout == 0 || learned_fanout > RAE_MAX_LEARNED_FANOUT {
+            return Err(RaeLearnError::InvalidFanout);
+        }
         validate_dimensions(BITS, expert_count)?;
         validate_identity(train_dataset_id)?;
         if frames.is_empty() {
@@ -143,7 +162,7 @@ impl RaeTrainedEventRouter {
         }
 
         let observed_associations = votes.len();
-        let mut assignments = vec![None; BITS];
+        let mut assignments = vec![Vec::new(); BITS];
         for ((feature, page), hits) in votes {
             let total = exposures[feature];
             debug_assert!(total >= hits);
@@ -158,13 +177,16 @@ impl RaeTrainedEventRouter {
                 exposures: total,
                 precision_ppm,
             };
-            let replace = assignments[feature].is_none_or(|best: RaeLearnedAssociation| {
-                (hits, core::cmp::Reverse(page))
-                    > (best.hits, core::cmp::Reverse(best.page_id.0))
+            assignments[feature].push(candidate);
+        }
+        for per_feature in &mut assignments {
+            per_feature.sort_by(|left, right| {
+                right
+                    .hits
+                    .cmp(&left.hits)
+                    .then_with(|| left.page_id.0.cmp(&right.page_id.0))
             });
-            if replace {
-                assignments[feature] = Some(candidate);
-            }
+            per_feature.truncate(learned_fanout);
         }
 
         Ok(Self {
@@ -172,6 +194,7 @@ impl RaeTrainedEventRouter {
             expert_count,
             train_dataset_id: train_dataset_id.to_owned(),
             assignments,
+            learned_fanout,
             observed_associations,
             training_frames: frames.len(),
         })
@@ -203,13 +226,30 @@ impl RaeTrainedEventRouter {
     }
 
     #[must_use]
-    pub fn learned_feature_count(&self) -> usize {
-        self.assignments.iter().filter(|value| value.is_some()).count()
+    pub const fn learned_fanout(&self) -> usize {
+        self.learned_fanout
     }
 
     #[must_use]
+    pub fn learned_association_count(&self) -> usize {
+        self.assignments.iter().map(Vec::len).sum()
+    }
+
+    #[must_use]
+    pub fn learned_feature_count(&self) -> usize {
+        self.assignments.iter().filter(|value| !value.is_empty()).count()
+    }
+
+    /// Highest-supported original MOR page, for the one-target baseline.
+    #[must_use]
     pub fn association(&self, feature: usize) -> Option<RaeLearnedAssociation> {
-        self.assignments.get(feature).copied().flatten()
+        self.assignments.get(feature)?.first().copied()
+    }
+
+    /// Frozen TRAIN-derived pages in deterministic descending support order.
+    #[must_use]
+    pub fn associations(&self, feature: usize) -> Option<&[RaeLearnedAssociation]> {
+        self.assignments.get(feature).map(Vec::as_slice)
     }
 
     /// Select page IDs using only the observed rising-feature mask and
@@ -219,7 +259,7 @@ impl RaeTrainedEventRouter {
             .map_err(|_| RaeLearnError::InvalidDimensions)?;
         let mut selected = vec![0_u64; self.expert_count.div_ceil(64)];
         for feature in set_indices(rising_words) {
-            if let Some(association) = self.assignments[feature] {
+            for association in &self.assignments[feature] {
                 let index = association.page_id.0 as usize;
                 selected[index / 64] |= 1_u64 << (index % 64);
             }
