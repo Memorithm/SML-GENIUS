@@ -1,0 +1,96 @@
+name: BPB3-K handwritten Haswell AVX2 three-way exact comparison
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3k_avx2_hand.S'
+      - 'research/boolean-posit/bpb3k_hand_asm.rs'
+      - 'research/boolean-posit/bpb3k_hand_asm_stock_bench.rs'
+      - 'research/boolean-posit/BPB3_K_HAND_ASM.md'
+      - '.github/workflows/bpb3k-hand-asm.yml'
+  push:
+    paths:
+      - 'research/boolean-posit/BPB3_K_HAND_ASM.md'
+      - 'research/boolean-posit/bpb3k_avx2_hand.S'
+      - 'research/boolean-posit/bpb3k_hand_asm.rs'
+      - 'research/boolean-posit/bpb3k_hand_asm_stock_bench.rs'
+      - '.github/workflows/bpb3k-hand-asm.yml'
+permissions:
+  contents: read
+
+jobs:
+  exact-assembly-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head with ephemeral credentials only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89 toolchain
+        run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+      - name: Rustfmt and assembler syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_hand_asm.rs research/boolean-posit/bpb3k_hand_asm_stock_bench.rs
+          cc -mavx2 -c research/boolean-posit/bpb3k_avx2_hand.S -o "$RUNNER_TEMP/bpb3k-hand.o"
+          ar rcs "$RUNNER_TEMP/libbpb3khand.a" "$RUNNER_TEMP/bpb3k-hand.o"
+      - name: Verify explicit ISA, register discipline and machine instruction trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          objdump -d -M intel "$RUNNER_TEMP/bpb3k-hand.o" | tee "$RUNNER_TEMP/bpb3k-hand-disassembly.txt" >/dev/null
+          grep -Eiq 'vpshufb' "$RUNNER_TEMP/bpb3k-hand-disassembly.txt"
+          grep -Eiq 'vpmaddubsw' "$RUNNER_TEMP/bpb3k-hand-disassembly.txt"
+          grep -Eiq 'vpmaddwd' "$RUNNER_TEMP/bpb3k-hand-disassembly.txt"
+          ! grep -Eiq 'vpopcnt' "$RUNNER_TEMP/bpb3k-hand-disassembly.txt"
+          # Only one function's .text is present. Strict no-stack-access
+          # invariant: no push/pop and no [rsp]/[rbp] memory operands.
+          if grep -Eiq '(^|[[:space:]])(push|pop)[[:space:]]|(\[rsp|\[rbp)' "$RUNNER_TEMP/bpb3k-hand-disassembly.txt"; then
+            echo STOP_BPB3K_HAND_ASM_STACK_ACCESS
+            exit 1
+          fi
+          readelf -Ws "$RUNNER_TEMP/bpb3k-hand.o" | grep -q 'mem_bpb3k_dot_avx2_asm'
+          echo 'PASS_BPB3K_HAND_ASM_ISA avx2_pshufb=true vpmaddubsw=true vpmaddwd=true vpopcnt=false stack_access=false target=sysv_x86_64'
+          # Caller and true port pressure are NOT evaluated by this check.
+      - name: Signed-Q8 exact numerical oracle, 32 unaligned offsets
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings --test \
+            research/boolean-posit/bpb3k_hand_asm.rs \
+            -L "native=$RUNNER_TEMP" -l static=bpb3khand \
+            -o "$RUNNER_TEMP/bpb3k-hand-oracle"
+          "$RUNNER_TEMP/bpb3k-hand-oracle" --nocapture
+      - name: Fetch unchanged pinned upstream AVX2 C and C++ tiled oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          git init -q "$RUNNER_TEMP/bpb3k-pinned-upstream"
+          git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" fetch --depth=1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3k-pinned-upstream" rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          bash research/boolean-posit/run_bpb3k_stock_oracle.sh \
+            "$RUNNER_TEMP/bpb3k-pinned-upstream" "$RUNNER_TEMP/bpb3k-original-stock" fused_v2_stock
+      - name: Build exact operands three-way benchmark with Haswell target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=haswell \
+            research/boolean-posit/bpb3k_hand_asm_stock_bench.rs \
+            -L "native=$RUNNER_TEMP" -l static=bpb3khand \
+            -L "native=$RUNNER_TEMP/bpb3k-original-stock" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench"
+      - name: Execute 72 paired triplets and verify identical 1024 source rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench" | tee "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench.txt"
+          grep -q '^PASS_BPB3K_HAND_ASM_THREEWAY_ORACLE ' "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench.txt"
+          test "$(grep -c '^BPB3K_HAND_ASM_SUMMARY ' "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench.txt")" = 4
+          test "$(grep -c '^BPB3K_HAND_ASM_RAW ' "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench.txt")" = 72
+          grep -q '^BPB3K_HAND_ASM_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-hand-asm-stock-bench.txt"
