@@ -692,4 +692,76 @@ mod tests {
         assert_eq!(heldout.totals.missed_required_pages, 1);
     }
 
+    #[test]
+    fn bounded_fanout_improves_multi_expert_coverage_but_cannot_fix_no_front() {
+        let train = [
+            frame(1, 1, 1, 0, 0b11),
+            frame(2, 0, 0, 1, 0b01),
+            frame(3, 1, 1, 0, 0b11),
+        ];
+        let threshold = RaeTrainPolicy {
+            minimum_exposures: 2,
+            minimum_precision_ppm: RAE_LEARNING_PPM,
+            max_associations: 2,
+        };
+        let single = RaeTrainedEventRouter::train::<8>("train-multi", 2, threshold, &train)
+            .unwrap();
+        let multi = RaeTrainedEventRouter::train_with_fanout::<8>(
+            "train-multi",
+            2,
+            threshold,
+            2,
+            &train,
+        )
+        .unwrap();
+        assert_eq!(single.learned_fanout(), 1);
+        assert_eq!(multi.learned_fanout(), 2);
+        assert_eq!(single.learned_association_count(), 1);
+        assert_eq!(multi.learned_association_count(), 2);
+        assert_eq!(multi.association(0).unwrap().page_id, PageId(0));
+        assert_eq!(
+            multi
+                .associations(0)
+                .unwrap()
+                .iter()
+                .map(|edge| edge.page_id)
+                .collect::<Vec<_>>(),
+            vec![PageId(0), PageId(1)]
+        );
+        assert_eq!(single.predict(&[1]).unwrap(), vec![0b01]);
+        assert_eq!(multi.predict(&[1]).unwrap(), vec![0b11]);
+
+        let holdout = [
+            frame(4, 1, 1, 0, 0b11),
+            frame(5, 1, 0, 0, 0b11),
+        ];
+        let one = single.evaluate("holdout-multi", &holdout).unwrap();
+        let two = multi.evaluate("holdout-multi", &holdout).unwrap();
+        assert_eq!(one.totals.required_pages, 4);
+        assert_eq!(one.totals.missed_required_pages, 3);
+        assert_eq!(two.totals.missed_required_pages, 2);
+        assert_eq!(two.per_frame[0].missed_required_pages, 0);
+        assert_eq!(two.per_frame[1].missed_required_pages, 2);
+        assert_eq!(
+            RaeTrainedEventRouter::train_with_fanout::<8>(
+                "train-multi",
+                2,
+                threshold,
+                0,
+                &train
+            ),
+            Err(RaeLearnError::InvalidFanout)
+        );
+        assert_eq!(
+            RaeTrainedEventRouter::train_with_fanout::<8>(
+                "train-multi",
+                2,
+                threshold,
+                RAE_MAX_LEARNED_FANOUT + 1,
+                &train
+            ),
+            Err(RaeLearnError::InvalidFanout)
+        );
+    }
+
 }
