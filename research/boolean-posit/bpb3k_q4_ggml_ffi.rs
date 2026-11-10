@@ -111,4 +111,66 @@ mod tests {
         assert!(f16_to_f32(0x7e01).is_nan());
         assert_eq!(f16_to_f32(0x7c00), f32::INFINITY);
     }
+
+    #[test]
+    fn two_blocks_match_independent_q3_stock_lane_order() {
+        // Regression for the real-model failure caused by summing each
+        // Q3_K superblock before applying FP32 FMA to independent lanes.
+        let mut weights = Vec::<u8>::new();
+        let mut activations = Vec::<u8>::new();
+        let mut reference_lanes = [0f32; 8];
+        for block in 0..2usize {
+            let mut original: [u8; 110] =
+                std::array::from_fn(|i| (i.wrapping_mul(23) + 17 + block * 19) as u8);
+            let f16_scale = [0x3c00u16, 0x3e00u16][block];
+            original[108..110].copy_from_slice(&f16_scale.to_le_bytes());
+            weights.extend_from_slice(&q4::transcode_q4::<146>(&original).unwrap());
+
+            let mut q8 = [0u8; 292];
+            let q8_scale = [0.03125f32, -0.0234375f32][block];
+            q8[..4].copy_from_slice(&q8_scale.to_le_bytes());
+            for i in 0..256 {
+                q8[4 + i] = (((i * 37 + block * 29) % 221) as i16 - 110) as i8 as u8;
+            }
+            activations.extend_from_slice(&q8);
+
+            let d = q8_scale * f16_to_f32(f16_scale);
+            let mut lanes = [0i32; 8];
+            for i in 0..256 {
+                // Independently decode the ORIGINAL 110-byte Q3_K.
+                let subgroup = i / 16;
+                let scales = &original[96..108];
+                let low = if subgroup < 8 {
+                    scales[subgroup] & 15
+                } else {
+                    scales[subgroup - 8] >> 4
+                };
+                let high = (scales[8 + subgroup % 4] >> (2 * (subgroup / 4))) & 3;
+                let signed_scale = i32::from(low | (high << 4)) - 32;
+                let signed_q = i32::from(q4::original_q3_code(&original, i));
+                let activation = i32::from(q8[4 + i] as i8);
+                let lane = i % 16 / 4 + if i % 32 < 16 { 0 } else { 4 };
+                lanes[lane] += signed_scale * signed_q * activation;
+            }
+            for i in 0..8 {
+                reference_lanes[i] = d.mul_add(lanes[i] as f32, reference_lanes[i]);
+            }
+        }
+        let half: [f32; 4] = std::array::from_fn(|i| reference_lanes[i] + reference_lanes[i + 4]);
+        let expected = (half[0] + half[2]) + (half[1] + half[3]);
+        let mut got = f32::NAN;
+        unsafe {
+            mem_q4_146_vec_dot(
+                512,
+                &mut got,
+                0,
+                weights.as_ptr().cast(),
+                0,
+                activations.as_ptr().cast(),
+                0,
+                1,
+            );
+        }
+        assert_eq!(got.to_bits(), expected.to_bits());
+    }
 }
