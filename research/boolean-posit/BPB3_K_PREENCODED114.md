@@ -58,3 +58,44 @@ This is a distinct prospectively frozen experiment, not
 retroactive editing of SCALE-1's earlier 130-byte results.
 It targets a lower memory overhead, not guaranteed speed.
 A kernel-only green CI must not cause model dispatch promotion.
+
+
+## Results observed 10 November 2026 — research-only
+
+[Exact-head dedicated run 42876557549](https://github.com/Memorithm/SML-GENIUS/actions/runs/42876557549)
+at  c9bbcf2885445ca4af8c77297b30cfeb43e5651c:
+green. 23 Rust unit tests, 896 original optimized upstream C AVX2
+oracle cases, 112 original C++ tiled cases, 1024 source-Q3_K
+single-superblock unit-scale bitwise FP32 rows and all 216
+four-way timed raw records passed without selective sample removal.
+
+Hosted-runner descriptive medians in ns per row (lower is faster):
+
+| Output rows | Tile | Stock Q3_K 110 B | Packed BPB3-K 110 B | Preencoded i16 130 B | Preencoded i8 114 B |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 1 | 27.16 | 49.22 | 38.66 | 36.77 |
+| 32 | 2 | 26.99 | 63.14 | 37.16 | 35.52 |
+| 32 | 4 | 17.99 | 31.06 | 27.15 | 25.51 |
+| 256 | 1 | 17.65 | 27.77 | 31.57 | 25.93 |
+| 256 | 2 | 27.32 | 59.81 | 36.89 | 34.71 |
+| 256 | 4 | 27.65 | 56.10 | 47.63 | 43.04 |
+| 1024 | 1 | 27.06 | 47.58 | 37.78 | 36.74 |
+| 1024 | 2 | 17.78 | 39.48 | **24.31** | 30.61 |
+| 1024 | 4 | **19.49** | 31.17 | 31.29 | **30.72** |
+
+The 114-byte signed-i8 scale candidate uses only 4 extra bytes
+versus stock rather than 20 for the 130-byte signed-i16 format.
+At 1024 rows / tile4 it improves on the 130-byte version
+by (31.29 - 30.72) / 31.29 = **1.82% lower time**, but
+is 30.72 / 19.49 = **1.576x slower** than stock.
+At tile2 on those same 1024 rows, it regresses versus i16
+(30.61 versus 24.31 ns/row). The result therefore does
+NOT establish a general speed advantage for signed-i8 scale
+preencoding over signed-i16 scale preencoding.
+
+All results reflect hosted synthetic one-superblock kernel time;
+conversion remains outside timing, and 114-byte model footprint,
+end-to-end GGUF load, cache/NUMA and multi-block FP32 fidelity have
+not been qualified. Neither the 114-byte nor 130-byte candidate
+has beaten original optimized stock Q3_K, and no runtime mode
+promotion is warranted.
