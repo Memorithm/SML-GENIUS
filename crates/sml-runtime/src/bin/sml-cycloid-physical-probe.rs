@@ -194,6 +194,10 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let mut file_ns = Vec::with_capacity(observations.samples.len());
     let mut ram_ns = Vec::with_capacity(observations.samples.len());
+    let mut file_when_file_first = Vec::with_capacity(usize::from(pairs));
+    let mut ram_when_file_first = Vec::with_capacity(usize::from(pairs));
+    let mut file_when_ram_first = Vec::with_capacity(usize::from(pairs));
+    let mut ram_when_ram_first = Vec::with_capacity(usize::from(pairs));
     let mut file_first = 0_usize;
     let mut ram_first = 0_usize;
     for observation in &observations.samples {
@@ -206,8 +210,16 @@ fn run() -> Result<(), Box<dyn Error>> {
         file_ns.push(observation.profile.file_read_verify_ns);
         ram_ns.push(observation.profile.resident_copy_verify_ns);
         match observation.order {
-            CycloidProbeOrder::FileThenRam => file_first += 1,
-            CycloidProbeOrder::RamThenFile => ram_first += 1,
+            CycloidProbeOrder::FileThenRam => {
+                file_first += 1;
+                file_when_file_first.push(observation.profile.file_read_verify_ns);
+                ram_when_file_first.push(observation.profile.resident_copy_verify_ns);
+            }
+            CycloidProbeOrder::RamThenFile => {
+                ram_first += 1;
+                file_when_ram_first.push(observation.profile.file_read_verify_ns);
+                ram_when_ram_first.push(observation.profile.resident_copy_verify_ns);
+            }
         }
     }
     if file_first != usize::from(pairs) || ram_first != usize::from(pairs) {
@@ -215,6 +227,10 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     let files = quantiles(&file_ns)?;
     let resident = quantiles(&ram_ns)?;
+    let file_in_file_first = quantiles(&file_when_file_first)?;
+    let ram_in_file_first = quantiles(&ram_when_file_first)?;
+    let file_in_ram_first = quantiles(&file_when_ram_first)?;
+    let ram_in_ram_first = quantiles(&ram_when_ram_first)?;
     println!(
         "{{\"schema\":\"{SCHEMA}\",\"scope\":\"synthetic_sml_page_verified_host_calls_only\",\
          \"model_inference_measured\":false,\"physical_dram_bytes_measured\":false,\
@@ -223,6 +239,10 @@ fn run() -> Result<(), Box<dyn Error>> {
          \"file_then_ram_samples\":{file_first},\"ram_then_file_samples\":{ram_first},\
          \"file_median_ns\":{},\"file_p95_ns\":{},\
          \"resident_median_ns\":{},\"resident_p95_ns\":{},\
+         \"file_when_file_first_median_ns\":{},\"file_when_file_first_p95_ns\":{},\
+         \"resident_when_file_first_median_ns\":{},\"resident_when_file_first_p95_ns\":{},\
+         \"file_when_ram_first_median_ns\":{},\"file_when_ram_first_p95_ns\":{},\
+         \"resident_when_ram_first_median_ns\":{},\"resident_when_ram_first_p95_ns\":{},\
          \"all_payloads_byte_exact\":true}}",
         payload_bytes + 64,
         observations.samples.len(),
@@ -230,6 +250,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         files.p95_ns,
         resident.median_ns,
         resident.p95_ns,
+        file_in_file_first.median_ns,
+        file_in_file_first.p95_ns,
+        ram_in_file_first.median_ns,
+        ram_in_file_first.p95_ns,
+        file_in_ram_first.median_ns,
+        file_in_ram_first.p95_ns,
+        ram_in_ram_first.median_ns,
+        ram_in_ram_first.p95_ns,
     );
     Ok(())
 }
