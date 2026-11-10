@@ -301,7 +301,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Err("synthetic selection fixture failed to authorize resident-only probe".into());
     }
     let borrowed = frozen.borrow_committed_resident(&runtime, &selection)?;
-    let committed = runtime.ram_page(PageId(0)).ok_or("resident page disappeared")?;
+    let committed = runtime
+        .ram_page(PageId(0))
+        .ok_or("resident page disappeared")?;
     if borrowed != payload.as_slice()
         || !std::ptr::eq(borrowed.as_ptr(), committed.payload().as_ptr())
     {
@@ -416,16 +418,14 @@ mod tests {
             path,
         };
         let planner = ElasticWeightPlanner::new(
-            vec![
-                ElasticWeightPage::new(
-                    PageId(0),
-                    512,
-                    WeightPrecision::Boolean,
-                    ResidencyTier::Disk,
-                    0,
-                )
-                .unwrap(),
-            ],
+            vec![ElasticWeightPage::new(
+                PageId(0),
+                512,
+                WeightPrecision::Boolean,
+                ResidencyTier::Disk,
+                0,
+            )
+            .unwrap()],
             ElasticWeightPolicy {
                 ram_limit_bytes: 64,
                 vram_limit_bytes: 0,
