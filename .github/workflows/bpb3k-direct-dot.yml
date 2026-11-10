@@ -6,6 +6,7 @@ on:
       - 'research/boolean-posit/bpb3k_direct.rs'
       - 'research/boolean-posit/bpb3k_prepared_bench.rs'
       - 'research/boolean-posit/bpb3k_prepared_stock_bench.rs'
+      - 'research/boolean-posit/bpb3k_prepared_lut_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - 'research/boolean-posit/BPB3_K_DIRECT_DOT.md'
@@ -16,6 +17,7 @@ on:
       - 'research/boolean-posit/bpb3k_direct.rs'
       - 'research/boolean-posit/bpb3k_prepared_bench.rs'
       - 'research/boolean-posit/bpb3k_prepared_stock_bench.rs'
+      - 'research/boolean-posit/bpb3k_prepared_lut_bench.rs'
       - 'research/boolean-posit/bpb3k.rs'
       - 'research/boolean-posit/gguf_k.rs'
       - '.github/workflows/bpb3k-direct-dot.yml'
@@ -37,7 +39,7 @@ jobs:
       - name: Install pinned research toolchain
         run: rustup toolchain install 1.89.0 --profile minimal --component rustfmt
       - name: Verify Rust formatting
-        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs research/boolean-posit/bpb3k_prepared_bench.rs research/boolean-posit/bpb3k_prepared_stock_bench.rs
+        run: rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_direct.rs research/boolean-posit/bpb3k_prepared_bench.rs research/boolean-posit/bpb3k_prepared_stock_bench.rs research/boolean-posit/bpb3k_prepared_lut_bench.rs
       - name: Build direct-dot test oracle (warnings denied)
         run: rustup run 1.89.0 rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3k_direct.rs -o "$RUNNER_TEMP/bpb3k-direct-tests"
       - name: Execute independent Q3_K dot parity and regression tests
@@ -84,3 +86,21 @@ jobs:
           test "$(grep -c '^BPB3K_STOCK_COMPARE_SUMMARY ' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt")" = 4
           test "$(grep -c '^BPB3K_STOCK_COMPARE_RAW ' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt")" = 64
           grep -q '^BPB3K_STOCK_COMPARE_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-prepared-stock-bench.txt"
+
+      - name: Compile second 16KiB Q8-lookup versus pinned stock AVX2 benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.89.0 rustc --edition=2021 -D warnings -O -C target-cpu=native \
+            research/boolean-posit/bpb3k_prepared_lut_bench.rs \
+            -L "native=$RUNNER_TEMP/bpb3k-stock-oracle" -l static=original_q3 \
+            -o "$RUNNER_TEMP/bpb3k-prepared-lut-bench"
+      - name: Exact original Q3_K stock against 16KiB byte-subset sum candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout -k 5s 90s "$RUNNER_TEMP/bpb3k-prepared-lut-bench" | tee "$RUNNER_TEMP/bpb3k-prepared-lut-bench.txt"
+          grep -q '^PASS_BPB3K_STOCK_Q8_LUT_SINGLE_BLOCK_ORACLE ' "$RUNNER_TEMP/bpb3k-prepared-lut-bench.txt"
+          test "$(grep -c '^BPB3K_STOCK_LUT_COMPARE_SUMMARY ' "$RUNNER_TEMP/bpb3k-prepared-lut-bench.txt")" = 4
+          test "$(grep -c '^BPB3K_STOCK_LUT_COMPARE_RAW ' "$RUNNER_TEMP/bpb3k-prepared-lut-bench.txt")" = 64
+          grep -q '^BPB3K_STOCK_LUT_COMPARE_VERDICT=DIAGNOSTIC' "$RUNNER_TEMP/bpb3k-prepared-lut-bench.txt"
