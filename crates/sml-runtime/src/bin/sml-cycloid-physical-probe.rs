@@ -474,7 +474,7 @@ mod tests {
             frozen
                 .borrow_committed_resident(&runtime, &selection)
                 .unwrap(),
-            payload
+            payload.as_slice()
         );
         let (borrow_first, copy_second) =
             timed_resident_pair(&runtime, &selection, &frozen, true).unwrap();
