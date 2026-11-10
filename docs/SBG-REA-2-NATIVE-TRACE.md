@@ -16,6 +16,8 @@ Every retained row records:
 
 - monotonic cycle ID;
 - packed, exact SBG R-bitplane (original feature coordinates);
+- packed rising and falling feature masks, preserving event coordinate identities
+  for a possible TRAIN-only event-to-page learning experiment;
 - packed native MOR-selected expert/page mask;
 - exact selected `PageId` values;
 - number of rising, falling and active routing bits;
