@@ -674,6 +674,42 @@ mod tests {
     }
 
 
+
+    #[test]
+    fn q5_preparation_rewrites_only_experimental_type_fields_after_validation() {
+        let root = temp_root();
+        let original_file = root.join("original.gguf");
+        let experimental_file = root.join("experimental.gguf");
+        let prepared_file = root.join("prepared.gguf");
+        let (mut source, fields, _) = fixture();
+        // Replace the fixture's original 110-byte Q3 tensor with a
+        // well-formed, unquantized 64-value FP16 vector (128 bytes).
+        let kind_field = fields[3].0;
+        source[kind_field..kind_field + 4].copy_from_slice(&F16.to_le_bytes());
+        source[kind_field - 8..kind_field].copy_from_slice(&64u64.to_le_bytes());
+        fs::write(&original_file, source).unwrap();
+        transcode(&original_file, &experimental_file).unwrap();
+        let safe = fs::read(&experimental_file).unwrap();
+        assert_eq!(
+            prepare_for_patched_runtime(&experimental_file, &prepared_file).unwrap(),
+            3
+        );
+        let prepared = fs::read(&prepared_file).unwrap();
+        assert_eq!(safe.len(), prepared.len());
+        let mut reconstructed = safe.clone();
+        for &(field, _) in &fields[..3] {
+            reconstructed[field..field + 4].copy_from_slice(&11u32.to_le_bytes());
+        }
+        assert_eq!(prepared, reconstructed);
+        assert_eq!(fs::read(&experimental_file).unwrap(), safe);
+        assert_eq!(
+            prepare_for_patched_runtime(&prepared_file, &root.join("second.gguf"))
+                .unwrap_err(),
+            "STOP_PREPARE_MIXED_OR_ALREADY_Q3"
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn q5_preparation_rejects_mixed_original_q3_and_preserves_safe_input() {
         let root = temp_root();
