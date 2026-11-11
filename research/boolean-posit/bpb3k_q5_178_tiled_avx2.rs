@@ -326,7 +326,7 @@ mod tests {
             let mut original: [u8; Q3_BYTES] = std::array::from_fn(|i| {
                 i.wrapping_mul(37).wrapping_add(seed * 19) as u8
             });
-            original[108..110].copy_from_slice(&[0x3c00, 0x8000, 0x7e01, 0xbc00][seed % 4].to_le_bytes());
+            original[108..110].copy_from_slice(&[0x3c00u16, 0x8000, 0x7e01, 0xbc00][seed % 4].to_le_bytes());
             let via_q3 = transcode_q3(&original).unwrap();
             let q4_block = q4::transcode_q4::<Q4_BYTES>(&original).unwrap();
             let via_q4 = transcode_q4(&q4_block).unwrap();
