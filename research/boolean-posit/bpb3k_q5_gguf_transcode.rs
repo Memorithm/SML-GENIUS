@@ -152,9 +152,7 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, u64, Vec<Tensor>), Strin
             if dimension == 0 {
                 first_dim = extent;
             }
-            values = values
-                .checked_mul(extent)
-                .ok_or("STOP_VALUES_OVERFLOW")?;
+            values = values.checked_mul(extent).ok_or("STOP_VALUES_OVERFLOW")?;
         }
         let kind_field = f.stream_position().map_err(|e| e.to_string())?;
         let kind = u32le(f)?;
@@ -203,15 +201,16 @@ fn encode_source_block(input: &mut File, kind: u32) -> Result<[u8; 178], String>
     match kind {
         F16 | BF16 => {
             let bytes = read::<512>(input)?;
-            let codes = std::array::from_fn(|i| {
-                u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])
-            });
+            let codes =
+                std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]));
             let converted = if kind == F16 {
                 quant::quantize_fp16(&codes)
             } else {
                 quant::quantize_bf16(&codes)
             };
-            converted.map(|x| x.bytes).map_err(|e| format!("STOP_Q5_SOURCE_{e:?}"))
+            converted
+                .map(|x| x.bytes)
+                .map_err(|e| format!("STOP_Q5_SOURCE_{e:?}"))
         }
         F32 => {
             let bytes = read::<1024>(input)?;
@@ -255,9 +254,7 @@ fn transcode(source: &Path, dest: &Path) -> Result<(u64, u64), String> {
         return Err("STOP_FIRST_TENSOR_NOT_AT_DATA_START".into());
     }
     for adjacent in entries.windows(2) {
-        if adjacent[1].offset <= adjacent[0].offset
-            || adjacent[1].offset % alignment != 0
-        {
+        if adjacent[1].offset <= adjacent[0].offset || adjacent[1].offset % alignment != 0 {
             return Err("STOP_OVERLAP_OR_MISALIGNMENT".into());
         }
     }
@@ -413,7 +410,6 @@ fn main() {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,10 +418,8 @@ mod tests {
 
     fn temp_root() -> std::path::PathBuf {
         let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "mem-q5-gguf-fixture-{}-{id}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mem-q5-gguf-fixture-{}-{id}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         root
     }
@@ -501,18 +495,33 @@ mod tests {
         let mut inp = File::open(&dst).unwrap();
         let (start, alignment, entries) = tensors(&mut inp, output.len() as u64).unwrap();
         assert_eq!(alignment, 32);
-        assert_eq!(entries.iter().map(|t| t.offset).collect::<Vec<_>>(),
-                   vec![0, 384, 576, 768, 896]);
-        assert_eq!(entries.iter().map(|t| t.kind).collect::<Vec<_>>(),
-                   vec![Q5_EXPERIMENTAL_TYPE, Q5_EXPERIMENTAL_TYPE,
-                        Q5_EXPERIMENTAL_TYPE, 11, F16]);
+        assert_eq!(
+            entries.iter().map(|t| t.offset).collect::<Vec<_>>(),
+            vec![0, 384, 576, 768, 896]
+        );
+        assert_eq!(
+            entries.iter().map(|t| t.kind).collect::<Vec<_>>(),
+            vec![
+                Q5_EXPERIMENTAL_TYPE,
+                Q5_EXPERIMENTAL_TYPE,
+                Q5_EXPERIMENTAL_TYPE,
+                11,
+                F16
+            ]
+        );
 
-        let f16_values: Vec<u16> = chunks[0].chunks_exact(2)
-            .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
-        let bf16_values: Vec<u16> = chunks[1].chunks_exact(2)
-            .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
-        let fp32_values: Vec<f32> = chunks[2].chunks_exact(4)
-            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let f16_values: Vec<u16> = chunks[0]
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect();
+        let bf16_values: Vec<u16> = chunks[1]
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect();
+        let fp32_values: Vec<f32> = chunks[2]
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
         let f16_expected = quant::quantize_fp16_tensor(&f16_values).unwrap();
         let bf16_expected = quant::quantize_bf16_tensor(&bf16_values).unwrap();
         let f32_expected = quant::quantize_f32_tensor(&fp32_values).unwrap();
@@ -566,7 +575,9 @@ mod tests {
         let first_dim_at = fields[0].0 - 16;
         raw[first_dim_at..first_dim_at + 8].copy_from_slice(&0u64.to_le_bytes());
         fs::write(&src, &raw).unwrap();
-        assert!(transcode(&src, &dst).unwrap_err().contains("STOP_ZERO_DIMENSION"));
+        assert!(transcode(&src, &dst)
+            .unwrap_err()
+            .contains("STOP_ZERO_DIMENSION"));
         assert!(!dst.exists());
         fs::remove_dir_all(&root).unwrap();
     }
