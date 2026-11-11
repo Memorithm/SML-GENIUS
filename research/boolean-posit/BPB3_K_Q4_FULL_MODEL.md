@@ -166,9 +166,13 @@ AVX2 non-tiled implementation stays mandatory for other contexts.
 
 The test workflow requires a unique real Q4 tiled marker from every
 experimental p64 benchmark run; the stock arm must not emit it.
-Retain the original two-prompt, full-vocabulary logit and token fidelity
-gate, 12 alternating paired p64/tg32 whole-model runs, peak RSS, pinned
-upstream model/hardware and raw results. A test that runs but loses
+Retain the two original prompts plus the pre-registered long-prompt,
+full-vocabulary logit and token fidelity gate. The new campaign freezes
+**48** alternating AB/BA whole-model p64/tg32 pairs (24 per order) before
+observing new throughput, preserving peak RSS, pinned upstream model and
+original native Q3_K source, all raw samples, and per-pair ratio analysis.
+The previously published 12-pair measurements remain historical evidence
+and must not be pooled into the new experiment. A test that runs but loses
 performance must be retained as a negative result. Hardware-specific
 follow-up requires RemoteOps admission, contamination gating, and
 real conversion/load-time accounting. No production default change.
