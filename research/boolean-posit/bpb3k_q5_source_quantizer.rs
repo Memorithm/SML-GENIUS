@@ -215,7 +215,6 @@ pub fn q4_reference_sse(
     Ok(optimize(source, f64::from(global), -8, 7).2)
 }
 
-
 /// Packed consecutive Q5-178 blocks, with whole-tensor source MSE.
 /// This payload is NOT a standard GGUF tensor and needs an admitted
 /// purpose-built loader before model inference is possible.
@@ -463,7 +462,6 @@ mod tests {
             QuantizeError::InvalidGlobalF16(0xbc00)
         );
     }
-
 
     #[test]
     fn consecutive_source_tensors_are_block_aligned_and_fail_closed() {
