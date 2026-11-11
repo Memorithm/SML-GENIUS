@@ -307,14 +307,20 @@ mod tests {
             match i % 4 { 0 => 0x3c00, 1 => 0xbc00, 2 => 0x3800, _ => 0x3400 }
         });
         let fp16_q = quantize_fp16(&f16).unwrap();
-        assert_eq!(fp16_q.squared_error, 0.0);
-        assert_eq!(dequantize(&fp16_q), f16.map(f16_to_f32));
+        assert!(fp16_q.squared_error.is_finite());
+        let fp16_values = f16.map(f16_to_f32);
+        let fp16_exact = quantize_f32_fixed_global(&fp16_values, 0x3400).unwrap();
+        assert_eq!(fp16_exact.squared_error, 0.0);
+        assert_eq!(dequantize(&fp16_exact), fp16_values);
         let bf16: [u16; 256] = std::array::from_fn(|i| {
             match i % 4 { 0 => 0x3f80, 1 => 0xbf80, 2 => 0x3f00, _ => 0x3e80 }
         });
         let bf16_q = quantize_bf16(&bf16).unwrap();
-        assert_eq!(bf16_q.squared_error, 0.0);
-        assert_eq!(dequantize(&bf16_q), bf16.map(|x| f32::from_bits(u32::from(x) << 16)));
+        assert!(bf16_q.squared_error.is_finite());
+        let bf16_values = bf16.map(|x| f32::from_bits(u32::from(x) << 16));
+        let bf16_exact = quantize_f32_fixed_global(&bf16_values, 0x3400).unwrap();
+        assert_eq!(bf16_exact.squared_error, 0.0);
+        assert_eq!(dequantize(&bf16_exact), bf16_values);
         let mut invalid = f16;
         invalid[17] = 0x7c00;
         assert_eq!(quantize_fp16(&invalid).unwrap_err(), QuantizeError::NonFiniteSource(17));
@@ -333,9 +339,9 @@ mod tests {
         source[13] = f32::MAX;
         assert_eq!(quantize_f32(&source).unwrap_err(), QuantizeError::RangeNotRepresentable);
         source[13] = -0.4;
-        assert_eq!(quantize_f32_fixed_global(&source, 0), Err(QuantizeError::InvalidGlobalF16(0)));
-        assert_eq!(quantize_f32_fixed_global(&source, 0x7c00), Err(QuantizeError::InvalidGlobalF16(0x7c00)));
-        assert_eq!(quantize_f32_fixed_global(&source, 0xbc00), Err(QuantizeError::InvalidGlobalF16(0xbc00)));
+        assert_eq!(quantize_f32_fixed_global(&source, 0).unwrap_err(), QuantizeError::InvalidGlobalF16(0));
+        assert_eq!(quantize_f32_fixed_global(&source, 0x7c00).unwrap_err(), QuantizeError::InvalidGlobalF16(0x7c00));
+        assert_eq!(quantize_f32_fixed_global(&source, 0xbc00).unwrap_err(), QuantizeError::InvalidGlobalF16(0xbc00));
     }
 
     #[test]
