@@ -10,11 +10,15 @@ Status: **research implementation only**. This is a new signed five-bit quantize
 - Encode as 128 low-nibble bytes, 32 fifth-bit bytes, 16 subgroup i8 scales and original FP16 global bits. Metadata semantics and SIMD calculation follow the separate Q5-178 tiled kernel.
 - Provide a separately optimized same-scale Q4 integer oracle (signed `[-8,7]`, same subgroup scale search), **not** the deployed BPB3-K Q4-146 surrogate. Its coefficient set is contained in Q5; the exact discrete Q5 squared-error optimum cannot be worse at the same global scale. This does not guarantee better model perplexity, model accuracy or speed.
 
+## Tensor-level packing
+
+The Rust API now packs whole FP32, FP16 and BF16 tensors with lengths divisible by 256 into consecutive 178-byte blocks using `quantize_f32_tensor`, `quantize_fp16_tensor`, and `quantize_bf16_tensor`. Output allocation is checked, each block is independently quantized, and source nonfinite errors report the absolute tensor coefficient index. A failed block produces no publicly returned partial payload. The returned `QuantizedTensor` records the exact block count and source-level squared error. Its byte stream is **not standard GGUF**; no model runtime has been adapted to consume it.
+
 ## Evidence boundaries
 
 The scalar integer dot and AVX2 tiled 1/2/4-row kernels are available from the parent PR and tested on deterministic vectors. This source quantizer adds actual five-bit coefficients beyond Q3_K's original `[-4,3]`, including FP16/BF16 raw source conversions and deterministic, per-block MSE metrics.
 
-**Not implemented in this PR**: a real model-conversion pipeline that locates and rewrites FP16/BF16 tensors with the ggml runtime's expected quantization granularity, an end-to-end llama.cpp Q5 runtime path, a calibrated real-model evaluation, a native Q5_K model baseline, physical Dell throughput, or production deployment. Existing Q3_K and Q4-146 pathways are not altered.
+**Not implemented in this PR**: a complete GGUF v3 converter that discovers model tensor types, rewrites metadata and aligned offsets, and supplies a matching runtime loader, an end-to-end llama.cpp Q5 runtime path, a calibrated real-model evaluation, a native Q5_K model baseline, physical Dell throughput, or production deployment. Existing Q3_K and Q4-146 pathways are not altered.
 
 ## Qualification
 
