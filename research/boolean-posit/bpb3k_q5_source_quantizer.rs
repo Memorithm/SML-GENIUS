@@ -21,6 +21,9 @@ pub enum QuantizeError {
     InvalidGlobalF16(u16),
     RangeNotRepresentable,
     PackError,
+    BadTensorLength(usize),
+    OutputSizeOverflow,
+    AllocationFailed,
 }
 
 #[derive(Clone, Debug)]
@@ -212,6 +215,95 @@ pub fn q4_reference_sse(
     Ok(optimize(source, f64::from(global), -8, 7).2)
 }
 
+
+/// Packed consecutive Q5-178 blocks, with whole-tensor source MSE.
+/// This payload is NOT a standard GGUF tensor and needs an admitted
+/// purpose-built loader before model inference is possible.
+#[derive(Clone, Debug)]
+pub struct QuantizedTensor {
+    pub payload: Vec<u8>,
+    pub blocks: usize,
+    pub squared_error: f64,
+}
+
+fn validate_tensor_len(len: usize) -> Result<usize, QuantizeError> {
+    if len == 0 || len % BLOCK_WEIGHTS != 0 {
+        return Err(QuantizeError::BadTensorLength(len));
+    }
+    Ok(len / BLOCK_WEIGHTS)
+}
+
+fn new_tensor_output(blocks: usize) -> Result<Vec<u8>, QuantizeError> {
+    let bytes = blocks
+        .checked_mul(q5::Q5_BYTES)
+        .ok_or(QuantizeError::OutputSizeOverflow)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(bytes)
+        .map_err(|_| QuantizeError::AllocationFailed)?;
+    Ok(output)
+}
+
+/// Convert an arbitrary number of whole source FP32 superblocks to
+/// contiguous nonstandard Q5-178 data in original tensor order.
+/// No partial output escapes on validation/quantization failure.
+pub fn quantize_f32_tensor(input: &[f32]) -> Result<QuantizedTensor, QuantizeError> {
+    let blocks = validate_tensor_len(input.len())?;
+    let mut payload = new_tensor_output(blocks)?;
+    let mut squared_error = 0.0;
+    for (block_index, chunk) in input.chunks_exact(BLOCK_WEIGHTS).enumerate() {
+        let mut source = [0.0f32; BLOCK_WEIGHTS];
+        source.copy_from_slice(chunk);
+        let encoded = quantize_f32(&source).map_err(|err| match err {
+            QuantizeError::NonFiniteSource(at) => {
+                QuantizeError::NonFiniteSource(block_index * BLOCK_WEIGHTS + at)
+            }
+            other => other,
+        })?;
+        payload.extend_from_slice(&encoded.bytes);
+        squared_error += encoded.squared_error;
+    }
+    Ok(QuantizedTensor {
+        payload,
+        blocks,
+        squared_error,
+    })
+}
+
+fn quantize_u16_tensor(
+    input: &[u16],
+    quantize: fn(&[u16; BLOCK_WEIGHTS]) -> Result<Quantized, QuantizeError>,
+) -> Result<QuantizedTensor, QuantizeError> {
+    let blocks = validate_tensor_len(input.len())?;
+    let mut payload = new_tensor_output(blocks)?;
+    let mut squared_error = 0.0;
+    for (block_index, chunk) in input.chunks_exact(BLOCK_WEIGHTS).enumerate() {
+        let mut source = [0u16; BLOCK_WEIGHTS];
+        source.copy_from_slice(chunk);
+        let encoded = quantize(&source).map_err(|err| match err {
+            QuantizeError::NonFiniteSource(at) => {
+                QuantizeError::NonFiniteSource(block_index * BLOCK_WEIGHTS + at)
+            }
+            other => other,
+        })?;
+        payload.extend_from_slice(&encoded.bytes);
+        squared_error += encoded.squared_error;
+    }
+    Ok(QuantizedTensor {
+        payload,
+        blocks,
+        squared_error,
+    })
+}
+
+pub fn quantize_fp16_tensor(input: &[u16]) -> Result<QuantizedTensor, QuantizeError> {
+    quantize_u16_tensor(input, quantize_fp16)
+}
+
+pub fn quantize_bf16_tensor(input: &[u16]) -> Result<QuantizedTensor, QuantizeError> {
+    quantize_u16_tensor(input, quantize_bf16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,6 +461,68 @@ mod tests {
         assert_eq!(
             quantize_f32_fixed_global(&source, 0xbc00).unwrap_err(),
             QuantizeError::InvalidGlobalF16(0xbc00)
+        );
+    }
+
+
+    #[test]
+    fn consecutive_source_tensors_are_block_aligned_and_fail_closed() {
+        let input: Vec<u16> = (0..(BLOCK_WEIGHTS * 3))
+            .map(|i| match i % 4 {
+                0 => 0x3c00,
+                1 => 0xbc00,
+                2 => 0x3800,
+                _ => 0x3400,
+            })
+            .collect();
+        let combined = quantize_fp16_tensor(&input).unwrap();
+        assert_eq!(combined.blocks, 3);
+        assert_eq!(combined.payload.len(), 3 * 178);
+        let mut expected_sse = 0.0;
+        for (block, chunk) in input.chunks_exact(256).enumerate() {
+            let mut one = [0u16; 256];
+            one.copy_from_slice(chunk);
+            let q = quantize_fp16(&one).unwrap();
+            assert_eq!(&combined.payload[block * 178..(block + 1) * 178], &q.bytes);
+            expected_sse += q.squared_error;
+        }
+        assert_eq!(combined.squared_error.to_bits(), expected_sse.to_bits());
+        assert_eq!(
+            quantize_fp16_tensor(&[]).unwrap_err(),
+            QuantizeError::BadTensorLength(0)
+        );
+        assert_eq!(
+            quantize_fp16_tensor(&input[..input.len() - 1]).unwrap_err(),
+            QuantizeError::BadTensorLength(input.len() - 1)
+        );
+        let mut invalid = input.clone();
+        invalid[BLOCK_WEIGHTS + 11] = 0x7c00;
+        assert_eq!(
+            quantize_fp16_tensor(&invalid).unwrap_err(),
+            QuantizeError::NonFiniteSource(BLOCK_WEIGHTS + 11)
+        );
+        let bf16: Vec<u16> = input
+            .iter()
+            .map(|&bits| match bits {
+                0x3c00 => 0x3f80,
+                0xbc00 => 0xbf80,
+                0x3800 => 0x3f00,
+                _ => 0x3e80,
+            })
+            .collect();
+        let qbf = quantize_bf16_tensor(&bf16).unwrap();
+        let f32: Vec<f32> = bf16
+            .iter()
+            .map(|&x| f32::from_bits(u32::from(x) << 16))
+            .collect();
+        let q32 = quantize_f32_tensor(&f32).unwrap();
+        assert_eq!(qbf.payload, q32.payload);
+        assert_eq!(qbf.squared_error.to_bits(), q32.squared_error.to_bits());
+        let mut invalid_f32 = f32.clone();
+        invalid_f32[2 * BLOCK_WEIGHTS + 9] = f32::NAN;
+        assert_eq!(
+            quantize_f32_tensor(&invalid_f32).unwrap_err(),
+            QuantizeError::NonFiniteSource(2 * BLOCK_WEIGHTS + 9)
         );
     }
 
