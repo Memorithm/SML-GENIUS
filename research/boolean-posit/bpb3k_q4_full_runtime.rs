@@ -364,10 +364,6 @@ const Q4_TILED_UNPACK: &str = r#"static void tiled_unpack_src0(const block_q3_K 
     constexpr int NB = 16;
     const int qk_stride = num_k * TILED_TILE_K;
     const int nb_stride = NB * num_k;
-    static std::once_flag first_q4_tiled;
-    std::call_once(first_q4_tiled, [] {
-        std::fputs("BPB3K_Q4_146_REAL_TILED_EXECUTED source_nibbles=true no_native_q3_unpack=true\n", stderr);
-    });
     for (int slab = 0; slab < num_k; slab++) {
         for (int r = 0; r < n_rows; r++) {
             const int d_off = slab * TILED_MICRO + r;
@@ -396,6 +392,15 @@ const Q4_TILED_UNPACK: &str = r#"static void tiled_unpack_src0(const block_q3_K 
 }
 
 "#;
+
+// The marker fires once at matrix dispatch, not in the per-tile hot loop.
+const Q4_TILED_DISPATCH: &str = r#"        case GGML_TYPE_Q3_K: {
+            static std::once_flag first_q4_tiled;
+            std::call_once(first_q4_tiled, [] {
+                std::fputs("BPB3K_Q4_146_REAL_TILED_EXECUTED source_nibbles=true no_native_q3_unpack=true\n", stderr);
+            });
+            return tiled_matmul_dispatch<block_q3_K, 16, false,  4, true>(params, dst, expert_rows, cur_a, cne1, scratch);
+        }"#;
 
 fn substitute_region(path: &Path, start: &str, end: &str, replacement: &str) -> Result<(), String> {
     let source = fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -484,6 +489,11 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         "#include <mutex>\n#include <cstdio>",
     )?;
     substitute_once(
+        &tiled,
+        "        case GGML_TYPE_Q3_K:\n            return tiled_matmul_dispatch<block_q3_K, 16, false,  4, true>(params, dst, expert_rows, cur_a, cne1, scratch);",
+        Q4_TILED_DISPATCH,
+    )?;
+    substitute_once(
         &cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
         "    ggml_add_backend_library(${GGML_CPU_NAME})\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \"${MEM_BPB3K_RUST_STATICLIB}\")\n        message(FATAL_ERROR \"Q4-146 Rust staticlib required\")\n    endif()\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \"${MEM_BPB3K_RUST_STATICLIB}\")",
@@ -518,7 +528,8 @@ mod tests {
     fn tiled_q4_nibbles_scales_and_fp16_match_original_source() {
         assert!(Q4_TILED_UNPACK.contains("w + 144"));
         assert!(Q4_TILED_UNPACK.contains("w + 128 + subgroup"));
-        assert!(Q4_TILED_UNPACK.contains("REAL_TILED_EXECUTED"));
+        assert!(Q4_TILED_DISPATCH.contains("REAL_TILED_EXECUTED"));
+        assert!(!Q4_TILED_UNPACK.contains("call_once"));
         for seed in 0..32usize {
             let mut original: [u8; 110] =
                 std::array::from_fn(|i| (i.wrapping_mul(37) + seed * 19) as u8);
