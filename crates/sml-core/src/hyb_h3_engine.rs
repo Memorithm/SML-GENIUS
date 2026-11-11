@@ -27,6 +27,8 @@ use crate::{
     hyb_h1d_copy::{mix_probability, oracle_probability, CopyExpert, DEFAULT_COPY_WEIGHT_TENTHS},
     hyb_h1d_gaussian_copy::{mix_gaussian_probability, oracle_longest_match, GaussianCopyProfile},
     hyb_h2_mor_experts::{route_bits, Router, EXPERTS, ROUTE_WORDS},
+    hyb_h2c_copy::{copy_bucket, expected_bit, CopyMixer, H2C_COPY_MIN, H2C_COPY_TABLE_BITS},
+    hyb_h2t_templates::MatchModel,
 };
 
 /// Positions a P1 model does not predict (its witness starts at 2): the
@@ -47,6 +49,7 @@ pub struct HybridHead {
     eighths: i32,
     copy_weight_tenths: u8,
     gaussian_copy: Option<GaussianCopyProfile>,
+    h2c: Option<CopyMixer>,
 }
 
 impl HybridHead {
@@ -63,6 +66,7 @@ impl HybridHead {
             eighths: 0,
             copy_weight_tenths: 0,
             gaussian_copy: None,
+            h2c: None,
         }
     }
 
@@ -79,6 +83,7 @@ impl HybridHead {
             eighths,
             copy_weight_tenths: 0,
             gaussian_copy: None,
+            h2c: None,
         }
     }
 
@@ -117,6 +122,18 @@ impl HybridHead {
     ) -> Self {
         let mut result = Self::single(head, eighths);
         result.gaussian_copy = Some(gaussian_copy);
+        result
+    }
+
+    /// HYB H-3c: one frozen H-1d head followed by the H-2c copy expert
+    /// judged on EVAL4 (`hyb_h2c_copy`): a per-document LZP match model
+    /// (context 6, 2^18 entries) over the coded bytes, whose expected bit
+    /// moves the head stretch by the frozen shift of its (match length,
+    /// depth) cell while the decoded upper bits agree with its prediction.
+    #[must_use]
+    pub fn single_with_h2c_copy(head: BankHead, eighths: i32, mixer: CopyMixer) -> Self {
+        let mut result = Self::single(head, eighths);
+        result.h2c = Some(mixer);
         result
     }
 
@@ -164,6 +181,7 @@ impl HybridHead {
             eighths: exported.eighths,
             copy_weight_tenths: 0,
             gaussian_copy: None,
+            h2c: None,
         }
     }
 
@@ -218,6 +236,23 @@ impl HybridHead {
     }
 }
 
+/// Stretch of decision `depth` after the H-2c copy expert: shifted while
+/// the decoded upper bits of `target` agree with the predicted byte.
+#[inline]
+fn h2c_stretch(
+    mixer: &CopyMixer,
+    prediction: Option<(u8, usize)>,
+    stretch: i32,
+    target: u8,
+    depth: usize,
+) -> i32 {
+    prediction
+        .and_then(|(q, n)| {
+            expected_bit(q, target, depth).map(|e| mixer.stretch(stretch, e, copy_bucket(n), depth))
+        })
+        .unwrap_or(stretch)
+}
+
 /// `u32` coder probability of a stretch (the trace scale is 1/65536).
 #[inline]
 fn coder_p1(tables: &Tables, stretch: i32) -> u32 {
@@ -239,6 +274,8 @@ pub struct HybridPredictor<'a> {
     record: BankRecord,
     expert: Option<usize>,
     copy: Option<CopyExpert>,
+    matcher: Option<MatchModel>,
+    prediction: Option<(u8, usize)>,
     p1: u32,
 }
 
@@ -259,6 +296,11 @@ impl<'a> HybridPredictor<'a> {
             expert: None,
             copy: (head.copy_weight_tenths > 0 || head.gaussian_copy.is_some())
                 .then(CopyExpert::default),
+            matcher: head
+                .h2c
+                .is_some()
+                .then(|| MatchModel::with_min(H2C_COPY_TABLE_BITS, H2C_COPY_MIN)),
+            prediction: None,
             p1: HALF,
         };
         predictor.prepare();
@@ -277,6 +319,7 @@ impl<'a> HybridPredictor<'a> {
             if let Some(copy) = self.copy.as_mut() {
                 copy.prepare_byte();
             }
+            self.prediction = self.matcher.as_ref().and_then(MatchModel::predict);
             self.code = ByteCode::default();
             self.blocks = self.model.frozen_blocks(self.ctx, 0);
             self.record = BankRecord::default();
@@ -303,7 +346,12 @@ impl<'a> HybridPredictor<'a> {
         let shift = self.expert.map_or(0, |k| {
             self.head.fused[k].correction(r, d, self.head.eighths)
         });
-        let neural = coder_p1(self.tables, st.saturating_add(shift));
+        let stretch = st.saturating_add(shift);
+        let stretch = match &self.head.h2c {
+            Some(mixer) => h2c_stretch(mixer, self.prediction, stretch, r.record.target, d),
+            None => stretch,
+        };
+        let neural = coder_p1(self.tables, stretch);
         self.p1 = self.copy.as_ref().map_or(neural, |copy| {
             let proposal = copy.probability(d, r.record.target);
             if let Some(gaussian) = self.head.gaussian_copy {
@@ -339,6 +387,13 @@ impl BitPredictor for HybridPredictor<'_> {
         if self.decision == 8 {
             if let Some(copy) = self.copy.as_mut() {
                 copy.push_decoded(self.record.record.target);
+            }
+            // Like the traces the copy was judged on, the matcher sees
+            // the bytes P1 predicts only (not the uncoded prefix).
+            if self.position >= UNCODED_PREFIX {
+                if let Some(matcher) = self.matcher.as_mut() {
+                    matcher.push(self.record.record.target);
+                }
             }
             self.ctx.push(self.record.record.target);
             self.position += 1;
@@ -407,6 +462,24 @@ pub fn decompress(
 #[must_use]
 pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &[u8]) -> Vec<u32> {
     let mut out = vec![HALF; UNCODED_PREFIX.min(data.len()) * 8];
+    // H-2c, the trace way: the match model runs over the traced bytes
+    // first, one prediction per byte, before the byte is pushed.
+    let predictions: Vec<Option<(u8, usize)>> = match head.h2c {
+        Some(_) => {
+            let mut m = MatchModel::with_min(H2C_COPY_TABLE_BITS, H2C_COPY_MIN);
+            data.iter()
+                .enumerate()
+                .map(|(i, &b)| {
+                    (i >= UNCODED_PREFIX).then(|| {
+                        let p = m.predict();
+                        m.push(b);
+                        p
+                    })?
+                })
+                .collect()
+        }
+        None => Vec::new(),
+    };
     model.code_document(tables, data, false, |position, ctx, byte, code| {
         let r = BankRecord {
             record: TraceRecord {
@@ -427,7 +500,12 @@ pub fn oracle_p1s(model: &mut Model, tables: &Tables, head: &HybridHead, data: &
                 let h = &head.heads[k];
                 h.correction(h.oracle_raw(&r, d), d, head.eighths)
             });
-            let neural = coder_p1(tables, i32::from(code.logits[d]).saturating_add(shift));
+            let stretch = i32::from(code.logits[d]).saturating_add(shift);
+            let stretch = match &head.h2c {
+                Some(mixer) => h2c_stretch(mixer, predictions[position], stretch, byte, d),
+                None => stretch,
+            };
+            let neural = coder_p1(tables, stretch);
             let copy = if head.copy_weight_tenths == 0 && head.gaussian_copy.is_none() {
                 None
             } else {
@@ -694,6 +772,42 @@ pub mod synthetic {
     /// host are the determinism criterion of H-3.
     #[must_use]
     pub fn deterministic_csv() -> String {
+        csv_of(heads().to_vec())
+    }
+
+    /// The H-3 heads plus the H-3c head: one H-1d head followed by the
+    /// H-2c copy expert with the frozen EVAL4 shifts of seed 11.
+    #[must_use]
+    pub fn heads_h3c() -> Vec<(&'static str, HybridHead)> {
+        let mut out = heads().to_vec();
+        out.push((
+            "single_h2c_copy",
+            HybridHead::single_with_h2c_copy(head(1), 8, CopyMixer::eval4_go(0)),
+        ));
+        out
+    }
+
+    /// Documents of [`documents`] plus one with long repeats, where the
+    /// copy expert acts on every bucket.
+    #[must_use]
+    pub fn documents_h3c() -> Vec<Vec<u8>> {
+        let mut out = documents();
+        out.push(text(1003, 700).repeat(12));
+        out
+    }
+
+    /// The H-3c determinism file: [`deterministic_csv`] rows for
+    /// [`heads_h3c`] and [`documents_h3c`].
+    #[must_use]
+    pub fn deterministic_csv_h3c() -> String {
+        csv_rows(heads_h3c(), &documents_h3c())
+    }
+
+    fn csv_of(heads: Vec<(&'static str, HybridHead)>) -> String {
+        csv_rows(heads, &documents())
+    }
+
+    fn csv_rows(heads: Vec<(&'static str, HybridHead)>, documents: &[Vec<u8>]) -> String {
         let tables = Tables::new();
         let mut m = model(&tables);
         let mut out = format!(
@@ -702,8 +816,8 @@ pub mod synthetic {
             hex(&tables.sha()),
             hex(&m.weights_sha()),
         );
-        for (name, h) in heads() {
-            for (i, doc) in documents().iter().enumerate() {
+        for (name, h) in heads {
+            for (i, doc) in documents.iter().enumerate() {
                 let p1s = engine_p1s(&m, &tables, &h, doc);
                 let oracle = p1s == oracle_p1s(&mut m, &tables, &h, doc);
                 let packed = compress(&m, &tables, &h, doc);
@@ -732,6 +846,55 @@ mod tests {
             .into_iter()
             .map(|(_, h)| h)
             .collect()
+    }
+
+    #[test]
+    fn the_h2c_copy_head_matches_the_trace_way_round_trips_and_gains_on_repeats() {
+        let tables = Tables::new();
+        let mut m = model(&tables);
+        let single = HybridHead::single(head(1), 8);
+        let copy = HybridHead::single_with_h2c_copy(head(1), 8, CopyMixer::eval4_go(0));
+        let zero = HybridHead::single_with_h2c_copy(head(1), 8, CopyMixer::zero());
+        let repeated = text(1003, 700).repeat(12);
+        for data in super::synthetic::documents_h3c() {
+            let p1s = engine_p1s(&m, &tables, &copy, &data);
+            assert_eq!(p1s, oracle_p1s(&mut m, &tables, &copy, &data));
+            let packed = compress(&m, &tables, &copy, &data);
+            assert_eq!(decompress(&m, &tables, &copy, &packed).unwrap(), data);
+            // Zero shifts leave the H-1d engine byte for byte.
+            assert_eq!(
+                engine_p1s(&m, &tables, &zero, &data),
+                engine_p1s(&m, &tables, &single, &data)
+            );
+        }
+        let with = compress(&m, &tables, &copy, &repeated).len();
+        let without = compress(&m, &tables, &single, &repeated).len();
+        assert!(with * 2 < without, "{with} vs {without}");
+        // A truncated or padded container is refused.
+        let packed = compress(&m, &tables, &copy, &repeated);
+        assert!(decompress(&m, &tables, &copy, &packed[..packed.len() - 1]).is_err());
+        let mut padded = packed.clone();
+        padded.push(0);
+        assert!(decompress(&m, &tables, &copy, &padded).is_err());
+    }
+
+    #[test]
+    fn the_h3c_determinism_file_keeps_the_h3_rows_and_passes() {
+        let h3 = super::synthetic::deterministic_csv();
+        let h3c = super::synthetic::deterministic_csv_h3c();
+        assert_eq!(h3c, super::synthetic::deterministic_csv_h3c());
+        let rows: Vec<&str> = h3c.lines().collect();
+        assert_eq!(rows.len(), 3 + 4 * 9);
+        for row in rows.iter().skip(3) {
+            assert!(row.ends_with(",true,true"), "{row}");
+        }
+        // The H-3 file is unchanged: its rows are those of the first eight
+        // documents of the first three heads.
+        let h3_rows: Vec<&str> = h3.lines().collect();
+        assert_eq!(&h3_rows[..3], &rows[..3]);
+        for (k, chunk) in rows[3..3 + 3 * 9].chunks(9).enumerate() {
+            assert_eq!(&h3_rows[3 + 8 * k..3 + 8 * (k + 1)], &chunk[..8]);
+        }
     }
 
     #[test]

@@ -1049,9 +1049,7 @@ fn cli_h3(
     head_paths: [&Path; 2],
     out: &Path,
 ) -> Result<()> {
-    use sml_core::hyb_h3_engine::{
-        compress, decompress, engine_p1s, oracle_p1s, parse_experts, parse_h1d_head, HybridHead,
-    };
+    use sml_core::hyb_h3_engine::{parse_experts, parse_h1d_head, HybridHead};
     let roster = h1d_roster(root, manifest, expected, Some((eval, EVAL5_ROLE)))?;
     let dir = p1.join("bytes_q4");
     let (mut model, weights_sha) = restore_h1d(plan, &roster, &dir)?;
@@ -1106,41 +1104,8 @@ fn cli_h3(
         fs::create_dir_all(out.join("containers").join(arm.name))?;
     }
     let tables = Tables::new();
-    let (mut docs, mut bytes, mut mismatches, mut failures) = (0u64, 0u64, 0u64, 0u64);
-    for doc in roster.docs.iter().filter(|d| d.role == Role::Eval2) {
-        let data = load(doc)?;
-        docs += 1;
-        bytes += data.len() as u64;
-        for arm in &mut arms {
-            let p1s = engine_p1s(&model, &tables, &arm.head, &data);
-            if p1s != oracle_p1s(&mut model, &tables, &arm.head, &data) {
-                mismatches += 1;
-            }
-            for (i, &p) in p1s.iter().enumerate() {
-                let bit = (data[i / 8] >> (7 - i % 8)) & 1 == 1;
-                let p = f64::from(if bit { p } else { p.wrapping_neg() }) / 4_294_967_296.0;
-                arm.model_bits -= p.log2();
-            }
-            let t = Instant::now();
-            let packed = compress(&model, &tables, &arm.head, &data);
-            arm.encode_ns += t.elapsed().as_nanos();
-            let t = Instant::now();
-            let back = decompress(&model, &tables, &arm.head, &packed);
-            arm.decode_ns += t.elapsed().as_nanos();
-            if back.as_deref().ok() != Some(data.as_slice()) {
-                failures += 1;
-            }
-            arm.container_bytes += packed.len() as u64;
-            arm.containers.extend_from_slice(&sha256(&packed));
-            // The containers stay with the run (outside the timed region).
-            fs::write(
-                out.join("containers")
-                    .join(arm.name)
-                    .join(format!("{}.smlh3", doc.index)),
-                &packed,
-            )?;
-        }
-    }
+    let (docs, bytes, mismatches, failures) =
+        engine_campaign(&mut model, &tables, &roster, &mut arms, out)?;
     if docs == 0 {
         return Err("empty EVAL5".into());
     }
@@ -1214,6 +1179,245 @@ fn cli_h3(
     Ok(())
 }
 
+/// HYB H-3c EVAL6: DEV-bucket articles of peS2o-0008, never read before.
+const EVAL6_ROLE: &str = "EVAL6";
+/// H-3c GO: the copy expert makes the native hybrid compress EVAL6 at
+/// least this much better than the H-1d head alone, for both seeds.
+const H3C_GAIN_BPC: f64 = 0.02;
+
+/// `engine-h3c-eval6` / `smoke-h3c-eval6` (HYB H-3c,
+/// docs/HYB-H3C-NATIVE-COPY-PREREGISTRATION.md): the frozen H-1d P1, the
+/// published A1d heads and the H-2c copy expert judged on EVAL4 run as a
+/// native compressor over EVAL6. Arms: P1 alone (b0), A1d (b1, per seed)
+/// and A1d + copy (b2, per seed); `h3c.tsv` gets the verdict.
+#[allow(clippy::too_many_arguments)]
+fn cli_h3c(
+    plan: Plan,
+    root: &Path,
+    manifest: &Path,
+    p1: &Path,
+    expected: Option<&str>,
+    eval: &Path,
+    head_paths: [&Path; 2],
+    out: &Path,
+) -> Result<()> {
+    use sml_core::{
+        hyb_h2c_copy::CopyMixer,
+        hyb_h3_engine::{parse_h1d_head, HybridHead},
+    };
+    let roster = h1d_roster(root, manifest, expected, Some((eval, EVAL6_ROLE)))?;
+    let dir = p1.join("bytes_q4");
+    let (mut model, weights_sha) = restore_h1d(plan, &roster, &dir)?;
+    if plan.label == "PREREGISTERED" && weights_sha != H3_P1_WEIGHTS_SHA256 {
+        return Err(format!("P1 weights {weights_sha} are not the H-1d bytes_q4 weights").into());
+    }
+    let arm = |name: &'static str, head: HybridHead| EngineArm {
+        name,
+        head,
+        container_bytes: 0,
+        model_bits: 0.0,
+        encode_ns: 0,
+        decode_ns: 0,
+        containers: Vec::new(),
+    };
+    let mut arms = vec![arm("b0", HybridHead::none())];
+    let mut copies = Vec::new();
+    let mut head_shas = Vec::new();
+    for (k, (path, names)) in head_paths
+        .iter()
+        .zip([("b1_seed11", "b2_seed11"), ("b1_seed23", "b2_seed23")])
+        .enumerate()
+    {
+        let text = fs::read_to_string(path)?;
+        let sha = hex(&sha256(text.as_bytes()));
+        if plan.label == "PREREGISTERED" && sha != H3_A1D_SHA256[k] {
+            return Err(format!("{} is not the H-1d head ({sha})", path.display()).into());
+        }
+        let (head, eighths) = parse_h1d_head(&text)?;
+        arms.push(arm(names.0, HybridHead::single(head.clone(), eighths)));
+        copies.push(arm(
+            names.1,
+            HybridHead::single_with_h2c_copy(head, eighths, CopyMixer::eval4_go(k)),
+        ));
+        head_shas.push(sha);
+    }
+    arms.extend(copies);
+    let canonical_root = fs::canonicalize(root)?;
+    fs::create_dir(out)?;
+    if fs::canonicalize(out)?.starts_with(&canonical_root) {
+        return Err("output must not be inside the data root".into());
+    }
+    for arm in &arms {
+        fs::create_dir_all(out.join("containers").join(arm.name))?;
+    }
+    let tables = Tables::new();
+    let (docs, bytes, mismatches, failures) =
+        engine_campaign(&mut model, &tables, &roster, &mut arms, out)?;
+    if docs == 0 {
+        return Err("empty EVAL6".into());
+    }
+    if hex(&model.weights_sha()) != weights_sha {
+        return Err("EVAL6 changed the weights".into());
+    }
+    let per_byte = |v: f64| v / bytes as f64;
+    let bpc: Vec<f64> = arms
+        .iter()
+        .map(|a| per_byte(8.0 * a.container_bytes as f64))
+        .collect();
+    let us = |ns: u128| ns as f64 / 1000.0 / bytes as f64;
+    let mut report = format!(
+        "label\t{}\nschema\tSML_HYB_H3C_ENGINE_V1\nmanifest_sha256\t{}\neval6_manifest_sha256\t{}\n\
+         weights_sha256\t{weights_sha}\ntables_sha256\t{}\n\
+         head_seed11_sha256\t{}\nhead_seed23_sha256\t{}\n\
+         copy_seed11_shifts\t{}\ncopy_seed23_shifts\t{}\neval6_docs\t{docs}\neval6_bytes\t{bytes}\n\
+         engine_oracle_mismatches\t{mismatches}\nround_trip_failures\t{failures}\n",
+        plan.label,
+        roster.manifest_sha,
+        roster.eval2_sha.as_deref().unwrap_or("none"),
+        hex(&tables.sha()),
+        head_shas[0],
+        head_shas[1],
+        CopyMixer::eval4_go(0).text(),
+        CopyMixer::eval4_go(1).text(),
+    );
+    for (arm, &b) in arms.iter().zip(&bpc) {
+        let n = arm.name;
+        report += &format!(
+            "{n}_container_bytes\t{}\n{n}_container_bpc\t{b:.9}\n{n}_model_bpc\t{:.9}\n\
+             {n}_encode_us_per_byte\t{:.4}\n{n}_decode_us_per_byte\t{:.4}\n\
+             {n}_containers_sha256\t{}\n",
+            arm.container_bytes,
+            per_byte(arm.model_bits),
+            us(arm.encode_ns),
+            us(arm.decode_ns),
+            hex(&sha256(&arm.containers)),
+        );
+    }
+    // arms: 0 = b0, 1..=2 = b1 seeds 11/23, 3..=4 = b2 seeds 11/23.
+    let head_gain = [bpc[0] - bpc[1], bpc[0] - bpc[2]];
+    let copy_gain = [bpc[1] - bpc[3], bpc[2] - bpc[4]];
+    let spread = (bpc[3] - bpc[4]).abs();
+    let ratio =
+        |a: usize, b: usize, ns: fn(&EngineArm) -> u128| ns(&arms[a]) as f64 / ns(&arms[b]) as f64;
+    let encode = [ratio(3, 0, |a| a.encode_ns), ratio(4, 0, |a| a.encode_ns)];
+    let decode = [ratio(3, 0, |a| a.decode_ns), ratio(4, 0, |a| a.decode_ns)];
+    let quality = copy_gain
+        .iter()
+        .all(|&g| g > H3C_GAIN_BPC && g > 2.0 * spread);
+    let cost = encode
+        .iter()
+        .chain(&decode)
+        .all(|&r| r <= H3_MAX_COST_RATIO);
+    let verdict = match (mismatches + failures == 0, quality, cost) {
+        (false, _, _) => "NO_GO_EXACTNESS",
+        (true, false, _) => "NO_GO",
+        (true, true, false) => "GO_DIAGNOSTIC_COST",
+        (true, true, true) => "GO",
+    };
+    report += &format!(
+        "head_gain_seed11_bpc\t{:.9}\nhead_gain_seed23_bpc\t{:.9}\n\
+         copy_gain_seed11_bpc\t{:.9}\ncopy_gain_seed23_bpc\t{:.9}\ncopy_seed_spread_bpc\t{spread:.9}\n\
+         encode_cost_ratio_seed11\t{:.4}\nencode_cost_ratio_seed23\t{:.4}\n\
+         decode_cost_ratio_seed11\t{:.4}\ndecode_cost_ratio_seed23\t{:.4}\n\
+         encode_cost_ratio_over_b1_seed11\t{:.4}\nencode_cost_ratio_over_b1_seed23\t{:.4}\n\
+         decode_cost_ratio_over_b1_seed11\t{:.4}\ndecode_cost_ratio_over_b1_seed23\t{:.4}\n\
+         gain_threshold_bpc\t{H3C_GAIN_BPC}\nmax_cost_ratio\t{H3_MAX_COST_RATIO}\n\
+         dev_read\tfalse\ntest\tUNOPENED\nsource_commit\t{}\nverdict\t{verdict}\n",
+        head_gain[0],
+        head_gain[1],
+        copy_gain[0],
+        copy_gain[1],
+        encode[0],
+        encode[1],
+        decode[0],
+        decode[1],
+        ratio(3, 1, |a| a.encode_ns),
+        ratio(4, 2, |a| a.encode_ns),
+        ratio(3, 1, |a| a.decode_ns),
+        ratio(4, 2, |a| a.decode_ns),
+        std::env::var("SML_SOURCE_COMMIT").unwrap_or_else(|_| "unknown".into()),
+    );
+    fs::write(out.join("h3c.tsv"), &report)?;
+    print!("{report}");
+    Ok(())
+}
+
+/// `engine-h3c-synthetic NEW_OUTPUT_DIR`: the H-3c cross-host determinism
+/// file (H-3 rows plus the copy head and a repetitive document; no data is
+/// read) and the engine timing on this host.
+fn cli_h3c_synthetic(out: &Path) -> Result<()> {
+    use sml_core::hyb_h3_engine::{compress, synthetic};
+    fs::create_dir(out)?;
+    let csv = synthetic::deterministic_csv_h3c();
+    fs::write(out.join("deterministic.csv"), &csv)?;
+    let tables = Tables::new();
+    let model = synthetic::model(&tables);
+    let doc = synthetic::text(4242, 1 << 20);
+    let mut timing = String::from("head\tbytes\tencode_us_per_byte\n");
+    for (name, head) in synthetic::heads_h3c() {
+        let t = Instant::now();
+        std::hint::black_box(compress(&model, &tables, &head, &doc));
+        let us = t.elapsed().as_secs_f64() * 1e6 / doc.len() as f64;
+        timing += &format!("{name}\t{}\t{us:.4}\n", doc.len());
+    }
+    fs::write(out.join("timing.tsv"), &timing)?;
+    print!(
+        "deterministic_sha256\t{}\n{timing}",
+        hex(&sha256(csv.as_bytes()))
+    );
+    Ok(())
+}
+
+/// Compresses and decompresses every evaluation document with each arm,
+/// alternating arms document by document, checks every decision against
+/// the trace way and keeps the containers. Returns (documents, bytes,
+/// oracle mismatches, round-trip failures).
+fn engine_campaign(
+    model: &mut Model,
+    tables: &Tables,
+    roster: &Roster,
+    arms: &mut [EngineArm],
+    out: &Path,
+) -> Result<(u64, u64, u64, u64)> {
+    use sml_core::hyb_h3_engine::{compress, decompress, engine_p1s, oracle_p1s};
+    let (mut docs, mut bytes, mut mismatches, mut failures) = (0u64, 0u64, 0u64, 0u64);
+    for doc in roster.docs.iter().filter(|d| d.role == Role::Eval2) {
+        let data = load(doc)?;
+        docs += 1;
+        bytes += data.len() as u64;
+        for arm in arms.iter_mut() {
+            let p1s = engine_p1s(model, tables, &arm.head, &data);
+            if p1s != oracle_p1s(model, tables, &arm.head, &data) {
+                mismatches += 1;
+            }
+            for (i, &p) in p1s.iter().enumerate() {
+                let bit = (data[i / 8] >> (7 - i % 8)) & 1 == 1;
+                let p = f64::from(if bit { p } else { p.wrapping_neg() }) / 4_294_967_296.0;
+                arm.model_bits -= p.log2();
+            }
+            let t = Instant::now();
+            let packed = compress(model, tables, &arm.head, &data);
+            arm.encode_ns += t.elapsed().as_nanos();
+            let t = Instant::now();
+            let back = decompress(model, tables, &arm.head, &packed);
+            arm.decode_ns += t.elapsed().as_nanos();
+            if back.as_deref().ok() != Some(data.as_slice()) {
+                failures += 1;
+            }
+            arm.container_bytes += packed.len() as u64;
+            arm.containers.extend_from_slice(&sha256(&packed));
+            // The containers stay with the run (outside the timed region).
+            fs::write(
+                out.join("containers")
+                    .join(arm.name)
+                    .join(format!("{}.smlh3", doc.index)),
+                &packed,
+            )?;
+        }
+    }
+    Ok((docs, bytes, mismatches, failures))
+}
+
 /// `engine-h3-synthetic NEW_OUTPUT_DIR`: the cross-host determinism file
 /// (synthetic model, heads and documents; no data is read) and the
 /// engine timing on this host.
@@ -1241,7 +1445,7 @@ fn cli_h3_synthetic(out: &Path) -> Result<()> {
 }
 
 fn cli(args: &[String]) -> Result<()> {
-    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3|trace-h2-eval4|smoke-h2-eval4) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL_MANIFEST.tsv | (engine-h3-eval5|smoke-h3-eval5) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL5_MANIFEST.tsv single|routed HEAD_SEED11 HEAD_SEED23 NEW_OUTPUT_DIR | engine-h3-synthetic NEW_OUTPUT_DIR";
+    let usage = "usage: sml-gb11-p1-s5h (run|smoke|run-h1b|smoke-h1b) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR [MANIFEST_SHA256] | (run-h1c|smoke-h1c) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- EVAL2_MANIFEST.tsv | (run-h1d|smoke-h1d) DATA_ROOT MANIFEST.tsv NEW_OUTPUT_DIR MANIFEST_SHA256|- | (trace-h1d-eval3|smoke-h1d-eval3|trace-h2-eval4|smoke-h2-eval4) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL_MANIFEST.tsv | (engine-h3-eval5|smoke-h3-eval5) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL5_MANIFEST.tsv single|routed HEAD_SEED11 HEAD_SEED23 NEW_OUTPUT_DIR | engine-h3-synthetic NEW_OUTPUT_DIR | (engine-h3c-eval6|smoke-h3c-eval6) DATA_ROOT MANIFEST.tsv P1_OUTPUT_DIR MANIFEST_SHA256|- EVAL6_MANIFEST.tsv HEAD_SEED11 HEAD_SEED23 NEW_OUTPUT_DIR | engine-h3c-synthetic NEW_OUTPUT_DIR";
     match args {
         [_, mode, root, manifest, out, sha] if mode == "run-h1d" || mode == "smoke-h1d" => {
             let base = if mode == "run-h1d" { RUN } else { SMOKE };
@@ -1307,6 +1511,30 @@ fn cli(args: &[String]) -> Result<()> {
         }
         [_, mode, out] if mode == "engine-h3-synthetic" => {
             return cli_h3_synthetic(Path::new(out));
+        }
+        [_, mode, root, manifest, p1, sha, eval, head11, head23, out]
+            if mode == "engine-h3c-eval6" || mode == "smoke-h3c-eval6" =>
+        {
+            let base = if mode == "engine-h3c-eval6" {
+                RUN
+            } else {
+                SMOKE
+            };
+            let plan = Plan { cal: true, ..base };
+            let expected = (sha != "-").then_some(sha.as_str());
+            return cli_h3c(
+                plan,
+                Path::new(root),
+                Path::new(manifest),
+                Path::new(p1),
+                expected,
+                Path::new(eval),
+                [Path::new(head11), Path::new(head23)],
+                Path::new(out),
+            );
+        }
+        [_, mode, out] if mode == "engine-h3c-synthetic" => {
+            return cli_h3c_synthetic(Path::new(out));
         }
         _ => {}
     }
@@ -1846,6 +2074,57 @@ mod tests {
             .find_map(|l| l.strip_prefix("weights_sha256\t"))
             .unwrap();
         assert_eq!(weights_line, json_str(&json, "weights_sha256").unwrap());
+        // H-3c: the engine compresses EVAL6 with P1 alone, both heads and
+        // both heads plus the copy expert, exactly and reversibly.
+        let mut eval6 = format!("{HEADER}\n");
+        for i in 0..2 {
+            let text = format!("a fourth unseen sample with repeats {i}; ").repeat(400);
+            let name = format!("c{i}.txt");
+            fs::write(data.join(&name), &text).unwrap();
+            eval6.push_str(&format!(
+                "EVAL6\t{name}\t{}\t{}\tOWNED_REVIEWED\n",
+                text.len(),
+                hex(&sha256(text.as_bytes()))
+            ));
+        }
+        let eval6_path = home.join("eval6.tsv");
+        fs::write(&eval6_path, &eval6).unwrap();
+        let h3c = |eval: &Path, out: &str| {
+            let mut v = args("smoke-h3c-eval6", "out", &[eval]);
+            v.extend(heads.iter().map(|p| p.display().to_string()));
+            v.push(home.join(out).display().to_string());
+            v
+        };
+        assert!(
+            cli(&h3c(&eval5_path, "h3c-bad")).is_err(),
+            "EVAL6 rows only"
+        );
+        cli(&h3c(&eval6_path, "h3c")).unwrap();
+        let report = fs::read_to_string(home.join("h3c/h3c.tsv")).unwrap();
+        for line in [
+            "label\tSMOKE",
+            "schema\tSML_HYB_H3C_ENGINE_V1",
+            "eval6_docs\t2",
+            "engine_oracle_mismatches\t0",
+            "round_trip_failures\t0",
+            "dev_read\tfalse",
+        ] {
+            assert!(report.lines().any(|l| l == line), "{line}\n{report}");
+        }
+        let value = |name: &str| -> f64 {
+            report
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{name}\t")))
+                .unwrap()
+                .parse()
+                .unwrap()
+        };
+        assert!(value("copy_gain_seed11_bpc") > 0.0 && value("copy_gain_seed23_bpc") > 0.0);
+        for arm in ["b0", "b1_seed11", "b1_seed23", "b2_seed11", "b2_seed23"] {
+            let kept = fs::read_dir(home.join("h3c/containers").join(arm)).unwrap();
+            assert_eq!(kept.count(), 2);
+        }
+        assert!(cli(&h3c(&eval6_path, "h3c")).is_err(), "no overwrite");
         // Tampered weights are refused.
         let mut weights = fs::read(dir.join("weights.bin")).unwrap();
         weights[0] ^= 1;
@@ -1904,6 +2183,26 @@ mod tests {
         wrong.push("00".repeat(32));
         assert!(cli(&wrong).is_err());
         fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn the_h3c_determinism_file_is_the_library_one() {
+        let out = std::env::temp_dir().join(format!("gb11-p1-h3c-syn-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&out);
+        let args: Vec<String> = ["bin", "engine-h3c-synthetic"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([out.display().to_string()])
+            .collect();
+        cli(&args).unwrap();
+        assert_eq!(
+            fs::read_to_string(out.join("deterministic.csv")).unwrap(),
+            sml_core::hyb_h3_engine::synthetic::deterministic_csv_h3c()
+        );
+        let timing = fs::read_to_string(out.join("timing.tsv")).unwrap();
+        assert_eq!(timing.lines().count(), 5);
+        assert!(cli(&args).is_err(), "no overwrite");
+        fs::remove_dir_all(&out).unwrap();
     }
 
     #[test]

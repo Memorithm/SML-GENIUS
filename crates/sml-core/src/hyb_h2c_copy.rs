@@ -116,7 +116,44 @@ impl CopyMixer {
             .collect::<Vec<_>>()
             .join(",")
     }
+
+    /// Inverse of [`CopyMixer::text`]: exactly `COPY_CELLS` shifts, each
+    /// in `SHIFT_MIN..=SHIFT_MAX`.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let values: Vec<i32> = text
+            .split(',')
+            .map(|v| v.trim().parse::<i32>().map_err(|e| e.to_string()))
+            .collect::<Result<_, _>>()?;
+        let shifts: [i32; COPY_CELLS] = values
+            .try_into()
+            .map_err(|v: Vec<i32>| format!("{} shifts, expected {COPY_CELLS}", v.len()))?;
+        if let Some(w) = shifts
+            .iter()
+            .find(|w| !(SHIFT_MIN..=SHIFT_MAX).contains(*w))
+        {
+            return Err(format!("shift {w} out of range"));
+        }
+        Ok(Self { shifts })
+    }
+
+    /// The copy mixer judged on EVAL4 (`GO`, RemoteOps #1285): the
+    /// context-6 shifts of the third CAL run (`h2c.tsv` 4644dca1...),
+    /// for the A1d head of seed 11 (`k` = 0) or 23 (`k` = 1).
+    #[must_use]
+    pub fn eval4_go(k: usize) -> Self {
+        Self::parse(EVAL4_GO_COPY_SHIFTS[k]).expect("frozen shifts are valid")
+    }
 }
+
+/// Context length and table size of the copy expert judged on EVAL4.
+pub const H2C_COPY_MIN: usize = 6;
+pub const H2C_COPY_TABLE_BITS: u32 = 18;
+/// Shifts of the copy expert judged on EVAL4, seeds 11 and 23 (third CAL
+/// run, RemoteOps #864; refitted and checked by `copy-eval4`).
+pub const EVAL4_GO_COPY_SHIFTS: [&str; 2] = [
+    "-88,168,112,152,200,280,336,440,984,408,240,312,384,504,536,728,1080,616,568,496,520,736,728,952,1280,1016,976,888,816,1112,1072,1288,1624,1376,1312,1472,1472,1664,1536,1624,2040,1568,1336,1896,2016,2032,2040,2032",
+    "440,176,208,144,192,264,344,448,784,416,320,336,384,480,544,712,1064,608,512,528,520,704,728,920,1248,1008,856,920,824,1080,1064,1264,1504,1376,1264,1496,1480,1616,1520,1616,2040,1592,1344,2040,2024,2024,2040,1936",
+];
 
 /// Histograms of aligned stretch and outcome per cell, from which the
 /// best shift of each cell is found exactly.
@@ -300,6 +337,19 @@ impl CopyFit {
 mod tests {
     use super::*;
     use crate::hyb_h2t_templates::MatchModel;
+
+    #[test]
+    fn the_mixer_text_parses_back_and_bad_text_is_refused() {
+        for (k, text) in EVAL4_GO_COPY_SHIFTS.iter().enumerate() {
+            let m = CopyMixer::eval4_go(k);
+            assert_eq!(m.text(), *text);
+            assert_eq!(CopyMixer::parse(&m.text()).unwrap().shifts, m.shifts);
+        }
+        assert!(CopyMixer::parse("1,2,3").is_err());
+        let too_big = vec!["4096"; COPY_CELLS].join(",");
+        assert!(CopyMixer::parse(&too_big).is_err());
+        assert!(CopyMixer::parse(&vec!["x"; COPY_CELLS].join(",")).is_err());
+    }
 
     #[test]
     fn buckets_and_expected_bits() {
