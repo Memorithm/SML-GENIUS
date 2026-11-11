@@ -110,18 +110,14 @@ pub fn transcode_q3(source: &[u8]) -> Result<[u8; Q5_BYTES], Error> {
     if source.len() != Q3_BYTES {
         return Err(Error::BadSourceLen(source.len()));
     }
-    let q4 = q4::transcode_q4::<Q4_BYTES>(source)
-        .map_err(|_| Error::BadSourceLen(source.len()))?;
+    let q4 = q4::transcode_q4::<Q4_BYTES>(source).map_err(|_| Error::BadSourceLen(source.len()))?;
     transcode_q4(&q4)
 }
 
 /// Scalar integer reference, independent of the AVX2 packed-bit decoder.
 /// Preserves the eight lane partitions needed for ggml-style multiblock
 /// floating-point FMA accumulation; it does not assert FP32 equivalence.
-pub fn scalar_lanes(
-    weights: &[u8],
-    activation: &[u8],
-) -> Result<DotLanes, Error> {
+pub fn scalar_lanes(weights: &[u8], activation: &[u8]) -> Result<DotLanes, Error> {
     if weights.len() != Q5_BYTES {
         return Err(Error::BadWeightsLen(weights.len()));
     }
@@ -159,34 +155,26 @@ mod avx2 {
             let fifteen = _mm256_set1_epi8(15);
             let sixteen = _mm256_set1_epi8(16);
             let selector = _mm256_setr_epi8(
-                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
-                2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                3, 3, 3, 3,
             );
             let bit_selector = _mm256_setr_epi8(
-                1, 2, 4, 8, 16, 32, 64, -128,
-                1, 2, 4, 8, 16, 32, 64, -128,
-                1, 2, 4, 8, 16, 32, 64, -128,
-                1, 2, 4, 8, 16, 32, 64, -128,
+                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64,
+                -128, 1, 2, 4, 8, 16, 32, 64, -128,
             );
             let mut accumulators = [zero; ROWS];
             for group in 0..8 {
                 // ONE activation load and ONE bias product per 32-code group,
                 // shared by every row of the microtile.
-                let input = _mm256_loadu_si256(
-                    activation.as_ptr().add(4 + group * 32).cast::<__m256i>(),
-                );
+                let input =
+                    _mm256_loadu_si256(activation.as_ptr().add(4 + group * 32).cast::<__m256i>());
                 let bias = _mm256_maddubs_epi16(sixteen, input);
                 for (row, accumulator) in accumulators.iter_mut().enumerate() {
                     let block = &weights[row * Q5_BYTES..(row + 1) * Q5_BYTES];
-                    let packed = _mm_loadu_si128(
-                        block.as_ptr().add(group * 16).cast::<__m128i>(),
-                    );
+                    let packed = _mm_loadu_si128(block.as_ptr().add(group * 16).cast::<__m128i>());
                     let broadcast = _mm256_broadcastsi128_si256(packed);
                     let low = _mm256_and_si256(broadcast, fifteen);
-                    let high = _mm256_and_si256(
-                        _mm256_srli_epi16(broadcast, 4),
-                        fifteen,
-                    );
+                    let high = _mm256_and_si256(_mm256_srli_epi16(broadcast, 4), fifteen);
                     let low_nibbles = _mm256_permute2x128_si256(low, high, 0x20);
 
                     // Four consecutive high-bit bytes encode all 32 codes.
@@ -197,20 +185,12 @@ mod avx2 {
                             .try_into()
                             .unwrap(),
                     );
-                    let selected = _mm256_shuffle_epi8(
-                        _mm256_set1_epi32(h as i32),
-                        selector,
-                    );
+                    let selected = _mm256_shuffle_epi8(_mm256_set1_epi32(h as i32), selector);
                     let masked = _mm256_and_si256(selected, bit_selector);
-                    let top = _mm256_andnot_si256(
-                        _mm256_cmpeq_epi8(masked, zero),
-                        sixteen,
-                    );
+                    let top = _mm256_andnot_si256(_mm256_cmpeq_epi8(masked, zero), sixteen);
                     let unsigned_codes = _mm256_or_si256(low_nibbles, top);
-                    let signed_pairs = _mm256_sub_epi16(
-                        _mm256_maddubs_epi16(unsigned_codes, input),
-                        bias,
-                    );
+                    let signed_pairs =
+                        _mm256_sub_epi16(_mm256_maddubs_epi16(unsigned_codes, input), bias);
                     let s0 = i16::from(block[SCALE_OFFSET + group * 2] as i8);
                     let s1 = i16::from(block[SCALE_OFFSET + group * 2 + 1] as i8);
                     let scales = _mm256_inserti128_si256(
@@ -218,10 +198,8 @@ mod avx2 {
                         _mm_set1_epi16(s1),
                         1,
                     );
-                    *accumulator = _mm256_add_epi32(
-                        *accumulator,
-                        _mm256_madd_epi16(signed_pairs, scales),
-                    );
+                    *accumulator =
+                        _mm256_add_epi32(*accumulator, _mm256_madd_epi16(signed_pairs, scales));
                 }
             }
             std::array::from_fn(|row| {
@@ -278,24 +256,32 @@ mod tests {
     use super::*;
 
     fn fixture(seed: usize) -> ([i8; 256], [i8; 16], [u8; Q8_BYTES]) {
-        let codes = std::array::from_fn(|i| {
-            match seed % 4 {
-                0 => (i % 32) as i8 - 16,
-                1 => if i % 2 == 0 { -16 } else { 15 },
-                2 => (i.wrapping_mul(19).wrapping_add(seed) % 32) as i8 - 16,
-                _ => 0,
+        let codes = std::array::from_fn(|i| match seed % 4 {
+            0 => (i % 32) as i8 - 16,
+            1 => {
+                if i % 2 == 0 {
+                    -16
+                } else {
+                    15
+                }
             }
+            2 => (i.wrapping_mul(19).wrapping_add(seed) % 32) as i8 - 16,
+            _ => 0,
         });
-        let scales = std::array::from_fn(|i| {
-            if i % 2 == 0 { -128 } else { 127 }
-        });
+        let scales = std::array::from_fn(|i| if i % 2 == 0 { -128 } else { 127 });
         let mut activations = [0u8; Q8_BYTES];
         activations[..4].copy_from_slice(&0x7fc12345u32.to_le_bytes());
         for i in 0..256 {
             activations[4 + i] = match seed % 5 {
                 0 => 128,
                 1 => 127,
-                2 => if i % 2 == 0 { 255 } else { 128 },
+                2 => {
+                    if i % 2 == 0 {
+                        255
+                    } else {
+                        128
+                    }
+                }
                 3 => i as u8,
                 _ => i.wrapping_mul(71).wrapping_add(seed) as u8,
             };
@@ -323,10 +309,10 @@ mod tests {
     #[test]
     fn q3_and_q4_transcodes_preserve_exact_integer_oracle() {
         for seed in 0..64 {
-            let mut original: [u8; Q3_BYTES] = std::array::from_fn(|i| {
-                i.wrapping_mul(37).wrapping_add(seed * 19) as u8
-            });
-            original[108..110].copy_from_slice(&[0x3c00u16, 0x8000, 0x7e01, 0xbc00][seed % 4].to_le_bytes());
+            let mut original: [u8; Q3_BYTES] =
+                std::array::from_fn(|i| i.wrapping_mul(37).wrapping_add(seed * 19) as u8);
+            original[108..110]
+                .copy_from_slice(&[0x3c00u16, 0x8000, 0x7e01, 0xbc00][seed % 4].to_le_bytes());
             let via_q3 = transcode_q3(&original).unwrap();
             let q4_block = q4::transcode_q4::<Q4_BYTES>(&original).unwrap();
             let via_q4 = transcode_q4(&q4_block).unwrap();
@@ -337,7 +323,11 @@ mod tests {
             }
             let (_, _, q8) = fixture(seed);
             assert_eq!(
-                scalar_lanes(&via_q3, &q8).unwrap().lanes.iter().sum::<i32>(),
+                scalar_lanes(&via_q3, &q8)
+                    .unwrap()
+                    .lanes
+                    .iter()
+                    .sum::<i32>(),
                 q4::original_integer_dot(&original, &q8),
                 "seed {seed}",
             );
@@ -359,11 +349,12 @@ mod tests {
                 );
             }
             let expected: Vec<_> = (0..4)
-                .map(|row| {
-                    scalar_lanes(&blocks[row * 178..(row + 1) * 178], &activation).unwrap()
-                })
+                .map(|row| scalar_lanes(&blocks[row * 178..(row + 1) * 178], &activation).unwrap())
                 .collect();
-            assert_eq!(dot_tiled::<1>(&blocks[..178], &activation).unwrap(), [expected[0]]);
+            assert_eq!(
+                dot_tiled::<1>(&blocks[..178], &activation).unwrap(),
+                [expected[0]]
+            );
             assert_eq!(
                 dot_tiled::<2>(&blocks[..356], &activation).unwrap(),
                 [expected[0], expected[1]],
@@ -390,19 +381,37 @@ mod tests {
         codes[27] = 16;
         assert_eq!(
             pack_signed(&codes, &scales, 0x3c00),
-            Err(Error::InvalidCode { index: 27, code: 16 }),
+            Err(Error::InvalidCode {
+                index: 27,
+                code: 16
+            }),
         );
         codes[27] = -17;
         assert_eq!(
             pack_signed(&codes, &scales, 0x3c00),
-            Err(Error::InvalidCode { index: 27, code: -17 }),
+            Err(Error::InvalidCode {
+                index: 27,
+                code: -17
+            }),
         );
         assert_eq!(transcode_q3(&[0u8; 109]), Err(Error::BadSourceLen(109)));
         assert_eq!(transcode_q4(&[0u8; 145]), Err(Error::BadSourceLen(145)));
         let valid = [0u8; Q5_BYTES];
-        assert_eq!(scalar_lanes(&valid[..177], &activation), Err(Error::BadWeightsLen(177)));
-        assert_eq!(scalar_lanes(&valid, &activation[..291]), Err(Error::BadActivationsLen(291)));
-        assert_eq!(dot_tiled::<3>(&[0u8; 534], &activation), Err(Error::BadTileRows(3)));
-        assert_eq!(dot_tiled::<1>(&valid[..177], &activation), Err(Error::BadWeightsLen(177)));
+        assert_eq!(
+            scalar_lanes(&valid[..177], &activation),
+            Err(Error::BadWeightsLen(177))
+        );
+        assert_eq!(
+            scalar_lanes(&valid, &activation[..291]),
+            Err(Error::BadActivationsLen(291))
+        );
+        assert_eq!(
+            dot_tiled::<3>(&[0u8; 534], &activation),
+            Err(Error::BadTileRows(3))
+        );
+        assert_eq!(
+            dot_tiled::<1>(&valid[..177], &activation),
+            Err(Error::BadWeightsLen(177))
+        );
     }
 }
