@@ -357,6 +357,62 @@ extern void mem_q4_146_vec_dot(int n, float *s, size_t bs,
 #endif
 "#;
 
+// Only the temporary Q3-surrogate repacker is replaced. Q4-146 nibbles
+// and signed subgroup scales are consumed directly, with no Q3_K fallback.
+const Q4_TILED_UNPACK: &str = r#"static void tiled_unpack_src0(const block_q3_K * rows, int64_t row_stride, int n_rows, tiled_tile_src0 * tile, int num_k) {
+    GGML_ASSERT(n_rows <= TILED_TILE_ROWS);
+    constexpr int NB = 16;
+    const int qk_stride = num_k * TILED_TILE_K;
+    const int nb_stride = NB * num_k;
+    static std::once_flag first_q4_tiled;
+    std::call_once(first_q4_tiled, [] {
+        std::fputs("BPB3K_Q4_146_REAL_TILED_EXECUTED source_nibbles=true no_native_q3_unpack=true\n", stderr);
+    });
+    for (int slab = 0; slab < num_k; slab++) {
+        for (int r = 0; r < n_rows; r++) {
+            const int d_off = slab * TILED_MICRO + r;
+            const int q_off = r * qk_stride + slab * TILED_TILE_K;
+            const int s_off = r * nb_stride + slab * NB;
+            const block_q3_K & x = rows[r * row_stride + slab];
+            const uint8_t * w = reinterpret_cast<const uint8_t *>(&x);
+            uint16_t global_scale_bits;
+            std::memcpy(&global_scale_bits, w + 144, sizeof(global_scale_bits));
+            tile->d[d_off] = ggml_fp16_to_fp32(global_scale_bits);
+            for (int subgroup = 0; subgroup < NB; subgroup++) {
+                int8_t signed_scale;
+                std::memcpy(&signed_scale, w + 128 + subgroup, sizeof(signed_scale));
+                tile->scales[s_off + subgroup] = static_cast<int32_t>(signed_scale);
+            }
+            uint8_t * q = &tile->q[q_off];
+            for (int group = 0; group < 8; group++) {
+                for (int lane = 0; lane < 16; lane++) {
+                    const uint8_t packed = w[16 * group + lane];
+                    q[32 * group + lane] = packed & 15;
+                    q[32 * group + 16 + lane] = packed >> 4;
+                }
+            }
+        }
+    }
+}
+
+"#;
+
+fn substitute_region(path: &Path, start: &str, end: &str, replacement: &str) -> Result<(), String> {
+    let source = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if source.matches(start).count() != 1 || source.matches(end).count() != 1 {
+        return Err(format!("STOP_SOURCE_LAYOUT_DRIFT path={}", path.display()));
+    }
+    let first = source.find(start).unwrap();
+    let last = source.find(end).unwrap();
+    if last <= first {
+        return Err("STOP_SOURCE_LAYOUT_ORDER".into());
+    }
+    let mut patched = String::with_capacity(source.len() + replacement.len());
+    patched.push_str(&source[..first]);
+    patched.push_str(replacement);
+    patched.push_str(&source[last..]);
+    fs::write(path, patched).map_err(|e| e.to_string())
+}
 fn substitute_once(path: &Path, from: &str, to: &str) -> Result<(), String> {
     let source = fs::read_to_string(path).map_err(|e| e.to_string())?;
     if source.matches(from).count() != 1 {
@@ -391,6 +447,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     if core_text.matches(".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,").count() != 1
         || cpu_text.matches(".vec_dot                  = ggml_vec_dot_q3_K_q8_K,").count() != 1
         || tiled_text.matches("        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:").count() != 1
+        || tiled_text.matches("        case GGML_TYPE_Q3_K:\n            return tiled_matmul_dispatch<block_q3_K, 16, false,  4, true>").count() != 1
     {
         return Err("STOP_Q4_TRAITS_OR_TILED_DRIFT".into());
     }
@@ -415,17 +472,19 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         ".vec_dot                  = ggml_vec_dot_q3_K_q8_K,",
         ".vec_dot                  = mem_q4_146_vec_dot,",
     )?;
-    substitute_once(
+    substitute_region(
         &tiled,
-        "        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:",
-        "        case GGML_TYPE_Q4_K:\n        /* Experimental Q4-146 surrogate MUST bypass stock Q3_K tiled unpack. */\n        case GGML_TYPE_Q2_K:",
+        "static void tiled_unpack_src0(const block_q3_K * rows,",
+        "static void tiled_unpack_src0(const block_q2_K * rows,",
+        Q4_TILED_UNPACK,
     )?;
+    substitute_once(&tiled, "#include <mutex>", "#include <mutex>\n#include <cstdio>")?;
     substitute_once(
         &cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
         "    ggml_add_backend_library(${GGML_CPU_NAME})\n    if (NOT MEM_BPB3K_RUST_STATICLIB OR NOT EXISTS \"${MEM_BPB3K_RUST_STATICLIB}\")\n        message(FATAL_ERROR \"Q4-146 Rust staticlib required\")\n    endif()\n    target_link_libraries(${GGML_CPU_NAME} PRIVATE \"${MEM_BPB3K_RUST_STATICLIB}\")",
     )?;
-    println!("PASS_BPB3K_Q4_GGML_PATCH original_ggml_sha={} q3_surrogate_block_bytes=146 rust_q4_dot=true stock_q3_tiled_bypass=true",
+    println!("PASS_BPB3K_Q4_GGML_PATCH original_ggml_sha={} q3_surrogate_block_bytes=146 rust_q4_dot=true q4_tiled_source_unpack=true stock_q3_weight_unpack=false",
         observed_sha);
     Ok(())
 }
@@ -451,6 +510,36 @@ mod tests {
         let root = std::path::PathBuf::from("/nonexistent-memorithm-test");
         assert!(patch(&root, "wrongsha").is_err());
     }
+    #[test]
+    fn tiled_q4_nibbles_scales_and_fp16_match_original_source() {
+        assert!(Q4_TILED_UNPACK.contains("w + 144"));
+        assert!(Q4_TILED_UNPACK.contains("w + 128 + subgroup"));
+        assert!(Q4_TILED_UNPACK.contains("REAL_TILED_EXECUTED"));
+        for seed in 0..32usize {
+            let mut original: [u8; 110] =
+                std::array::from_fn(|i| (i.wrapping_mul(37) + seed * 19) as u8);
+            original[108..110].copy_from_slice(&0x3c00u16.to_le_bytes());
+            let q4 = q4::transcode_q4::<146>(&original).unwrap();
+            for index in 0..256 {
+                let packed = q4[(index / 32) * 16 + index % 16];
+                let code = if index % 32 < 16 { packed & 15 } else { packed >> 4 };
+                let native_signed = q4::original_q3_code(&original, index);
+                assert_eq!(i16::from(code) - 4, i16::from(native_signed));
+            }
+            for subgroup in 0..16 {
+                let scales = &original[96..108];
+                let lo = if subgroup < 8 {
+                    scales[subgroup] & 15
+                } else {
+                    scales[subgroup - 8] >> 4
+                };
+                let hi = (scales[8 + subgroup % 4] >> (2 * (subgroup / 4))) & 3;
+                assert_eq!(q4[128 + subgroup] as i8, ((lo | (hi << 4)) as i8) - 32);
+            }
+            assert_eq!(&q4[144..146], &original[108..110]);
+        }
+    }
+
     #[test]
     fn c_bridge_exposes_q4_146_only() {
         assert!(C_BRIDGE.contains("extern void mem_q4_146_vec_dot"));
