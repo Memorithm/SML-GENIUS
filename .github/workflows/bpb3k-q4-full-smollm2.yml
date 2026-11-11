@@ -121,9 +121,17 @@ jobs:
               else
                 exe=./llama/build/bin/llama-debug; model=EXPERIMENTAL-Q4-146.gguf
               fi
-              MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
-                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -c 256 -b 512 -ub 512 -n 8 -p "$phrase" --save-logits \
-                >"logits-$case-$arm.log" 2>&1 || fail=1
+              # Longer prefill must fit its full tokenized prompt plus eight output steps.
+              # This changes only the diagnostic context, identically for both arms.
+              ctx=256
+              if [[ "$case" == longprefill ]]; then ctx=1024; fi
+              if ! MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
+                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -c "$ctx" -b 512 -ub 512 -n 8 -p "$phrase" --save-logits \
+                >"logits-$case-$arm.log" 2>&1; then
+                fail=1
+                echo "FIDELITY_EXECUTION_REJECTED case=$case arm=$arm context=$ctx"
+                tail -n 30 "logits-$case-$arm.log"
+              fi
               grep -q 'PASS_BPB3K_FIDELITY_DUMP' "logits-$case-$arm.log" || fail=1
               if [[ "$case" == longprefill && "$arm" == q4 ]]; then
                 grep -q '^BPB3K_Q4_146_REAL_TILED_EXECUTED ' "logits-$case-$arm.log" || fail=1
