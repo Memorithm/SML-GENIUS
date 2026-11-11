@@ -412,3 +412,169 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static TEST_ID: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_root() -> std::path::PathBuf {
+        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "mem-q5-gguf-fixture-{}-{id}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        root
+    }
+
+    fn add_tensor(
+        header: &mut Vec<u8>,
+        name: &str,
+        kind: u32,
+        dims: &[u64],
+        offset: u64,
+    ) -> (usize, usize) {
+        header.extend_from_slice(&(name.len() as u64).to_le_bytes());
+        header.extend_from_slice(name.as_bytes());
+        header.extend_from_slice(&(dims.len() as u32).to_le_bytes());
+        for &d in dims {
+            header.extend_from_slice(&d.to_le_bytes());
+        }
+        let kind_at = header.len();
+        header.extend_from_slice(&kind.to_le_bytes());
+        let offset_at = header.len();
+        header.extend_from_slice(&offset.to_le_bytes());
+        (kind_at, offset_at)
+    }
+
+    fn fixture() -> (Vec<u8>, Vec<(usize, usize)>, Vec<Vec<u8>>) {
+        let mut header = Vec::new();
+        header.extend_from_slice(b"GGUF");
+        header.extend_from_slice(&3u32.to_le_bytes());
+        header.extend_from_slice(&5u64.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        let fields = vec![
+            add_tensor(&mut header, "f16.matrix", F16, &[256, 2], 0),
+            add_tensor(&mut header, "bf16.matrix", BF16, &[256, 1], 1024),
+            add_tensor(&mut header, "f32.matrix", F32, &[256, 1], 1536),
+            add_tensor(&mut header, "q3.untouched", 11, &[256], 2560),
+            add_tensor(&mut header, "f16.vector", F16, &[16], 2688),
+        ];
+        header.resize((header.len() + 31) & !31, 0);
+        let fp16: Vec<u8> = (0..512usize)
+            .flat_map(|i| [0x3c00u16, 0xbc00, 0x3800, 0x3400][i % 4].to_le_bytes())
+            .collect();
+        let bf16: Vec<u8> = (0..256usize)
+            .flat_map(|i| [0x3f80u16, 0xbf80, 0x3f00, 0x3e80][i % 4].to_le_bytes())
+            .collect();
+        let f32: Vec<u8> = (0..256usize)
+            .flat_map(|i| ((i as f32 - 130.0) / 9.0).to_le_bytes())
+            .collect();
+        let mut stock = (0..110usize)
+            .map(|i| (i.wrapping_mul(79) + 17) as u8)
+            .collect::<Vec<u8>>();
+        stock.resize(128, 0);
+        let vector = (0..16usize)
+            .flat_map(|i| [0x3c00u16, 0xbc00][i % 2].to_le_bytes())
+            .collect::<Vec<u8>>();
+        let chunks = vec![fp16, bf16, f32, stock, vector];
+        let mut raw = header;
+        for chunk in &chunks {
+            raw.extend_from_slice(chunk);
+        }
+        (raw, fields, chunks)
+    }
+
+    #[test]
+    fn real_gguf_v3_source_weights_quantized_and_offsets_relocated() {
+        let root = temp_root();
+        let src = root.join("original.gguf");
+        let dst = root.join("experimental.gguf");
+        let (original, fields, chunks) = fixture();
+        fs::write(&src, &original).unwrap();
+        let (tensors_done, blocks_done) = transcode(&src, &dst).unwrap();
+        assert_eq!((tensors_done, blocks_done), (3, 4));
+        let output = fs::read(&dst).unwrap();
+        let mut inp = File::open(&dst).unwrap();
+        let (start, alignment, entries) = tensors(&mut inp, output.len() as u64).unwrap();
+        assert_eq!(alignment, 32);
+        assert_eq!(entries.iter().map(|t| t.offset).collect::<Vec<_>>(),
+                   vec![0, 384, 576, 768, 896]);
+        assert_eq!(entries.iter().map(|t| t.kind).collect::<Vec<_>>(),
+                   vec![Q5_EXPERIMENTAL_TYPE, Q5_EXPERIMENTAL_TYPE,
+                        Q5_EXPERIMENTAL_TYPE, 11, F16]);
+
+        let f16_values: Vec<u16> = chunks[0].chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+        let bf16_values: Vec<u16> = chunks[1].chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+        let fp32_values: Vec<f32> = chunks[2].chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let f16_expected = quant::quantize_fp16_tensor(&f16_values).unwrap();
+        let bf16_expected = quant::quantize_bf16_tensor(&bf16_values).unwrap();
+        let f32_expected = quant::quantize_f32_tensor(&fp32_values).unwrap();
+        let at = start as usize;
+        assert_eq!(&output[at..at + 356], &f16_expected.payload);
+        assert_eq!(&output[at + 384..at + 562], &bf16_expected.payload);
+        assert_eq!(&output[at + 576..at + 754], &f32_expected.payload);
+        assert_eq!(&output[at + 768..at + 896], &chunks[3]);
+        assert_eq!(&output[at + 896..at + 928], &chunks[4]);
+        for (index, &(kind_at, off_at)) in fields.iter().enumerate() {
+            let kind = u32::from_le_bytes(output[kind_at..kind_at + 4].try_into().unwrap());
+            let off = u64::from_le_bytes(output[off_at..off_at + 8].try_into().unwrap());
+            assert_eq!(kind, entries[index].kind);
+            assert_eq!(off, entries[index].offset);
+        }
+        assert_eq!(fs::read(&src).unwrap(), original);
+        assert!(transcode(&src, &dst).is_err()); // never clobber existing output
+        assert_eq!(fs::read(&dst).unwrap(), output);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn reject_nonfinite_matrix_without_creating_partial_output() {
+        let root = temp_root();
+        let src = root.join("nan.gguf");
+        let dst = root.join("bad.gguf");
+        let (mut raw, _, _) = fixture();
+        let header_len = (raw.len() - (1024 + 512 + 1024 + 128 + 32)) as usize;
+        // One NaN in the *second* F16 source block.
+        let index = header_len + 2 * 280;
+        raw[index..index + 2].copy_from_slice(&0x7e01u16.to_le_bytes());
+        fs::write(&src, raw).unwrap();
+        let error = transcode(&src, &dst).unwrap_err();
+        assert!(error.contains("STOP_Q5_SOURCE_NonFiniteSource"), "{error}");
+        assert!(!dst.exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn reject_malformed_or_ineligible_gguf_before_output() {
+        let root = temp_root();
+        let src = root.join("original.gguf");
+        let dst = root.join("converted.gguf");
+        let (mut raw, fields, _) = fixture();
+        raw[0..4].copy_from_slice(b"BAD!");
+        fs::write(&src, &raw).unwrap();
+        assert!(transcode(&src, &dst).unwrap_err().contains("STOP_NOT_GGUF"));
+        assert!(!dst.exists());
+        raw[0..4].copy_from_slice(b"GGUF");
+        // Invalid source matrix dimension, zero forbidden.
+        let first_dim_at = fields[0].0 - 16;
+        raw[first_dim_at..first_dim_at + 8].copy_from_slice(&0u64.to_le_bytes());
+        fs::write(&src, &raw).unwrap();
+        assert!(transcode(&src, &dst).unwrap_err().contains("STOP_ZERO_DIMENSION"));
+        assert!(!dst.exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn no_conversion_to_standard_q5_k_or_q3_k_identifiers() {
+        assert_ne!(Q5_EXPERIMENTAL_TYPE, 13);
+        assert_ne!(Q5_EXPERIMENTAL_TYPE, 11);
+        assert_eq!(Q5_EXPERIMENTAL_TYPE, 0xffff_0005);
+    }
+}
