@@ -142,6 +142,13 @@ jobs:
                 timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -p 64 -n 32 -r 2 \
                 >"bench-$round-$arm.txt" 2>&1
               grep -q '| ' "bench-$round-$arm.txt"
+              if [[ "$arm" == q4 ]]; then
+                # A faster dot loop is insufficient: the prompt must exercise
+                # the Q4-146 nibble repacker and tiled matrix path itself.
+                grep -q '^BPB3K_Q4_146_REAL_TILED_EXECUTED ' "bench-$round-$arm.txt"
+              else
+                ! grep -q 'BPB3K_Q4_146_REAL_TILED_EXECUTED' "bench-$round-$arm.txt"
+              fi
               echo "Q4_FULL_MODEL_BENCH pair=$round arm=$arm"
             done
           done
