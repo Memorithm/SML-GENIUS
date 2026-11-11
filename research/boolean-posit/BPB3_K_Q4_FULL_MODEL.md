@@ -145,3 +145,31 @@ research result. No Dell Xeon or NUMA/PMU conclusions are implied.
 A separate strictly admitted physical paired campaign through
 Memorithm/RemoteOps is still required to evaluate that hardware.
 
+## Follow-up: real Q4-146 tiled prompt path (2026-11-11)
+
+**Status: experimental code; model fidelity and performance remain unqualified
+until CI passes on the exact branch head. No speedup is claimed.**
+
+The previous full-model experiment explicitly bypassed the original Q3_K
+tiled matrix path for nonstandard 146-byte weight blocks. As a result the
+experimental prompt path relied on row-at-a-time Rust AVX2 vec_dot, while
+the untouched Q3_K control could take the optimized tiled path. This is a
+testable design asymmetry, not an established causal attribution.
+
+In the pinned temporary llama.cpp checkout, the experimental source-weight
+unpacker now reads Q4-146 **directly**: 128 packed nibble bytes as the 256
+unsigned (q + 4) codes, 16 signed i8 scales starting at offset 128, and
+unchanged FP16 global scale at byte offset 144. These feed the common
+tiled matrix microkernel with BIAS=4. Neither the native 110-byte Q3_K
+unpacker nor the original Q3_K dot reads surrogate weights. The Rust
+AVX2 non-tiled implementation stays mandatory for other contexts.
+
+The test workflow requires a unique real Q4 tiled marker from every
+experimental p64 benchmark run; the stock arm must not emit it.
+Retain the original two-prompt, full-vocabulary logit and token fidelity
+gate, 12 alternating paired p64/tg32 whole-model runs, peak RSS, pinned
+upstream model/hardware and raw results. A test that runs but loses
+performance must be retained as a negative result. Hardware-specific
+follow-up requires RemoteOps admission, contamination gating, and
+real conversion/load-time accounting. No production default change.
+
