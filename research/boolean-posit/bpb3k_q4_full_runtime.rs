@@ -478,7 +478,11 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         "static void tiled_unpack_src0(const block_q2_K * rows,",
         Q4_TILED_UNPACK,
     )?;
-    substitute_once(&tiled, "#include <mutex>", "#include <mutex>\n#include <cstdio>")?;
+    substitute_once(
+        &tiled,
+        "#include <mutex>",
+        "#include <mutex>\n#include <cstdio>",
+    )?;
     substitute_once(
         &cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
@@ -522,7 +526,11 @@ mod tests {
             let q4 = q4::transcode_q4::<146>(&original).unwrap();
             for index in 0..256 {
                 let packed = q4[(index / 32) * 16 + index % 16];
-                let code = if index % 32 < 16 { packed & 15 } else { packed >> 4 };
+                let code = if index % 32 < 16 {
+                    packed & 15
+                } else {
+                    packed >> 4
+                };
                 let native_signed = q4::original_q3_code(&original, index);
                 assert_eq!(i16::from(code) - 4, i16::from(native_signed));
             }
