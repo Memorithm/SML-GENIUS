@@ -101,36 +101,55 @@ jobs:
           else
             echo 'Q4_CANARY=REJECTED_OUTPUT_DIVERGENCE' | tee canary.txt
           fi
-      - name: Four full-vocabulary logits dumps and frozen exact-token tolerance comparison
+      - name: Full-vocabulary and exact-token fidelity including long tiled prefill
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/q4-smollm2"
           fail=0
-          for case in arithmetic french; do
-            if [[ "$case" == arithmetic ]]; then phrase='In mathematics, two plus two equals'; else phrase='La capitale de la France est'; fi
+          for case in arithmetic french longprefill; do
+            if [[ "$case" == arithmetic ]]; then
+              phrase='In mathematics, two plus two equals'
+            elif [[ "$case" == french ]]; then
+              phrase='La capitale de la France est'
+            else
+              phrase='This long deterministic prefill input enumerates sequential integers for exact CPU matrix processing. Please continue this sequence: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96'
+            fi
             for arm in stock q4; do
               if [[ "$arm" == stock ]]; then
                 exe=./stock/build/bin/llama-debug; model=original.gguf
               else
                 exe=./llama/build/bin/llama-debug; model=EXPERIMENTAL-Q4-146.gguf
               fi
-              MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
-                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -c 256 -b 512 -ub 512 -n 8 -p "$phrase" --save-logits \
-                >"logits-$case-$arm.log" 2>&1 || fail=1
+              # Longer prefill must fit its full tokenized prompt plus eight output steps.
+              # This changes only the diagnostic context, identically for both arms.
+              ctx=256
+              if [[ "$case" == longprefill ]]; then ctx=1024; fi
+              if ! MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
+                timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -c "$ctx" -b 512 -ub 512 -n 8 -p "$phrase" --save-logits \
+                >"logits-$case-$arm.log" 2>&1; then
+                fail=1
+                echo "FIDELITY_EXECUTION_REJECTED case=$case arm=$arm context=$ctx"
+                tail -n 30 "logits-$case-$arm.log"
+              fi
               grep -q 'PASS_BPB3K_FIDELITY_DUMP' "logits-$case-$arm.log" || fail=1
+              if [[ "$case" == longprefill && "$arm" == q4 ]]; then
+                grep -q '^BPB3K_Q4_146_REAL_TILED_EXECUTED ' "logits-$case-$arm.log" || fail=1
+              fi
             done
             ./fidelity compare "logits-$case-stock.bin" "logits-$case-q4.bin" stock \
               >"comparison-$case.txt" 2>&1 || fail=1
             cat "comparison-$case.txt" || true
           done
           if [[ "$fail" == 0 ]]; then echo Q4_LOGITS=QUALIFIED_FROZEN_STOCK_TOLERANCE | tee verdict.txt; else echo Q4_LOGITS=REJECTED | tee verdict.txt; fi
-      - name: Twelve alternating paired complete model CPU throughput and RSS sessions
+      - name: Forty-eight alternating paired complete model CPU throughput and RSS sessions
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/q4-smollm2"
-          for round in $(seq 1 12); do
+          # 48 fully paired AB/BA rounds, fixed before inspecting the new outcomes.
+          # Each round independently tests pp64, tg32, and peak RSS on both arms.
+          for round in $(seq 1 48); do
             if (( round % 2 == 0 )); then order='q4 stock'; else order='stock q4'; fi
             for arm in $order; do
               if [[ "$arm" == stock ]]; then
@@ -142,12 +161,19 @@ jobs:
                 timeout -k 10s 180s "$exe" -m "$model" -ngl 0 -t 2 -p 64 -n 32 -r 2 \
                 >"bench-$round-$arm.txt" 2>&1
               grep -q '| ' "bench-$round-$arm.txt"
+              if [[ "$arm" == q4 ]]; then
+                # A faster dot loop is insufficient: the prompt must exercise
+                # the Q4-146 nibble repacker and tiled matrix path itself.
+                grep -q '^BPB3K_Q4_146_REAL_TILED_EXECUTED ' "bench-$round-$arm.txt"
+              else
+                ! grep -q 'BPB3K_Q4_146_REAL_TILED_EXECUTED' "bench-$round-$arm.txt"
+              fi
               echo "Q4_FULL_MODEL_BENCH pair=$round arm=$arm"
             done
           done
-          test "$(ls bench-*-stock.txt | wc -l)" -eq 12
-          test "$(ls bench-*-q4.txt | wc -l)" -eq 12
-          echo Q4_PAIRED_RUNS=12 | tee bench-verdict.txt
+          test "$(ls bench-*-stock.txt | wc -l)" -eq 48
+          test "$(ls bench-*-q4.txt | wc -l)" -eq 48
+          echo Q4_PAIRED_RUNS=48 | tee bench-verdict.txt
       - name: Independent fidelity gate after retaining all performance evidence
         shell: bash
         run: |
@@ -155,7 +181,7 @@ jobs:
           cd "$RUNNER_TEMP/q4-smollm2"
           grep -q '^Q4_CANARY=QUALIFIED_STOCK_AND_Q4' canary.txt
           grep -q '^Q4_LOGITS=QUALIFIED_FROZEN_STOCK_TOLERANCE' verdict.txt
-          grep -q '^Q4_PAIRED_RUNS=12' bench-verdict.txt
+          grep -q '^Q4_PAIRED_RUNS=48' bench-verdict.txt
           echo PASS_Q4_146_FULL_MODEL=HOSTED_ONLY_PHYSICAL_DELL_NOT_QUALIFIED
       - name: Retain audit evidence, never distribute nonstandard model or raw logits
         if: always()
