@@ -96,12 +96,7 @@ fn choose_global(source: &[f32; 256]) -> Result<u16, QuantizeError> {
 /// This exact discrete search cannot be worse than a signed four-bit
 /// candidate search using the SAME global scale: [-8,7] is a subset
 /// of [-16,15]. Floating-point model logits remain unqualified.
-fn optimize(
-    source: &[f32; 256],
-    global: f64,
-    lower: i8,
-    upper: i8,
-) -> ([i8; 256], [i8; 16], f64) {
+fn optimize(source: &[f32; 256], global: f64, lower: i8, upper: i8) -> ([i8; 256], [i8; 16], f64) {
     let mut codes = [0i8; 256];
     let mut scales = [0i8; 16];
     let mut total_sse = 0.0f64;
@@ -158,14 +153,9 @@ pub fn quantize_f32_fixed_global(
             return Err(QuantizeError::NonFiniteSource(index));
         }
     }
-    let (signed_codes, signed_scales, squared_error) =
-        optimize(source, f64::from(global), -16, 15);
-    let bytes = q5::pack_signed(
-        &signed_codes,
-        &signed_scales,
-        global_scale_f16_bits,
-    )
-    .map_err(|_| QuantizeError::PackError)?;
+    let (signed_codes, signed_scales, squared_error) = optimize(source, f64::from(global), -16, 15);
+    let bytes = q5::pack_signed(&signed_codes, &signed_scales, global_scale_f16_bits)
+        .map_err(|_| QuantizeError::PackError)?;
     Ok(Quantized {
         bytes,
         squared_error,
@@ -198,9 +188,7 @@ pub fn quantize_bf16(source: &[u16; BLOCK_WEIGHTS]) -> Result<Quantized, Quantiz
 pub fn dequantize(q: &Quantized) -> [f32; BLOCK_WEIGHTS] {
     let global = f16_to_f32(q.global_scale_f16_bits);
     std::array::from_fn(|i| {
-        f32::from(q.signed_codes[i])
-            * f32::from(q.signed_scales[i / SUBGROUP_WEIGHTS])
-            * global
+        f32::from(q.signed_codes[i]) * f32::from(q.signed_scales[i / SUBGROUP_WEIGHTS]) * global
     })
 }
 
@@ -258,7 +246,10 @@ mod tests {
         assert!(f16_to_f32(0x7c00).is_infinite());
         assert!(f16_to_f32(0x7e00).is_nan());
         for exponent in -24..=15 {
-            assert_eq!(f16_to_f32(f16_power_of_two(exponent)), 2.0f32.powi(exponent));
+            assert_eq!(
+                f16_to_f32(f16_power_of_two(exponent)),
+                2.0f32.powi(exponent)
+            );
         }
     }
 
@@ -285,9 +276,15 @@ mod tests {
             let original = deterministic_source(seed);
             let result = quantize_f32(&original).unwrap();
             let baseline = q4_reference_sse(&original, result.global_scale_f16_bits).unwrap();
-            assert!(result.squared_error <= baseline + 1e-11, "seed {seed}: {} > {baseline}", result.squared_error);
+            assert!(
+                result.squared_error <= baseline + 1e-11,
+                "seed {seed}: {} > {baseline}",
+                result.squared_error
+            );
             let reconstruction = dequantize(&result);
-            let actual_sse: f64 = original.iter().zip(reconstruction.iter())
+            let actual_sse: f64 = original
+                .iter()
+                .zip(reconstruction.iter())
                 .map(|(&a, &b)| (f64::from(a) - f64::from(b)).powi(2))
                 .sum();
             // The reconstruction is rounded to f32, while our search
@@ -295,7 +292,8 @@ mod tests {
             assert!(
                 (actual_sse - result.squared_error).abs()
                     <= (1e-4 * actual_sse.max(result.squared_error)).max(1e-12),
-                "seed={seed} actual={actual_sse} predicted={}", result.squared_error
+                "seed={seed} actual={actual_sse} predicted={}",
+                result.squared_error
             );
             assert!(result.signed_codes.iter().all(|&x| (-16..=15).contains(&x)));
         }
@@ -303,8 +301,11 @@ mod tests {
 
     #[test]
     fn fp16_and_bf16_are_real_source_precision_and_reject_nonfinite() {
-        let f16: [u16; 256] = std::array::from_fn(|i| {
-            match i % 4 { 0 => 0x3c00, 1 => 0xbc00, 2 => 0x3800, _ => 0x3400 }
+        let f16: [u16; 256] = std::array::from_fn(|i| match i % 4 {
+            0 => 0x3c00,
+            1 => 0xbc00,
+            2 => 0x3800,
+            _ => 0x3400,
         });
         let fp16_q = quantize_fp16(&f16).unwrap();
         assert!(fp16_q.squared_error.is_finite());
@@ -312,8 +313,11 @@ mod tests {
         let fp16_exact = quantize_f32_fixed_global(&fp16_values, 0x3400).unwrap();
         assert_eq!(fp16_exact.squared_error, 0.0);
         assert_eq!(dequantize(&fp16_exact), fp16_values);
-        let bf16: [u16; 256] = std::array::from_fn(|i| {
-            match i % 4 { 0 => 0x3f80, 1 => 0xbf80, 2 => 0x3f00, _ => 0x3e80 }
+        let bf16: [u16; 256] = std::array::from_fn(|i| match i % 4 {
+            0 => 0x3f80,
+            1 => 0xbf80,
+            2 => 0x3f00,
+            _ => 0x3e80,
         });
         let bf16_q = quantize_bf16(&bf16).unwrap();
         assert!(bf16_q.squared_error.is_finite());
@@ -323,25 +327,49 @@ mod tests {
         assert_eq!(dequantize(&bf16_exact), bf16_values);
         let mut invalid = f16;
         invalid[17] = 0x7c00;
-        assert_eq!(quantize_fp16(&invalid).unwrap_err(), QuantizeError::NonFiniteSource(17));
+        assert_eq!(
+            quantize_fp16(&invalid).unwrap_err(),
+            QuantizeError::NonFiniteSource(17)
+        );
         let mut invalid_bf16 = bf16;
         invalid_bf16[42] = 0x7fc1;
-        assert_eq!(quantize_bf16(&invalid_bf16).unwrap_err(), QuantizeError::NonFiniteSource(42));
+        assert_eq!(
+            quantize_bf16(&invalid_bf16).unwrap_err(),
+            QuantizeError::NonFiniteSource(42)
+        );
     }
 
     #[test]
     fn strict_invalid_values_and_out_of_range() {
         let mut source = [0.0f32; 256];
         source[13] = f32::NAN;
-        assert_eq!(quantize_f32(&source).unwrap_err(), QuantizeError::NonFiniteSource(13));
+        assert_eq!(
+            quantize_f32(&source).unwrap_err(),
+            QuantizeError::NonFiniteSource(13)
+        );
         source[13] = f32::INFINITY;
-        assert_eq!(quantize_f32(&source).unwrap_err(), QuantizeError::NonFiniteSource(13));
+        assert_eq!(
+            quantize_f32(&source).unwrap_err(),
+            QuantizeError::NonFiniteSource(13)
+        );
         source[13] = f32::MAX;
-        assert_eq!(quantize_f32(&source).unwrap_err(), QuantizeError::RangeNotRepresentable);
+        assert_eq!(
+            quantize_f32(&source).unwrap_err(),
+            QuantizeError::RangeNotRepresentable
+        );
         source[13] = -0.4;
-        assert_eq!(quantize_f32_fixed_global(&source, 0).unwrap_err(), QuantizeError::InvalidGlobalF16(0));
-        assert_eq!(quantize_f32_fixed_global(&source, 0x7c00).unwrap_err(), QuantizeError::InvalidGlobalF16(0x7c00));
-        assert_eq!(quantize_f32_fixed_global(&source, 0xbc00).unwrap_err(), QuantizeError::InvalidGlobalF16(0xbc00));
+        assert_eq!(
+            quantize_f32_fixed_global(&source, 0).unwrap_err(),
+            QuantizeError::InvalidGlobalF16(0)
+        );
+        assert_eq!(
+            quantize_f32_fixed_global(&source, 0x7c00).unwrap_err(),
+            QuantizeError::InvalidGlobalF16(0x7c00)
+        );
+        assert_eq!(
+            quantize_f32_fixed_global(&source, 0xbc00).unwrap_err(),
+            QuantizeError::InvalidGlobalF16(0xbc00)
+        );
     }
 
     #[test]
@@ -353,7 +381,9 @@ mod tests {
         assert_eq!(a.squared_error.to_bits(), b.squared_error.to_bits());
         let mut q8 = [0u8; 292];
         q8[..4].copy_from_slice(&0x3f800000u32.to_le_bytes());
-        for i in 0..256 { q8[4 + i] = (i as i32 - 128) as i8 as u8; }
+        for i in 0..256 {
+            q8[4 + i] = (i as i32 - 128) as i8 as u8;
+        }
         let scalar = q5::scalar_lanes(&a.bytes, &q8).unwrap();
         if std::is_x86_feature_detected!("avx2") {
             let tiled = q5::dot_tiled::<1>(&a.bytes, &q8).unwrap();
