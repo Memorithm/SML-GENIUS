@@ -487,7 +487,6 @@ fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String
     result
 }
 
-
 /// Audit the exact tensor selection of a *standard* Q5_K source-matched
 /// baseline against our sentinel Q5-178 and the same source-precision GGUF.
 /// This is a strict type/shape/size and unmodified-data admission gate,
@@ -531,11 +530,15 @@ fn audited_region(
         .checked_add(tensor.offset)
         .ok_or("STOP_AUDIT_OFFSET_OVERFLOW")?;
     let next = if let Some(t) = entries.get(index + 1) {
-        tensor_start.checked_add(t.offset).ok_or("STOP_AUDIT_NEXT_OVERFLOW")?
+        tensor_start
+            .checked_add(t.offset)
+            .ok_or("STOP_AUDIT_NEXT_OVERFLOW")?
     } else {
         file_size
     };
-    if next <= position || next > file_size || bytes > next - position
+    if next <= position
+        || next > file_size
+        || bytes > next - position
         || next - position - bytes >= alignment
     {
         return Err(format!("STOP_AUDIT_EXTENT name={}", tensor.name));
@@ -550,13 +553,18 @@ fn original_type_bytes(t: &Tensor) -> Result<u64, String> {
         24 => 1,
         27 | 28 => 8,
         11 => {
-            if t.values % 256 != 0 { return Err("STOP_AUDIT_Q3_LENGTH".into()); }
-            return (t.values / 256).checked_mul(110)
+            if t.values % 256 != 0 {
+                return Err("STOP_AUDIT_Q3_LENGTH".into());
+            }
+            return (t.values / 256)
+                .checked_mul(110)
                 .ok_or_else(|| "STOP_AUDIT_Q3_OVERFLOW".into());
         }
         _ => return Err(format!("STOP_AUDIT_UNSUPPORTED_SOURCE_TYPE={}", t.kind)),
     };
-    t.values.checked_mul(per_element).ok_or_else(|| "STOP_AUDIT_SOURCE_OVERFLOW".into())
+    t.values
+        .checked_mul(per_element)
+        .ok_or_else(|| "STOP_AUDIT_SOURCE_OVERFLOW".into())
 }
 
 fn compare_original_payload(
@@ -575,7 +583,8 @@ fn compare_original_payload(
         let size = usize::try_from(remaining.min(left.len() as u64))
             .map_err(|_| "STOP_AUDIT_BUFFER_OVERFLOW")?;
         a.read_exact(&mut left[..size]).map_err(|e| e.to_string())?;
-        b.read_exact(&mut right[..size]).map_err(|e| e.to_string())?;
+        b.read_exact(&mut right[..size])
+            .map_err(|e| e.to_string())?;
         if left[..size] != right[..size] {
             return Err("STOP_AUDIT_UNCHANGED_PAYLOAD_DIFFERENCE".into());
         }
@@ -584,13 +593,11 @@ fn compare_original_payload(
     Ok(())
 }
 
-fn audit_matched_native_q5k(
-    source: &Path,
-    native: &Path,
-    sentinel: &Path,
-) -> Result<u64, String> {
-    let (mut source_f, source_size, source_start, source_align, source_ts) = prepared_directory(source)?;
-    let (mut native_f, native_size, native_start, native_align, native_ts) = prepared_directory(native)?;
+fn audit_matched_native_q5k(source: &Path, native: &Path, sentinel: &Path) -> Result<u64, String> {
+    let (mut source_f, source_size, source_start, source_align, source_ts) =
+        prepared_directory(source)?;
+    let (mut native_f, native_size, native_start, native_align, native_ts) =
+        prepared_directory(native)?;
     let (mut q5_f, q5_size, q5_start, q5_align, q5_ts) = prepared_directory(sentinel)?;
     if source_ts.len() != native_ts.len()
         || source_ts.len() != q5_ts.len()
@@ -599,43 +606,76 @@ fn audit_matched_native_q5k(
     {
         return Err("STOP_AUDIT_TENSOR_COUNT_OR_ALIGNMENT".into());
     }
-    let native_names: std::collections::HashMap<_, _> =
-        native_ts.iter().enumerate().map(|(i,t)| (t.name.as_str(), i)).collect();
-    let q5_names: std::collections::HashMap<_, _> =
-        q5_ts.iter().enumerate().map(|(i,t)| (t.name.as_str(), i)).collect();
+    let native_names: std::collections::HashMap<_, _> = native_ts
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.name.as_str(), i))
+        .collect();
+    let q5_names: std::collections::HashMap<_, _> = q5_ts
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.name.as_str(), i))
+        .collect();
     let mut quantized_count = 0u64;
     let mut total_blocks = 0u64;
     for (i, original) in source_ts.iter().enumerate() {
-        let &nidx = native_names.get(original.name.as_str())
+        let &nidx = native_names
+            .get(original.name.as_str())
             .ok_or("STOP_AUDIT_NATIVE_NAME_MISSING")?;
-        let &qidx = q5_names.get(original.name.as_str())
+        let &qidx = q5_names
+            .get(original.name.as_str())
             .ok_or("STOP_AUDIT_Q5_NAME_MISSING")?;
         let n = &native_ts[nidx];
         let q = &q5_ts[qidx];
-        if n.shape != original.shape || q.shape != original.shape
-            || n.values != original.values || q.values != original.values
+        if n.shape != original.shape
+            || q.shape != original.shape
+            || n.values != original.values
+            || q.values != original.values
         {
             return Err(format!("STOP_AUDIT_TENSOR_SHAPE name={}", original.name));
         }
         let source_bytes = original_type_bytes(original)?;
-        let src_pos = audited_region(source_size, source_start, source_align, &source_ts, i, source_bytes)?;
+        let src_pos = audited_region(
+            source_size,
+            source_start,
+            source_align,
+            &source_ts,
+            i,
+            source_bytes,
+        )?;
         if should_quantize(original) {
             if n.kind != 13 || q.kind != Q5_EXPERIMENTAL_TYPE {
-                return Err(format!("STOP_AUDIT_Q5_TYPE_MISMATCH name={} native={} q5={}",
-                    original.name, n.kind, q.kind));
+                return Err(format!(
+                    "STOP_AUDIT_Q5_TYPE_MISMATCH name={} native={} q5={}",
+                    original.name, n.kind, q.kind
+                ));
             }
             let blocks = original.values / 256;
             let native_bytes = blocks.checked_mul(176).ok_or("STOP_AUDIT_NATIVE_SIZE")?;
             let q5_bytes = blocks.checked_mul(178).ok_or("STOP_AUDIT_Q5_SIZE")?;
-            audited_region(native_size, native_start, native_align, &native_ts, nidx, native_bytes)?;
+            audited_region(
+                native_size,
+                native_start,
+                native_align,
+                &native_ts,
+                nidx,
+                native_bytes,
+            )?;
             audited_region(q5_size, q5_start, q5_align, &q5_ts, qidx, q5_bytes)?;
             total_blocks += blocks;
             quantized_count += 1;
         } else {
             if original.kind != n.kind || original.kind != q.kind {
-                return Err(format!("STOP_AUDIT_UNCHANGED_TYPE name={}",original.name));
+                return Err(format!("STOP_AUDIT_UNCHANGED_TYPE name={}", original.name));
             }
-            let npos = audited_region(native_size, native_start, native_align, &native_ts, nidx, source_bytes)?;
+            let npos = audited_region(
+                native_size,
+                native_start,
+                native_align,
+                &native_ts,
+                nidx,
+                source_bytes,
+            )?;
             let qpos = audited_region(q5_size, q5_start, q5_align, &q5_ts, qidx, source_bytes)?;
             compare_original_payload(&mut source_f, &mut native_f, src_pos, npos, source_bytes)?;
             compare_original_payload(&mut source_f, &mut q5_f, src_pos, qpos, source_bytes)?;
@@ -904,7 +944,6 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
-
     /// Deterministic GGUF envelope mirroring a correctly selective native
     /// Q5_K conversion without requiring an external C++ quantizer in the
     /// standalone unit test. This checks the audit's metadata and bytes.
@@ -950,7 +989,10 @@ mod tests {
         fs::write(&original, source).unwrap();
         transcode(&original, &sentinel).unwrap();
         fixture_native_q5k(&original, &native);
-        assert_eq!(audit_matched_native_q5k(&original, &native, &sentinel).unwrap(), 3);
+        assert_eq!(
+            audit_matched_native_q5k(&original, &native, &sentinel).unwrap(),
+            3
+        );
         let untouched = fs::read(&native).unwrap();
         let mut altered = untouched.clone();
         let mut f = File::open(&native).unwrap();
@@ -958,22 +1000,18 @@ mod tests {
         let q3 = items.iter().find(|t| t.name == "q3.untouched").unwrap();
         altered[(start + q3.offset + 13) as usize] ^= 0x80;
         fs::write(&native, &altered).unwrap();
-        assert!(
-            audit_matched_native_q5k(&original, &native, &sentinel)
-                .unwrap_err()
-                .contains("STOP_AUDIT_UNCHANGED_PAYLOAD_DIFFERENCE")
-        );
+        assert!(audit_matched_native_q5k(&original, &native, &sentinel)
+            .unwrap_err()
+            .contains("STOP_AUDIT_UNCHANGED_PAYLOAD_DIFFERENCE"));
         fs::write(&native, &untouched).unwrap();
         let first = items.iter().find(|t| t.name == "f16.matrix").unwrap();
         let mut changed = untouched.clone();
         changed[first.kind_field as usize..first.kind_field as usize + 4]
             .copy_from_slice(&12u32.to_le_bytes());
         fs::write(&native, &changed).unwrap();
-        assert!(
-            audit_matched_native_q5k(&original, &native, &sentinel)
-                .unwrap_err()
-                .contains("STOP_AUDIT_Q5_TYPE_MISMATCH")
-        );
+        assert!(audit_matched_native_q5k(&original, &native, &sentinel)
+            .unwrap_err()
+            .contains("STOP_AUDIT_Q5_TYPE_MISMATCH"));
         fs::remove_dir_all(&root).unwrap();
     }
 
