@@ -570,7 +570,7 @@ fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
         let counts = [Delta::Two, Delta::Four]
             .map(|v| chosen.blocks.iter().filter(|b| b.delta == v).count());
         println!(
-            "{split},{name},{},{:.6},{:.12},{:.12},{},{},{},{},{},{}",
+            "{split},{name},{},{:.6},{:.12},{:.12},{},{},{},{},{},{},{}",
             chosen.total_bytes,
             chosen.total_bytes as f64 * 8.0 / (rows.len() * 256) as f64,
             (sse / (rows.len() * 256) as f64).sqrt(),
