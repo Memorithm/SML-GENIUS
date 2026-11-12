@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install pinned Rust 1.89
         shell: bash
@@ -73,12 +73,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: posit8-supervised-circuit-\${{ github.sha }}
+          name: posit8-supervised-circuit-${{ github.sha }}
           path: |
-            \${{ runner.temp }}/posit8-tests.txt
-            \${{ runner.temp }}/posit8-synthesis-summary.txt
-            \${{ runner.temp }}/posit8-learned-native.rs
-            \${{ runner.temp }}/posit8-learned-native.s
-            \${{ runner.temp }}/posit8-native-check.txt
+            ${{ runner.temp }}/posit8-tests.txt
+            ${{ runner.temp }}/posit8-synthesis-summary.txt
+            ${{ runner.temp }}/posit8-learned-native.rs
+            ${{ runner.temp }}/posit8-learned-native.s
+            ${{ runner.temp }}/posit8-native-check.txt
           if-no-files-found: warn
           retention-days: 21
