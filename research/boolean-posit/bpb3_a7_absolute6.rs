@@ -263,7 +263,7 @@ pub fn allocate(source: &[[f64; LANES]], budget: usize) -> Result<Allocation, Er
         return Err(Error::TooManyBlocks);
     }
     let count = source.len() * GROUPS;
-    let base = source.len() * 12 + count * 2;
+    let base = source.len() * MIN_BYTES;
     if budget < base {
         return Err(Error::Budget);
     }
