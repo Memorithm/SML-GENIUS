@@ -6,6 +6,11 @@
 use std::fs;
 use std::path::Path;
 
+#[cfg(test)]
+#[path = "bpb3_adaptive.rs"]
+#[allow(dead_code)]
+mod a1;
+
 const LANES: usize = 64;
 const GROUPS: usize = 4;
 const WIDTH: usize = 16;
@@ -759,6 +764,57 @@ mod tests {
             .sum();
         assert_eq!(exact, dense);
         assert_eq!(dot_exact(&mixed.wires, &[]), Err(Error::WrongLength));
+    }
+
+    #[test]
+    fn delta2_wire_includes_every_a1_uniform_mode_at_identical_bytes() {
+        let block_source = source(0x4813);
+        for mode in 1..=3u8 {
+            let old = a1::quantize(&block_source, mode, 0).unwrap();
+            let local = std::array::from_fn(|group| {
+                let codes = std::array::from_fn(|i| old.codes[group * WIDTH + i]);
+                Group {
+                    mode,
+                    exponent: old.exponent,
+                    codes,
+                    sse: 0.0,
+                }
+            });
+            let candidate = Block {
+                delta: Delta::Two,
+                base: old.exponent,
+                groups: local,
+                sse: old.sse,
+            };
+            let wire = pack(&candidate).unwrap();
+            assert_eq!(wire.len(), a1::wire_bytes(mode).unwrap());
+            let (codes, exponents) = unpack(&wire).unwrap();
+            assert_eq!(codes, old.codes);
+            assert_eq!(exponents, [old.exponent; GROUPS]);
+        }
+    }
+
+    #[test]
+    fn global_delta2_source_sse_never_exceeds_a1_at_equal_storage() {
+        for seed in 1..=8u64 {
+            let inputs = [
+                source(seed),
+                source(seed + 100),
+                source(seed + 200),
+                source(seed + 300),
+            ];
+            let legacy = a1::allocate(&inputs, ROW_BYTES).unwrap();
+            let options: Vec<_> = inputs.iter().map(|x| candidates(x).unwrap()).collect();
+            let compact = allocate(&options, ROW_BYTES, true, false).unwrap();
+            assert_eq!(legacy.total_bytes, ROW_BYTES);
+            assert!(compact.total_bytes <= ROW_BYTES);
+            assert!(
+                compact.sse <= legacy.sse + 1e-10 * legacy.sse.max(1.0),
+                "seed={seed} compact={} legacy={}",
+                compact.sse,
+                legacy.sse
+            );
+        }
     }
 
     #[test]
