@@ -78,7 +78,11 @@ pub fn pack(codes: &[i8; LANES], exponent: i8, mode: u8) -> Result<Vec<u8>, Erro
     let maximum = (1i16 << mode) - 1;
     for (index, &code) in codes.iter().enumerate() {
         if i16::from(code).abs() > maximum {
-            return Err(Error::InvalidCode { index, value: code, mode });
+            return Err(Error::InvalidCode {
+                index,
+                value: code,
+                mode,
+            });
         }
         let magnitude = code.unsigned_abs();
         let bit = 1u64 << index;
@@ -104,11 +108,17 @@ pub fn pack(codes: &[i8; LANES], exponent: i8, mode: u8) -> Result<Vec<u8>, Erro
 
 fn parse(raw: &[u8]) -> Result<(u8, i8, u64, [u64; 3]), Error> {
     let Some(&mode) = raw.first() else {
-        return Err(Error::WrongLength { actual: 0, expected: 1 });
+        return Err(Error::WrongLength {
+            actual: 0,
+            expected: 1,
+        });
     };
     let bytes = wire_bytes(mode)?;
     if raw.len() != bytes {
-        return Err(Error::WrongLength { actual: raw.len(), expected: bytes });
+        return Err(Error::WrongLength {
+            actual: raw.len(),
+            expected: bytes,
+        });
     }
     let scale = u16::from_le_bytes([raw[1], raw[2]]);
     let exponent = fixed::decode_scale(scale).ok_or(Error::NoncanonicalExponent)?;
@@ -158,13 +168,18 @@ pub fn dot(raw: &[u8], input_negative: u64) -> Result<(i32, i8), Error> {
 /// This avoids f32 reassociation; it is not ggml's FP32 accumulation contract.
 pub fn dot_sum_exact(wires: &[Vec<u8>], bipolar: &[u64]) -> Result<i128, Error> {
     if wires.len() != bipolar.len() {
-        return Err(Error::WrongLength { actual: bipolar.len(), expected: wires.len() });
+        return Err(Error::WrongLength {
+            actual: bipolar.len(),
+            expected: wires.len(),
+        });
     }
     let mut total = 0i128;
     for (wire, &mask) in wires.iter().zip(bipolar) {
         let (integer, exponent) = dot(wire, mask)?;
         let multiplier = 1i128 << (i32::from(exponent) + 24);
-        let term = i128::from(integer).checked_mul(multiplier).ok_or(Error::ArithmeticOverflow)?;
+        let term = i128::from(integer)
+            .checked_mul(multiplier)
+            .ok_or(Error::ArithmeticOverflow)?;
         total = total.checked_add(term).ok_or(Error::ArithmeticOverflow)?;
     }
     Ok(total)
@@ -220,7 +235,10 @@ pub fn fixed_mode(source: &[[f64; LANES]], mode: u8) -> Result<Allocation, Error
         choices.push(choice);
     }
     Ok(Allocation {
-        total_bytes: source.len().checked_mul(wire_bytes(mode)?).ok_or(Error::BudgetOverflow)?,
+        total_bytes: source
+            .len()
+            .checked_mul(wire_bytes(mode)?)
+            .ok_or(Error::BudgetOverflow)?,
         wires,
         choices,
         sse,
@@ -240,7 +258,10 @@ pub fn allocate(source: &[[f64; LANES]], budget_bytes: usize) -> Result<Allocati
     }
     let minimum = count.checked_mul(MIN_BYTES).ok_or(Error::BudgetOverflow)?;
     if budget_bytes < minimum {
-        return Err(Error::BudgetTooSmall { budget: budget_bytes, minimum });
+        return Err(Error::BudgetTooSmall {
+            budget: budget_bytes,
+            minimum,
+        });
     }
     let max_extra = (budget_bytes - minimum) / STEP_BYTES;
     let max_extra = max_extra.min(2 * count);
@@ -301,19 +322,33 @@ pub fn allocate(source: &[[f64; LANES]], budget_bytes: usize) -> Result<Allocati
         spent -= usize::from(mode - 1);
     }
     choices.reverse();
-    let wires = choices.iter()
+    let wires = choices
+        .iter()
         .map(|q| pack(&q.codes, q.exponent, q.mode))
         .collect::<Result<Vec<_>, _>>()?;
     let total_bytes = minimum + actual_extra * STEP_BYTES;
     debug_assert_eq!(wires.iter().map(Vec::len).sum::<usize>(), total_bytes);
     debug_assert!(total_bytes <= budget_bytes);
-    Ok(Allocation { wires, choices, total_bytes, sse: best })
+    Ok(Allocation {
+        wires,
+        choices,
+        total_bytes,
+        sse: best,
+    })
 }
 
 fn dense_dot(codes: &[i8; LANES], input_negative: u64) -> i32 {
-    codes.iter().enumerate().map(|(i, &code)| {
-        if (input_negative >> i) & 1 != 0 { -i32::from(code) } else { i32::from(code) }
-    }).sum()
+    codes
+        .iter()
+        .enumerate()
+        .map(|(i, &code)| {
+            if (input_negative >> i) & 1 != 0 {
+                -i32::from(code)
+            } else {
+                i32::from(code)
+            }
+        })
+        .sum()
 }
 
 fn rand64(seed: &mut u64) -> u64 {
@@ -326,7 +361,10 @@ fn rand64(seed: &mut u64) -> u64 {
 fn evaluate(split: &str, data: &[[f64; LANES]]) -> Result<(), Error> {
     let fixed = fixed_mode(data, 2)?;
     let adaptive = allocate(data, data.len() * FIXED_TAGGED_BYTES)?;
-    for (name, result) in [("fixed_3bit_tagged", &fixed), ("adaptive_2to4bit", &adaptive)] {
+    for (name, result) in [
+        ("fixed_3bit_tagged", &fixed),
+        ("adaptive_2to4bit", &adaptive),
+    ] {
         let mut squared = 0.0f64;
         let mut dot_squared = 0.0f64;
         let mut count = 0;
@@ -342,9 +380,11 @@ fn evaluate(split: &str, data: &[[f64; LANES]]) -> Result<(), Error> {
             }
             for _ in 0..16 {
                 let mask = rand64(&mut rng);
-                let actual = original.iter().enumerate().map(|(i, &v)| {
-                    if (mask >> i) & 1 == 0 { v } else { -v }
-                }).sum::<f64>();
+                let actual = original
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &v)| if (mask >> i) & 1 == 0 { v } else { -v })
+                    .sum::<f64>();
                 let (integer, _) = dot(wire, mask)?;
                 assert_eq!(integer, dense_dot(&codes, mask));
                 let delta = f64::from(integer) * scale - actual;
@@ -354,10 +394,17 @@ fn evaluate(split: &str, data: &[[f64; LANES]]) -> Result<(), Error> {
         }
         assert!((squared - result.sse).abs() <= 1e-8 * squared.max(1.0));
         let m = [1u8, 2, 3].map(|mode| result.choices.iter().filter(|c| c.mode == mode).count());
-        println!("{split},{name},{},{:.6},{:.12},{:.12},{},{},{},{}",
-            result.total_bytes, result.total_bytes as f64 * 8.0 / count as f64,
-            (squared / count as f64).sqrt(), (dot_squared / masks as f64).sqrt(),
-            count, m[0], m[1], m[2]);
+        println!(
+            "{split},{name},{},{:.6},{:.12},{:.12},{},{},{},{}",
+            result.total_bytes,
+            result.total_bytes as f64 * 8.0 / count as f64,
+            (squared / count as f64).sqrt(),
+            (dot_squared / masks as f64).sqrt(),
+            count,
+            m[0],
+            m[1],
+            m[2]
+        );
     }
     Ok(())
 }
@@ -396,8 +443,20 @@ mod tests {
             let signed = 2.0 * u - 1.0;
             match seed % 4 {
                 0 => signed * 0.9,
-                1 => if index % 6 == 0 { signed * 0.7 } else { 0.0 },
-                2 => if index % 31 == 0 { signed * 7.0 } else { signed * 0.12 },
+                1 => {
+                    if index % 6 == 0 {
+                        signed * 0.7
+                    } else {
+                        0.0
+                    }
+                }
+                2 => {
+                    if index % 31 == 0 {
+                        signed * 7.0
+                    } else {
+                        signed * 0.12
+                    }
+                }
                 _ => signed * 2.0f64.powi((index % 13) as i32 - 10),
             }
         })
@@ -426,7 +485,11 @@ mod tests {
                 for case in 0..20usize {
                     let codes = std::array::from_fn(|i| {
                         let value = (rand64(&mut rng) % u64::from(2 * max + 1)) as i8;
-                        if i % 7 == case % 7 { 0 } else { value - max as i8 }
+                        if i % 7 == case % 7 {
+                            0
+                        } else {
+                            value - max as i8
+                        }
                     });
                     let wire = pack(&codes, exponent, mode).unwrap();
                     assert_eq!(unpack(&wire), Ok((codes, exponent)));
@@ -445,7 +508,7 @@ mod tests {
         let zero = [0i8; LANES];
         for mode in 1..=3u8 {
             let mut wire = pack(&zero, 0, mode).unwrap();
-            assert!(unpack(&wire[..wire.len()-1]).is_err());
+            assert!(unpack(&wire[..wire.len() - 1]).is_err());
             wire[1] = 0;
             wire[2] = 0;
             assert_eq!(unpack(&wire), Err(Error::NoncanonicalExponent));
@@ -453,13 +516,26 @@ mod tests {
             zero_sign[3] = 1;
             assert_eq!(unpack(&zero_sign), Err(Error::NegativeZero));
         }
-        assert_eq!(unpack(&[]), Err(Error::WrongLength { actual: 0, expected: 1 }));
+        assert_eq!(
+            unpack(&[]),
+            Err(Error::WrongLength {
+                actual: 0,
+                expected: 1
+            })
+        );
         let mut first = pack(&zero, 0, 1).unwrap();
         first[0] = 9;
         assert_eq!(unpack(&first), Err(Error::InvalidMode(9)));
         let mut invalid = zero;
         invalid[5] = -4;
-        assert_eq!(pack(&invalid, 0, 2), Err(Error::InvalidCode { index: 5, value: -4, mode: 2 }));
+        assert_eq!(
+            pack(&invalid, 0, 2),
+            Err(Error::InvalidCode {
+                index: 5,
+                value: -4,
+                mode: 2
+            })
+        );
     }
 
     #[test]
@@ -474,7 +550,13 @@ mod tests {
         }
         let mut bad = synthetic(7);
         bad[13] = f64::INFINITY;
-        assert_eq!(quantize(&bad, 2, 6), Err(Error::NonFiniteSource { block: 6, index: 13 }));
+        assert_eq!(
+            quantize(&bad, 2, 6),
+            Err(Error::NonFiniteSource {
+                block: 6,
+                index: 13
+            })
+        );
         bad[13] = f64::MAX;
         assert_eq!(quantize(&bad, 2, 6), Err(Error::UnrepresentableSse));
     }
@@ -487,10 +569,22 @@ mod tests {
         let adaptive = allocate(&values, budget).unwrap();
         assert!(adaptive.total_bytes <= budget);
         assert!(adaptive.sse <= fixed.sse + 1e-11);
-        assert_eq!(adaptive.wires.iter().map(Vec::len).sum::<usize>(), adaptive.total_bytes);
+        assert_eq!(
+            adaptive.wires.iter().map(Vec::len).sum::<usize>(),
+            adaptive.total_bytes
+        );
         assert_eq!(allocate(&[], 0).unwrap_err(), Error::EmptyInput);
-        assert_eq!(allocate(&values, MIN_BYTES * 32 - 1).unwrap_err(), Error::BudgetTooSmall { budget: MIN_BYTES * 32 - 1, minimum: MIN_BYTES * 32 });
-        assert_eq!(allocate(&vec![[0.0; 64]; MAX_BLOCKS + 1], 9000).unwrap_err(), Error::TooManyBlocks(MAX_BLOCKS + 1));
+        assert_eq!(
+            allocate(&values, MIN_BYTES * 32 - 1).unwrap_err(),
+            Error::BudgetTooSmall {
+                budget: MIN_BYTES * 32 - 1,
+                minimum: MIN_BYTES * 32
+            }
+        );
+        assert_eq!(
+            allocate(&vec![[0.0; 64]; MAX_BLOCKS + 1], 9000).unwrap_err(),
+            Error::TooManyBlocks(MAX_BLOCKS + 1)
+        );
     }
 
     #[test]
@@ -539,7 +633,13 @@ mod tests {
         for (mode, exponent) in [(1, -24i8), (2, 0), (3, 27), (1, 12), (3, -8)] {
             let max = (1i8 << mode) - 1;
             let codes = std::array::from_fn(|i| {
-                if i % 3 == 0 { -max } else if i % 3 == 1 { max } else { 0 }
+                if i % 3 == 0 {
+                    -max
+                } else if i % 3 == 1 {
+                    max
+                } else {
+                    0
+                }
             });
             let wire = pack(&codes, exponent, mode).unwrap();
             let mask = rand64(&mut rng);
@@ -548,6 +648,9 @@ mod tests {
             masks.push(mask);
         }
         assert_eq!(dot_sum_exact(&wires, &masks), Ok(expected));
-        assert!(matches!(dot_sum_exact(&wires, &[]), Err(Error::WrongLength { .. })));
+        assert!(matches!(
+            dot_sum_exact(&wires, &[]),
+            Err(Error::WrongLength { .. })
+        ));
     }
 }
