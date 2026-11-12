@@ -503,7 +503,7 @@ mod tests {
             .map(|i| std::array::from_fn(|j| {
                 if j % 16 == 0 { i as f64 + 2.0 } else { j as f64 / 8192.0 }
             })).collect();
-        assert_eq!(allocate(&sources, 83), Err(Error::Budget));
+        assert!(matches!(allocate(&sources, 83), Err(Error::Budget)));
         let selected = allocate(&sources, ROW_BYTES).unwrap();
         assert!(selected.total_bytes <= ROW_BYTES);
         let masks = [0, !0, 0x55aa_55aa_55aa_55aa, 0x1234_5678_9abc_def0];
