@@ -72,6 +72,12 @@ To reproduce on a bounded research computer, add `--verify-each-block` to the ex
 
 Large synthetic checks alone cannot establish neural-network capability, practical numeric accuracy, or storage-traffic elimination. Matched real-corpus quality, multi-seed controls, hardware counters and end-to-end model trials remain separate preregistered gates.
 
+## Adaptive precision BPB-3-A1 (2026-11-12)
+
+Research-only adaptive Boolean codec with 1, 2, or 3 magnitude planes plus a sign plane per 64 coefficients (19/27/35 serialized bytes per block). An exact bounded dynamic program chooses a 108-byte-per-256-weight allocation including mode/scale metadata; BPB-3/v0 retains its original separate 26-byte wire. The signed integer Boolean dot and 2^-24 dyadic inter-block accumulation have independent Rust oracles.
+
+The source- and model-pinned Pythia-14M hosted study uses four previously untested layer-2/3 matrices and fully costed, matched-source standard Q3_K/Q4_K references. **Result:** adaptive quantization reduced reconstruction RMSE against the tagged fixed BPB-3 candidate on all four TEST matrices, but Q3_K remained more accurate on all four. This validates a bounded component optimization, not numerical-format novelty, model quality, performance, DRAM reductions or production readiness. Raw metrics and immutable SHA provenance: [A1 result](BPB3_ADAPTIVE_RESULTS_20261112.md); [frozen preregistration](BPB3_ADAPTIVE_PROTOCOL_20261112.md).
+
 ## Next scientific gates
 
 BP-1: exact bitwise parity, canonical decode and supervised learning on disjoint holdout.
