@@ -271,7 +271,7 @@ impl Synthesized {
     /// the CPU's actual native ISA. No handwritten assembly or GPU dependency.
     pub fn emit_rust(&self) -> String {
         let mut out = String::from(
-            "#![forbid(unsafe_code)]\n#[no_mangle]\n#[inline(never)]\npub extern \"C\" fn learned_posit8_neg(x: u8) -> u8 {\n"
+            "#![forbid(unsafe_code)]\n#[inline(never)]\npub extern \"C\" fn learned_posit8_neg(x: u8) -> u8 {\n"
         );
         for (index, node) in self.nodes.iter().enumerate() {
             match node.expr {
