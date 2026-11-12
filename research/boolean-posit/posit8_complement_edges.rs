@@ -8,6 +8,9 @@ use std::fmt::Write;
 #[path = "posit8_bitplane64.rs"]
 mod bitplane64;
 
+#[path = "posit8_bitplane64_bench.rs"]
+mod bitplane64_bench;
+
 const SELECTOR_COUNT: usize = 16;
 const MAX_STACK_BYTES: usize = 16_384;
 
