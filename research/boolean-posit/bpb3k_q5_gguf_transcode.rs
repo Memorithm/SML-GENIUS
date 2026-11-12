@@ -392,6 +392,97 @@ fn transcode(source: &Path, dest: &Path) -> Result<(u64, u64), String> {
     result
 }
 
+/// Prepare only for an exact-source-pinned patched ggml process: translate
+/// the deliberately nonstandard Q5 sentinel to the Q3_K surrogate type ID.
+/// Never mutate the safe sentinel source; reject mixed stock Q3_K matrices.
+/// The patched runtime must override the Q3_K byte stride to 178 and
+/// replace its dequantization, tiled unpacker and vector dot implementations.
+fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String> {
+    if source == dest {
+        return Err("STOP_PREPARE_SOURCE_DEST_SAME".into());
+    }
+    if dest.exists() {
+        return Err("STOP_PREPARE_DEST_EXISTS".into());
+    }
+    let mut input = File::open(source).map_err(|e| e.to_string())?;
+    let len = input.metadata().map_err(|e| e.to_string())?.len();
+    if !(1..=MAX_GGUF).contains(&len) {
+        return Err("STOP_PREPARE_FILE_SIZE".into());
+    }
+    let (start, alignment, mut entries) = tensors(&mut input, len)?;
+    entries.sort_by_key(|t| t.offset);
+    if entries.is_empty() || entries[0].offset != 0 {
+        return Err("STOP_PREPARE_TENSOR_DIRECTORY".into());
+    }
+    let mut count = 0;
+    for (index, tensor) in entries.iter().enumerate() {
+        if index > 0
+            && (tensor.offset <= entries[index - 1].offset || tensor.offset % alignment != 0)
+        {
+            return Err("STOP_PREPARE_OFFSETS".into());
+        }
+        if tensor.kind == 11 {
+            return Err("STOP_PREPARE_MIXED_OR_ALREADY_Q3".into());
+        }
+        if tensor.kind != Q5_EXPERIMENTAL_TYPE {
+            continue;
+        }
+        if tensor.dims < 2 || tensor.first_dim % 256 != 0 || tensor.values % 256 != 0 {
+            return Err("STOP_PREPARE_INVALID_Q5_SHAPE".into());
+        }
+        let expected = (tensor.values / 256)
+            .checked_mul(178)
+            .ok_or("STOP_PREPARE_Q5_SIZE_OVERFLOW")?;
+        let from = start
+            .checked_add(tensor.offset)
+            .ok_or("STOP_PREPARE_OFFSET_OVERFLOW")?;
+        let end = if let Some(next) = entries.get(index + 1) {
+            start
+                .checked_add(next.offset)
+                .ok_or("STOP_PREPARE_NEXT_OVERFLOW")?
+        } else {
+            len
+        };
+        if from >= end || end > len || expected > end - from || end - from - expected >= alignment {
+            return Err("STOP_PREPARE_Q5_SIZE".into());
+        }
+        count += 1;
+    }
+    if count == 0 {
+        return Err("STOP_PREPARE_NO_Q5_TENSORS".into());
+    }
+    let result = (|| {
+        let mut output = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(dest)
+            .map_err(|e| e.to_string())?;
+        input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let copied = std::io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
+        if copied != len {
+            return Err("STOP_PREPARE_SHORT_COPY".into());
+        }
+        for tensor in entries.iter().filter(|t| t.kind == Q5_EXPERIMENTAL_TYPE) {
+            output
+                .seek(SeekFrom::Start(tensor.kind_field))
+                .map_err(|e| e.to_string())?;
+            output
+                .write_all(&11u32.to_le_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+        output.sync_all().map_err(|e| e.to_string())?;
+        println!(
+            "PASS_Q5_178_PREPARE_PATCHED_RUNTIME tensors={} q3_surrogate_type=11 payload_bytes=178 stock_loader_forbidden=true",
+            count
+        );
+        Ok(count)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(dest);
+    }
+    result
+}
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
@@ -399,7 +490,11 @@ fn run() -> Result<(), String> {
             transcode(Path::new(source), Path::new(dest))?;
             Ok(())
         }
-        _ => Err("USAGE: bpb3k_q5_gguf_transcode transcode <original-F16-BF16-F32-gguf> <experimental-Q5-178-gguf>".into()),
+        [_, mode, source, dest] if mode == "prepare-patched-runtime" => {
+            prepare_for_patched_runtime(Path::new(source), Path::new(dest))?;
+            Ok(())
+        }
+        _ => Err("USAGE: bpb3k_q5_gguf_transcode transcode <source-F16-BF16-F32-gguf> <experimental-Q5-178-gguf> | prepare-patched-runtime <experimental-Q5-178-gguf> <temporary-patched-only-gguf>".into()),
     }
 }
 
@@ -579,6 +674,59 @@ mod tests {
             .unwrap_err()
             .contains("STOP_ZERO_DIMENSION"));
         assert!(!dst.exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn q5_preparation_rewrites_only_experimental_type_fields_after_validation() {
+        let root = temp_root();
+        let original_file = root.join("original.gguf");
+        let experimental_file = root.join("experimental.gguf");
+        let prepared_file = root.join("prepared.gguf");
+        let (mut source, fields, _) = fixture();
+        // Replace the fixture's original 110-byte Q3 tensor with a
+        // well-formed, unquantized 64-value FP16 vector (128 bytes).
+        let kind_field = fields[3].0;
+        source[kind_field..kind_field + 4].copy_from_slice(&F16.to_le_bytes());
+        source[kind_field - 8..kind_field].copy_from_slice(&64u64.to_le_bytes());
+        fs::write(&original_file, source).unwrap();
+        transcode(&original_file, &experimental_file).unwrap();
+        let safe = fs::read(&experimental_file).unwrap();
+        assert_eq!(
+            prepare_for_patched_runtime(&experimental_file, &prepared_file).unwrap(),
+            3
+        );
+        let prepared = fs::read(&prepared_file).unwrap();
+        assert_eq!(safe.len(), prepared.len());
+        let mut reconstructed = safe.clone();
+        for &(field, _) in &fields[..3] {
+            reconstructed[field..field + 4].copy_from_slice(&11u32.to_le_bytes());
+        }
+        assert_eq!(prepared, reconstructed);
+        assert_eq!(fs::read(&experimental_file).unwrap(), safe);
+        assert_eq!(
+            prepare_for_patched_runtime(&prepared_file, &root.join("second.gguf")).unwrap_err(),
+            "STOP_PREPARE_MIXED_OR_ALREADY_Q3"
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn q5_preparation_rejects_mixed_original_q3_and_preserves_safe_input() {
+        let root = temp_root();
+        let original_file = root.join("original.gguf");
+        let experimental_file = root.join("experimental.gguf");
+        let prepared_file = root.join("prepared.gguf");
+        let (raw, _, _) = fixture();
+        fs::write(&original_file, raw).unwrap();
+        transcode(&original_file, &experimental_file).unwrap();
+        let source = fs::read(&experimental_file).unwrap();
+        assert_eq!(
+            prepare_for_patched_runtime(&experimental_file, &prepared_file).unwrap_err(),
+            "STOP_PREPARE_MIXED_OR_ALREADY_Q3"
+        );
+        assert!(!prepared_file.exists());
+        assert_eq!(fs::read(&experimental_file).unwrap(), source);
         fs::remove_dir_all(&root).unwrap();
     }
 
