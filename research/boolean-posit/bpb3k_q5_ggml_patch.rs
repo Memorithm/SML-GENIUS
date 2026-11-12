@@ -194,9 +194,10 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
-        [_, mode, checkout, sha] if mode == "patch" =>
-            patch(Path::new(checkout), sha),
-        _ => Err("USAGE: bpb3k_q5_ggml_patch patch <throwaway-pinned-llama-checkout> <exact-sha>".into()),
+        [_, mode, checkout, sha] if mode == "patch" => patch(Path::new(checkout), sha),
+        _ => Err(
+            "USAGE: bpb3k_q5_ggml_patch patch <throwaway-pinned-llama-checkout> <exact-sha>".into(),
+        ),
     }
 }
 
