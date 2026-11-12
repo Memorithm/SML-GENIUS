@@ -84,11 +84,19 @@ static void tiled_unpack_src0(const block_q3_K * rows, int64_t row_stride, int n
             // The fifth-bit plane is byte-ordered across all 256 codes.
             for (int group = 0; group < 8; group++) {
                 uint8_t * dest = q + group * 32;
+#if defined(__SSE2__)
+                const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i *>(w + group * 16));
+                const __m128i mask = _mm_set1_epi8(0x0f);
+                _mm_storeu_si128(reinterpret_cast<__m128i *>(dest), _mm_and_si128(packed, mask));
+                const __m128i upper = _mm_and_si128(_mm_srli_epi16(packed, 4), mask);
+                _mm_storeu_si128(reinterpret_cast<__m128i *>(dest + 16), upper);
+#else
                 for (int lane = 0; lane < 16; lane++) {
                     const uint8_t packed = w[group * 16 + lane];
                     dest[lane]      = packed & 15;
                     dest[lane + 16] = packed >> 4;
                 }
+#endif
                 for (int byte = 0; byte < 4; byte++) {
                     const uint64_t high = mem_q5_178_spread_eight(w[128 + group * 4 + byte]);
                     uint64_t codes;
@@ -196,7 +204,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     substitute_once(
         &tiled,
         "#include <mutex>",
-        "#include <mutex>\n#include <cstdio>",
+        "#include <mutex>\n#include <cstdio>\n#if defined(__SSE2__)\n#include <emmintrin.h>\n#endif",
     )?;
     substitute_once(
         &tiled,
@@ -312,6 +320,9 @@ mod tests {
         assert!(Q5_TILED_UNPACK.contains("w + 176"));
         assert!(Q5_TILED_UNPACK.contains("w + 160 + subgroup"));
         assert!(Q5_TILED_UNPACK.contains("mem_q5_178_spread_eight"));
+        assert!(Q5_TILED_UNPACK.contains("_mm_storeu_si128"));
+        assert!(Q5_TILED_UNPACK.contains("#else"));
+        assert!(Q5_TILED_UNPACK.contains("_mm_srli_epi16"));
         assert!(Q5_TILED_UNPACK.contains("w[128 + group * 4 + byte]"));
         assert!(Q5_TILED_UNPACK.contains("std::memcpy(dest + byte * 8, &codes, sizeof(codes))"));
         assert!(Q5_TILED_DISPATCH.contains("REAL_TILED_EXECUTED"));
