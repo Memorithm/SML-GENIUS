@@ -152,9 +152,12 @@ pub fn dot_subgroups(wire: &[u8], masks: u64) -> Result<[(i32, i8); GROUPS], Err
         let weight_sign = ((sign >> (group * GROUP_WIDTH)) & 0xffff) as u16;
         let equal_sign = !(weight_sign ^ input_sign);
         let mut integer = 0i32;
-        for (p, &plane) in planes[group][..usize::from(modes[group])].iter().enumerate() {
-            integer += ((2 * (equal_sign & plane).count_ones() as i32)
-                - plane.count_ones() as i32) * (1 << p);
+        for (p, &plane) in planes[group][..usize::from(modes[group])]
+            .iter()
+            .enumerate()
+        {
+            integer += ((2 * (equal_sign & plane).count_ones() as i32) - plane.count_ones() as i32)
+                * (1 << p);
         }
         (integer, exponents[group])
     }))
@@ -207,11 +210,13 @@ fn alternatives(source: &[f64; LANES]) -> Result<[[GroupChoice; 3]; GROUPS], Err
             let exponent = option.exponents[group];
             let scale = 2.0f64.powi(i32::from(exponent));
             let codes = std::array::from_fn(|i| option.codes[group * GROUP_WIDTH + i]);
-            let sse = (0..GROUP_WIDTH).map(|i| {
-                let value = source[group * GROUP_WIDTH + i];
-                let error = value - f64::from(codes[i]) * scale;
-                error * error
-            }).sum();
+            let sse = (0..GROUP_WIDTH)
+                .map(|i| {
+                    let value = source[group * GROUP_WIDTH + i];
+                    let error = value - f64::from(codes[i]) * scale;
+                    error * error
+                })
+                .sum();
             GroupChoice {
                 mode: (mode_index + 1) as u8,
                 exponent,
@@ -319,15 +324,18 @@ fn random(seed: &mut u64) -> u64 {
 fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
     let source: Vec<[f64; LANES]> = weights
         .iter()
-        .flat_map(|row| {
-            (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i])))
-        })
+        .flat_map(|row| (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i]))))
         .collect();
     let chosen = allocate(&source, weights.len() * ROW_BYTES)?;
     let mut source_sse = 0.0;
     let mut signed_dot_sse = 0.0;
     let mut dots = 0usize;
-    let mut rng = MASK_SEED ^ if split == "TEST" { 0x9e37_79b9_7f4a_7c15 } else { 0 };
+    let mut rng = MASK_SEED
+        ^ if split == "TEST" {
+            0x9e37_79b9_7f4a_7c15
+        } else {
+            0
+        };
     for (row, original) in weights.iter().enumerate() {
         let mut truth = [0.0f64; 256];
         for (i, &value) in original.iter().enumerate() {
@@ -337,17 +345,25 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
         for (block, wire) in wires.iter().enumerate() {
             let (codes, exponents) = unpack(wire)?;
             for (index, &code) in codes.iter().enumerate() {
-                let reconstructed = f64::from(code)
-                    * 2.0f64.powi(i32::from(exponents[index / GROUP_WIDTH]));
+                let reconstructed =
+                    f64::from(code) * 2.0f64.powi(i32::from(exponents[index / GROUP_WIDTH]));
                 let delta = reconstructed - truth[block * LANES + index];
                 source_sse += delta * delta;
             }
         }
         for _ in 0..16 {
             let masks: [u64; 4] = std::array::from_fn(|_| random(&mut rng));
-            let actual: f64 = truth.iter().enumerate().map(|(i, &value)| {
-                if (masks[i / 64] >> (i % 64)) & 1 != 0 { -value } else { value }
-            }).sum();
+            let actual: f64 = truth
+                .iter()
+                .enumerate()
+                .map(|(i, &value)| {
+                    if (masks[i / 64] >> (i % 64)) & 1 != 0 {
+                        -value
+                    } else {
+                        value
+                    }
+                })
+                .sum();
             let observed = dot_256(wires, &masks)?;
             let error = actual - observed;
             signed_dot_sse += error * error;
@@ -356,7 +372,8 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
     }
     assert!((source_sse - chosen.sse).abs() <= 1e-7 * source_sse.max(1.0));
     let coefficients = weights.len() * 256;
-    let mode_counts = [1u8, 2, 3].map(|mode| chosen.groups.iter().filter(|c| c.mode == mode).count());
+    let mode_counts =
+        [1u8, 2, 3].map(|mode| chosen.groups.iter().filter(|c| c.mode == mode).count());
     println!(
         "{split},bpb3_a5_mixed16,{},{:.6},{:.12},{:.12},{},{},{},{},{}",
         chosen.total_bytes,
@@ -382,12 +399,14 @@ fn main() {
     assert_eq!(bytes.len(), 48 * 256 * 4, "STOP_A5_INPUT_LENGTH");
     let rows: Vec<[f32; 256]> = bytes
         .chunks_exact(256 * 4)
-        .map(|raw| std::array::from_fn(|i| f32::from_le_bytes(
-            raw[4 * i..4 * i + 4].try_into().unwrap()
-        )))
+        .map(|raw| {
+            std::array::from_fn(|i| f32::from_le_bytes(raw[4 * i..4 * i + 4].try_into().unwrap()))
+        })
         .collect();
     assert!(rows.iter().all(|r| r.iter().all(|x| x.is_finite())));
-    println!("protocol=bpb3-a5-mixed16-budget108-v1,source=EXTERNALLY_PINNED,claim=RECONSTRUCTION_ONLY");
+    println!(
+        "protocol=bpb3-a5-mixed16-budget108-v1,source=EXTERNALLY_PINNED,claim=RECONSTRUCTION_ONLY"
+    );
     println!("split,codec,payload_bytes,bits_per_weight,weight_rmse,dot_rmse,coefficients,dots,mode1_blocks,mode2_blocks,mode3_blocks");
     evaluate("DEV", &rows[..24]).expect("A5 DEV");
     evaluate("TEST", &rows[24..]).expect("A5 TEST");
@@ -411,8 +430,12 @@ mod tests {
         GroupChoice {
             mode,
             exponent,
-            codes: std::array::from_fn(|i| if i % 13 == 0 { 0 } else {
-                i as i8 % (2 * max + 1) - max
+            codes: std::array::from_fn(|i| {
+                if i % 13 == 0 {
+                    0
+                } else {
+                    i as i8 % (2 * max + 1) - max
+                }
             }),
             sse: 0.0,
         }
@@ -454,10 +477,18 @@ mod tests {
             for masks in [0, u64::MAX, random(&mut rng), random(&mut rng)] {
                 let observed = dot_subgroups(&wire, masks).unwrap();
                 for g in 0..4 {
-                    let dense: i32 = groups[g].codes.iter().enumerate().map(|(i, &v)| {
-                        if (masks >> (g * 16 + i)) & 1 != 0 { -i32::from(v) }
-                        else { i32::from(v) }
-                    }).sum();
+                    let dense: i32 = groups[g]
+                        .codes
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &v)| {
+                            if (masks >> (g * 16 + i)) & 1 != 0 {
+                                -i32::from(v)
+                            } else {
+                                i32::from(v)
+                            }
+                        })
+                        .sum();
                     assert_eq!(observed[g], (dense, groups[g].exponent));
                 }
             }
@@ -473,7 +504,9 @@ mod tests {
             assert!(a5_result.total_bytes <= ROW_BYTES);
             assert!(
                 a5_result.sse <= a4_result.sse + 1e-10 * a4_result.sse.max(1.0),
-                "seed={seed}: a5={} a4={}", a5_result.sse, a4_result.sse
+                "seed={seed}: a5={} a4={}",
+                a5_result.sse,
+                a4_result.sse
             );
         }
     }
@@ -510,14 +543,21 @@ mod tests {
         let selected = allocate(&source, ROW_BYTES).unwrap();
         let masks = [0, u64::MAX, 0x0123_4567_89ab_cdef, 0xa55a_5aa5_55aa_ff00];
         let actual = dot_exact(&selected.wires, &masks).unwrap();
-        let expected: i128 = selected.wires.iter().zip(masks).map(|(wire, mask)| {
-            let (codes, exp) = unpack(wire).unwrap();
-            (0..64).map(|i| {
-                let q = i128::from(codes[i]);
-                let signed = if (mask >> i) & 1 != 0 { -q } else { q };
-                signed << (i32::from(exp[i / 16]) + 24)
-            }).sum::<i128>()
-        }).sum();
+        let expected: i128 = selected
+            .wires
+            .iter()
+            .zip(masks)
+            .map(|(wire, mask)| {
+                let (codes, exp) = unpack(wire).unwrap();
+                (0..64)
+                    .map(|i| {
+                        let q = i128::from(codes[i]);
+                        let signed = if (mask >> i) & 1 != 0 { -q } else { q };
+                        signed << (i32::from(exp[i / 16]) + 24)
+                    })
+                    .sum::<i128>()
+            })
+            .sum();
         assert_eq!(actual, expected);
         assert_eq!(dot_exact(&selected.wires, &[]), Err(Error::WrongLength));
         let mut invalid = source(11);
@@ -530,7 +570,9 @@ mod tests {
         let block = source(42);
         for mode in 1..=3 {
             let a4_choice = a4::quantize(&block, mode).unwrap();
-            let groups = alternatives(&block).unwrap().map(|opts| opts[usize::from(mode - 1)]);
+            let groups = alternatives(&block)
+                .unwrap()
+                .map(|opts| opts[usize::from(mode - 1)]);
             let a5_wire = pack(&groups).unwrap();
             let (a5_codes, exp) = unpack(&a5_wire).unwrap();
             assert_eq!(a5_codes, a4_choice.codes);
