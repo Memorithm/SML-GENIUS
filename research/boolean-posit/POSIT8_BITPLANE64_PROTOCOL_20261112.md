@@ -11,6 +11,10 @@
 5. Les 65 536 paires d'opérandes sont vérifiées par **1 024 lots consécutifs de 64 couples** pour chaque opération, contre l'oracle exact en nombres entiers existant. Les cas NaR, zéro et saturation sont couverts ; les tests supplémentaires les concentrent dans un lot.
 6. Aucune matrice flottante, table d'inférence, modèle tiers, dépendance GPU ou service réseau n'intervient.
 
+## Adaptateur de taille arbitraire
+
+Un second point d'entrée accepte un nombre quelconque de couples, y compris 0, 1, 63, 65, 129 ou 1 024 entrées. Il découpe les entrées en tranches de 64, complète uniquement le dernier lot par des zéros dans la pile locale, puis copie seulement les sorties réellement demandées. La mémoire de calcul est conservée entre les lots. Un désaccord entre les tailles des tableaux d'entrée et de sortie, ou une mémoire de travail incompatible avec le graphe, provoque un rejet **avant toute modification des sorties**. La qualification comprend une campagne d'exactitude sur des longueurs non alignées et les situations d'erreur.
+
 ## Limitations et comparateurs
 
 Le chemin `u64` est **portable** et ne contient pas de code SIMD AVX2 explicite. Un débit supérieur à 64 fois le noyau scalaire n'est pas garanti et ne doit pas être revendiqué. Une comparaison contre l'assembleur natif scalaire et un benchmark sur le même matériel restent nécessaires ; le coût de transposition entrée/sortie fait partie du travail réel et doit être comptabilisé. Les qualités numériques du modèle complet ne sont pas mesurées. L'équivalence obtenue est relative à notre oracle et non à une qualification normative externe du Posit Standard.
