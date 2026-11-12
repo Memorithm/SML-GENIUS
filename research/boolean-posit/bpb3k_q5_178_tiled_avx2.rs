@@ -114,6 +114,25 @@ pub fn transcode_q3(source: &[u8]) -> Result<[u8; Q5_BYTES], Error> {
     transcode_q4(&q4)
 }
 
+/// Preserve IEEE 754 binary16 values exactly while widening to f32.
+/// Used by the experimental batched decode path to match ggml semantics.
+pub fn f16_to_f32(bits: u16) -> f32 {
+    let sign = u32::from(bits & 0x8000) << 16;
+    let exponent = u32::from((bits >> 10) & 31);
+    let fraction = u32::from(bits & 0x03ff);
+    if exponent == 0 {
+        if fraction == 0 {
+            return f32::from_bits(sign);
+        }
+        let value = (fraction as f32) * f32::from_bits(0x3380_0000);
+        return if sign == 0 { value } else { -value };
+    }
+    if exponent == 31 {
+        return f32::from_bits(sign | 0x7f80_0000 | (fraction << 13));
+    }
+    f32::from_bits(sign | ((exponent + 112) << 23) | (fraction << 13))
+}
+
 /// Scalar integer reference, independent of the AVX2 packed-bit decoder.
 /// Preserves the eight lane partitions needed for ggml-style multiblock
 /// floating-point FMA accumulation; it does not assert FP32 equivalence.
@@ -209,6 +228,92 @@ mod avx2 {
             })
         }
     }
+
+    /// Fused one-row batched decode. Builds the constant VPSHUFB masks
+    /// exactly once across all superblocks and keeps the eight independent
+    /// floating-point FMA chains alive until the terminal ggml reduction.
+    /// No repeated AVX2 feature detection or block-length validation.
+    ///
+    /// SAFETY: caller must have checked AVX2 support, n > 0, n % 256 == 0
+    /// and exact 178*blocks / 292*blocks source spans before entering.
+    #[target_feature(enable = "avx2")]
+    pub(super) unsafe fn batched_single_row_dot(
+        weights: &[u8],
+        activations: &[u8],
+        blocks: usize,
+    ) -> f32 {
+        unsafe {
+            let zero = _mm256_setzero_si256();
+            let nibble_mask = _mm256_set1_epi8(15);
+            let sixteen = _mm256_set1_epi8(16);
+            let selector = _mm256_setr_epi8(
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                3, 3, 3, 3,
+            );
+            let bit_selector = _mm256_setr_epi8(
+                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64,
+                -128, 1, 2, 4, 8, 16, 32, 64, -128,
+            );
+            let mut fp32_lanes = [0f32; 8];
+            for block in 0..blocks {
+                let w = weights.as_ptr().add(block * Q5_BYTES);
+                let a = activations.as_ptr().add(block * Q8_BYTES);
+                let mut integer_lanes = zero;
+                for group in 0..8 {
+                    let input = _mm256_loadu_si256(a.add(4 + group * 32).cast::<__m256i>());
+                    // Bias is applied at the exact 16-bit pair stage before
+                    // i8 subgroup scales; neither saturating pair products
+                    // nor ggml FP32 FMA association may be changed.
+                    let bias = _mm256_maddubs_epi16(sixteen, input);
+                    let packed = _mm_loadu_si128(w.add(group * 16).cast::<__m128i>());
+                    let broadcast = _mm256_broadcastsi128_si256(packed);
+                    let low = _mm256_and_si256(broadcast, nibble_mask);
+                    let high = _mm256_and_si256(_mm256_srli_epi16(broadcast, 4), nibble_mask);
+                    let lower = _mm256_permute2x128_si256(low, high, 0x20);
+                    let high_ptr = w.add(HIGH_OFFSET + group * 4);
+                    let high_word = u32::from_le_bytes([
+                        *high_ptr,
+                        *high_ptr.add(1),
+                        *high_ptr.add(2),
+                        *high_ptr.add(3),
+                    ]);
+                    let selected =
+                        _mm256_shuffle_epi8(_mm256_set1_epi32(high_word as i32), selector);
+                    let high_mask = _mm256_and_si256(selected, bit_selector);
+                    let high_codes =
+                        _mm256_andnot_si256(_mm256_cmpeq_epi8(high_mask, zero), sixteen);
+                    let unsigned_codes = _mm256_or_si256(lower, high_codes);
+                    let pair = _mm256_sub_epi16(_mm256_maddubs_epi16(unsigned_codes, input), bias);
+                    let scale0 = i16::from(*w.add(SCALE_OFFSET + group * 2) as i8);
+                    let scale1 = i16::from(*w.add(SCALE_OFFSET + group * 2 + 1) as i8);
+                    let subgroup_scales = _mm256_inserti128_si256(
+                        _mm256_castsi128_si256(_mm_set1_epi16(scale0)),
+                        _mm_set1_epi16(scale1),
+                        1,
+                    );
+                    integer_lanes =
+                        _mm256_add_epi32(integer_lanes, _mm256_madd_epi16(pair, subgroup_scales));
+                }
+                let mut lanes = [0i32; 8];
+                _mm256_storeu_si256(lanes.as_mut_ptr().cast::<__m256i>(), integer_lanes);
+                let global_bits =
+                    u16::from_le_bytes([*w.add(FP16_OFFSET), *w.add(FP16_OFFSET + 1)]);
+                let q8_bits = u32::from_le_bytes([*a, *a.add(1), *a.add(2), *a.add(3)]);
+                let d = f32::from_bits(q8_bits) * f16_to_f32(global_bits);
+                for (acc, lane) in fp32_lanes.iter_mut().zip(lanes) {
+                    *acc = d.mul_add(lane as f32, *acc);
+                }
+            }
+            // hsum_float_8: low/high lanes, 0+2 and 1+3, final sum.
+            let halves = [
+                fp32_lanes[0] + fp32_lanes[4],
+                fp32_lanes[1] + fp32_lanes[5],
+                fp32_lanes[2] + fp32_lanes[6],
+                fp32_lanes[3] + fp32_lanes[7],
+            ];
+            (halves[0] + halves[2]) + (halves[1] + halves[3])
+        }
+    }
 }
 
 /// Native AVX2 1/2/4-row microtile; one Q8_K activation is reused by every
@@ -249,6 +354,26 @@ pub fn dot_tiled<const ROWS: usize>(
     {
         Err(Error::UnsupportedCpu)
     }
+}
+
+/// Batched decode for the source-pinned ggml one-row FFI. The fast
+/// integer AVX2 unpack and floating-point association are identical to
+/// `dot_tiled::<1>`; only the constant setup, feature check and per-block
+/// validation are hoisted out of the superblock loop.
+///
+/// # Safety
+///
+/// x86_64 AVX2 must already have been checked by the caller, and
+/// `weights.len() == blocks * 178`, `activations.len() == blocks * 292`,
+/// `blocks > 0`. These invariants are enforced by the external FFI
+/// before calling this function; never call on untrusted slices.
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn dot_batched_single_avx2_prechecked(
+    weights: &[u8],
+    activations: &[u8],
+    blocks: usize,
+) -> f32 {
+    unsafe { avx2::batched_single_row_dot(weights, activations, blocks) }
 }
 
 #[cfg(test)]
