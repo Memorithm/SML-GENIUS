@@ -1,7 +1,7 @@
 //! Complemented-edge reduced Boolean DAG synthesis for two-input posit8.
 //! Independent internal variant: symbolic exact truth-table construction,
 //! native x86-64 System V assembly emission and exhaustive parity.
-use super::{deinterleave, LearnedCircuit, Operation, DOMAIN, MAX_NODES};
+use super::{deinterleave, Operation, DOMAIN, MAX_NODES};
 use std::collections::HashMap;
 use std::fmt::Write;
 
@@ -219,6 +219,7 @@ impl ComplementCircuit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LearnedCircuit;
 
     #[test]
     fn complement_edges_save_nodes_and_keep_all_exact_outputs() {
