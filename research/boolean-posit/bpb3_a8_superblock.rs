@@ -87,7 +87,7 @@ pub fn pack(block: &Superblock) -> Result<Vec<u8>, Error> {
         if !(-1..=2).contains(&delta) {
             return Err(Error::InvalidLocalExponent);
         }
-        delta_bits |= (delta + 1) as u32 << (2 * group);
+        delta_bits |= ((delta + 1) as u32) << (2 * group);
         let max = (1i16 << choice.mode) - 1;
         for (i, &code) in choice.codes.iter().enumerate() {
             if i16::from(code).abs() > max {
