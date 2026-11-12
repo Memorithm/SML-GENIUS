@@ -1,4 +1,4 @@
-name: Posit8 true x86-64 GNU assembly lowering and exhaustive ABI verification
+name: Posit8 x86-64 assembly backends and exhaustive native ABI verification
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ permissions:
 jobs:
   native-assembly:
     runs-on: ubuntu-24.04
-    timeout-minutes: 22
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           rustup toolchain install 1.89.0 --profile minimal --component rustfmt
           rustup default 1.89.0
-      - name: Format and regression tests for Rust gate-to-assembly compiler
+      - name: Rust format and exact BDD plus compiler tests
         shell: bash
         run: |
           set -euo pipefail
@@ -43,25 +43,32 @@ jobs:
           rustc --edition 2021 -O -D warnings --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-asm-generator-tests"
           "$RUNNER_TEMP/posit8-asm-generator-tests" --nocapture | tee "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
           grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
-      - name: Generate, assemble, link, and exhaustively compare ADD and MUL
+      - name: Compare direct and cached-selector x86 machine code on all pairs
         shell: bash
         run: |
           set -euo pipefail
           rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bdd-gas-generator"
           for op in add mul; do
-            SRC="$RUNNER_TEMP/posit8-asm-$op.s"
-            OBJ="$RUNNER_TEMP/posit8-asm-$op.o"
-            "$RUNNER_TEMP/posit8-bdd-gas-generator" "--emit-x86-$op" > "$SRC"
-            gcc -c -x assembler "$SRC" -o "$OBJ"
-            objdump -d -M intel "$OBJ" > "$RUNNER_TEMP/posit8-asm-$op-disassembly.txt"
-            nm --defined-only "$OBJ" | grep -q "mem_posit8_asm_$op"
-            wc -c "$SRC" "$OBJ" | tee "$RUNNER_TEMP/posit8-asm-$op-sizes.txt"
-            cat > "$RUNNER_TEMP/posit8-asm-$op-verify.rs" <<RS
+            for mode in direct cached; do
+              if [ "$mode" = cached ]; then
+                ARG="--emit-x86-cached-$op"
+                SYMBOL="mem_posit8_asm_cached_$op"
+              else
+                ARG="--emit-x86-$op"
+                SYMBOL="mem_posit8_asm_$op"
+              fi
+              PREFIX="$RUNNER_TEMP/posit8-asm-$mode-$op"
+              "$RUNNER_TEMP/posit8-bdd-gas-generator" "$ARG" > "$PREFIX.s"
+              gcc -c -x assembler "$PREFIX.s" -o "$PREFIX.o"
+              objdump -d -M intel "$PREFIX.o" > "$PREFIX-disassembly.txt"
+              nm --defined-only "$PREFIX.o" | grep -q "$SYMBOL"
+              wc -c "$PREFIX.s" "$PREFIX.o" | tee "$PREFIX-sizes.txt"
+              cat > "$PREFIX-verify.rs" <<RS
           #[path = "$GITHUB_WORKSPACE/research/boolean-posit/posit8_circuit_synth.rs"]
           #[allow(dead_code)]
           mod original;
           unsafe extern "C" {
-              fn mem_posit8_asm_$op(a: u8, b: u8) -> u8;
+              fn $SYMBOL(a: u8, b: u8) -> u8;
           }
           #[test]
           fn all_65536_pairs_equal_reference() {
@@ -72,34 +79,35 @@ jobs:
                       } else {
                           original::Posit8(a).mul(original::Posit8(b)).0
                       };
-                      let actual = unsafe { mem_posit8_asm_$op(a, b) };
+                      let actual = unsafe { $SYMBOL(a, b) };
                       assert_eq!(actual, expected, "a={a} b={b}");
                   }
               }
           }
           RS
-            rustc --edition 2021 -O -D warnings --test "$RUNNER_TEMP/posit8-asm-$op-verify.rs" \
-              -C link-arg="$OBJ" -o "$RUNNER_TEMP/posit8-asm-$op-verify"
-            "$RUNNER_TEMP/posit8-asm-$op-verify" --nocapture | tee "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
-            grep -Fq 'test all_65536_pairs_equal_reference ... ok' "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
-            grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
+              rustc --edition 2021 -O -D warnings --test "$PREFIX-verify.rs" \
+                -C link-arg="$PREFIX.o" -o "$PREFIX-verify"
+              "$PREFIX-verify" --nocapture | tee "$PREFIX-verify.txt"
+              grep -Fq 'test all_65536_pairs_equal_reference ... ok' "$PREFIX-verify.txt"
+              grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$PREFIX-verify.txt"
+            done
+            old_size=$(stat -c %s "$RUNNER_TEMP/posit8-asm-direct-$op.o")
+            new_size=$(stat -c %s "$RUNNER_TEMP/posit8-asm-cached-$op.o")
+            echo "ISA_CODE_SIZE op=$op direct_obj=$old_size cached_obj=$new_size" | tee -a "$RUNNER_TEMP/posit8-asm-size-comparison.txt"
+            test "$new_size" -lt "$old_size"
           done
-      - name: Retain source, native machine code, disassembly and correctness evidence
+      - name: Preserve both machine-code variants and full exhaustive evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: posit8-native-x86-sysv-${{ github.sha }}
+          name: posit8-native-asm-compare-${{ github.sha }}
           path: |
             ${{ runner.temp }}/posit8-asm-generator-tests.txt
-            ${{ runner.temp }}/posit8-asm-add.s
-            ${{ runner.temp }}/posit8-asm-mul.s
-            ${{ runner.temp }}/posit8-asm-add.o
-            ${{ runner.temp }}/posit8-asm-mul.o
-            ${{ runner.temp }}/posit8-asm-add-disassembly.txt
-            ${{ runner.temp }}/posit8-asm-mul-disassembly.txt
-            ${{ runner.temp }}/posit8-asm-add-sizes.txt
-            ${{ runner.temp }}/posit8-asm-mul-sizes.txt
-            ${{ runner.temp }}/posit8-asm-add-verify.txt
-            ${{ runner.temp }}/posit8-asm-mul-verify.txt
+            ${{ runner.temp }}/posit8-asm-*.s
+            ${{ runner.temp }}/posit8-asm-*.o
+            ${{ runner.temp }}/posit8-asm-*-disassembly.txt
+            ${{ runner.temp }}/posit8-asm-*-sizes.txt
+            ${{ runner.temp }}/posit8-asm-*-verify.txt
+            ${{ runner.temp }}/posit8-asm-size-comparison.txt
           if-no-files-found: warn
           retention-days: 21
