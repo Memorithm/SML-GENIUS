@@ -6,6 +6,7 @@ on:
       - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
       - 'research/boolean-posit/BPB3_K_Q5_NATIVE_MATCHED.md'
   push:
+    branches: [main]
     paths:
       - '.github/workflows/bpb3k-q5-native-q5k-matched.yml'
       - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
