@@ -184,7 +184,8 @@ mod tests {
                 let decoded = decode_bpb3k(&buffer[offset..offset + BYTES]).unwrap();
                 for (index, (&actual, &reference)) in decoded.iter().zip(&oracle).enumerate() {
                     assert_eq!(
-                        actual.to_bits(), reference.to_bits(),
+                        actual.to_bits(),
+                        reference.to_bits(),
                         "case={case} offset={offset} index={index}"
                     );
                 }
