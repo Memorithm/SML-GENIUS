@@ -247,12 +247,12 @@ mod avx2 {
             let nibble_mask = _mm256_set1_epi8(15);
             let sixteen = _mm256_set1_epi8(16);
             let selector = _mm256_setr_epi8(
-                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
-                2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                3, 3, 3, 3,
             );
             let bit_selector = _mm256_setr_epi8(
-                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128,
-                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128,
+                1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64, -128, 1, 2, 4, 8, 16, 32, 64,
+                -128, 1, 2, 4, 8, 16, 32, 64, -128,
             );
             let mut fp32_lanes = [0f32; 8];
             for block in 0..blocks {
@@ -268,30 +268,22 @@ mod avx2 {
                     let packed = _mm_loadu_si128(w.add(group * 16).cast::<__m128i>());
                     let broadcast = _mm256_broadcastsi128_si256(packed);
                     let low = _mm256_and_si256(broadcast, nibble_mask);
-                    let high = _mm256_and_si256(
-                        _mm256_srli_epi16(broadcast, 4),
-                        nibble_mask,
-                    );
+                    let high = _mm256_and_si256(_mm256_srli_epi16(broadcast, 4), nibble_mask);
                     let lower = _mm256_permute2x128_si256(low, high, 0x20);
                     let high_ptr = w.add(HIGH_OFFSET + group * 4);
                     let high_word = u32::from_le_bytes([
-                        *high_ptr, *high_ptr.add(1),
-                        *high_ptr.add(2), *high_ptr.add(3),
+                        *high_ptr,
+                        *high_ptr.add(1),
+                        *high_ptr.add(2),
+                        *high_ptr.add(3),
                     ]);
-                    let selected = _mm256_shuffle_epi8(
-                        _mm256_set1_epi32(high_word as i32),
-                        selector,
-                    );
+                    let selected =
+                        _mm256_shuffle_epi8(_mm256_set1_epi32(high_word as i32), selector);
                     let high_mask = _mm256_and_si256(selected, bit_selector);
-                    let high_codes = _mm256_andnot_si256(
-                        _mm256_cmpeq_epi8(high_mask, zero),
-                        sixteen,
-                    );
+                    let high_codes =
+                        _mm256_andnot_si256(_mm256_cmpeq_epi8(high_mask, zero), sixteen);
                     let unsigned_codes = _mm256_or_si256(lower, high_codes);
-                    let pair = _mm256_sub_epi16(
-                        _mm256_maddubs_epi16(unsigned_codes, input),
-                        bias,
-                    );
+                    let pair = _mm256_sub_epi16(_mm256_maddubs_epi16(unsigned_codes, input), bias);
                     let scale0 = i16::from(*w.add(SCALE_OFFSET + group * 2) as i8);
                     let scale1 = i16::from(*w.add(SCALE_OFFSET + group * 2 + 1) as i8);
                     let subgroup_scales = _mm256_inserti128_si256(
@@ -299,16 +291,13 @@ mod avx2 {
                         _mm_set1_epi16(scale1),
                         1,
                     );
-                    integer_lanes = _mm256_add_epi32(
-                        integer_lanes,
-                        _mm256_madd_epi16(pair, subgroup_scales),
-                    );
+                    integer_lanes =
+                        _mm256_add_epi32(integer_lanes, _mm256_madd_epi16(pair, subgroup_scales));
                 }
                 let mut lanes = [0i32; 8];
                 _mm256_storeu_si256(lanes.as_mut_ptr().cast::<__m256i>(), integer_lanes);
-                let global_bits = u16::from_le_bytes([
-                    *w.add(FP16_OFFSET), *w.add(FP16_OFFSET + 1),
-                ]);
+                let global_bits =
+                    u16::from_le_bytes([*w.add(FP16_OFFSET), *w.add(FP16_OFFSET + 1)]);
                 let q8_bits = u32::from_le_bytes([*a, *a.add(1), *a.add(2), *a.add(3)]);
                 let d = f32::from_bits(q8_bits) * f16_to_f32(global_bits);
                 for (acc, lane) in fp32_lanes.iter_mut().zip(lanes) {
@@ -325,7 +314,6 @@ mod avx2 {
             (halves[0] + halves[2]) + (halves[1] + halves[3])
         }
     }
-
 }
 
 /// Native AVX2 1/2/4-row microtile; one Q8_K activation is reused by every
