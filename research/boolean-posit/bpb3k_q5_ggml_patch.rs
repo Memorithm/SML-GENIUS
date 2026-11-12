@@ -230,12 +230,100 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     Ok(())
 }
 
+
+const CPP_PROBE_PREFIX: &str = r#"
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+#define GGML_ASSERT(condition) assert(condition)
+constexpr int TILED_TILE_ROWS = 16;
+constexpr int TILED_TILE_K = 256;
+constexpr int TILED_MICRO = 16;
+struct block_q3_K { uint8_t bytes[178]; };
+static_assert(sizeof(block_q3_K) == 178, "Q5 experimental stride");
+struct tiled_tile_src0 {
+    float d[TILED_MICRO * 4] = {};
+    int32_t scales[TILED_MICRO * 16 * 4] = {};
+    uint8_t q[TILED_MICRO * TILED_TILE_K * 4] = {};
+};
+static float ggml_fp16_to_fp32(uint16_t bits) {
+    // The isolated unpack parity harness checks the exact metadata byte
+    // extraction and its addressing, not IEEE FP16 arithmetic.
+    return static_cast<float>(bits);
+}
+"#;
+
+const CPP_PROBE_SUFFIX: &str = r#"
+int main() {
+    for (int blocks_per_row : {1, 2, 4}) {
+        for (int n_rows : {1, 4, 16}) {
+            for (uint32_t seed = 0; seed < 32; ++seed) {
+                std::vector<block_q3_K> blocks(n_rows * blocks_per_row);
+                uint32_t state = seed ^ 0x7a39b64fU;
+                for (auto & block : blocks) {
+                    for (uint8_t & value : block.bytes) {
+                        state = state * 1664525U + 1013904223U;
+                        value = static_cast<uint8_t>(state >> 24);
+                    }
+                }
+                tiled_tile_src0 tile{};
+                std::memset(tile.q, 0xcc, sizeof(tile.q));
+                tiled_unpack_src0(blocks.data(), blocks_per_row, n_rows,
+                                  &tile, blocks_per_row);
+                for (int row = 0; row < n_rows; ++row) {
+                    for (int slab = 0; slab < blocks_per_row; ++slab) {
+                        const uint8_t * w = blocks[row * blocks_per_row + slab].bytes;
+                        const size_t qoffset = row * blocks_per_row * 256 + slab * 256;
+                        const size_t soffset = row * blocks_per_row * 16 + slab * 16;
+                        for (int i = 0; i < 256; ++i) {
+                            const uint8_t packed = w[(i / 32) * 16 + i % 16];
+                            const int low = (i % 32) < 16 ? (packed & 15) : (packed >> 4);
+                            const int high = (w[128 + i / 8] >> (i % 8)) & 1;
+                            assert(tile.q[qoffset + i] == static_cast<uint8_t>(low | (high << 4)));
+                        }
+                        for (int s = 0; s < 16; ++s) {
+                            assert(tile.scales[soffset + s] == static_cast<int8_t>(w[160 + s]));
+                        }
+                        uint16_t global_bits = 0;
+                        std::memcpy(&global_bits, w + 176, sizeof(global_bits));
+                        assert(tile.d[slab * 16 + row] == static_cast<float>(global_bits));
+                    }
+                }
+            }
+        }
+    }
+    std::puts("PASS_Q5_178_EXACT_GENERATED_CXX_TILED_UNPACK_SANITIZER");
+}
+"#;
+
+/// Write an independent, sanitizer-ready C++ translation unit using the
+/// EXACT compiled unpack body injected into the pinned upstream backend.
+/// No copy/paste of the hot decoder is permitted in the probe.
+fn emit_tiled_probe(destination: &Path) -> Result<(), String> {
+    if destination.exists() {
+        return Err("STOP_PROBE_OUTPUT_EXISTS".into());
+    }
+    let mut unit = String::with_capacity(
+        CPP_PROBE_PREFIX.len() + Q5_TILED_UNPACK.len() + CPP_PROBE_SUFFIX.len(),
+    );
+    unit.push_str(CPP_PROBE_PREFIX);
+    unit.push_str(Q5_TILED_UNPACK);
+    unit.push_str(CPP_PROBE_SUFFIX);
+    fs::write(destination, unit).map_err(|e| e.to_string())
+}
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
         [_, mode, checkout, sha] if mode == "patch" => patch(Path::new(checkout), sha),
+        [_, mode, destination] if mode == "emit-tiled-probe" => emit_tiled_probe(Path::new(destination)),
         _ => Err(
-            "USAGE: bpb3k_q5_ggml_patch patch <throwaway-pinned-llama-checkout> <exact-sha>".into(),
+            "USAGE: bpb3k_q5_ggml_patch patch <throwaway-pinned-llama-checkout> <exact-sha> | emit-tiled-probe <new-cxx-file>".into(),
         ),
     }
 }
