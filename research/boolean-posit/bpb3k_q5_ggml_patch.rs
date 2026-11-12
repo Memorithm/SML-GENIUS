@@ -121,6 +121,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     let core = root.join("ggml/src/ggml.c");
     let cpu = root.join("ggml/src/ggml-cpu/ggml-cpu.c");
     let tiled = root.join("ggml/src/ggml-cpu/tiled/tiled.cpp");
+    let tiled_kernel = root.join("ggml/src/ggml-cpu/tiled/tiled-kernel.cpp");
     let cmake = root.join("ggml/src/ggml-cpu/CMakeLists.txt");
     let bridge = root.join("ggml/src/ggml-bpb3k-q5-178-experimental.h");
     if bridge.exists() {
@@ -181,6 +182,15 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
         "        case GGML_TYPE_Q3_K:\n            return tiled_matmul_dispatch<block_q3_K, 16, false,  4, true>(params, dst, expert_rows, cur_a, cne1, scratch);",
         Q5_TILED_DISPATCH,
     )?;
+    // tiled-kernel.cpp explicitly instantiates every supported template
+    // variant in its own translation unit. Merely changing tiled.cpp's
+    // dispatch to BIAS=16 compiles but leaves an unresolved linker symbol.
+    // Guard the exact pinned source and instantiate the new Q5 variant.
+    substitute_once(
+        &tiled_kernel,
+        "// q3_K: act-bias (Wmax 4)",
+        "// Experimental signed Q5-178 uses a bias of 16 (Wmax 16).\ntemplate void tiled_run_microtile<16, false, 16, true>(const tiled_tile_src0 & src0, const tiled_tile_src1 & src1,\n                                                 int i0, int j0, int num_k, int slab, float * buf, int buf_stride);\n// q3_K: act-bias (Wmax 4)",
+    )?;
     substitute_once(
         &cmake,
         "    ggml_add_backend_library(${GGML_CPU_NAME})",
@@ -229,5 +239,6 @@ mod tests {
         assert!(Q5_TILED_UNPACK.contains("w[128 + i / 8]"));
         assert!(Q5_TILED_DISPATCH.contains("REAL_TILED_EXECUTED"));
         assert!(Q5_TILED_DISPATCH.contains(", 16, true>"));
+        assert!(GGML_SHA.len() == 40);
     }
 }
