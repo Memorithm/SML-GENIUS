@@ -41,3 +41,13 @@ Le compilateur Rust propose désormais deux stratégies de génération assemble
 Les deux variantes utilisent un maximum de 16 384 octets de pile et conservent le contrat ABI. Le banc GitHub compile des **objets ELF indépendants pour ADD et MUL, dans les deux modes**, conserve les désassemblages et mesure le nombre d'octets des objets assemblés. Chaque binaire lié Rust/assembleur doit valider les **65 536 paires** contre la même référence. Le critère de taille est déclaré à l'avance : un objet cached doit être plus petit que son contrôle direct sur les deux opérations, sinon l'essai est une régression conservée et rapportée.
 
 Un objet ELF de taille réduite ne démontre pas une diminution de latence, de consommation DRAM, de surface circuit physique, de taille de l'exécutable complet ni de coût énergétique. Aucun choix pour le modèle final n'est autorisé à ce stade.
+
+## ISA2 — DAG booléen à arêtes complémentaires (hypothèse prospective)
+
+En plus des deux générateurs précédents, une troisième variante Rust construit un graphe de décision réduit avec **un indicateur de complément sur chaque référence** : `ref = (node_id << 1) | negated`. Le terminal faux est la référence `0` ; le terminal vrai est la référence `1`. La normalisation canonique impose une arête haute non complémentée afin de mutualiser des fonctions qui sont les négations l'une de l'autre.
+
+Ce mécanisme est une **optimisation structurelle** du circuit booléen, distincte de l'allocation des registres et du prétraitement des entrées. Il ne modifie pas l'oracle posit8 ni ses opérations.
+
+L'implémentation `posit8_complement_edges.rs` contient un nouveau synthétiseur ROBDD et un troisième émetteur assembleur SysV : les arêtes complémentaires se réalisent par `XOR 1` et les multiplexeurs restent `XOR/AND` sans branchement. Les références, la profondeur et les indices de pile sont vérifiés avant génération, avec le même plafond **16 384 octets**.
+
+Le protocole compare désormais **trois objets natifs pour ADD et trois pour MUL**, les compile et les lie séparément au Rust de vérification. Toutes les **65 536 paires par opération et par variante** doivent être exactes. La réduction du nombre de nœuds par rapport au DAG sans arêtes complémentaires est un critère déclaré ; la réduction du **nombre d'octets ELF** est une métrique ouverte (un `XOR` supplémentaire peut annuler une économie de nœuds). Aucune amélioration de latence, de débit, d'énergie ou de qualité de modèle n'est supposée.
