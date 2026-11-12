@@ -4,7 +4,11 @@ on:
     paths:
       - '.github/workflows/bpb3k-q5-native-q5k-matched.yml'
       - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/bpb3k_q5_ggml_patch.rs'
+      - 'research/boolean-posit/bpb3k_q5_ggml_ffi.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
       - 'research/boolean-posit/BPB3_K_Q5_NATIVE_MATCHED.md'
+      - 'research/boolean-posit/BPB3_K_Q5_FAST_TILED_UNPACK.md'
   push:
     branches: [main]
     paths:
