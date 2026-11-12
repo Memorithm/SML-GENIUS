@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(parse(&bytes).unwrap_err(), Error::InvalidToken);
         let mut altered = dump([0; 8]);
         altered[24..28].copy_from_slice(&2u32.to_le_bytes());
-        assert_eq!(parse(&altered).unwrap_err(), Error::InvalidToken);
+        assert_eq!(parse(&altered).unwrap_err(), Error::InvalidShape);
         let mut altered = dump([0; 8]);
         altered.extend_from_slice(&1u32.to_le_bytes());
         assert_eq!(parse(&altered).unwrap_err(), Error::TrailingBytes);
