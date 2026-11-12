@@ -1,0 +1,59 @@
+name: Posit8 independent exact arithmetic oracle 65536-pair verification
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_independent_oracle.rs'
+      - 'research/boolean-posit/posit8_circuit_synth.rs'
+      - 'research/boolean-posit/POSIT8_INDEPENDENT_ORACLE_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-independent-oracle.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_independent_oracle.rs'
+      - 'research/boolean-posit/posit8_circuit_synth.rs'
+      - 'research/boolean-posit/POSIT8_INDEPENDENT_ORACLE_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-independent-oracle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  independent-arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict source formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_independent_oracle.rs
+      - name: Exhaustive independent decode ADD and MUL verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_independent_oracle.rs -o "$RUNNER_TEMP/posit8-independent-tests"
+          "$RUNNER_TEMP/posit8-independent-tests" --nocapture | tee "$RUNNER_TEMP/posit8-independent-tests.txt"
+          grep -Fq 'test tests::independent_decoder_agrees_on_all_256_encodings ... ok' "$RUNNER_TEMP/posit8-independent-tests.txt"
+          grep -Fq 'test tests::independent_addition_matches_all_65536_pairs ... ok' "$RUNNER_TEMP/posit8-independent-tests.txt"
+          grep -Fq 'test tests::independent_multiplication_matches_all_65536_pairs ... ok' "$RUNNER_TEMP/posit8-independent-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-independent-tests.txt"
+      - name: Preserve independently checked arithmetic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-independent-oracle-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-independent-tests.txt
+          if-no-files-found: warn
+          retention-days: 21
