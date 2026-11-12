@@ -251,7 +251,6 @@ fn main() {
 mod tests {
     use super::*;
 
-
     /// Verify the candidate bit swizzle against the independent per-bit
     /// reference for every possible fifth-bit byte (not a probabilistic test).
     #[test]
@@ -275,8 +274,7 @@ mod tests {
     fn packed_q5_tiled_decoder_matches_all_scalar_positions() {
         for seed in 0..1024usize {
             let payload: [u8; 178] = std::array::from_fn(|i| {
-                ((i.wrapping_mul(131) ^ seed.wrapping_mul(79) ^ i.wrapping_mul(seed))
-                    & 255) as u8
+                ((i.wrapping_mul(131) ^ seed.wrapping_mul(79) ^ i.wrapping_mul(seed)) & 255) as u8
             });
             let mut fast = [0u8; 256];
             for group in 0..8 {
@@ -291,14 +289,18 @@ mod tests {
                     x = (x | (x << 14)) & 0x0003_0003_0003_0003;
                     x = (x | (x << 7)) & 0x0101_0101_0101_0101;
                     let offset = group * 32 + byte * 8;
-                    let codes = u64::from_le_bytes(fast[offset..offset + 8].try_into().unwrap())
-                        | (x << 4);
+                    let codes =
+                        u64::from_le_bytes(fast[offset..offset + 8].try_into().unwrap()) | (x << 4);
                     fast[offset..offset + 8].copy_from_slice(&codes.to_le_bytes());
                 }
             }
             for (i, actual) in fast.iter().enumerate() {
                 let packed = payload[(i / 32) * 16 + (i % 16)];
-                let low = if i % 32 < 16 { packed & 15 } else { packed >> 4 };
+                let low = if i % 32 < 16 {
+                    packed & 15
+                } else {
+                    packed >> 4
+                };
                 let high = (payload[128 + i / 8] >> (i % 8)) & 1;
                 assert_eq!(*actual, low | (high << 4), "seed={seed} index={i}");
             }
