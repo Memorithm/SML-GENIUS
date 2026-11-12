@@ -66,17 +66,9 @@ fn official(ty: i32, source: &[f32; N]) -> [f64; N] {
     let mut c = [0f32; N];
     unsafe {
         if ty == GGML_Q3_K {
-            dequantize_row_q3_K(
-                wire.as_ptr().cast::<c_void>(),
-                c.as_mut_ptr(),
-                N as i64,
-            );
+            dequantize_row_q3_K(wire.as_ptr().cast::<c_void>(), c.as_mut_ptr(), N as i64);
         } else {
-            dequantize_row_q4_K(
-                wire.as_ptr().cast::<c_void>(),
-                c.as_mut_ptr(),
-                N as i64,
-            );
+            dequantize_row_q4_K(wire.as_ptr().cast::<c_void>(), c.as_mut_ptr(), N as i64);
         }
     }
     for (index, (&x, &y)) in rust.iter().zip(&c).enumerate() {
@@ -192,9 +184,7 @@ fn evaluate(split: &str, weights: &[[f32; N]]) {
     assert_eq!(weights.len(), ROWS);
     let blocks: Vec<[f64; 64]> = weights
         .iter()
-        .flat_map(|row| {
-            (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i])))
-        })
+        .flat_map(|row| (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i]))))
         .collect();
     let fixed = adaptive::fixed_mode(&blocks, 2).unwrap();
     let chosen = adaptive::allocate(&blocks, ROWS * 108).unwrap();
@@ -203,7 +193,12 @@ fn evaluate(split: &str, weights: &[[f32; N]]) {
     assert!(chosen.sse <= fixed.sse + 1e-10);
     let counts = [1, 2, 3].map(|m| chosen.choices.iter().filter(|c| c.mode == m).count());
     let mut stats = [Metrics::default(); 4];
-    let mut rng = SEED ^ if split == "TEST" { 0x9e37_79b9_7f4a_7c15 } else { 0 };
+    let mut rng = SEED
+        ^ if split == "TEST" {
+            0x9e37_79b9_7f4a_7c15
+        } else {
+            0
+        };
     for row in 0..ROWS {
         let mut original = [0.0; N];
         for (i, &v) in weights[row].iter().enumerate() {
@@ -252,9 +247,7 @@ fn main() {
     let weights: Vec<[f32; N]> = bytes
         .chunks_exact(N * 4)
         .map(|chunk| {
-            std::array::from_fn(|i| {
-                f32::from_le_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap())
-            })
+            std::array::from_fn(|i| f32::from_le_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap()))
         })
         .collect();
     assert_eq!(weights.len(), 48);
@@ -305,9 +298,8 @@ mod tests {
             weights: 3,
             dots: 1,
         };
-        let pooled = ((one.square_error + two.square_error)
-            / (one.weights + two.weights) as f64)
-            .sqrt();
+        let pooled =
+            ((one.square_error + two.square_error) / (one.weights + two.weights) as f64).sqrt();
         assert_eq!(pooled, 1.5);
     }
 }
