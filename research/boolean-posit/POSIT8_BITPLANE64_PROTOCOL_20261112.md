@@ -15,6 +15,17 @@
 
 Un second point d'entrée accepte un nombre quelconque de couples, y compris 0, 1, 63, 65, 129 ou 1 024 entrées. Il découpe les entrées en tranches de 64, complète uniquement le dernier lot par des zéros dans la pile locale, puis copie seulement les sorties réellement demandées. La mémoire de calcul est conservée entre les lots. Un désaccord entre les tailles des tableaux d'entrée et de sortie, ou une mémoire de travail incompatible avec le graphe, provoque un rejet **avant toute modification des sorties**. La qualification comprend une campagne d'exactitude sur des longueurs non alignées et les situations d'erreur.
 
+## Comparaison CPU appariée (expérimentale)
+
+Le programme Rust accepte également l'option de mesure `--bench-bitslice64`. Sur **les mêmes 65 536 couples posit8**, présentés dans un ordre déterministe fixé avant la mesure (permutation multiplicative modulo 2^16), il compare deux voies utilisant exactement le **même graphe appris** :
+
+- **Scalar BDD** : suivre le graphe de décision pour chaque couple séparément ;
+- **Bitplane64** : créer les plans d'entrées `u64`, calculer chaque nœud sur 64 couples et reconstruire 64 sorties.
+
+Sept passages mesurés, deux passages d'échauffement, ordre d'exécution inversé une fois sur deux ; publier les médianes `ns/couple`, le rapport de débit et le checksum commun. Toutes les vérifications exhaustives préalables doivent réussir. La transposition des 16 variables d'entrée et des huit bits de sortie fait partie du temps mesuré ; les buffers sont réutilisés.
+
+**Attention** : ce comparateur est l'interpréteur scalaire de BDD, et non l'assembleur x86-64 directement compilé de notre PR ISA0, ni une ALU posit conventionnelle optimisée. Un gain sur ce comparateur ne prouve **aucun** avantage vis-à-vis des implémentations natives précédentes ni au niveau d'un modèle de langage. La stabilité entre CPU GitHub et la qualification physique sous RemoteOps devront être vérifiées.
+
 ## Limitations et comparateurs
 
 Le chemin `u64` est **portable** et ne contient pas de code SIMD AVX2 explicite. Un débit supérieur à 64 fois le noyau scalaire n'est pas garanti et ne doit pas être revendiqué. Une comparaison contre l'assembleur natif scalaire et un benchmark sur le même matériel restent nécessaires ; le coût de transposition entrée/sortie fait partie du travail réel et doit être comptabilisé. Les qualités numériques du modèle complet ne sont pas mesurées. L'équivalence obtenue est relative à notre oracle et non à une qualification normative externe du Posit Standard.
