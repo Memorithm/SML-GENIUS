@@ -51,7 +51,11 @@ impl EdgeBuilder {
             return Err("complemented graph node budget exceeded");
         }
         let id = (self.nodes.len() + 1) * 2;
-        self.nodes.push(EdgeNode { variable, low, high });
+        self.nodes.push(EdgeNode {
+            variable,
+            low,
+            high,
+        });
         self.unique.insert((variable, low, high), id);
         Ok(id ^ output_flip)
     }
@@ -235,7 +239,10 @@ mod tests {
             assert!(code.contains("and dl, BYTE PTR"));
             assert!(!code.contains("jmp "));
             assert!(!code.contains("call "));
-            assert_eq!(code.matches("    mov BYTE PTR [rsp + ").count(), graph.nodes() + 1 + SELECTOR_COUNT);
+            assert_eq!(
+                code.matches("    mov BYTE PTR [rsp + ").count(),
+                graph.nodes() + 1 + SELECTOR_COUNT
+            );
         }
     }
 }
