@@ -15,8 +15,12 @@ pub struct Posit8(pub u8);
 impl Posit8 {
     pub fn decode_units(self) -> Option<i64> {
         let raw = self.0;
-        if raw == 0x80 { return None; }
-        if raw == 0 { return Some(0); }
+        if raw == 0x80 {
+            return None;
+        }
+        if raw == 0 {
+            return Some(0);
+        }
         let negative = raw & 0x80 != 0;
         let positive = if negative { raw.wrapping_neg() } else { raw };
         let mut cursor = 6i32;
@@ -27,7 +31,9 @@ impl Posit8 {
             cursor -= 1;
         }
         let regime = if first != 0 { count - 1 } else { -count };
-        if cursor >= 0 { cursor -= 1; }
+        if cursor >= 0 {
+            cursor -= 1;
+        }
         let mut exponent = 0i32;
         for _ in 0..2 {
             exponent <<= 1;
@@ -38,18 +44,21 @@ impl Posit8 {
         }
         let fraction_bits = (cursor + 1) as u32;
         let fraction_mask = (1u32 << fraction_bits) - 1;
-        let significand = (1i64 << fraction_bits)
-            + i64::from(u32::from(positive) & fraction_mask);
+        let significand = (1i64 << fraction_bits) + i64::from(u32::from(positive) & fraction_mask);
         let shift = SCALE_BITS as i32 + 4 * regime + exponent - fraction_bits as i32;
         assert!((0..=48).contains(&shift));
         let units = significand << shift;
         Some(if negative { -units } else { units })
     }
-    pub fn neg(self) -> Self { Self(self.0.wrapping_neg()) }
+    pub fn neg(self) -> Self {
+        Self(self.0.wrapping_neg())
+    }
     /// Exact nearest encoding by integer distances, ties to even LSB;
     /// saturates nonzero under/overflow. NOT an independently audited oracle.
     fn round_scaled(target: i128, denominator_shift: u32) -> Self {
-        if target == 0 { return Self(0); }
+        if target == 0 {
+            return Self(0);
+        }
         let negative = target < 0;
         let magnitude = target.abs();
         let denominator = 1i128 << denominator_shift;
@@ -83,7 +92,9 @@ impl Posit8 {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Truth([u64; 4]);
-fn is_train(x: u8) -> bool { x % 8 != 5 && x % 8 != 6 }
+fn is_train(x: u8) -> bool {
+    x % 8 != 5 && x % 8 != 6
+}
 impl Truth {
     fn from_fn(f: impl Fn(u8) -> bool) -> Self {
         let mut result = [0u64; 4];
@@ -105,33 +116,62 @@ impl Truth {
         }))
     }
     fn matches_training(self, target: Self) -> bool {
-        (0..=255u8).filter(|&x| is_train(x))
+        (0..=255u8)
+            .filter(|&x| is_train(x))
             .all(|x| self.bit(x) == target.bit(x))
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Binary { And, Or, Xor }
+enum Binary {
+    And,
+    Or,
+    Xor,
+}
 impl Binary {
     fn symbol(self) -> &'static str {
-        match self { Self::And => "&", Self::Or => "|", Self::Xor => "^" }
+        match self {
+            Self::And => "&",
+            Self::Or => "|",
+            Self::Xor => "^",
+        }
     }
 }
 #[derive(Clone, Copy, Debug)]
-enum Expr { Input(u8), Gate { op: Binary, left: usize, right: usize } }
+enum Expr {
+    Input(u8),
+    Gate {
+        op: Binary,
+        left: usize,
+        right: usize,
+    },
+}
 #[derive(Clone, Copy, Debug)]
-struct Node { expr: Expr, truth: Truth, depth: usize }
+struct Node {
+    expr: Expr,
+    truth: Truth,
+    depth: usize,
+}
 #[derive(Debug)]
-pub struct Synthesized { nodes: Vec<Node>, outputs: [usize; 8] }
+pub struct Synthesized {
+    nodes: Vec<Node>,
+    outputs: [usize; 8],
+}
 
 impl Synthesized {
     /// Exact one-gate enumerative expansion on TRAIN only. The teacher
     /// supplies prefix-OR intermediate targets; this is NOT unrestricted
     /// end-to-end circuit synthesis for posit addition/multiplication.
     fn learn_signal(&mut self, desired: Truth) -> Result<usize, &'static str> {
-        if let Some(i) = self.nodes.iter().position(|node| node.truth.matches_training(desired)) {
+        if let Some(i) = self
+            .nodes
+            .iter()
+            .position(|node| node.truth.matches_training(desired))
+        {
             return Ok(i);
         }
-        if self.nodes.len() >= MAX_GATES + 8 { return Err("gate budget exceeded"); }
+        if self.nodes.len() >= MAX_GATES + 8 {
+            return Err("gate budget exceeded");
+        }
         let mut candidates = Vec::new();
         for left in 0..self.nodes.len() {
             for right in (left + 1)..self.nodes.len() {
@@ -146,7 +186,9 @@ impl Synthesized {
         }
         candidates.sort_by_key(|(depth, left, right, op, _)| {
             let rank = match op {
-                Binary::And => 0, Binary::Or => 1, Binary::Xor => 2,
+                Binary::And => 0,
+                Binary::Or => 1,
+                Binary::Xor => 2,
             };
             (*depth, *left, *right, rank)
         });
@@ -154,29 +196,31 @@ impl Synthesized {
             return Err("no one-gate candidate fits the training target");
         };
         let id = self.nodes.len();
-        self.nodes.push(Node { expr: Expr::Gate { op, left, right }, truth, depth });
+        self.nodes.push(Node {
+            expr: Expr::Gate { op, left, right },
+            truth,
+            depth,
+        });
         Ok(id)
     }
     pub fn learn_negation() -> Result<Self, &'static str> {
         let mut model = Self {
-            nodes: (0..8).map(|bit| Node {
-                expr: Expr::Input(bit),
-                truth: Truth::from_fn(|x| (x >> bit) & 1 != 0),
-                depth: 0,
-            }).collect(),
+            nodes: (0..8)
+                .map(|bit| Node {
+                    expr: Expr::Input(bit),
+                    truth: Truth::from_fn(|x| (x >> bit) & 1 != 0),
+                    depth: 0,
+                })
+                .collect(),
             outputs: [0; 8],
         };
         for bit in 0..8usize {
             if bit > 0 {
                 // A teacher-directed intermediate signal, fitted by gates.
-                let prefix = Truth::from_fn(|x| {
-                    u16::from(x) & ((1u16 << bit) - 1) != 0
-                });
+                let prefix = Truth::from_fn(|x| u16::from(x) & ((1u16 << bit) - 1) != 0);
                 model.learn_signal(prefix)?;
             }
-            let desired = Truth::from_fn(|x| {
-                (x.wrapping_neg() >> bit) & 1 != 0
-            });
+            let desired = Truth::from_fn(|x| (x.wrapping_neg() >> bit) & 1 != 0);
             model.outputs[bit] = model.learn_signal(desired)?;
         }
         Ok(model)
@@ -194,13 +238,20 @@ impl Synthesized {
             };
             values.push(bit);
         }
-        self.outputs.iter().enumerate().fold(0u8, |raw, (bit, &id)| {
-            raw | (values[id] << bit)
-        })
+        self.outputs
+            .iter()
+            .enumerate()
+            .fold(0u8, |raw, (bit, &id)| raw | (values[id] << bit))
     }
-    pub fn gates(&self) -> usize { self.nodes.len() - 8 }
+    pub fn gates(&self) -> usize {
+        self.nodes.len() - 8
+    }
     pub fn max_depth(&self) -> usize {
-        self.outputs.iter().map(|&i| self.nodes[i].depth).max().unwrap_or(0)
+        self.outputs
+            .iter()
+            .map(|&i| self.nodes[i].depth)
+            .max()
+            .unwrap_or(0)
     }
     pub fn heldout_errors(&self) -> usize {
         (0..=255u8)
@@ -208,7 +259,9 @@ impl Synthesized {
             .count()
     }
     pub fn verify_all(&self) -> Result<(), &'static str> {
-        if self.gates() > MAX_GATES { return Err("gate budget exceeded"); }
+        if self.gates() > MAX_GATES {
+            return Err("gate budget exceeded");
+        }
         if (0..=255u8).any(|x| self.evaluate(x) != Posit8(x).neg().0) {
             return Err("exhaustive truth-table mismatch");
         }
@@ -226,13 +279,22 @@ impl Synthesized {
                     writeln!(&mut out, "    let w{index}: u8 = (x >> {bit}) & 1;").unwrap();
                 }
                 Expr::Gate { op, left, right } => {
-                    writeln!(&mut out, "    let w{index}: u8 = w{left} {} w{right};", op.symbol()).unwrap();
+                    writeln!(
+                        &mut out,
+                        "    let w{index}: u8 = w{left} {} w{right};",
+                        op.symbol()
+                    )
+                    .unwrap();
                 }
             }
         }
-        let terms = self.outputs.iter().enumerate().map(|(bit, &id)| {
-            format!("(w{id} << {bit})")
-        }).collect::<Vec<_>>().join(" | ");
+        let terms = self
+            .outputs
+            .iter()
+            .enumerate()
+            .map(|(bit, &id)| format!("(w{id} << {bit})"))
+            .collect::<Vec<_>>()
+            .join(" | ");
         writeln!(&mut out, "    {terms}\n}}").unwrap();
         out
     }
@@ -243,8 +305,12 @@ fn main() {
     if std::env::args().any(|arg| arg == "--emit-rust") {
         print!("{}", learned.emit_rust());
     } else {
-        println!("POSIT8_CIRCUIT_NEG PASS train={} holdout=64 gates={} depth={} exhaustive=256 errors=0",
-            TRAIN_SAMPLES, learned.gates(), learned.max_depth());
+        println!(
+            "POSIT8_CIRCUIT_NEG PASS train={} holdout=64 gates={} depth={} exhaustive=256 errors=0",
+            TRAIN_SAMPLES,
+            learned.gates(),
+            learned.max_depth()
+        );
         println!("POSIT8_ARITHMETIC_ORACLE add_mul=65536_pairs_each; add_mul_circuit_synthesis=NOT_IMPLEMENTED");
     }
 }
@@ -261,12 +327,15 @@ mod tests {
         assert_eq!(Posit8(0xc0).decode_units(), Some(-(1i64 << SCALE_BITS)));
         for x in 0..=255u8 {
             if x != 0x80 {
-                assert_eq!(Posit8(x).decode_units().unwrap(),
-                    -Posit8(x.wrapping_neg()).decode_units().unwrap());
+                assert_eq!(
+                    Posit8(x).decode_units().unwrap(),
+                    -Posit8(x.wrapping_neg()).decode_units().unwrap()
+                );
             }
         }
         let positives: Vec<_> = (1..=127u8)
-            .map(|x| Posit8(x).decode_units().unwrap()).collect();
+            .map(|x| Posit8(x).decode_units().unwrap())
+            .collect();
         assert!(positives.windows(2).all(|w| w[0] < w[1]));
     }
     #[test]
@@ -304,6 +373,8 @@ mod tests {
         assert!(graph.gates() <= MAX_GATES);
         assert_eq!(graph.heldout_errors(), 0);
         graph.verify_all().unwrap();
-        assert!(graph.emit_rust().contains("extern \"C\" fn learned_posit8_neg"));
+        assert!(graph
+            .emit_rust()
+            .contains("extern \"C\" fn learned_posit8_neg"));
     }
 }
