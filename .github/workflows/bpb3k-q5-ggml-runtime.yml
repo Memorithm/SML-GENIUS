@@ -1,0 +1,67 @@
+name: BPB3-K Q5-178 pinned ggml CPU ABI and real tiled source
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q5-ggml-runtime.yml'
+      - 'research/boolean-posit/bpb3k_q5_ggml_patch.rs'
+      - 'research/boolean-posit/bpb3k_q5_ggml_ffi.rs'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+      - 'research/boolean-posit/BPB3_K_Q5_GGML_RUNTIME.md'
+  push:
+    paths:
+      - '.github/workflows/bpb3k-q5-ggml-runtime.yml'
+      - 'research/boolean-posit/bpb3k_q5_ggml_patch.rs'
+      - 'research/boolean-posit/bpb3k_q5_ggml_ffi.rs'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+permissions:
+  contents: read
+jobs:
+  q5-pinned-ggml-cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 format, AVX2 ABI and GGUF preparation qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          for item in bpb3k_q5_ggml_patch bpb3k_q5_ggml_ffi bpb3k_q5_gguf_transcode; do
+            rustup run 1.89.0 rustfmt --edition 2021 --check "research/boolean-posit/$item.rs"
+            rustup run 1.89.0 rustc --edition 2021 -D warnings \
+              --test "research/boolean-posit/$item.rs" -o "$RUNNER_TEMP/$item-tests"
+            "$RUNNER_TEMP/$item-tests" --nocapture
+          done
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
+            -C target-cpu=haswell -C relocation-model=pic --crate-type staticlib \
+            research/boolean-posit/bpb3k_q5_ggml_ffi.rs -o "$RUNNER_TEMP/libmem-q5-178.a"
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
+            research/boolean-posit/bpb3k_q5_ggml_patch.rs -o "$RUNNER_TEMP/q5-patcher"
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
+            research/boolean-posit/bpb3k_q5_gguf_transcode.rs -o "$RUNNER_TEMP/q5-transcode"
+          echo PASS_Q5_178_RUST_ABI_AND_PREPARE=HOSTED_CPU_FIXTURE_ONLY
+      - name: Compile actual SHA-pinned llama.cpp with Q5-178 C and Rust CPU adapters
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          git init -q q5-llama
+          git -C q5-llama remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C q5-llama fetch --depth 1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C q5-llama checkout -q --detach FETCH_HEAD
+          test "$(git -C q5-llama rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          "$RUNNER_TEMP/q5-patcher" patch "$RUNNER_TEMP/q5-llama" f7591a6a01f9273de03331732bdc0b39721168be | tee patched.log
+          grep -q '^PASS_BPB3K_Q5_GGML_PATCH ' patched.log
+          cmake -S q5-llama -B q5-llama/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON \
+            -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/libmem-q5-178.a"
+          cmake --build q5-llama/build -j 3 --target llama-cli llama-bench
+          sha256sum q5-llama/build/bin/llama-cli q5-llama/build/bin/llama-bench
+          echo PASS_Q5_178_REAL_PATCHED_LLAMA_CPP_BUILD=SOURCE_PINNED_ONLY
