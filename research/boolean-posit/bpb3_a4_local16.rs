@@ -130,10 +130,7 @@ pub fn unpack(wire: &[u8]) -> Result<([i8; LANES], [i8; SUBGROUPS]), Error> {
 
 /// One signed bipolar input bit means -1; zero means +1.
 /// Returns exact SIGNED integer sums and exponents for each 16-lane subgroup.
-pub fn dot_subgroups(
-    wire: &[u8],
-    bipolar_negative: u64,
-) -> Result<[(i32, i8); SUBGROUPS], Error> {
+pub fn dot_subgroups(wire: &[u8], bipolar_negative: u64) -> Result<[(i32, i8); SUBGROUPS], Error> {
     let (mode, exponents, negative, planes) = parse(wire)?;
     let equal_sign = !(negative ^ bipolar_negative);
     Ok(std::array::from_fn(|group| {
@@ -220,8 +217,7 @@ pub fn quantize(source: &[f64; LANES], mode: u8) -> Result<Choice, Error> {
             return Err(Error::NonFinite);
         }
         result.exponents[group] = best_exponent;
-        result.codes[group * GROUP_WIDTH..(group + 1) * GROUP_WIDTH]
-            .copy_from_slice(&best_codes);
+        result.codes[group * GROUP_WIDTH..(group + 1) * GROUP_WIDTH].copy_from_slice(&best_codes);
         result.sse += best_sse;
     }
     if !result.sse.is_finite() {
@@ -318,16 +314,19 @@ fn random(seed: &mut u64) -> u64 {
 fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
     let source: Vec<[f64; 64]> = weights
         .iter()
-        .flat_map(|row| {
-            (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i])))
-        })
+        .flat_map(|row| (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i]))))
         .collect();
     let allocation = allocate(&source, weights.len() * ROW_BYTES)?;
     assert_eq!(allocation.wires.len(), weights.len() * 4);
     let mut mse = 0.0;
     let mut dot_mse = 0.0;
     let mut n_dots = 0usize;
-    let mut rng = MASK_SEED ^ if split == "TEST" { 0x9e37_79b9_7f4a_7c15 } else { 0 };
+    let mut rng = MASK_SEED
+        ^ if split == "TEST" {
+            0x9e37_79b9_7f4a_7c15
+        } else {
+            0
+        };
     for (row, original) in weights.iter().enumerate() {
         let slice = &allocation.wires[row * 4..row * 4 + 4];
         let mut original_f64 = [0.0f64; 256];
@@ -344,9 +343,17 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
         }
         for _ in 0..16 {
             let masks: [u64; 4] = std::array::from_fn(|_| random(&mut rng));
-            let truth: f64 = original_f64.iter().enumerate().map(|(i, &v)| {
-                if (masks[i / 64] >> (i % 64)) & 1 != 0 { -v } else { v }
-            }).sum();
+            let truth: f64 = original_f64
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    if (masks[i / 64] >> (i % 64)) & 1 != 0 {
+                        -v
+                    } else {
+                        v
+                    }
+                })
+                .sum();
             let result = dot_256(slice, &masks)?;
             let d = result - truth;
             dot_mse += d * d;
@@ -354,7 +361,8 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
         }
     }
     let coefficients = weights.len() * 256;
-    let counts = [1u8, 2, 3].map(|mode| allocation.choices.iter().filter(|c| c.mode == mode).count());
+    let counts =
+        [1u8, 2, 3].map(|mode| allocation.choices.iter().filter(|c| c.mode == mode).count());
     assert!((mse - allocation.sse).abs() <= 1e-7 * mse.max(1.0));
     println!(
         "{split},bpb3_a4_local16,{},{:.6},{:.12},{:.12},{},{},{},{},{}",
@@ -381,12 +389,14 @@ fn main() {
     assert_eq!(bytes.len(), 48 * 256 * 4, "STOP_A4_SOURCE_LENGTH");
     let weights: Vec<[f32; 256]> = bytes
         .chunks_exact(256 * 4)
-        .map(|chunk| std::array::from_fn(|i| f32::from_le_bytes(
-            chunk[i * 4..i * 4 + 4].try_into().unwrap()
-        )))
+        .map(|chunk| {
+            std::array::from_fn(|i| f32::from_le_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap()))
+        })
         .collect();
     assert!(weights.iter().all(|row| row.iter().all(|v| v.is_finite())));
-    println!("protocol=bpb3-a4-local16-budget108-v1,claim=RECONSTRUCTION_ONLY,source=EXTERNALLY_PINNED");
+    println!(
+        "protocol=bpb3-a4-local16-budget108-v1,claim=RECONSTRUCTION_ONLY,source=EXTERNALLY_PINNED"
+    );
     println!("split,codec,payload_bytes,bits_per_weight,weight_rmse,dot_rmse,coefficients,dots,mode1_blocks,mode2_blocks,mode3_blocks");
     evaluate("DEV", &weights[..24]).expect("A4 DEV");
     evaluate("TEST", &weights[24..]).expect("A4 TEST");
@@ -429,8 +439,10 @@ mod tests {
         invalid[2] = 28u8;
         assert_eq!(unpack(&invalid), Err(Error::InvalidExponent));
         let mut negative_zero = pack(&Choice {
-            codes: [0; 64], ..choice.clone()
-        }).unwrap();
+            codes: [0; 64],
+            ..choice.clone()
+        })
+        .unwrap();
         negative_zero[5] = 1;
         assert_eq!(unpack(&negative_zero), Err(Error::NegativeZero));
     }
@@ -443,19 +455,26 @@ mod tests {
                 let codes = arbitrary_codes(mode, random(&mut rng));
                 let exponents = [-24, -5, 7, 27];
                 let wire = pack(&Choice {
-                    mode, codes, exponents, sse: 0.0,
-                }).unwrap();
+                    mode,
+                    codes,
+                    exponents,
+                    sse: 0.0,
+                })
+                .unwrap();
                 for mask in [0, u64::MAX, random(&mut rng), random(&mut rng)] {
                     let values = dot_subgroups(&wire, mask).unwrap();
                     for group in 0..SUBGROUPS {
                         let dense: i32 = codes[group * 16..(group + 1) * 16]
-                            .iter().enumerate().map(|(i, &code)| {
+                            .iter()
+                            .enumerate()
+                            .map(|(i, &code)| {
                                 if (mask >> (group * 16 + i)) & 1 != 0 {
                                     -i32::from(code)
                                 } else {
                                     i32::from(code)
                                 }
-                            }).sum();
+                            })
+                            .sum();
                         assert_eq!(values[group], (dense, exponents[group]), "case={case}");
                     }
                 }
@@ -466,15 +485,26 @@ mod tests {
     #[test]
     fn allocation_matches_bruteforce_small_inputs() {
         let source: Vec<[f64; 64]> = (0..3)
-            .map(|block| std::array::from_fn(|i| {
-                if i % 21 == 0 { (block + 1) as f64 * 7.0 }
-                else { (i as f64 - 32.0) * (block as f64 + 1.0) / 256.0 }
-            })).collect();
-        let choices: Vec<_> = source.iter().map(|s| [
-            quantize(s, 1).unwrap(),
-            quantize(s, 2).unwrap(),
-            quantize(s, 3).unwrap(),
-        ]).collect();
+            .map(|block| {
+                std::array::from_fn(|i| {
+                    if i % 21 == 0 {
+                        (block + 1) as f64 * 7.0
+                    } else {
+                        (i as f64 - 32.0) * (block as f64 + 1.0) / 256.0
+                    }
+                })
+            })
+            .collect();
+        let choices: Vec<_> = source
+            .iter()
+            .map(|s| {
+                [
+                    quantize(s, 1).unwrap(),
+                    quantize(s, 2).unwrap(),
+                    quantize(s, 3).unwrap(),
+                ]
+            })
+            .collect();
         let budget = 3 * 29;
         let allocated = allocate(&source, budget).unwrap();
         let mut brute = f64::INFINITY;
@@ -485,14 +515,17 @@ mod tests {
                         + wire_bytes(b as u8).unwrap()
                         + wire_bytes(c as u8).unwrap();
                     if price <= budget {
-                        let sse = choices[0][a - 1].sse
-                            + choices[1][b - 1].sse + choices[2][c - 1].sse;
+                        let sse =
+                            choices[0][a - 1].sse + choices[1][b - 1].sse + choices[2][c - 1].sse;
                         brute = brute.min(sse);
                     }
                 }
             }
         }
-        assert_eq!(allocated.total_bytes, allocated.wires.iter().map(Vec::len).sum());
+        assert_eq!(
+            allocated.total_bytes,
+            allocated.wires.iter().map(Vec::len).sum()
+        );
         assert!(allocated.total_bytes <= budget);
         assert!((allocated.sse - brute).abs() <= 1e-12 * brute.max(1.0));
     }
@@ -500,22 +533,39 @@ mod tests {
     #[test]
     fn exact_dyadic_multi_block_oracle_and_budget_fail_closed() {
         let sources: Vec<_> = (0..4)
-            .map(|i| std::array::from_fn(|j| {
-                if j % 16 == 0 { i as f64 + 2.0 } else { j as f64 / 8192.0 }
-            })).collect();
+            .map(|i| {
+                std::array::from_fn(|j| {
+                    if j % 16 == 0 {
+                        i as f64 + 2.0
+                    } else {
+                        j as f64 / 8192.0
+                    }
+                })
+            })
+            .collect();
         assert!(matches!(allocate(&sources, 83), Err(Error::Budget)));
         let selected = allocate(&sources, ROW_BYTES).unwrap();
         assert!(selected.total_bytes <= ROW_BYTES);
         let masks = [0, !0, 0x55aa_55aa_55aa_55aa, 0x1234_5678_9abc_def0];
         let exact = dot_exact(&selected.wires, &masks).unwrap();
-        let dense: i128 = selected.wires.iter().zip(masks).map(|(wire, mask)| {
-            let (codes, exp) = unpack(wire).unwrap();
-            (0..64).map(|i| {
-                let signed = if (mask >> i) & 1 != 0 { -i128::from(codes[i]) }
-                             else { i128::from(codes[i]) };
-                signed << (i32::from(exp[i/16]) + 24)
-            }).sum::<i128>()
-        }).sum();
+        let dense: i128 = selected
+            .wires
+            .iter()
+            .zip(masks)
+            .map(|(wire, mask)| {
+                let (codes, exp) = unpack(wire).unwrap();
+                (0..64)
+                    .map(|i| {
+                        let signed = if (mask >> i) & 1 != 0 {
+                            -i128::from(codes[i])
+                        } else {
+                            i128::from(codes[i])
+                        };
+                        signed << (i32::from(exp[i / 16]) + 24)
+                    })
+                    .sum::<i128>()
+            })
+            .sum();
         assert_eq!(exact, dense);
         assert_eq!(dot_exact(&selected.wires, &[]), Err(Error::WrongLength));
     }
@@ -525,8 +575,8 @@ mod tests {
         let mut source = [0.0f64; 64];
         for group in 0..4 {
             for i in 0..16 {
-                source[group * 16 + i] = ((i as f64 - 7.5) / 8.0)
-                    * 2.0f64.powi((group as i32) * 5 - 12);
+                source[group * 16 + i] =
+                    ((i as f64 - 7.5) / 8.0) * 2.0f64.powi((group as i32) * 5 - 12);
             }
         }
         let mut bad = source;
@@ -538,11 +588,14 @@ mod tests {
             let (codes, exponents) = unpack(&wire).unwrap();
             assert_eq!(codes, choice.codes);
             assert_eq!(exponents, choice.exponents);
-            let mse: f64 = source.iter().enumerate().map(|(i, &v)| {
-                let d = v - f64::from(codes[i])
-                    * 2.0f64.powi(i32::from(exponents[i / 16]));
-                d * d
-            }).sum();
+            let mse: f64 = source
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    let d = v - f64::from(codes[i]) * 2.0f64.powi(i32::from(exponents[i / 16]));
+                    d * d
+                })
+                .sum();
             assert!((mse - choice.sse).abs() <= 1e-9 * mse.max(1.0));
         }
     }
