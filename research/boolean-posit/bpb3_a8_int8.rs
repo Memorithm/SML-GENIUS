@@ -50,13 +50,12 @@ pub fn dot_i8_exact(wire: &[u8], input: &[i8; LANES]) -> Result<i128, Error> {
     for bit in 0..BITS {
         let mask = signed_activation_mask(input, bit);
         let db = a8::dot_exact(wire, &mask).map_err(|_| Error::InvalidWire)?;
-        let coefficient = if bit == 7 {
-            -128i128
-        } else {
-            1i128 << bit
-        };
+        let coefficient = if bit == 7 { -128i128 } else { 1i128 << bit };
         numerator = numerator
-            .checked_add(db.checked_mul(coefficient).ok_or(Error::ArithmeticOverflow)?)
+            .checked_add(
+                db.checked_mul(coefficient)
+                    .ok_or(Error::ArithmeticOverflow)?,
+            )
             .ok_or(Error::ArithmeticOverflow)?;
     }
     let s = a8::dot_exact(wire, &[0u64; 4]).map_err(|_| Error::InvalidWire)?;
@@ -86,10 +85,7 @@ pub fn matvec_i8_into(
     Ok(())
 }
 
-pub fn matvec_i8(
-    view: &tensor::TensorView<'_>,
-    input: &[i8; LANES],
-) -> Result<Vec<i128>, Error> {
+pub fn matvec_i8(view: &tensor::TensorView<'_>, input: &[i8; LANES]) -> Result<Vec<i128>, Error> {
     let mut output = vec![0i128; view.len()];
     matvec_i8_into(view, input, &mut output)?;
     Ok(output)
