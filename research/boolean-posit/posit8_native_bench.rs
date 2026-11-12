@@ -29,15 +29,33 @@ struct Candidate {
 fn all_modes(operation: &str) -> [Candidate; MODES] {
     if operation == "add" {
         [
-            Candidate { name: "direct", run: mem_posit8_asm_add },
-            Candidate { name: "cached", run: mem_posit8_asm_cached_add },
-            Candidate { name: "complement", run: mem_posit8_ce_add },
+            Candidate {
+                name: "direct",
+                run: mem_posit8_asm_add,
+            },
+            Candidate {
+                name: "cached",
+                run: mem_posit8_asm_cached_add,
+            },
+            Candidate {
+                name: "complement",
+                run: mem_posit8_ce_add,
+            },
         ]
     } else {
         [
-            Candidate { name: "direct", run: mem_posit8_asm_mul },
-            Candidate { name: "cached", run: mem_posit8_asm_cached_mul },
-            Candidate { name: "complement", run: mem_posit8_ce_mul },
+            Candidate {
+                name: "direct",
+                run: mem_posit8_asm_mul,
+            },
+            Candidate {
+                name: "cached",
+                run: mem_posit8_asm_cached_mul,
+            },
+            Candidate {
+                name: "complement",
+                run: mem_posit8_ce_mul,
+            },
         ]
     }
 }
