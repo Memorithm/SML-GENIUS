@@ -27,6 +27,7 @@ struct Tensor {
     values: u64,
     dims: u32,
     first_dim: u64,
+    shape: Vec<u64>,
     offset: u64,
     offset_field: u64,
 }
@@ -144,11 +145,13 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, u64, Vec<Tensor>), Strin
         }
         let mut values = 1u64;
         let mut first_dim = 0;
+        let mut shape = Vec::with_capacity(dims as usize);
         for dimension in 0..dims {
             let extent = u64le(f)?;
             if extent == 0 {
                 return Err("STOP_ZERO_DIMENSION".into());
             }
+            shape.push(extent);
             if dimension == 0 {
                 first_dim = extent;
             }
@@ -165,6 +168,7 @@ fn tensors(f: &mut File, file_len: u64) -> Result<(u64, u64, Vec<Tensor>), Strin
             values,
             dims,
             first_dim,
+            shape,
             offset,
             offset_field,
         });
@@ -483,6 +487,168 @@ fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String
     result
 }
 
+
+/// Audit the exact tensor selection of a *standard* Q5_K source-matched
+/// baseline against our sentinel Q5-178 and the same source-precision GGUF.
+/// This is a strict type/shape/size and unmodified-data admission gate,
+/// NOT an accuracy comparison of differently quantized coefficients.
+fn prepared_directory(path: &Path) -> Result<(File, u64, u64, u64, Vec<Tensor>), String> {
+    let mut file = File::open(path).map_err(|e| e.to_string())?;
+    let size = file.metadata().map_err(|e| e.to_string())?.len();
+    if !(1..=MAX_GGUF).contains(&size) {
+        return Err("STOP_AUDIT_FILE_SIZE".into());
+    }
+    let (start, alignment, mut entries) = tensors(&mut file, size)?;
+    if entries.is_empty() {
+        return Err("STOP_AUDIT_NO_TENSORS".into());
+    }
+    entries.sort_by_key(|t| t.offset);
+    if entries[0].offset != 0 {
+        return Err("STOP_AUDIT_FIRST_OFFSET".into());
+    }
+    let mut names = std::collections::HashSet::new();
+    for (i, t) in entries.iter().enumerate() {
+        if !names.insert(t.name.clone())
+            || t.offset % alignment != 0
+            || (i != 0 && t.offset <= entries[i - 1].offset)
+        {
+            return Err("STOP_AUDIT_DUPLICATE_OR_UNALIGNED".into());
+        }
+    }
+    Ok((file, size, start, alignment, entries))
+}
+
+fn audited_region(
+    file_size: u64,
+    tensor_start: u64,
+    alignment: u64,
+    entries: &[Tensor],
+    index: usize,
+    bytes: u64,
+) -> Result<u64, String> {
+    let tensor = entries.get(index).ok_or("STOP_AUDIT_TENSOR_INDEX")?;
+    let position = tensor_start
+        .checked_add(tensor.offset)
+        .ok_or("STOP_AUDIT_OFFSET_OVERFLOW")?;
+    let next = if let Some(t) = entries.get(index + 1) {
+        tensor_start.checked_add(t.offset).ok_or("STOP_AUDIT_NEXT_OVERFLOW")?
+    } else {
+        file_size
+    };
+    if next <= position || next > file_size || bytes > next - position
+        || next - position - bytes >= alignment
+    {
+        return Err(format!("STOP_AUDIT_EXTENT name={}", tensor.name));
+    }
+    Ok(position)
+}
+
+fn original_type_bytes(t: &Tensor) -> Result<u64, String> {
+    let per_element = match t.kind {
+        F32 | 26 => 4,
+        F16 | BF16 | 25 => 2,
+        24 => 1,
+        27 | 28 => 8,
+        11 => {
+            if t.values % 256 != 0 { return Err("STOP_AUDIT_Q3_LENGTH".into()); }
+            return (t.values / 256).checked_mul(110)
+                .ok_or_else(|| "STOP_AUDIT_Q3_OVERFLOW".into());
+        }
+        _ => return Err(format!("STOP_AUDIT_UNSUPPORTED_SOURCE_TYPE={}", t.kind)),
+    };
+    t.values.checked_mul(per_element).ok_or_else(|| "STOP_AUDIT_SOURCE_OVERFLOW".into())
+}
+
+fn compare_original_payload(
+    a: &mut File,
+    b: &mut File,
+    pos_a: u64,
+    pos_b: u64,
+    count: u64,
+) -> Result<(), String> {
+    a.seek(SeekFrom::Start(pos_a)).map_err(|e| e.to_string())?;
+    b.seek(SeekFrom::Start(pos_b)).map_err(|e| e.to_string())?;
+    let mut remaining = count;
+    let mut left = [0u8; 8192];
+    let mut right = [0u8; 8192];
+    while remaining > 0 {
+        let size = usize::try_from(remaining.min(left.len() as u64))
+            .map_err(|_| "STOP_AUDIT_BUFFER_OVERFLOW")?;
+        a.read_exact(&mut left[..size]).map_err(|e| e.to_string())?;
+        b.read_exact(&mut right[..size]).map_err(|e| e.to_string())?;
+        if left[..size] != right[..size] {
+            return Err("STOP_AUDIT_UNCHANGED_PAYLOAD_DIFFERENCE".into());
+        }
+        remaining -= size as u64;
+    }
+    Ok(())
+}
+
+fn audit_matched_native_q5k(
+    source: &Path,
+    native: &Path,
+    sentinel: &Path,
+) -> Result<u64, String> {
+    let (mut source_f, source_size, source_start, source_align, source_ts) = prepared_directory(source)?;
+    let (mut native_f, native_size, native_start, native_align, native_ts) = prepared_directory(native)?;
+    let (mut q5_f, q5_size, q5_start, q5_align, q5_ts) = prepared_directory(sentinel)?;
+    if source_ts.len() != native_ts.len()
+        || source_ts.len() != q5_ts.len()
+        || source_align != native_align
+        || source_align != q5_align
+    {
+        return Err("STOP_AUDIT_TENSOR_COUNT_OR_ALIGNMENT".into());
+    }
+    let native_names: std::collections::HashMap<_, _> =
+        native_ts.iter().enumerate().map(|(i,t)| (t.name.as_str(), i)).collect();
+    let q5_names: std::collections::HashMap<_, _> =
+        q5_ts.iter().enumerate().map(|(i,t)| (t.name.as_str(), i)).collect();
+    let mut quantized_count = 0u64;
+    let mut total_blocks = 0u64;
+    for (i, original) in source_ts.iter().enumerate() {
+        let &nidx = native_names.get(original.name.as_str())
+            .ok_or("STOP_AUDIT_NATIVE_NAME_MISSING")?;
+        let &qidx = q5_names.get(original.name.as_str())
+            .ok_or("STOP_AUDIT_Q5_NAME_MISSING")?;
+        let n = &native_ts[nidx];
+        let q = &q5_ts[qidx];
+        if n.shape != original.shape || q.shape != original.shape
+            || n.values != original.values || q.values != original.values
+        {
+            return Err(format!("STOP_AUDIT_TENSOR_SHAPE name={}", original.name));
+        }
+        let source_bytes = original_type_bytes(original)?;
+        let src_pos = audited_region(source_size, source_start, source_align, &source_ts, i, source_bytes)?;
+        if should_quantize(original) {
+            if n.kind != 13 || q.kind != Q5_EXPERIMENTAL_TYPE {
+                return Err(format!("STOP_AUDIT_Q5_TYPE_MISMATCH name={} native={} q5={}",
+                    original.name, n.kind, q.kind));
+            }
+            let blocks = original.values / 256;
+            let native_bytes = blocks.checked_mul(176).ok_or("STOP_AUDIT_NATIVE_SIZE")?;
+            let q5_bytes = blocks.checked_mul(178).ok_or("STOP_AUDIT_Q5_SIZE")?;
+            audited_region(native_size, native_start, native_align, &native_ts, nidx, native_bytes)?;
+            audited_region(q5_size, q5_start, q5_align, &q5_ts, qidx, q5_bytes)?;
+            total_blocks += blocks;
+            quantized_count += 1;
+        } else {
+            if original.kind != n.kind || original.kind != q.kind {
+                return Err(format!("STOP_AUDIT_UNCHANGED_TYPE name={}",original.name));
+            }
+            let npos = audited_region(native_size, native_start, native_align, &native_ts, nidx, source_bytes)?;
+            let qpos = audited_region(q5_size, q5_start, q5_align, &q5_ts, qidx, source_bytes)?;
+            compare_original_payload(&mut source_f, &mut native_f, src_pos, npos, source_bytes)?;
+            compare_original_payload(&mut source_f, &mut q5_f, src_pos, qpos, source_bytes)?;
+        }
+    }
+    if quantized_count == 0 {
+        return Err("STOP_AUDIT_NO_SELECTED_MATRICES".into());
+    }
+    println!("PASS_Q5K_MATCHED_SOURCE native_type=13 q5_type=0xffff0005 matrices={} blocks={} unchanged_tensors_bit_identical=true",
+        quantized_count, total_blocks);
+    Ok(quantized_count)
+}
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
@@ -494,7 +660,15 @@ fn run() -> Result<(), String> {
             prepare_for_patched_runtime(Path::new(source), Path::new(dest))?;
             Ok(())
         }
-        _ => Err("USAGE: bpb3k_q5_gguf_transcode transcode <source-F16-BF16-F32-gguf> <experimental-Q5-178-gguf> | prepare-patched-runtime <experimental-Q5-178-gguf> <temporary-patched-only-gguf>".into()),
+        [_, mode, source, native, sentinel] if mode == "audit-native-q5k" => {
+            audit_matched_native_q5k(
+                Path::new(source),
+                Path::new(native),
+                Path::new(sentinel),
+            )?;
+            Ok(())
+        }
+        _ => Err("USAGE: bpb3k_q5_gguf_transcode transcode <source-F16-BF16-F32-gguf> <experimental-Q5-178-gguf> | prepare-patched-runtime <experimental-Q5-178-gguf> <temporary-patched-only-gguf> | audit-native-q5k <source-F16> <native-Q5_K> <sentinel-Q5-178>".into()),
     }
 }
 
