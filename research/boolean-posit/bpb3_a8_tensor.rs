@@ -193,8 +193,7 @@ impl<'a> TensorView<'a> {
             return Err(TensorError::WrongLength);
         }
         for (row, output) in outputs.iter_mut().enumerate() {
-            *output =
-                a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?;
+            *output = a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?;
         }
         Ok(())
     }
