@@ -1,0 +1,84 @@
+name: Boolean posit8 supervised circuit synthesis and exhaustive arithmetic
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_circuit_synth.rs'
+      - 'research/boolean-posit/POSIT8_LEARNED_CIRCUIT_PROTOCOL_20261112.md'
+      - '.github/workflows/bpb3-posit8-synthesis.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_circuit_synth.rs'
+      - 'research/boolean-posit/POSIT8_LEARNED_CIRCUIT_PROTOCOL_20261112.md'
+      - '.github/workflows/bpb3-posit8-synthesis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-posit8-exactness-and-native-codegen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict source format
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_circuit_synth.rs
+      - name: Exact posit8 arithmetic and supervised discovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_circuit_synth.rs -o "$RUNNER_TEMP/posit8-synth-tests"
+          "$RUNNER_TEMP/posit8-synth-tests" --nocapture | tee "$RUNNER_TEMP/posit8-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-tests.txt"
+      - name: Emit learned Rust and compile real native machine code
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_circuit_synth.rs -o "$RUNNER_TEMP/posit8-synth"
+          "$RUNNER_TEMP/posit8-synth" | tee "$RUNNER_TEMP/posit8-synthesis-summary.txt"
+          "$RUNNER_TEMP/posit8-synth" --emit-rust > "$RUNNER_TEMP/posit8-learned-native.rs"
+          rustc --edition 2021 -D warnings -C opt-level=3 --crate-type=lib --emit=asm \
+            "$RUNNER_TEMP/posit8-learned-native.rs" -o "$RUNNER_TEMP/posit8-learned-native.s"
+          grep -q 'learned_posit8_neg' "$RUNNER_TEMP/posit8-learned-native.s"
+          cat >> "$RUNNER_TEMP/posit8-learned-native.rs" <<'RS'
+          #[cfg(test)]
+          mod compiled_oracle {
+              use super::learned_posit8_neg;
+              #[test]
+              fn all_256_native_compiled_negations() {
+                  for encoded in 0..=255u8 {
+                      assert_eq!(learned_posit8_neg(encoded), encoded.wrapping_neg());
+                  }
+              }
+          }
+          RS
+          rustc --edition 2021 -D warnings -O --test "$RUNNER_TEMP/posit8-learned-native.rs" -o "$RUNNER_TEMP/posit8-native-check"
+          "$RUNNER_TEMP/posit8-native-check" --nocapture | tee "$RUNNER_TEMP/posit8-native-check.txt"
+          grep -q 'test result: ok. 1 passed; 0 failed' "$RUNNER_TEMP/posit8-native-check.txt"
+      - name: Preserve source, assembly and exact oracle evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-supervised-circuit-\${{ github.sha }}
+          path: |
+            \${{ runner.temp }}/posit8-tests.txt
+            \${{ runner.temp }}/posit8-synthesis-summary.txt
+            \${{ runner.temp }}/posit8-learned-native.rs
+            \${{ runner.temp }}/posit8-learned-native.s
+            \${{ runner.temp }}/posit8-native-check.txt
+          if-no-files-found: warn
+          retention-days: 21
