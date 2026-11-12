@@ -538,9 +538,9 @@ mod tests {
 
     #[test]
     fn exact_signed_i128_dot_and_malformed_inputs() {
-        let source: Vec<_> = (0..4).map(|i| source(i as u64 + 100)).collect();
-        assert!(matches!(allocate(&source, 80), Err(Error::Budget)));
-        let selected = allocate(&source, ROW_BYTES).unwrap();
+        let blocks: Vec<_> = (0..4).map(|i| source(i as u64 + 100)).collect();
+        assert!(matches!(allocate(&blocks, 80), Err(Error::Budget)));
+        let selected = allocate(&blocks, ROW_BYTES).unwrap();
         let masks = [0, u64::MAX, 0x0123_4567_89ab_cdef, 0xa55a_5aa5_55aa_ff00];
         let actual = dot_exact(&selected.wires, &masks).unwrap();
         let expected: i128 = selected
