@@ -10,27 +10,6 @@ use std::ffi::{c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 static FIRST_Q5_DOT: AtomicBool = AtomicBool::new(true);
 
-fn f16_to_f32(bits: u16) -> f32 {
-    let sign = u32::from(bits & 0x8000) << 16;
-    let exponent = u32::from((bits >> 10) & 31);
-    let fraction = u32::from(bits & 0x03ff);
-    if exponent == 0 {
-        if fraction == 0 {
-            return f32::from_bits(sign);
-        }
-        // f16 subnormal has the exact value mantissa * 2^-24.
-        return if sign == 0 {
-            (fraction as f32) * f32::from_bits(0x3380_0000)
-        } else {
-            -(fraction as f32) * f32::from_bits(0x3380_0000)
-        };
-    }
-    if exponent == 31 {
-        return f32::from_bits(sign | 0x7f80_0000 | (fraction << 13));
-    }
-    f32::from_bits(sign | ((exponent + 112) << 23) | (fraction << 13))
-}
-
 /// C ABI mirrors ggml_vec_dot_q3_K_q8_K for one row. The Rust SIMD
 /// implementation reads only Q5-178 and original Q8_K (292 bytes) and
 /// never calls stock ggml Q3_K. The signed integer dot is exact;
@@ -67,32 +46,11 @@ pub unsafe extern "C" fn mem_q5_178_vec_dot(
     // tensor data spans exactly n/256 blocks; Q8_K is unchanged.
     let weights = unsafe { std::slice::from_raw_parts(vx.cast::<u8>(), blocks * 178) };
     let activations = unsafe { std::slice::from_raw_parts(vy.cast::<u8>(), blocks * 292) };
-    // Original optimized ggml Q3_K performs eight independent FP32 FMA
-    // chains, each surviving across ALL superblocks, then hsum_float_8.
-    // Summing each 256-weight block first changes the FP32 reduction graph
-    // and can flip full-model tokens despite identical integer products.
-    let mut accumulators = [0f32; 8];
-    for i in 0..blocks {
-        let w = &weights[178 * i..178 * (i + 1)];
-        let a = &activations[292 * i..292 * (i + 1)];
-        let dot = match q5::dot_tiled::<1>(w, a).map(|blocks| blocks[0]) {
-            Ok(dot) => dot,
-            Err(_) => std::process::abort(),
-        };
-        let d = f32::from_bits(dot.q8_scale_f32_bits) * f16_to_f32(dot.global_scale_f16_bits);
-        for (acc, integer) in accumulators.iter_mut().zip(dot.lanes) {
-            *acc = d.mul_add(integer as f32, *acc);
-        }
-    }
-    // Same association as original ggml hsum_float_8 (upper half + lower
-    // half; then lane 0+2 and 1+3; then final lane 0+1).
-    let halves = [
-        accumulators[0] + accumulators[4],
-        accumulators[1] + accumulators[5],
-        accumulators[2] + accumulators[6],
-        accumulators[3] + accumulators[7],
-    ];
-    let output = (halves[0] + halves[2]) + (halves[1] + halves[3]);
+    // SAFETY: the upfront C ABI guard checks AVX2, nonzero n and n % 256;
+    // the exact contiguous byte spans are the pinned ggml tensor contract.
+    // The optimized path hoists the mask setup and uses eight independent
+    // FP32-FMA lanes across ALL blocks, with the original hsum_float_8 order.
+    let output = unsafe { q5::dot_batched_single_avx2_prechecked(weights, activations, blocks) };
     // SAFETY: ggml provides a writable result float for nrc=1.
     unsafe { result.write_unaligned(output) };
 }
@@ -107,7 +65,7 @@ mod tests {
             let w = &weights[178 * block..178 * (block + 1)];
             let a = &activations[292 * block..292 * (block + 1)];
             let integer = q5::scalar_lanes(w, a).unwrap();
-            let global = f16_to_f32(integer.global_scale_f16_bits);
+            let global = q5::f16_to_f32(integer.global_scale_f16_bits);
             let activation_scale = f32::from_bits(integer.q8_scale_f32_bits);
             let multiplier = activation_scale * global;
             for (acc, lane) in lanes.iter_mut().zip(integer.lanes) {
@@ -167,12 +125,46 @@ mod tests {
     }
 
     #[test]
+    fn fused_batched_q5_avx2_matches_scalar_exact_fp32_association() {
+        if !std::is_x86_feature_detected!("avx2") {
+            return;
+        }
+        for blocks in [1usize, 2, 3, 17, 32, 101, 256] {
+            let (weights, activations) = fixtures(blocks);
+            let reference = scalar_reference(&weights, &activations, blocks);
+            let fast = unsafe {
+                q5::dot_batched_single_avx2_prechecked(&weights, &activations, blocks)
+            };
+            assert_eq!(
+                reference.to_bits(),
+                fast.to_bits(),
+                "FP32 FMA graph diverged at {blocks} blocks"
+            );
+        }
+    }
+
+    #[test]
+    fn batched_q5_preserves_subnormal_global_scaling() {
+        if !std::is_x86_feature_detected!("avx2") {
+            return;
+        }
+        let (mut weights, activations) = fixtures(17);
+        for (block, w) in weights.chunks_exact_mut(178).enumerate() {
+            let scale = [0x0001u16, 0x8001, 0x0400, 0x8400, 0x3c00, 0xbc00][block % 6];
+            w[176..178].copy_from_slice(&scale.to_le_bytes());
+        }
+        let reference = scalar_reference(&weights, &activations, 17);
+        let fast = unsafe { q5::dot_batched_single_avx2_prechecked(&weights, &activations, 17) };
+        assert_eq!(reference.to_bits(), fast.to_bits());
+    }
+
+    #[test]
     fn f16_widening_preserves_subnormals_and_signed_zeros() {
-        assert_eq!(f16_to_f32(0x0000).to_bits(), 0);
-        assert_eq!(f16_to_f32(0x8000).to_bits(), 0x80000000);
-        assert_eq!(f16_to_f32(0x3c00), 1.0);
-        assert_eq!(f16_to_f32(0xbc00), -1.0);
-        assert_eq!(f16_to_f32(0x0001), 2f32.powi(-24));
-        assert!(f16_to_f32(0x7e01).is_nan());
+        assert_eq!(q5::f16_to_f32(0x0000).to_bits(), 0);
+        assert_eq!(q5::f16_to_f32(0x8000).to_bits(), 0x80000000);
+        assert_eq!(q5::f16_to_f32(0x3c00), 1.0);
+        assert_eq!(q5::f16_to_f32(0xbc00), -1.0);
+        assert_eq!(q5::f16_to_f32(0x0001), 2f32.powi(-24));
+        assert!(q5::f16_to_f32(0x7e01).is_nan());
     }
 }
