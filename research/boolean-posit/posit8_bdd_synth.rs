@@ -215,7 +215,10 @@ fn main() {
     };
     if let Some(operation) = assembly_operation {
         let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
-        print!("{}", learned.emit_sysv_x86_64().expect("bounded assembly output"));
+        print!(
+            "{}",
+            learned.emit_sysv_x86_64().expect("bounded assembly output")
+        );
         return;
     }
     let operation = match arg.as_deref() {
