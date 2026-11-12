@@ -45,9 +45,20 @@ extern void mem_q5_178_vec_dot(int n, float *s, size_t bs,
 #endif
 "#;
 
-// Directly unpack actual Q5 nibbles and fifth-bit plane. No Q3_K stock
-// repacker or hidden 110-byte decoding; 16-bit bias matches signed q=u-16.
-const Q5_TILED_UNPACK: &str = r#"static void tiled_unpack_src0(const block_q3_K * rows, int64_t row_stride, int n_rows, tiled_tile_src0 * tile, int num_k) {
+// Directly unpack actual Q5 nibbles and fifth-bit plane. The hot path
+// expands eight fifth bits at once into eight distinct bytes using a 64-bit
+// swizzle, replacing 256 independent per-weight bitplane loads/shifts.
+// No heap, dense intermediate, or stock Q3_K fallback. Exactly preserves
+// the existing unsigned q[0..31] and signed bias=16 microkernel contract.
+const Q5_TILED_UNPACK: &str = r#"static inline uint64_t mem_q5_178_spread_eight(uint8_t byte) {
+    uint64_t value = byte;
+    value = (value | (value << 28)) & UINT64_C(0x0000000F0000000F);
+    value = (value | (value << 14)) & UINT64_C(0x0003000300030003);
+    value = (value | (value << 7))  & UINT64_C(0x0101010101010101);
+    return value << 4;
+}
+
+static void tiled_unpack_src0(const block_q3_K * rows, int64_t row_stride, int n_rows, tiled_tile_src0 * tile, int num_k) {
     GGML_ASSERT(n_rows <= TILED_TILE_ROWS);
     constexpr int NB = 16;
     const int qk_stride = num_k * TILED_TILE_K;
@@ -68,13 +79,23 @@ const Q5_TILED_UNPACK: &str = r#"static void tiled_unpack_src0(const block_q3_K 
                 tile->scales[s_off + subgroup] = static_cast<int32_t>(signed_scale);
             }
             uint8_t * q = &tile->q[q_off];
-            for (int i = 0; i < 256; i++) {
-                const int group = i / 32;
-                const int lane = i % 16;
-                const uint8_t packed = w[group * 16 + lane];
-                const int low = (i % 32) < 16 ? (packed & 15) : (packed >> 4);
-                const int high = (w[128 + i / 8] >> (i % 8)) & 1;
-                q[i] = static_cast<uint8_t>(low | (high << 4));
+            // The source-pinned CPU backend is x86-64 little-endian.
+            // The first nibble is code i, the second is code i+16.
+            // The fifth-bit plane is byte-ordered across all 256 codes.
+            for (int group = 0; group < 8; group++) {
+                uint8_t * dest = q + group * 32;
+                for (int lane = 0; lane < 16; lane++) {
+                    const uint8_t packed = w[group * 16 + lane];
+                    dest[lane]      = packed & 15;
+                    dest[lane + 16] = packed >> 4;
+                }
+                for (int byte = 0; byte < 4; byte++) {
+                    const uint64_t high = mem_q5_178_spread_eight(w[128 + group * 4 + byte]);
+                    uint64_t codes;
+                    std::memcpy(&codes, dest + byte * 8, sizeof(codes));
+                    codes |= high;
+                    std::memcpy(dest + byte * 8, &codes, sizeof(codes));
+                }
             }
         }
     }
@@ -222,6 +243,60 @@ fn main() {
 mod tests {
     use super::*;
 
+
+    /// Verify the candidate bit swizzle against the independent per-bit
+    /// reference for every possible fifth-bit byte (not a probabilistic test).
+    #[test]
+    fn exhaustive_fifth_bitbyte_spread_is_exact() {
+        for sample in 0..=255u64 {
+            let mut x = sample;
+            x = (x | (x << 28)) & 0x0000_000f_0000_000f;
+            x = (x | (x << 14)) & 0x0003_0003_0003_0003;
+            x = (x | (x << 7)) & 0x0101_0101_0101_0101;
+            let encoded = x << 4;
+            let expected: u64 = (0..8)
+                .map(|bit| ((sample >> bit) & 1) << (8 * bit + 4))
+                .sum();
+            assert_eq!(encoded, expected, "bad bitplane byte {sample}");
+        }
+    }
+
+    /// Independent 256-weight layout parity for 1,024 deterministic packed
+    /// candidate blocks: checks nibble order, high-bit bytes and boundaries.
+    #[test]
+    fn packed_q5_tiled_decoder_matches_all_scalar_positions() {
+        for seed in 0..1024usize {
+            let payload: [u8; 178] = std::array::from_fn(|i| {
+                ((i.wrapping_mul(131) ^ seed.wrapping_mul(79) ^ i.wrapping_mul(seed))
+                    & 255) as u8
+            });
+            let mut fast = [0u8; 256];
+            for group in 0..8 {
+                for lane in 0..16 {
+                    let packed = payload[group * 16 + lane];
+                    fast[group * 32 + lane] = packed & 15;
+                    fast[group * 32 + lane + 16] = packed >> 4;
+                }
+                for byte in 0..4 {
+                    let mut x = u64::from(payload[128 + group * 4 + byte]);
+                    x = (x | (x << 28)) & 0x0000_000f_0000_000f;
+                    x = (x | (x << 14)) & 0x0003_0003_0003_0003;
+                    x = (x | (x << 7)) & 0x0101_0101_0101_0101;
+                    let offset = group * 32 + byte * 8;
+                    let codes = u64::from_le_bytes(fast[offset..offset + 8].try_into().unwrap())
+                        | (x << 4);
+                    fast[offset..offset + 8].copy_from_slice(&codes.to_le_bytes());
+                }
+            }
+            for (i, actual) in fast.iter().enumerate() {
+                let packed = payload[(i / 32) * 16 + (i % 16)];
+                let low = if i % 32 < 16 { packed & 15 } else { packed >> 4 };
+                let high = (payload[128 + i / 8] >> (i % 8)) & 1;
+                assert_eq!(*actual, low | (high << 4), "seed={seed} index={i}");
+            }
+        }
+    }
+
     #[test]
     fn wrong_pin_is_rejected_without_patching_any_checkout() {
         assert!(patch(Path::new("/nonexistent-checkout"), "wrong-pin").is_err());
@@ -236,7 +311,9 @@ mod tests {
         assert!(!C_BRIDGE.contains("ggml_vec_dot_q3_K_q8_K"));
         assert!(Q5_TILED_UNPACK.contains("w + 176"));
         assert!(Q5_TILED_UNPACK.contains("w + 160 + subgroup"));
-        assert!(Q5_TILED_UNPACK.contains("w[128 + i / 8]"));
+        assert!(Q5_TILED_UNPACK.contains("mem_q5_178_spread_eight"));
+        assert!(Q5_TILED_UNPACK.contains("w[128 + group * 4 + byte]"));
+        assert!(Q5_TILED_UNPACK.contains("std::memcpy(dest + byte * 8, &codes, sizeof(codes))"));
         assert!(Q5_TILED_DISPATCH.contains("REAL_TILED_EXECUTED"));
         assert!(Q5_TILED_DISPATCH.contains(", 16, true>"));
         assert!(GGML_SHA.len() == 40);
