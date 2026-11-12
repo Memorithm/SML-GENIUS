@@ -60,9 +60,12 @@ fn parse(bytes: &[u8]) -> Result<Dump, Error> {
         if selected >= vocab {
             return Err(Error::InvalidToken);
         }
-        let greedy = row.iter().enumerate()
+        let greedy = row
+            .iter()
+            .enumerate()
             .max_by(|(ia, a), (ib, b)| a.total_cmp(b).then_with(|| ib.cmp(ia)))
-            .map(|(index, _)| index).unwrap();
+            .map(|(index, _)| index)
+            .unwrap();
         if selected != greedy {
             return Err(Error::InvalidToken);
         }
@@ -72,7 +75,12 @@ fn parse(bytes: &[u8]) -> Result<Dump, Error> {
     if pos != bytes.len() {
         return Err(Error::TrailingBytes);
     }
-    Ok(Dump { vocab, prompt, logits, tokens })
+    Ok(Dump {
+        vocab,
+        prompt,
+        logits,
+        tokens,
+    })
 }
 fn report(a: &Dump, b: &Dump) -> Result<String, Error> {
     if a.vocab != b.vocab {
@@ -81,7 +89,9 @@ fn report(a: &Dump, b: &Dump) -> Result<String, Error> {
     if a.prompt != b.prompt {
         return Err(Error::PromptMismatch);
     }
-    let mut csv = String::from("step,comparable_context,stock_token,q5_token,max_abs_logit_diff,rmse_logit_diff\n");
+    let mut csv = String::from(
+        "step,comparable_context,stock_token,q5_token,max_abs_logit_diff,rmse_logit_diff\n",
+    );
     let mut contexts_match = true;
     for step in 0..8 {
         if contexts_match {
@@ -140,9 +150,7 @@ mod tests {
         bytes.extend_from_slice(&1u32.to_le_bytes());
         bytes.extend_from_slice(&8u32.to_le_bytes());
         for token in tokens {
-            let row = (0..3usize).map(|i| {
-                if i == token as usize { 2.0f32 } else { -1.0f32 }
-            });
+            let row = (0..3usize).map(|i| if i == token as usize { 2.0f32 } else { -1.0f32 });
             for x in row {
                 bytes.extend_from_slice(&x.to_le_bytes());
             }
@@ -178,7 +186,10 @@ mod tests {
         altered.extend_from_slice(&1u32.to_le_bytes());
         assert_eq!(parse(&altered).unwrap_err(), Error::TrailingBytes);
         let short = dump([0; 8]);
-        assert_eq!(parse(&short[..short.len() - 1]).unwrap_err(), Error::Truncated);
+        assert_eq!(
+            parse(&short[..short.len() - 1]).unwrap_err(),
+            Error::Truncated
+        );
         let mut altered = dump([0; 8]);
         // Logit[0] at offset: magic8+vocab4+prompt_count4+prompt8+steps4.
         altered[28..32].copy_from_slice(&f32::NAN.to_le_bytes());
