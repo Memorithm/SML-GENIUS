@@ -34,9 +34,7 @@ impl IndependentPosit8 {
             self.0
         };
         let mut position = 0usize;
-        let encoded_bit = |offset: usize| -> u8 {
-            (magnitude >> (6 - offset)) & 1
-        };
+        let encoded_bit = |offset: usize| -> u8 { (magnitude >> (6 - offset)) & 1 };
         let first = encoded_bit(position);
         while position < 7 && encoded_bit(position) == first {
             position += 1;
