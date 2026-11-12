@@ -111,7 +111,7 @@ impl ComplementCircuit {
         let mut scratch = self.new_scratch64();
         let mut output = [0u8; LANES];
         for block in 0..(65536 / LANES) {
-            let inputs = std::array::from_fn(|lane| {
+            let inputs: [(u8, u8); LANES] = std::array::from_fn(|lane| {
                 let packed = (block * LANES + lane) as u16;
                 crate::deinterleave(packed)
             });
