@@ -221,7 +221,9 @@ fn main() {
             .expect("bounded complemented synthesis");
         print!(
             "{}",
-            learned.emit_sysv_x86_64().expect("bounded complemented assembly")
+            learned
+                .emit_sysv_x86_64()
+                .expect("bounded complemented assembly")
         );
         return;
     }
