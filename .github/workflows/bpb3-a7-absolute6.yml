@@ -1,0 +1,173 @@
+name: BPB-3 A7 absolute6 independent dyadic scales and unseen model weights
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3_a7_absolute6.rs'
+      - 'research/boolean-posit/bpb3_a7_corpus.py'
+      - 'research/boolean-posit/BPB3_A7_ABSOLUTE6_PROTOCOL_20261112.md'
+      - '.github/workflows/bpb3-a7-absolute6.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3_a7_absolute6.rs'
+      - 'research/boolean-posit/bpb3_a7_corpus.py'
+      - '.github/workflows/bpb3-a7-absolute6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  a7-correctness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89 and check frozen extractor syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+          python3 -m py_compile research/boolean-posit/bpb3_a7_corpus.py research/boolean-posit/smollm2_adaptive_corpus.py
+      - name: Format standalone Rust A7
+        id: format
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3_a7_absolute6.rs
+      - name: Independent signed Boolean and global-DP oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings --test research/boolean-posit/bpb3_a7_absolute6.rs -o "$RUNNER_TEMP/a7-tests"
+          "$RUNNER_TEMP/a7-tests" --nocapture | tee "$RUNNER_TEMP/a7-test-output.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/a7-test-output.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a7_absolute6.rs -o "$RUNNER_TEMP/a7-eval"
+      - name: Preserve corrected formatting for diagnostic
+        if: failure() && steps.format.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 research/boolean-posit/bpb3_a7_absolute6.rs
+          mkdir -p "$RUNNER_TEMP/a7-format"
+          cp research/boolean-posit/bpb3_a7_absolute6.rs "$RUNNER_TEMP/a7-format/"
+      - name: Upload standalone or format evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-a7-standalone-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/a7-test-output.txt
+            ${{ runner.temp }}/a7-format/bpb3_a7_absolute6.rs
+          if-no-files-found: warn
+          retention-days: 21
+
+  a7-heldout:
+    needs: a7-correctness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Read-only pinned model source tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/a7-venv"
+          "$RUNNER_TEMP/a7-venv/bin/pip" install --disable-pip-version-check numpy==2.2.6 huggingface_hub==0.35.3 hf_xet==1.1.10
+      - name: Check pinned original model bytes
+        shell: bash
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/a7-source"
+          export A7_MODEL_DIR="$RUNNER_TEMP/a7-source"
+          "$RUNNER_TEMP/a7-venv/bin/python" - <<'PY'
+          import os
+          from huggingface_hub import hf_hub_download
+          print(hf_hub_download(repo_id="HuggingFaceTB/SmolLM2-135M", revision="93efa2f097d58c2a74874c7e644dbc9b0cee75a2", filename="model.safetensors", local_dir=os.environ["A7_MODEL_DIR"]))
+          PY
+          echo '80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1  '"$RUNNER_TEMP/a7-source/model.safetensors" | sha256sum -c -
+      - name: Materialize only fresh layer24/25 transient source blocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/a7-venv/bin/python" research/boolean-posit/bpb3_a7_corpus.py "$RUNNER_TEMP/a7-source/model.safetensors" "$RUNNER_TEMP/a7-source/selected" | tee "$RUNNER_TEMP/a7-source-admission.txt"
+          grep -q '^PASS_BPB3_A7_FRESH_STRATA tensors=4 dev=24 test=24' "$RUNNER_TEMP/a7-source-admission.txt"
+      - name: Build frozen stock GGML Q3_K and Q4_K reference encoder
+        shell: bash
+        env:
+          GGML_SHA: f7591a6a01f9273de03331732bdc0b39721168be
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/a7-ggml"
+          git -C "$RUNNER_TEMP/a7-ggml" remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C "$RUNNER_TEMP/a7-ggml" -c credential.helper= fetch --no-tags --depth=1 origin "$GGML_SHA"
+          git -C "$RUNNER_TEMP/a7-ggml" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/a7-ggml" rev-parse HEAD)" = "$GGML_SHA"
+          cmake -S "$RUNNER_TEMP/a7-ggml" -B "$RUNNER_TEMP/a7-build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_METAL=OFF -DGGML_BACKEND_DL=OFF -DBUILD_SHARED_LIBS=ON
+          cmake --build "$RUNNER_TEMP/a7-build" --target ggml-base -j 2
+          LIB="$(find "$RUNNER_TEMP/a7-build" -type f -name 'libggml-base.so*' | head -n 1)"
+          test -n "$LIB"
+          dirname "$LIB" > "$RUNNER_TEMP/a7-libdir.txt"
+      - name: Evaluate source-matched A1 A7 Q3_K and Q4_K with same bipolar masks
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+          LIBDIR="$(cat "$RUNNER_TEMP/a7-libdir.txt")"
+          export LD_LIBRARY_PATH="$LIBDIR"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a7_absolute6.rs -o "$RUNNER_TEMP/a7-local"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a6_delta_scales.rs -o "$RUNNER_TEMP/a7-a6-local"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a5_mixed16.rs -o "$RUNNER_TEMP/a7-a5-local"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a4_local16.rs -o "$RUNNER_TEMP/a7-a4-local"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_adaptive_a3_paired.rs -L "native=$LIBDIR" -o "$RUNNER_TEMP/a7-native-and-a1"
+          echo 'tensor,split,codec,payload_bytes,bits_per_weight,weight_rmse,dot_rmse,coefficients,dots,delta2_blocks,delta4_blocks,mode1_groups,mode2_groups,mode3_groups' > "$RUNNER_TEMP/a7-all-results.csv"
+          for tensor in attention_output_layer24 attention_q_layer24 mlp_up_layer25 mlp_down_layer25; do
+            FILE="$RUNNER_TEMP/a7-source/selected/$tensor.f32le"
+            test "$(stat -c %s "$FILE")" -eq 49152
+            "$RUNNER_TEMP/a7-local" --external-f32le "$FILE" | tee "$RUNNER_TEMP/a7-$tensor.csv"
+            "$RUNNER_TEMP/a7-a6-local" --external-f32le "$FILE" | tee "$RUNNER_TEMP/a7-a6-$tensor.csv"
+            "$RUNNER_TEMP/a7-a5-local" --external-f32le "$FILE" | tee "$RUNNER_TEMP/a7-a5-$tensor.csv"
+            "$RUNNER_TEMP/a7-a4-local" --external-f32le "$FILE" | tee "$RUNNER_TEMP/a7-a4-$tensor.csv"
+            "$RUNNER_TEMP/a7-native-and-a1" --external-f32le "$FILE" | tee "$RUNNER_TEMP/a7-baseline-$tensor.csv"
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/a7-$tensor.csv")" -eq 1
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/a7-$tensor.csv")" -eq 1
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/a7-a6-$tensor.csv")" -eq 3
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/a7-a6-$tensor.csv")" -eq 3
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/a7-a5-$tensor.csv")" -eq 1
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/a7-a5-$tensor.csv")" -eq 1
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/a7-a4-$tensor.csv")" -eq 1
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/a7-a4-$tensor.csv")" -eq 1
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/a7-baseline-$tensor.csv")" -eq 4
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/a7-baseline-$tensor.csv")" -eq 4
+            awk -v tensor="$tensor" 'NR>2 {print tensor "," $0}' "$RUNNER_TEMP/a7-$tensor.csv" >> "$RUNNER_TEMP/a7-all-results.csv"
+            awk -v tensor="$tensor" 'NR>2 {print tensor "," $0}' "$RUNNER_TEMP/a7-a6-$tensor.csv" >> "$RUNNER_TEMP/a7-all-results.csv"
+            for format in a7-a5 a7-a4 a7-baseline; do
+              awk -F, -v tensor="$tensor" 'NR>2 { print tensor "," $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8 ",,," $9 "," $10 "," $11 }' "$RUNNER_TEMP/$format-$tensor.csv" >> "$RUNNER_TEMP/a7-all-results.csv"
+            done
+          done
+          test "$(wc -l < "$RUNNER_TEMP/a7-all-results.csv")" -eq 81
+          sha256sum "$RUNNER_TEMP/a7-all-results.csv" "$RUNNER_TEMP/a7-source/selected/manifest.json" > "$RUNNER_TEMP/a7-result-hashes.txt"
+          echo 'PASS_A7_FULLY_COSTED_ABSOLUTE6_HELDOUT preserving every negative or positive result'
+      - name: Retain only source hashes, metrics and manifests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-a7-local16-research-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/a7-all-results.csv
+            ${{ runner.temp }}/a7-result-hashes.txt
+            ${{ runner.temp }}/a7-source-admission.txt
+            ${{ runner.temp }}/a7-source/selected/manifest.json
+          if-no-files-found: warn
+          retention-days: 30
