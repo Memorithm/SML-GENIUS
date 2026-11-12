@@ -99,25 +99,44 @@ fn choose_global(source: &[f32; 256]) -> Result<u16, QuantizeError> {
 /// This exact discrete search cannot be worse than a signed four-bit
 /// candidate search using the SAME global scale: [-8,7] is a subset
 /// of [-16,15]. Floating-point model logits remain unqualified.
-fn optimize(source: &[f32; 256], global: f64, lower: i8, upper: i8) -> ([i8; 256], [i8; 16], f64) {
+// The exhaustive reference remains independently callable by tests. The
+// optimized path removes only candidates that cannot beat the incumbent.
+fn optimize_impl<const PRUNE: bool>(
+    source: &[f32; 256],
+    global: f64,
+    lower: i8,
+    upper: i8,
+) -> ([i8; 256], [i8; 16], f64) {
     let mut codes = [0i8; 256];
     let mut scales = [0i8; 16];
     let mut total_sse = 0.0f64;
+    // These multipliers are identical for all sixteen subgroups. Hoist
+    // their computation without changing the f64 operation sequence.
+    let multipliers: [f64; 256] = std::array::from_fn(|choice| {
+        let scale = if choice <= 127 {
+            choice as i16
+        } else {
+            127 - choice as i16
+        };
+        global * f64::from(scale)
+    });
+
     for subgroup in 0..16 {
+        let values: [f64; 16] =
+            std::array::from_fn(|local| f64::from(source[subgroup * 16 + local]));
         let mut best_sse = f64::INFINITY;
         let mut best_scale = 0i8;
         let mut best_codes = [0i8; 16];
-        for choice in 0..256usize {
+        for (choice, &multiplier) in multipliers.iter().enumerate() {
             let scale = if choice <= 127 {
                 choice as i16
             } else {
                 127 - choice as i16
             };
-            let multiplier = global * f64::from(scale);
             let mut trial = [0i8; 16];
             let mut err = 0.0f64;
             for (local, code) in trial.iter_mut().enumerate() {
-                let value = f64::from(source[subgroup * 16 + local]);
+                let value = values[local];
                 // A zero-scale candidate represents precisely zero.
                 let q = if scale == 0 {
                     0.0
@@ -129,6 +148,13 @@ fn optimize(source: &[f32; 256], global: f64, lower: i8, upper: i8) -> ([i8; 256
                 *code = q as i8;
                 let residual = value - q * multiplier;
                 err += residual * residual;
+                // Squared residuals are nonnegative on finite admitted
+                // inputs. Further terms cannot decrease this partial SSE.
+                // Strict '>' preserves exact-score ties and the original
+                // deterministic scale-selection order.
+                if PRUNE && err > best_sse {
+                    break;
+                }
             }
             if err < best_sse {
                 best_sse = err;
@@ -141,6 +167,10 @@ fn optimize(source: &[f32; 256], global: f64, lower: i8, upper: i8) -> ([i8; 256
         total_sse += best_sse;
     }
     (codes, scales, total_sse)
+}
+
+fn optimize(source: &[f32; 256], global: f64, lower: i8, upper: i8) -> ([i8; 256], [i8; 16], f64) {
+    optimize_impl::<true>(source, global, lower, upper)
 }
 
 pub fn quantize_f32_fixed_global(
@@ -325,6 +355,51 @@ mod tests {
             };
             uniform * scale
         })
+    }
+
+    #[test]
+    fn pruned_search_matches_unpruned_exact_argmin_and_sse() {
+        let signed_zero = std::array::from_fn(|i| if i % 2 == 0 { 0.0 } else { -0.0 });
+        let nearly_zero = std::array::from_fn(|i| {
+            if i % 3 == 0 {
+                -f32::from_bits(1)
+            } else {
+                f32::from_bits(1)
+            }
+        });
+        // Include ties, signed zeros, extreme signed values and many
+        // independently generated deterministic source blocks.
+        let mut sources = vec![
+            [0.0f32; 256],
+            signed_zero,
+            nearly_zero,
+            std::array::from_fn(|i| if i % 2 == 0 { -32768.0 } else { 32768.0 }),
+            std::array::from_fn(|i| if i % 2 == 0 { -0.5 } else { 0.5 }),
+        ];
+        sources.extend((0..48).map(deterministic_source));
+        for (case, source) in sources.iter().enumerate() {
+            for (global, lower, upper) in [
+                (2.0f64.powi(-14), -16, 15),
+                (1.0f64, -16, 15),
+                (32.0f64, -8, 7),
+            ] {
+                let baseline = optimize_impl::<false>(source, global, lower, upper);
+                let candidate = optimize_impl::<true>(source, global, lower, upper);
+                assert_eq!(
+                    candidate.0, baseline.0,
+                    "codes case={case}, global={global}"
+                );
+                assert_eq!(
+                    candidate.1, baseline.1,
+                    "scales case={case}, global={global}"
+                );
+                assert_eq!(
+                    candidate.2.to_bits(),
+                    baseline.2.to_bits(),
+                    "SSE case={case}, global={global}"
+                );
+            }
+        }
     }
 
     #[test]
