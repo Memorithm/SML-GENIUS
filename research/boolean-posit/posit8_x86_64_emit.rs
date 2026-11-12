@@ -44,10 +44,7 @@ impl LearnedCircuit {
             return Err("stack scratch budget exceeded");
         }
         for (index, node) in self.nodes.iter().enumerate() {
-            if node.variable >= SELECTORS as u8
-                || node.low >= index + 2
-                || node.high >= index + 2
-            {
+            if node.variable >= SELECTORS as u8 || node.low >= index + 2 || node.high >= index + 2 {
                 return Err("invalid or cyclic BDD node");
             }
         }
@@ -154,8 +151,14 @@ mod tests {
                 assert!(asm.contains("add rsp, "));
             }
             assert_eq!(direct.matches("    xor edx, eax").count(), circuit.nodes());
-            assert_eq!(direct.matches("    mov BYTE PTR [rsp + ").count(), circuit.nodes() + 2);
-            assert_eq!(cached.matches("    mov BYTE PTR [rsp + ").count(), circuit.nodes() + 2 + SELECTORS);
+            assert_eq!(
+                direct.matches("    mov BYTE PTR [rsp + ").count(),
+                circuit.nodes() + 2
+            );
+            assert_eq!(
+                cached.matches("    mov BYTE PTR [rsp + ").count(),
+                circuit.nodes() + 2 + SELECTORS
+            );
             assert!(cached.contains("and dl, BYTE PTR"));
             assert!(cached.len() < direct.len());
         }
