@@ -392,7 +392,6 @@ fn transcode(source: &Path, dest: &Path) -> Result<(u64, u64), String> {
     result
 }
 
-
 /// Prepare only for an exact-source-pinned patched ggml process: translate
 /// the deliberately nonstandard Q5 sentinel to the Q3_K surrogate type ID.
 /// Never mutate the safe sentinel source; reject mixed stock Q3_K matrices.
@@ -418,8 +417,7 @@ fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String
     let mut count = 0;
     for (index, tensor) in entries.iter().enumerate() {
         if index > 0
-            && (tensor.offset <= entries[index - 1].offset
-                || tensor.offset % alignment != 0)
+            && (tensor.offset <= entries[index - 1].offset || tensor.offset % alignment != 0)
         {
             return Err("STOP_PREPARE_OFFSETS".into());
         }
@@ -439,14 +437,13 @@ fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String
             .checked_add(tensor.offset)
             .ok_or("STOP_PREPARE_OFFSET_OVERFLOW")?;
         let end = if let Some(next) = entries.get(index + 1) {
-            start.checked_add(next.offset).ok_or("STOP_PREPARE_NEXT_OVERFLOW")?
+            start
+                .checked_add(next.offset)
+                .ok_or("STOP_PREPARE_NEXT_OVERFLOW")?
         } else {
             len
         };
-        if from >= end || end > len
-            || expected > end - from
-            || end - from - expected >= alignment
-        {
+        if from >= end || end > len || expected > end - from || end - from - expected >= alignment {
             return Err("STOP_PREPARE_Q5_SIZE".into());
         }
         count += 1;
@@ -455,16 +452,23 @@ fn prepare_for_patched_runtime(source: &Path, dest: &Path) -> Result<u64, String
         return Err("STOP_PREPARE_NO_Q5_TENSORS".into());
     }
     let result = (|| {
-        let mut output = OpenOptions::new().create_new(true).write(true)
-            .open(dest).map_err(|e| e.to_string())?;
+        let mut output = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(dest)
+            .map_err(|e| e.to_string())?;
         input.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
         let copied = std::io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
         if copied != len {
             return Err("STOP_PREPARE_SHORT_COPY".into());
         }
         for tensor in entries.iter().filter(|t| t.kind == Q5_EXPERIMENTAL_TYPE) {
-            output.seek(SeekFrom::Start(tensor.kind_field)).map_err(|e| e.to_string())?;
-            output.write_all(&11u32.to_le_bytes()).map_err(|e| e.to_string())?;
+            output
+                .seek(SeekFrom::Start(tensor.kind_field))
+                .map_err(|e| e.to_string())?;
+            output
+                .write_all(&11u32.to_le_bytes())
+                .map_err(|e| e.to_string())?;
         }
         output.sync_all().map_err(|e| e.to_string())?;
         println!(
@@ -673,8 +677,6 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
-
-
     #[test]
     fn q5_preparation_rewrites_only_experimental_type_fields_after_validation() {
         let root = temp_root();
@@ -703,8 +705,7 @@ mod tests {
         assert_eq!(prepared, reconstructed);
         assert_eq!(fs::read(&experimental_file).unwrap(), safe);
         assert_eq!(
-            prepare_for_patched_runtime(&prepared_file, &root.join("second.gguf"))
-                .unwrap_err(),
+            prepare_for_patched_runtime(&prepared_file, &root.join("second.gguf")).unwrap_err(),
             "STOP_PREPARE_MIXED_OR_ALREADY_Q3"
         );
         fs::remove_dir_all(&root).unwrap();
@@ -721,8 +722,7 @@ mod tests {
         transcode(&original_file, &experimental_file).unwrap();
         let source = fs::read(&experimental_file).unwrap();
         assert_eq!(
-            prepare_for_patched_runtime(&experimental_file, &prepared_file)
-                .unwrap_err(),
+            prepare_for_patched_runtime(&experimental_file, &prepared_file).unwrap_err(),
             "STOP_PREPARE_MIXED_OR_ALREADY_Q3"
         );
         assert!(!prepared_file.exists());
