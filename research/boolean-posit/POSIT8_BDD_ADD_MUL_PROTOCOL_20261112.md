@@ -23,10 +23,10 @@ Pour chaque couple de deux posits8 `a,b`, produire la représentation exacte cal
 - Émettre les mesures **réelles** de nombre de nœuds, taille du source Rust généré, nombre de portes MUX et profondeur maximale, plutôt que les présumer.
 - Sauvegarder le code machine assemblé, tous les tests et l'identité SHA du commit.
 - Ne jamais interpréter la synthèse par vérité exhaustive comme une validation de généralisation hors du domaine 8 bits, de faible complexité, de conformité standard, de vitesse ou d'efficacité énergétique.
-- Ne pas copier le code nCPU, dont la licence annoncée dans README (MIT) contredit le fichier LICENSE (CC BY-NC 4.0).
+- Préserver l'indépendance des implémentations : aucun code tiers, poids, table de vérité ou jeu d'essai externe n'est incorporé dans les algorithmes et les circuits générés. Toute dépendance future reste soumise à une vérification de provenance, de licence et de validité scientifique.
 
 ## Prochain verrou scientifique
 
 **SYNTH2 :** découvrir des sous-structures arithmétiques *composables* (régime, normalisation, retenue, arrondi) sans utiliser 100 % de la table comme exemples d'entraînement. Partition train/validation réellement disjointe, recherche d'un bon ordre de variables gelée sur DEV, équivalence exhaustive finale sur 65 536 couples. Comparer aux circuits écrits manuellement, au nombre de portes physiques estimé, à la taille binaire et au **temps réellement mesuré** face à un noyau posit8 conventionnel natif. Les nouveaux résultats ne seront promus dans SML-GENIUS ou V888-BOOLEEN qu'après leur propre validation indépendante.
 
-Références : Robert C. Price, [nCPU, mars 2026](https://github.com/robertcprice/nCPU/blob/main/paper/ncpu_paper.md) (inspiration seulement) ; [Posit Standard 2022](https://posithub.org/docs/posit_standard-2.pdf). Mesures CPU physiques via Memorithm/RemoteOps uniquement après admission isolée.
+Référence normative : [Posit Standard 2022](https://posithub.org/docs/posit_standard-2.pdf). Les mesures sur CPU physiques doivent être admises et isolées exclusivement par Memorithm/RemoteOps. Le travail est réalisé de manière autonome au sein de Memorithm.
