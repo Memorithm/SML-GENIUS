@@ -253,8 +253,8 @@ pub fn dot_i8_prepared(bytes: &[u8], input: &Int8Bitplanes) -> Result<i128, Erro
         for (plane_index, &weight_bits) in planes[g][..usize::from(modes[g])].iter().enumerate() {
             for (bit, &activation_bits) in input[g].iter().enumerate() {
                 let selected = weight_bits & activation_bits;
-                let signed_count = selected.count_ones() as i32
-                    - 2 * (selected & weight_sign).count_ones() as i32;
+                let signed_count =
+                    selected.count_ones() as i32 - 2 * (selected & weight_sign).count_ones() as i32;
                 let activation_factor = if bit == 7 { -128 } else { 1i32 << bit };
                 let term = signed_count
                     .checked_mul(activation_factor)
