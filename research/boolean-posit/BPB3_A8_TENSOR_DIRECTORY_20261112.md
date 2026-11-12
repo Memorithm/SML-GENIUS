@@ -16,7 +16,7 @@ Serialized tensor format:
 
 At construction time, the reader validates all page offsets, page cardinalities, all per-page checkpoints and all original A8 blocks. It retains page borrows and a bounded in-memory reference directory. Each subsequent row lookup uses O(1) page addressing plus at most seven earlier block-mode-prefix scans inside that page; there is no full preceding-tensor scan or copied weight buffer for random access.
 
-The `signed_bipolar_matvec(mask)` operation uses **one common 256-element bipolar input** (four u64 words; 1-bit is negative) for each A8 matrix row. It returns one **exact checked i128 integer in units of 2^-24** per row using the original signed POPCOUNT A8 kernel. The path does not unpack all 256 coefficients into a dense float buffer and explicitly rejects corrupt or unvalidated tensor data. Independent tests reconstruct the original signed coefficients and sum a scalar reference from the actual quantized codes and dyadic exponents.
+The `signed_bipolar_matvec(mask)` operation uses **one common 256-element bipolar input** (four u64 words; 1-bit is negative) for each A8 matrix row. It returns one **exact checked i128 integer in units of 2^-24** per row using the original signed POPCOUNT A8 kernel. For recurring token vectors, `signed_bipolar_matvec_into(mask, outputs)` uses a preallocated caller-owned `i128` output slice and rejects wrong-length buffers before mutation, avoiding per-call output-vector allocation. The path does not unpack all 256 coefficients into a dense float buffer and explicitly rejects corrupt or unvalidated tensor data. Independent tests reconstruct the original signed coefficients and sum a scalar reference from the actual quantized codes and dyadic exponents.
 
 ## Fully charged serialized storage
 
@@ -34,6 +34,6 @@ This is an **exact on-wire size accounting**, not a measured hardware-byte-read 
 
 ## Tests
 
-The hosted Rust 1.89 standalone workflow compiles and executes the tensor's own tests plus the original A8/page tests. It checks every byte across 1,24,255,256,257,511,512,513 rows, 300-row exact integer bipolar matvec against independent scalar codes at four input masks, two-level directory corruption, page corruption, length and bound failures, and exact serialized overhead. The parent page-local workflow remains part of the same gate.
+The hosted Rust 1.89 standalone workflow compiles and executes the tensor's own tests plus the original A8/page tests. It checks every byte across 1,24,255,256,257,511,512,513 rows, 300-row exact integer bipolar matvec and reusable-buffer output against independent scalar codes at four input masks (including wrong-length rejection without mutation), two-level directory corruption, page corruption, length and bound failures, and exact serialized overhead. The parent page-local workflow remains part of the same gate.
 
 No Dell, Thor, Mac, vendor SDK or production process is involved. Physical qualification, if needed, must be admitted by Memorithm/RemoteOps and cannot be inferred from these hosted CPU checks.
