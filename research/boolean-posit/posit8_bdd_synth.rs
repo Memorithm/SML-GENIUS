@@ -208,6 +208,21 @@ impl LearnedCircuit {
 }
 fn main() {
     let arg = std::env::args().nth(1);
+    let cached_assembly_operation = match arg.as_deref() {
+        Some("--emit-x86-cached-add") => Some(Operation::Add),
+        Some("--emit-x86-cached-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = cached_assembly_operation {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        print!(
+            "{}",
+            learned
+                .emit_sysv_x86_64_cached()
+                .expect("bounded cached assembly output")
+        );
+        return;
+    }
     let assembly_operation = match arg.as_deref() {
         Some("--emit-x86-add") => Some(Operation::Add),
         Some("--emit-x86-mul") => Some(Operation::Mul),
