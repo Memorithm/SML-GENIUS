@@ -12,6 +12,8 @@ on:
     branches: [main]
     paths:
       - 'research/boolean-posit/bpb3_a8_paged.rs'
+      - 'research/boolean-posit/bpb3_a8_tensor.rs'
+      - 'research/boolean-posit/BPB3_A8_TENSOR_DIRECTORY_20261112.md'
       - 'research/boolean-posit/BPB3_A8_PAGED_INDEX_20261112.md'
       - '.github/workflows/bpb3-a8-paged.yml'
   workflow_dispatch:
@@ -49,6 +51,7 @@ jobs:
           rustc --edition 2021 -D warnings --test research/boolean-posit/bpb3_a8_tensor.rs -o "$RUNNER_TEMP/bpb3-a8-tensor-tests"
           "$RUNNER_TEMP/bpb3-a8-tensor-tests" --nocapture | tee "$RUNNER_TEMP/bpb3-a8-tensor-test-output.txt"
           grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/bpb3-a8-page-test-output.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/bpb3-a8-tensor-test-output.txt"
       - name: Preserve CPU-only correctness evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
