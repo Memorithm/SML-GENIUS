@@ -139,7 +139,7 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     let tiled_text = fs::read_to_string(&tiled).map_err(|e| e.to_string())?;
     if core_text.matches(".to_float                 = (ggml_to_float_t) dequantize_row_q3_K,").count() != 1
         || cpu_text.matches(".vec_dot                  = ggml_vec_dot_q3_K_q8_K,").count() != 1
-        || tiled_text.matches("        case GGML_TYPE_Q5_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:").count() != 1
+        || tiled_text.matches("        case GGML_TYPE_Q4_K:\n        case GGML_TYPE_Q3_K:\n        case GGML_TYPE_Q2_K:").count() != 1
         || tiled_text.matches("        case GGML_TYPE_Q3_K:\n            return tiled_matmul_dispatch<block_q3_K, 16, false,  4, true>").count() != 1
     {
         return Err("STOP_Q5_TRAITS_OR_TILED_DRIFT".into());
