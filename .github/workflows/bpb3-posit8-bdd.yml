@@ -80,7 +80,8 @@ jobs:
           RS
             rustc --edition 2021 -O -D warnings --test "$SRC" -o "$RUNNER_TEMP/posit8-native-$op-test"
             "$RUNNER_TEMP/posit8-native-$op-test" --nocapture | tee "$RUNNER_TEMP/posit8-native-$op-check.txt"
-            grep -Eq 'test result: ok[.] 1 passed; 0 failed;' "$RUNNER_TEMP/posit8-native-$op-check.txt"
+            grep -Fq 'test generated_circuit_validation::all_65536_posit8_inputs ... ok' "$RUNNER_TEMP/posit8-native-$op-check.txt"
+            grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-native-$op-check.txt"
           done
       - name: Preserve evidence
         if: always()
