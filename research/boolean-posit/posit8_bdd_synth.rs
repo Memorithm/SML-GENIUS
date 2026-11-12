@@ -76,7 +76,11 @@ impl Builder {
             return Err("circuit exceeds prescribed node budget");
         }
         let id = self.nodes.len() + 2;
-        self.nodes.push(Branch { variable, low, high });
+        self.nodes.push(Branch {
+            variable,
+            low,
+            high,
+        });
         self.unique.insert((variable, low, high), id);
         Ok(id)
     }
@@ -112,15 +116,26 @@ impl LearnedCircuit {
             let (a, b) = deinterleave(encoded as u16);
             *output = operation.oracle(a, b);
         }
-        let mut builder = Builder { nodes: Vec::new(), unique: HashMap::new() };
+        let mut builder = Builder {
+            nodes: Vec::new(),
+            unique: HashMap::new(),
+        };
         let mut output_roots = [0usize; BITS];
         for (bit, root) in output_roots.iter_mut().enumerate() {
             *root = builder.visit(&expected, 0, DOMAIN, bit as u8)?;
         }
-        Ok(Self { operation, nodes: builder.nodes, output_roots })
+        Ok(Self {
+            operation,
+            nodes: builder.nodes,
+            output_roots,
+        })
     }
-    pub fn nodes(&self) -> usize { self.nodes.len() }
-    pub fn depth(&self) -> usize { 16 }
+    pub fn nodes(&self) -> usize {
+        self.nodes.len()
+    }
+    pub fn depth(&self) -> usize {
+        16
+    }
     pub fn evaluate(&self, a: u8, b: u8) -> u8 {
         let packed = interleave(a, b);
         let mut result = 0u8;
@@ -156,21 +171,34 @@ impl LearnedCircuit {
             "#![forbid(unsafe_code)]\n#[inline(never)]\npub fn {function}(a: u8, b: u8) -> u8 {{\n"
         );
         for bit in 0..8 {
-            writeln!(&mut code, "    let p{}: u8 = (a >> {}) & 1;", 2*bit, bit).unwrap();
-            writeln!(&mut code, "    let p{}: u8 = (b >> {}) & 1;", 2*bit + 1, bit).unwrap();
+            writeln!(&mut code, "    let p{}: u8 = (a >> {}) & 1;", 2 * bit, bit).unwrap();
+            writeln!(
+                &mut code,
+                "    let p{}: u8 = (b >> {}) & 1;",
+                2 * bit + 1,
+                bit
+            )
+            .unwrap();
         }
         code.push_str("    let w0: u8 = 0;\n    let w1: u8 = 1;\n");
         for (offset, node) in self.nodes.iter().enumerate() {
             let v = node.variable;
             let id = offset + 2;
             // A Boolean multiplexer: low XOR ((low XOR high) AND select).
-            writeln!(&mut code,
+            writeln!(
+                &mut code,
                 "    let w{id}: u8 = w{} ^ ((w{} ^ w{}) & p{v});",
-                node.low, node.low, node.high).unwrap();
+                node.low, node.low, node.high
+            )
+            .unwrap();
         }
-        let expr = self.output_roots.iter().enumerate().map(|(bit, root)| {
-            format!("(w{root} << {bit})")
-        }).collect::<Vec<_>>().join(" | ");
+        let expr = self
+            .output_roots
+            .iter()
+            .enumerate()
+            .map(|(bit, root)| format!("(w{root} << {bit})"))
+            .collect::<Vec<_>>()
+            .join(" | ");
         writeln!(&mut code, "    {expr}\n}}").unwrap();
         code
     }
@@ -190,8 +218,11 @@ fn main() {
     for operation in [Operation::Add, Operation::Mul] {
         let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
         learned.verify_exhaustive().expect("all 65536 input pairs");
-        println!("POSIT8_BDD_{} PASS nodes={} depth<=16 pairs=65536 mismatches=0",
-            operation.name(), learned.nodes());
+        println!(
+            "POSIT8_BDD_{} PASS nodes={} depth<=16 pairs=65536 mismatches=0",
+            operation.name(),
+            learned.nodes()
+        );
     }
 }
 #[cfg(test)]
