@@ -182,12 +182,26 @@ impl<'a> TensorView<'a> {
     /// Each output uses the same 256-element bipolar vector; a set input bit
     /// denotes -1, otherwise +1. Exact output units are multiples of 2^-24.
     /// No dense dequantization occurs in this execution path.
-    pub fn signed_bipolar_matvec(&self, mask: &[u64; 4]) -> Result<Vec<i128>, TensorError> {
-        let mut outputs = Vec::with_capacity(self.rows);
-        for row in 0..self.rows {
-            outputs
-                .push(a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?);
+    /// Reuses caller-owned output storage across multiple inference inputs.
+    /// Wrong-sized output buffers are rejected before modifying any element.
+    pub fn signed_bipolar_matvec_into(
+        &self,
+        mask: &[u64; 4],
+        outputs: &mut [i128],
+    ) -> Result<(), TensorError> {
+        if outputs.len() != self.rows {
+            return Err(TensorError::WrongLength);
         }
+        for (row, output) in outputs.iter_mut().enumerate() {
+            *output =
+                a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?;
+        }
+        Ok(())
+    }
+
+    pub fn signed_bipolar_matvec(&self, mask: &[u64; 4]) -> Result<Vec<i128>, TensorError> {
+        let mut outputs = vec![0i128; self.rows];
+        self.signed_bipolar_matvec_into(mask, &mut outputs)?;
         Ok(outputs)
     }
 }
@@ -270,6 +284,15 @@ mod tests {
             let actual = view.signed_bipolar_matvec(&mask).unwrap();
             let reference: Vec<_> = source.iter().map(|row| scalar_oracle(row, &mask)).collect();
             assert_eq!(actual, reference);
+            let mut reused = vec![-12345i128; view.len()];
+            view.signed_bipolar_matvec_into(&mask, &mut reused).unwrap();
+            assert_eq!(reused, reference);
+            let mut too_short = vec![77i128; view.len() - 1];
+            assert_eq!(
+                view.signed_bipolar_matvec_into(&mask, &mut too_short),
+                Err(TensorError::WrongLength)
+            );
+            assert!(too_short.iter().all(|&value| value == 77));
         }
     }
 
