@@ -1,0 +1,182 @@
+name: BPB3-K Q5-178 vs truly matched native Q5_K on original F16
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q5-native-q5k-matched.yml'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/BPB3_K_Q5_NATIVE_MATCHED.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bpb3k-q5-native-q5k-matched.yml'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+permissions:
+  contents: read
+jobs:
+  same-source-same-tensor-q5k-control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Compile Rust 1.89 and assert exact three-way GGUF tensor audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup run 1.89.0 rustfmt --edition 2021 --check research/boolean-posit/bpb3k_q5_gguf_transcode.rs
+          mkdir -p "$RUNNER_TEMP/q5-matched"
+          rustup run 1.89.0 rustc --edition 2021 -D warnings --test \
+            research/boolean-posit/bpb3k_q5_gguf_transcode.rs -o "$RUNNER_TEMP/q5-matched/audit-tests"
+          "$RUNNER_TEMP/q5-matched/audit-tests" --nocapture
+          for item in bpb3k_q5_gguf_transcode bpb3k_q5_ggml_patch bpb3k_fidelity bpb3k_q5_logits_report; do
+            rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
+              "research/boolean-posit/$item.rs" -o "$RUNNER_TEMP/q5-matched/$item"
+          done
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -O -C target-cpu=haswell \
+            -C relocation-model=pic --crate-type staticlib research/boolean-posit/bpb3k_q5_ggml_ffi.rs \
+            -o "$RUNNER_TEMP/q5-matched/libq5.a"
+      - name: Verify the same original trained F16 model and independently convert Q5-178
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q5-matched"
+          timeout -k 10s 360s curl -fL --retry 3 --connect-timeout 20 --max-time 350 \
+            -o source-f16.gguf \
+            'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/c6f2d396a5faa22c9722908d47e8da81a5d8cebc/SmolLM2-135M-Instruct-f16.gguf'
+          echo 'f535f83ec568d040f88ddc04a199fa6da90923bbb41d4dcaed02caa924d6ef57  source-f16.gguf' | sha256sum -c -
+          /usr/bin/time -v -o q5-conversion-resources.txt \
+            timeout -k 10s 1800s ./bpb3k_q5_gguf_transcode transcode source-f16.gguf sentinel-q5-178.gguf \
+            | tee q5-conversion.txt
+          grep -q '^PASS_Q5_178_GGUF_SOURCE tensors=30 blocks=103680 ' q5-conversion.txt
+          ./bpb3k_q5_gguf_transcode prepare-patched-runtime sentinel-q5-178.gguf patched-q5-178.gguf \
+            | tee q5-preparation.txt
+          grep -q '^PASS_Q5_178_PREPARE_PATCHED_RUNTIME tensors=30 ' q5-preparation.txt
+      - name: Compile untouched ggml Q5_K CPU quantizer and pinned Q5-178 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q5-matched"
+          git init -q llama
+          git -C llama remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C llama fetch --depth 1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C llama checkout -q --detach FETCH_HEAD
+          test "$(git -C llama rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          git -C llama worktree add --detach ../stock f7591a6a01f9273de03331732bdc0b39721168be
+          ./bpb3k_q5_ggml_patch patch "$PWD/llama" f7591a6a01f9273de03331732bdc0b39721168be | tee q5-patch.txt
+          grep -q '^PASS_BPB3K_Q5_GGML_PATCH ' q5-patch.txt
+          ./bpb3k_fidelity patch-debug "$PWD/llama"
+          ./bpb3k_fidelity patch-debug "$PWD/stock"
+          cmake -S llama -B llama/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON \
+            -DMEM_BPB3K_RUST_STATICLIB="$PWD/libq5.a"
+          cmake --build llama/build -j 3 --target llama-debug llama-bench
+          cmake -S stock -B stock/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build stock/build -j 3 --target llama-quantize llama-debug llama-bench
+          sha256sum llama/build/bin/llama-debug stock/build/bin/llama-debug stock/build/bin/llama-quantize > binary-hashes.txt
+      - name: Generate genuinely native Q5_K only for source-matched 30 matrices
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q5-matched"
+          /usr/bin/time -v -o native-q5k-conversion-resources.txt \
+            timeout -k 10s 1200s ./stock/build/bin/llama-quantize --pure \
+              --tensor-type 'ffn_down\.weight$=q5_k' --tensor-type '.*=f16' \
+              source-f16.gguf native-q5-k.gguf Q5_K_S 2 \
+              >native-q5k-conversion.txt 2>&1
+          ./bpb3k_q5_gguf_transcode audit-native-q5k \
+            source-f16.gguf native-q5-k.gguf sentinel-q5-178.gguf | tee three-way-audit.txt
+          grep -q '^PASS_Q5K_MATCHED_SOURCE .*matrices=30 blocks=103680 ' three-way-audit.txt
+          sha256sum source-f16.gguf native-q5-k.gguf sentinel-q5-178.gguf patched-q5-178.gguf > model-hashes.txt
+      - name: Full-vocabulary Q5_K versus Q5-178 only while contexts match
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q5-matched"
+          fail=0
+          for case in arithmetic longprefill; do
+            if [[ "$case" == arithmetic ]]; then
+              phrase='In mathematics, two plus two equals'
+            else
+              phrase='This bounded CPU source-model comparison enumerates the integers in order: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80'
+            fi
+            for arm in native q5; do
+              if [[ "$arm" == native ]]; then
+                model=native-q5-k.gguf; exe=./stock/build/bin/llama-debug
+              else
+                model=patched-q5-178.gguf; exe=./llama/build/bin/llama-debug
+              fi
+              if ! MEM_BPB3K_FIDELITY_DUMP="$PWD/logits-$case-$arm.bin" \
+                timeout -k 10s 240s "$exe" -m "$model" -ngl 0 -t 2 -c 1024 -b 512 -ub 512 -n 8 \
+                  -p "$phrase" --save-logits >"output-$case-$arm.txt" 2>&1; then
+                fail=1
+                tail -n 25 "output-$case-$arm.txt"
+              fi
+              grep -q '^PASS_BPB3K_FIDELITY_DUMP ' "output-$case-$arm.txt" || fail=1
+            done
+            if [[ -f "logits-$case-native.bin" && -f "logits-$case-q5.bin" ]]; then
+              ./bpb3k_q5_logits_report "logits-$case-native.bin" "logits-$case-q5.bin" \
+                | tee "comparison-$case.csv" || fail=1
+            else
+              fail=1
+            fi
+          done
+          grep -q '^BPB3K_Q5_178_REAL_DOT_EXECUTED ' output-arithmetic-q5.txt || fail=1
+          grep -q '^BPB3K_Q5_178_REAL_TILED_EXECUTED ' output-longprefill-q5.txt || fail=1
+          if grep -q 'BPB3K_Q5_178_REAL_' output-arithmetic-native.txt; then fail=1; fi
+          echo "Q5_NATIVE_MATCH_CANARY_FAIL=$fail" | tee canary.txt
+          test "$fail" -eq 0
+      - name: Eight alternating complete model Q5_K versus Q5-178 pp64/tg32/RSS pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/q5-matched"
+          for pair in $(seq 1 8); do
+            if (( pair % 2 )); then order='native q5'; else order='q5 native'; fi
+            for arm in $order; do
+              if [[ "$arm" == native ]]; then
+                model=native-q5-k.gguf; exe=./stock/build/bin/llama-bench
+              else
+                model=patched-q5-178.gguf; exe=./llama/build/bin/llama-bench
+              fi
+              /usr/bin/time -v -o "resource-$pair-$arm.txt" \
+                timeout -k 10s 240s "$exe" -m "$model" -ngl 0 -t 2 -p 64 -n 32 -r 2 \
+                >"bench-$pair-$arm.txt" 2>&1
+              grep -q '| ' "bench-$pair-$arm.txt"
+              if [[ "$arm" == q5 ]]; then
+                grep -q '^BPB3K_Q5_178_REAL_TILED_EXECUTED ' "bench-$pair-$arm.txt"
+              else
+                if grep -q 'BPB3K_Q5_178_REAL_' "bench-$pair-$arm.txt"; then exit 1; fi
+              fi
+            done
+          done
+          echo 'Q5_MATCHED_Q5K_PAIRED_RUNS=8' | tee paired-verdict.txt
+      - name: Retain only audit logs, never model or vocabulary dump payloads
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: q5-vs-q5k-matched-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/q5-matched/model-hashes.txt
+            ${{ runner.temp }}/q5-matched/binary-hashes.txt
+            ${{ runner.temp }}/q5-matched/q5-conversion-resources.txt
+            ${{ runner.temp }}/q5-matched/q5-conversion.txt
+            ${{ runner.temp }}/q5-matched/q5-preparation.txt
+            ${{ runner.temp }}/q5-matched/q5-patch.txt
+            ${{ runner.temp }}/q5-matched/native-q5k-conversion-resources.txt
+            ${{ runner.temp }}/q5-matched/native-q5k-conversion.txt
+            ${{ runner.temp }}/q5-matched/three-way-audit.txt
+            ${{ runner.temp }}/q5-matched/output-*.txt
+            ${{ runner.temp }}/q5-matched/comparison-*.csv
+            ${{ runner.temp }}/q5-matched/canary.txt
+            ${{ runner.temp }}/q5-matched/bench-*.txt
+            ${{ runner.temp }}/q5-matched/resource-*.txt
+            ${{ runner.temp }}/q5-matched/paired-verdict.txt
+          if-no-files-found: warn
+          retention-days: 21
