@@ -132,9 +132,8 @@ mod tests {
         for blocks in [1usize, 2, 3, 17, 32, 101, 256] {
             let (weights, activations) = fixtures(blocks);
             let reference = scalar_reference(&weights, &activations, blocks);
-            let fast = unsafe {
-                q5::dot_batched_single_avx2_prechecked(&weights, &activations, blocks)
-            };
+            let fast =
+                unsafe { q5::dot_batched_single_avx2_prechecked(&weights, &activations, blocks) };
             assert_eq!(
                 reference.to_bits(),
                 fast.to_bits(),
