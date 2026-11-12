@@ -170,8 +170,8 @@ pub fn dot_subgroups(bytes: &[u8], mask: u64) -> Result<[(i32, i8); GROUPS], Err
         let signs_equal = !(weight_sign ^ input_sign);
         let mut sum = 0i32;
         for (index, &plane) in planes[g][..usize::from(modes[g])].iter().enumerate() {
-            sum += (2 * (plane & signs_equal).count_ones() as i32
-                - plane.count_ones() as i32) * (1 << index);
+            sum += (2 * (plane & signs_equal).count_ones() as i32 - plane.count_ones() as i32)
+                * (1 << index);
         }
         (sum, exponents[g])
     }))
@@ -356,9 +356,7 @@ fn random(seed: &mut u64) -> u64 {
 fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
     let source: Vec<[f64; LANES]> = weights
         .iter()
-        .flat_map(|row| {
-            (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i])))
-        })
+        .flat_map(|row| (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i]))))
         .collect();
     let allocated = allocate(&source, weights.len() * ROW_BYTES)?;
     let mut source_sse = 0.0;
@@ -376,8 +374,7 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
         for (b, wire) in wires.iter().enumerate() {
             let (codes, exponents) = unpack(wire)?;
             for (i, &q) in codes.iter().enumerate() {
-                let predicted =
-                    f64::from(q) * 2.0f64.powi(i32::from(exponents[i / SUBGROUP]));
+                let predicted = f64::from(q) * 2.0f64.powi(i32::from(exponents[i / SUBGROUP]));
                 let residual = truth[b * LANES + i] - predicted;
                 source_sse += residual * residual;
             }
@@ -406,7 +403,11 @@ fn evaluate(split: &str, weights: &[[f32; 256]]) -> Result<(), Error> {
     }
     let coeffs = weights.len() * 256;
     let modes = [1u8, 2, 3].map(|mode| {
-        allocated.groups.iter().filter(|group| group.mode == mode).count()
+        allocated
+            .groups
+            .iter()
+            .filter(|group| group.mode == mode)
+            .count()
     });
     println!(
         "{split},bpb3_a7_absolute6,{},{:.6},{:.12},{:.12},{},{},,,{},{},{}",
@@ -434,9 +435,7 @@ fn main() {
     let weights: Vec<[f32; 256]> = bytes
         .chunks_exact(256 * 4)
         .map(|bytes| {
-            std::array::from_fn(|i| {
-                f32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap())
-            })
+            std::array::from_fn(|i| f32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap()))
         })
         .collect();
     assert!(weights.iter().all(|row| row.iter().all(|x| x.is_finite())));
@@ -482,12 +481,15 @@ mod tests {
         let mut truncated = wire.clone();
         truncated.pop();
         assert_eq!(unpack(&truncated), Err(Error::WrongLength));
-        let mut negative_zero = pack(&[Group {
-            mode: 1,
-            exponent: 0,
-            codes: [0; SUBGROUP],
-            sse: 0.0
-        }; GROUPS]).unwrap();
+        let mut negative_zero = pack(
+            &[Group {
+                mode: 1,
+                exponent: 0,
+                codes: [0; SUBGROUP],
+                sse: 0.0,
+            }; GROUPS],
+        )
+        .unwrap();
         negative_zero[4] |= 1;
         assert_eq!(unpack(&negative_zero), Err(Error::NegativeZero));
     }
@@ -574,7 +576,8 @@ mod tests {
         let result = allocate(&sources, ROW_BYTES).unwrap();
         let masks = [0, u64::MAX, 0x55aa_55aa_55aa_55aa, 0x0123_4567_89ab_cdef];
         let actual = dot_exact(&result.wires, &masks).unwrap();
-        let oracle: i128 = result.wires
+        let oracle: i128 = result
+            .wires
             .iter()
             .zip(masks)
             .map(|(wire, mask)| {
@@ -595,7 +598,12 @@ mod tests {
     #[test]
     fn a7_admits_every_delta4_exponent_combination_at_exact_same_bytes() {
         for seed in 1..=4u64 {
-            let source = [fixture(seed), fixture(seed + 20), fixture(seed + 40), fixture(seed + 60)];
+            let source = [
+                fixture(seed),
+                fixture(seed + 20),
+                fixture(seed + 40),
+                fixture(seed + 60),
+            ];
             let old_opts: Vec<_> = source.iter().map(|x| a6::candidates(x).unwrap()).collect();
             let delta4 = a6::allocate(&old_opts, ROW_BYTES, false, true).unwrap();
             let absolute = allocate(&source, ROW_BYTES).unwrap();
@@ -629,7 +637,10 @@ mod tests {
         source[7] = f64::NAN;
         assert!(matches!(allocate(&[source], 108), Err(Error::NonFinite)));
         let sources = vec![[0.0f64; LANES]; MAX_BLOCKS + 1];
-        assert!(matches!(allocate(&sources, 10_000), Err(Error::TooManyBlocks)));
+        assert!(matches!(
+            allocate(&sources, 10_000),
+            Err(Error::TooManyBlocks)
+        ));
         assert!(matches!(allocate(&[], 10_000), Err(Error::Empty)));
     }
 }
