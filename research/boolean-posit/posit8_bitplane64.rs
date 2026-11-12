@@ -56,10 +56,8 @@ impl ComplementCircuit {
             if usize::from(node.variable) >= VARIABLES {
                 return Err("Boolean variable out of range");
             }
-            let low = scratch.node_masks[low_id]
-                ^ if node.low & 1 != 0 { u64::MAX } else { 0 };
-            let high = scratch.node_masks[high_id]
-                ^ if node.high & 1 != 0 { u64::MAX } else { 0 };
+            let low = scratch.node_masks[low_id] ^ if node.low & 1 != 0 { u64::MAX } else { 0 };
+            let high = scratch.node_masks[high_id] ^ if node.high & 1 != 0 { u64::MAX } else { 0 };
             let selector = scratch.input_masks[usize::from(node.variable)];
             scratch.node_masks[index + 1] = low ^ ((low ^ high) & selector);
         }
@@ -70,8 +68,7 @@ impl ComplementCircuit {
             if id >= scratch.node_masks.len() {
                 return Err("invalid result root");
             }
-            result_planes[bit] = scratch.node_masks[id]
-                ^ if root & 1 != 0 { u64::MAX } else { 0 };
+            result_planes[bit] = scratch.node_masks[id] ^ if root & 1 != 0 { u64::MAX } else { 0 };
         }
         for (lane, output) in outputs.iter_mut().enumerate() {
             let mut value = 0u8;
