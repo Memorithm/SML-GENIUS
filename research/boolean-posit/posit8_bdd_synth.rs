@@ -219,8 +219,14 @@ fn main() {
     if let Some(operation) = complemented_operation {
         let learned = complement_edges::ComplementCircuit::synthesize(operation)
             .expect("bounded complemented synthesis");
-        learned.verify_exhaustive().expect("all 65536 complemented cases");
-        eprintln!("POSIT8_CE_{} PASS nodes={} pairs=65536", operation.name(), learned.nodes());
+        learned
+            .verify_exhaustive()
+            .expect("all 65536 complemented cases");
+        eprintln!(
+            "POSIT8_CE_{} PASS nodes={} pairs=65536",
+            operation.name(),
+            learned.nodes()
+        );
         print!(
             "{}",
             learned
