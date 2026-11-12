@@ -1,6 +1,6 @@
 //! Exact signed INT8 activation dot/matvec over original BPB-3-A8 Boolean wires.
-//! Uses eight bipolar POPCOUNT evaluations plus one all-positive correction.
-//! This is a correctness-first research kernel, not a speed or model claim.
+//! Preserves a nine-pass bipolar POPCOUNT oracle and executes a fused
+//! single-parse 8-bitplane POPCOUNT matrix-vector path. No speed claim.
 #![forbid(unsafe_code)]
 
 #[path = "bpb3_a8_superblock.rs"]
@@ -68,6 +68,7 @@ pub fn dot_i8_exact(wire: &[u8], input: &[i8; LANES]) -> Result<i128, Error> {
     Ok(numerator / 2)
 }
 
+/// Fused matrix-vector execution with one shared prepared activation vector.
 /// Reuses an existing caller-owned output slice, one value per tensor row.
 /// A size error is detected before touching any output element.
 pub fn matvec_i8_into(
@@ -78,9 +79,10 @@ pub fn matvec_i8_into(
     if output.len() != view.len() {
         return Err(Error::WrongOutputLength);
     }
+    let bitplanes = a8::prepare_i8_bitplanes(input);
     for (index, slot) in output.iter_mut().enumerate() {
         let wire = view.row(index).map_err(|_| Error::InvalidTensor)?;
-        *slot = dot_i8_exact(wire, input)?;
+        *slot = a8::dot_i8_prepared(wire, &bitplanes).map_err(|_| Error::InvalidWire)?;
     }
     Ok(())
 }
@@ -157,10 +159,12 @@ mod tests {
             let row = wire(index);
             for kind in 0..8 {
                 let input = fixture(kind);
+                let oracle = scalar_oracle(&row, &input);
+                assert_eq!(dot_i8_exact(&row, &input).unwrap(), oracle);
                 assert_eq!(
-                    dot_i8_exact(&row, &input).unwrap(),
-                    scalar_oracle(&row, &input),
-                    "row={index} kind={kind}"
+                    a8::dot_i8_fused(&row, &input).unwrap(),
+                    oracle,
+                    "fused row={index} kind={kind}"
                 );
             }
         }
