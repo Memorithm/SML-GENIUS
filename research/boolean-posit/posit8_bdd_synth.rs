@@ -176,12 +176,6 @@ impl LearnedCircuit {
     }
 }
 fn main() {
-    for operation in [Operation::Add, Operation::Mul] {
-        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
-        learned.verify_exhaustive().expect("all 65536 input pairs");
-        println!("POSIT8_BDD_{} PASS nodes={} depth<=16 pairs=65536 mismatches=0",
-            operation.name(), learned.nodes());
-    }
     let arg = std::env::args().nth(1);
     let operation = match arg.as_deref() {
         Some("--emit-add") => Some(Operation::Add),
@@ -190,8 +184,14 @@ fn main() {
     };
     if let Some(operation) = operation {
         let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
-        // The native-source output mode must contain ONLY compilable Rust.
         print!("{}", learned.emit_native_rust());
+        return;
+    }
+    for operation in [Operation::Add, Operation::Mul] {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        learned.verify_exhaustive().expect("all 65536 input pairs");
+        println!("POSIT8_BDD_{} PASS nodes={} depth<=16 pairs=65536 mismatches=0",
+            operation.name(), learned.nodes());
     }
 }
 #[cfg(test)]
