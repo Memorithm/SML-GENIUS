@@ -361,7 +361,11 @@ mod tests {
     fn pruned_search_matches_unpruned_exact_argmin_and_sse() {
         let signed_zero = std::array::from_fn(|i| if i % 2 == 0 { 0.0 } else { -0.0 });
         let nearly_zero = std::array::from_fn(|i| {
-            if i % 3 == 0 { -f32::from_bits(1) } else { f32::from_bits(1) }
+            if i % 3 == 0 {
+                -f32::from_bits(1)
+            } else {
+                f32::from_bits(1)
+            }
         });
         // Include ties, signed zeros, extreme signed values and many
         // independently generated deterministic source blocks.
@@ -381,10 +385,19 @@ mod tests {
             ] {
                 let baseline = optimize_impl::<false>(source, global, lower, upper);
                 let candidate = optimize_impl::<true>(source, global, lower, upper);
-                assert_eq!(candidate.0, baseline.0, "codes case={case}, global={global}");
-                assert_eq!(candidate.1, baseline.1, "scales case={case}, global={global}");
-                assert_eq!(candidate.2.to_bits(), baseline.2.to_bits(),
-                    "SSE case={case}, global={global}");
+                assert_eq!(
+                    candidate.0, baseline.0,
+                    "codes case={case}, global={global}"
+                );
+                assert_eq!(
+                    candidate.1, baseline.1,
+                    "scales case={case}, global={global}"
+                );
+                assert_eq!(
+                    candidate.2.to_bits(),
+                    baseline.2.to_bits(),
+                    "SSE case={case}, global={global}"
+                );
             }
         }
     }
