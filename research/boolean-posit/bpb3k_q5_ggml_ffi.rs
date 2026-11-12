@@ -97,7 +97,6 @@ pub unsafe extern "C" fn mem_q5_178_vec_dot(
     unsafe { result.write_unaligned(output) };
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,13 +122,10 @@ mod tests {
         let mut w = Vec::new();
         let mut a = Vec::new();
         for block in 0..blocks {
-            let codes: [i8; 256] =
-                std::array::from_fn(|i| ((i * 23 + block * 7) % 32) as i8 - 16);
-            let scales: [i8; 16] =
-                std::array::from_fn(|i| ((i * 19 + block * 3) % 64) as i8 - 32);
+            let codes: [i8; 256] = std::array::from_fn(|i| ((i * 23 + block * 7) % 32) as i8 - 16);
+            let scales: [i8; 16] = std::array::from_fn(|i| ((i * 19 + block * 3) % 64) as i8 - 32);
             w.extend_from_slice(
-                &q5::pack_signed(&codes, &scales, [0x3c00u16, 0xbc00, 0x3800][block % 3])
-                    .unwrap(),
+                &q5::pack_signed(&codes, &scales, [0x3c00u16, 0xbc00, 0x3800][block % 3]).unwrap(),
             );
             let mut input = [0u8; 292];
             input[..4].copy_from_slice(&[0.015625f32, -0.0078125, 0.125][block % 3].to_le_bytes());
