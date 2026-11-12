@@ -1,0 +1,219 @@
+//! Clean-room exact Boolean circuit synthesis for 8-bit posit ADD and MUL.
+//! Reduced ordered BDDs, learned only from the complete 65,536-pair oracle;
+//! not gradient descent, not independent validation of Posit Standard 2022.
+#![forbid(unsafe_code)]
+
+#[path = "posit8_circuit_synth.rs"]
+#[allow(dead_code)]
+mod source;
+
+use source::Posit8;
+use std::collections::HashMap;
+use std::fmt::Write;
+
+const DOMAIN: usize = 1 << 16;
+const MAX_NODES: usize = 16000;
+const BITS: usize = 8;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Operation {
+    Add,
+    Mul,
+}
+impl Operation {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Mul => "mul",
+        }
+    }
+    fn oracle(self, a: u8, b: u8) -> u8 {
+        match self {
+            Self::Add => Posit8(a).add(Posit8(b)).0,
+            Self::Mul => Posit8(a).mul(Posit8(b)).0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Branch {
+    variable: u8,
+    low: usize,
+    high: usize,
+}
+#[derive(Debug)]
+pub struct LearnedCircuit {
+    operation: Operation,
+    nodes: Vec<Branch>,
+    output_roots: [usize; BITS],
+}
+struct Builder {
+    nodes: Vec<Branch>,
+    unique: HashMap<(u8, usize, usize), usize>,
+}
+impl Builder {
+    fn visit(
+        &mut self,
+        expected: &[u8],
+        start: usize,
+        size: usize,
+        output_bit: u8,
+    ) -> Result<usize, &'static str> {
+        if size == 1 {
+            return Ok(usize::from((expected[start] >> output_bit) & 1));
+        }
+        let half = size / 2;
+        let low = self.visit(expected, start, half, output_bit)?;
+        let high = self.visit(expected, start + half, half, output_bit)?;
+        if low == high {
+            return Ok(low);
+        }
+        let variable = (size.trailing_zeros() - 1) as u8;
+        if let Some(&previous) = self.unique.get(&(variable, low, high)) {
+            return Ok(previous);
+        }
+        if self.nodes.len() >= MAX_NODES {
+            return Err("circuit exceeds prescribed node budget");
+        }
+        let id = self.nodes.len() + 2;
+        self.nodes.push(Branch { variable, low, high });
+        self.unique.insert((variable, low, high), id);
+        Ok(id)
+    }
+}
+
+/// Interleave a and b bits so bit positions 2i/2i+1 represent ai/bi.
+/// This fixed variable order is frozen before observing compressed size.
+pub fn interleave(a: u8, b: u8) -> u16 {
+    let mut packed = 0u16;
+    for bit in 0..8 {
+        packed |= u16::from((a >> bit) & 1) << (2 * bit);
+        packed |= u16::from((b >> bit) & 1) << (2 * bit + 1);
+    }
+    packed
+}
+pub fn deinterleave(packed: u16) -> (u8, u8) {
+    let mut a = 0u8;
+    let mut b = 0u8;
+    for bit in 0..8 {
+        a |= (((packed >> (2 * bit)) & 1) as u8) << bit;
+        b |= (((packed >> (2 * bit + 1)) & 1) as u8) << bit;
+    }
+    (a, b)
+}
+impl LearnedCircuit {
+    /// Deterministic reduced ordered BDD synthesis, one 16-input Boolean
+    /// network with eight output roots. All 65536 pairs are training facts;
+    /// the subsequent exhaustive execution is an algebraic regression check,
+    /// NOT a disjoint hold-out generalization or independent Posit oracle.
+    pub fn synthesize(operation: Operation) -> Result<Self, &'static str> {
+        let mut expected = vec![0u8; DOMAIN];
+        for (encoded, output) in expected.iter_mut().enumerate() {
+            let (a, b) = deinterleave(encoded as u16);
+            *output = operation.oracle(a, b);
+        }
+        let mut builder = Builder { nodes: Vec::new(), unique: HashMap::new() };
+        let mut output_roots = [0usize; BITS];
+        for (bit, root) in output_roots.iter_mut().enumerate() {
+            *root = builder.visit(&expected, 0, DOMAIN, bit as u8)?;
+        }
+        Ok(Self { operation, nodes: builder.nodes, output_roots })
+    }
+    pub fn nodes(&self) -> usize { self.nodes.len() }
+    pub fn depth(&self) -> usize { 16 }
+    pub fn evaluate(&self, a: u8, b: u8) -> u8 {
+        let packed = interleave(a, b);
+        let mut result = 0u8;
+        for (bit, &root) in self.output_roots.iter().enumerate() {
+            let mut current = root;
+            while current >= 2 {
+                let node = self.nodes[current - 2];
+                current = if (packed >> node.variable) & 1 == 0 {
+                    node.low
+                } else {
+                    node.high
+                };
+            }
+            result |= (current as u8) << bit;
+        }
+        result
+    }
+    pub fn verify_exhaustive(&self) -> Result<(), &'static str> {
+        for packed in 0..=65535u16 {
+            let (a, b) = deinterleave(packed);
+            if self.evaluate(a, b) != self.operation.oracle(a, b) {
+                return Err("synthesized circuit != posit oracle");
+            }
+        }
+        Ok(())
+    }
+    /// Emit bitwise MUX in safe Rust. Compiler lowers it to its actual native
+    /// ISA. This is a circuit of Boolean operations, not a runtime LUT lookup,
+    /// a Python/PT model or a claim of better performance.
+    pub fn emit_native_rust(&self) -> String {
+        let function = format!("learned_posit8_{}", self.operation.name());
+        let mut code = format!(
+            "#![forbid(unsafe_code)]\n#[inline(never)]\npub fn {function}(a: u8, b: u8) -> u8 {{\n"
+        );
+        for bit in 0..8 {
+            writeln!(&mut code, "    let p{}: u8 = (a >> {}) & 1;", 2*bit, bit).unwrap();
+            writeln!(&mut code, "    let p{}: u8 = (b >> {}) & 1;", 2*bit + 1, bit).unwrap();
+        }
+        code.push_str("    let w0: u8 = 0;\n    let w1: u8 = 1;\n");
+        for (offset, node) in self.nodes.iter().enumerate() {
+            let v = node.variable;
+            let id = offset + 2;
+            // A Boolean multiplexer: low XOR ((low XOR high) AND select).
+            writeln!(&mut code,
+                "    let w{id}: u8 = w{} ^ ((w{} ^ w{}) & p{v});",
+                node.low, node.low, node.high).unwrap();
+        }
+        let expr = self.output_roots.iter().enumerate().map(|(bit, root)| {
+            format!("(w{root} << {bit})")
+        }).collect::<Vec<_>>().join(" | ");
+        writeln!(&mut code, "    {expr}\n}}").unwrap();
+        code
+    }
+}
+fn main() {
+    for operation in [Operation::Add, Operation::Mul] {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        learned.verify_exhaustive().expect("all 65536 input pairs");
+        println!("POSIT8_BDD_{} PASS nodes={} depth<=16 pairs=65536 mismatches=0",
+            operation.name(), learned.nodes());
+    }
+    let arg = std::env::args().nth(1);
+    let operation = match arg.as_deref() {
+        Some("--emit-add") => Some(Operation::Add),
+        Some("--emit-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = operation {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        // The native-source output mode must contain ONLY compilable Rust.
+        print!("{}", learned.emit_native_rust());
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn interleave_round_trip_is_total() {
+        for packed in 0..=65535u16 {
+            let (a, b) = deinterleave(packed);
+            assert_eq!(interleave(a, b), packed);
+        }
+    }
+    #[test]
+    fn add_bdd_exact_65536_inputs() {
+        let circuit = LearnedCircuit::synthesize(Operation::Add).unwrap();
+        assert!(circuit.nodes() <= MAX_NODES);
+        circuit.verify_exhaustive().unwrap();
+    }
+    #[test]
+    fn mul_bdd_exact_65536_inputs() {
+        let circuit = LearnedCircuit::synthesize(Operation::Mul).unwrap();
+        assert!(circuit.nodes() <= MAX_NODES);
+        circuit.verify_exhaustive().unwrap();
+    }
+}
