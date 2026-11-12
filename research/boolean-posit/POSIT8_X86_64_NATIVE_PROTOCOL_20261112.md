@@ -30,3 +30,14 @@ Le protocole de compilation cible **Linux x86-64 System V ABI** :
 La baisse du nombre de nœuds, du trafic pile, des instructions et des latences doit faire l'objet de recherches prospectives : élimination des portes mortes, propagation des constantes, mutualisation des plans d'activations, allocation des registres, comparateurs sur taille **réelle** du code machine, déroulage et vectorisation SIMD AVX2. Le remplacement par une version plus compacte sera autorisé seulement après exactitude intégrale, benchmark CPU apparié et préservation de l'oracle indépendant.
 
 Référence normative : [Posit Standard 2022](https://posithub.org/docs/posit_standard-2.pdf), qui ne constitue **pas** à ce stade une preuve indépendante de conformité de notre décodeur.
+
+## ISA1 — Variante à sélecteurs pré-calculés et cas terminaux
+
+Le compilateur Rust propose désormais deux stratégies de génération assembleur **exécutant exactement la même fonction** :
+
+- **Directe (contrôle gelé)** : chaque nœud extrait le bit d'entrée depuis `edi` ou `esi` et reconstruit le multiplexeur bitwise.
+- **Sélecteurs mutualisés (candidate)** : extraire les 16 bits une seule fois au début de la fonction, les stocker dans 16 octets de pile supplémentaires à des offsets statiques, puis réaliser chaque MUX en `movzx`, `xor`, `and dl, BYTE PTR`, `xor` et `mov`. Si un nœud est simplement `if bit then 1 else 0` (ou son complément), émettre une lecture directe du sélecteur et éventuellement un `xor al, 1`.
+
+Les deux variantes utilisent un maximum de 16 384 octets de pile et conservent le contrat ABI. Le banc GitHub compile des **objets ELF indépendants pour ADD et MUL, dans les deux modes**, conserve les désassemblages et mesure le nombre d'octets des objets assemblés. Chaque binaire lié Rust/assembleur doit valider les **65 536 paires** contre la même référence. Le critère de taille est déclaré à l'avance : un objet cached doit être plus petit que son contrôle direct sur les deux opérations, sinon l'essai est une régression conservée et rapportée.
+
+Un objet ELF de taille réduite ne démontre pas une diminution de latence, de consommation DRAM, de surface circuit physique, de taille de l'exécutable complet ni de coût énergétique. Aucun choix pour le modèle final n'est autorisé à ce stade.
