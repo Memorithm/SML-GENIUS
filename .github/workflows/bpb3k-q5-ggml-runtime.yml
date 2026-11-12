@@ -45,6 +45,32 @@ jobs:
             research/boolean-posit/bpb3k_q5_ggml_patch.rs -o "$RUNNER_TEMP/q5-patcher"
           rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
             research/boolean-posit/bpb3k_q5_gguf_transcode.rs -o "$RUNNER_TEMP/q5-transcode"
+          "$RUNNER_TEMP/q5-patcher" emit-tiled-probe "$RUNNER_TEMP/q5-exact-unpack.cpp"
+          c++ -std=c++17 -O2 -msse2 -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$RUNNER_TEMP/q5-exact-unpack.cpp" -o "$RUNNER_TEMP/q5-exact-unpack"
+          ASAN_OPTIONS=detect_leaks=0 "$RUNNER_TEMP/q5-exact-unpack" | tee "$RUNNER_TEMP/q5-exact-unpack.log"
+          grep -q '^PASS_Q5_178_EXACT_GENERATED_CXX_TILED_UNPACK_SANITIZER
+      - name: Compile actual SHA-pinned llama.cpp with Q5-178 C and Rust CPU adapters
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          git init -q q5-llama
+          git -C q5-llama remote add origin https://github.com/ggml-org/llama.cpp.git
+          timeout -k 5s 240s git -C q5-llama fetch --depth 1 --no-tags origin f7591a6a01f9273de03331732bdc0b39721168be
+          git -C q5-llama checkout -q --detach FETCH_HEAD
+          test "$(git -C q5-llama rev-parse HEAD)" = f7591a6a01f9273de03331732bdc0b39721168be
+          "$RUNNER_TEMP/q5-patcher" patch "$RUNNER_TEMP/q5-llama" f7591a6a01f9273de03331732bdc0b39721168be | tee patched.log
+          grep -q '^PASS_BPB3K_Q5_GGML_PATCH ' patched.log
+          cmake -S q5-llama -B q5-llama/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_VULKAN=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON \
+            -DMEM_BPB3K_RUST_STATICLIB="$RUNNER_TEMP/libmem-q5-178.a"
+          cmake --build q5-llama/build -j 3 --target llama-cli llama-bench
+          sha256sum q5-llama/build/bin/llama-cli q5-llama/build/bin/llama-bench
+          echo PASS_Q5_178_REAL_PATCHED_LLAMA_CPP_BUILD=SOURCE_PINNED_ONLY
+ "$RUNNER_TEMP/q5-exact-unpack.log"
           echo PASS_Q5_178_RUST_ABI_AND_PREPARE=HOSTED_CPU_FIXTURE_ONLY
       - name: Compile actual SHA-pinned llama.cpp with Q5-178 C and Rust CPU adapters
         shell: bash
