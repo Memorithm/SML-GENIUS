@@ -152,7 +152,14 @@ pub fn pack(block: &Block) -> Result<Vec<u8>, Error> {
     Ok(output)
 }
 
-type Parsed = ([u8; GROUPS], [i8; GROUPS], u64, [[u16; 3]; GROUPS], Delta, i8);
+type Parsed = (
+    [u8; GROUPS],
+    [i8; GROUPS],
+    u64,
+    [[u16; 3]; GROUPS],
+    Delta,
+    i8,
+);
 
 fn parse(raw: &[u8]) -> Result<Parsed, Error> {
     if raw.len() < 11 {
@@ -232,9 +239,12 @@ pub fn dot_groups(raw: &[u8], bipolar: u64) -> Result<[(i32, i8); GROUPS], Error
         let negative = ((sign >> (WIDTH * group)) & 0xffff) as u16;
         let equal_sign = !(input ^ negative);
         let mut total = 0i32;
-        for (p, &plane) in planes[group][..usize::from(modes[group])].iter().enumerate() {
-            total += (2 * (plane & equal_sign).count_ones() as i32
-                - plane.count_ones() as i32) * (1 << p);
+        for (p, &plane) in planes[group][..usize::from(modes[group])]
+            .iter()
+            .enumerate()
+        {
+            total += (2 * (plane & equal_sign).count_ones() as i32 - plane.count_ones() as i32)
+                * (1 << p);
         }
         (total, exponents[group])
     }))
@@ -250,7 +260,9 @@ pub fn dot_exact(wires: &[Vec<u8>], inputs: &[u64]) -> Result<i128, Error> {
             let factor = 1i128
                 .checked_shl((i32::from(exponent) + 24) as u32)
                 .ok_or(Error::Overflow)?;
-            let term = i128::from(integer).checked_mul(factor).ok_or(Error::Overflow)?;
+            let term = i128::from(integer)
+                .checked_mul(factor)
+                .ok_or(Error::Overflow)?;
             sum = sum.checked_add(term).ok_or(Error::Overflow)?;
         }
     }
@@ -284,14 +296,15 @@ fn quant_table(source: &[f64; LANES]) -> Result<[[[Quant16; EXPONENTS]; 3]; GROU
                 let mut squared = 0.0;
                 let codes = std::array::from_fn(|i| {
                     let value = source[g * WIDTH + i];
-                    let signed = (value / scale)
-                        .round()
-                        .clamp(-magnitude_max, magnitude_max) as i8;
+                    let signed = (value / scale).round().clamp(-magnitude_max, magnitude_max) as i8;
                     let residual = value - f64::from(signed) * scale;
                     squared += residual * residual;
                     signed
                 });
-                Quant16 { codes, sse: squared }
+                Quant16 {
+                    codes,
+                    sse: squared,
+                }
             })
         })
     });
@@ -496,11 +509,12 @@ fn random(seed: &mut u64) -> u64 {
 fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
     let source: Vec<[f64; LANES]> = rows
         .iter()
-        .flat_map(|row| {
-            (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i])))
-        })
+        .flat_map(|row| (0..4).map(move |g| std::array::from_fn(|i| f64::from(row[g * 64 + i]))))
         .collect();
-    let all = source.iter().map(candidates).collect::<Result<Vec<_>, _>>()?;
+    let all = source
+        .iter()
+        .map(candidates)
+        .collect::<Result<Vec<_>, _>>()?;
     let arms = [
         ("bpb3_a6_delta2", true, false),
         ("bpb3_a6_delta4", false, true),
@@ -512,7 +526,12 @@ fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
         let mut sse = 0.0f64;
         let mut dot_sse = 0.0f64;
         let mut dots = 0usize;
-        let mut rng = MASK_SEED ^ if split == "TEST" { 0x9e37_79b9_7f4a_7c15 } else { 0 };
+        let mut rng = MASK_SEED
+            ^ if split == "TEST" {
+                0x9e37_79b9_7f4a_7c15
+            } else {
+                0
+            };
         for (row, original) in rows.iter().enumerate() {
             let mut exact = [0.0f64; 256];
             for (i, &value) in original.iter().enumerate() {
@@ -529,9 +548,17 @@ fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
             }
             for _ in 0..16 {
                 let masks: [u64; 4] = std::array::from_fn(|_| random(&mut rng));
-                let original_dot: f64 = exact.iter().enumerate().map(|(i, &v)| {
-                    if (masks[i / 64] >> (i % 64)) & 1 != 0 { -v } else { v }
-                }).sum();
+                let original_dot: f64 = exact
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &v)| {
+                        if (masks[i / 64] >> (i % 64)) & 1 != 0 {
+                            -v
+                        } else {
+                            v
+                        }
+                    })
+                    .sum();
                 let dot = dot_256(wires, &masks)?;
                 dot_sse += (dot - original_dot) * (dot - original_dot);
                 dots += 1;
@@ -540,9 +567,8 @@ fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
         if (sse - chosen.sse).abs() > 1e-7 * sse.max(1.0) {
             return Err(Error::NonFinite);
         }
-        let counts = [Delta::Two, Delta::Four].map(|v| {
-            chosen.blocks.iter().filter(|b| b.delta == v).count()
-        });
+        let counts = [Delta::Two, Delta::Four]
+            .map(|v| chosen.blocks.iter().filter(|b| b.delta == v).count());
         println!(
             "{split},{name},{},{:.6},{:.12},{:.12},{},{},{},{},{},{}",
             chosen.total_bytes,
@@ -553,9 +579,21 @@ fn evaluate(split: &str, rows: &[[f32; 256]]) -> Result<(), Error> {
             dots,
             counts[0],
             counts[1],
-            chosen.blocks.iter().map(|b| b.groups.iter().filter(|g| g.mode == 1).count()).sum::<usize>(),
-            chosen.blocks.iter().map(|b| b.groups.iter().filter(|g| g.mode == 2).count()).sum::<usize>(),
-            chosen.blocks.iter().map(|b| b.groups.iter().filter(|g| g.mode == 3).count()).sum::<usize>(),
+            chosen
+                .blocks
+                .iter()
+                .map(|b| b.groups.iter().filter(|g| g.mode == 1).count())
+                .sum::<usize>(),
+            chosen
+                .blocks
+                .iter()
+                .map(|b| b.groups.iter().filter(|g| g.mode == 2).count())
+                .sum::<usize>(),
+            chosen
+                .blocks
+                .iter()
+                .map(|b| b.groups.iter().filter(|g| g.mode == 3).count())
+                .sum::<usize>(),
         );
         measurements.push(chosen.sse);
     }
@@ -577,9 +615,9 @@ fn main() {
     assert_eq!(bytes.len(), 48 * 256 * 4, "STOP_A6_SOURCE_SIZE");
     let rows: Vec<[f32; 256]> = bytes
         .chunks_exact(256 * 4)
-        .map(|chunk| std::array::from_fn(|i| f32::from_le_bytes(
-            chunk[4 * i..4 * i + 4].try_into().unwrap()
-        )))
+        .map(|chunk| {
+            std::array::from_fn(|i| f32::from_le_bytes(chunk[4 * i..4 * i + 4].try_into().unwrap()))
+        })
         .collect();
     assert!(rows.iter().all(|row| row.iter().all(|x| x.is_finite())));
     println!("protocol=bpb3-a6-delta2-delta4-mixed-budget108-v1,source=EXTERNALLY_SHA_PINNED,claim=COMPONENT_ONLY");
@@ -605,7 +643,10 @@ mod tests {
         let choices = candidates(&q).unwrap();
         for c in &choices {
             let wire = pack(c).unwrap();
-            assert_eq!(wire.len(), wire_bytes(c.delta, &c.groups.map(|g| g.mode)).unwrap());
+            assert_eq!(
+                wire.len(),
+                wire_bytes(c.delta, &c.groups.map(|g| g.mode)).unwrap()
+            );
             let (decoded, scales) = unpack(&wire).unwrap();
             for g in 0..4 {
                 assert_eq!(scales[g], c.groups[g].exponent);
@@ -619,7 +660,7 @@ mod tests {
             bad = wire.clone();
             bad[1] = 104;
             assert_eq!(unpack(&bad), Err(Error::InvalidBaseSymbol));
-            assert_eq!(unpack(&wire[..wire.len()-1]), Err(Error::WrongLength));
+            assert_eq!(unpack(&wire[..wire.len() - 1]), Err(Error::WrongLength));
         }
     }
 
@@ -631,10 +672,19 @@ mod tests {
             for mask in [0, u64::MAX, 0x1122_3344_aabb_ccdd] {
                 let dots = dot_groups(&wire, mask).unwrap();
                 for g in 0..GROUPS {
-                    let expected: i32 = candidate.groups[g].codes.iter().enumerate().map(|(i, &q)| {
-                        if (mask >> (g*WIDTH+i)) & 1 == 0 { i32::from(q) } else { -i32::from(q) }
-                    }).sum();
-                    assert_eq!(dots[g], (expected,candidate.groups[g].exponent));
+                    let expected: i32 = candidate.groups[g]
+                        .codes
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &q)| {
+                            if (mask >> (g * WIDTH + i)) & 1 == 0 {
+                                i32::from(q)
+                            } else {
+                                -i32::from(q)
+                            }
+                        })
+                        .sum();
+                    assert_eq!(dots[g], (expected, candidate.groups[g].exponent));
                 }
             }
         }
@@ -645,61 +695,90 @@ mod tests {
         let blocks = [source(1), source(2), source(3)];
         let options: Vec<Vec<Block>> = blocks.iter().map(|b| candidates(b).unwrap()).collect();
         let budget = 90;
-        for (two, four) in [(true,false),(false,true),(true,true)] {
-            let selected = allocate(&options,budget,two,four).unwrap();
+        for (two, four) in [(true, false), (false, true), (true, true)] {
+            let selected = allocate(&options, budget, two, four).unwrap();
             let mut brute = f64::INFINITY;
             for a in &options[0] {
                 for b in &options[1] {
                     for c in &options[2] {
-                        if [a,b,c].iter().any(|block| (block.delta == Delta::Two && !two) || (block.delta == Delta::Four && !four)) {continue}
-                        let cost = [a,b,c].iter().map(|block| wire_bytes(block.delta,&block.groups.map(|g|g.mode)).unwrap()).sum::<usize>();
-                        if cost <= budget { brute = brute.min(a.sse+b.sse+c.sse); }
+                        if [a, b, c].iter().any(|block| {
+                            (block.delta == Delta::Two && !two)
+                                || (block.delta == Delta::Four && !four)
+                        }) {
+                            continue;
+                        }
+                        let cost = [a, b, c]
+                            .iter()
+                            .map(|block| {
+                                wire_bytes(block.delta, &block.groups.map(|g| g.mode)).unwrap()
+                            })
+                            .sum::<usize>();
+                        if cost <= budget {
+                            brute = brute.min(a.sse + b.sse + c.sse);
+                        }
                     }
                 }
             }
-            assert!((selected.sse-brute).abs() <= 1e-10*brute.max(1.0));
-            assert_eq!(selected.total_bytes, selected.wires.iter().map(Vec::len).sum::<usize>());
+            assert!((selected.sse - brute).abs() <= 1e-10 * brute.max(1.0));
+            assert_eq!(
+                selected.total_bytes,
+                selected.wires.iter().map(Vec::len).sum::<usize>()
+            );
         }
     }
 
     #[test]
     fn mixed_is_superset_of_two_or_four_and_exact_dot_is_checked() {
-        let input = [source(11),source(12),source(13),source(14)];
+        let input = [source(11), source(12), source(13), source(14)];
         let options: Vec<_> = input.iter().map(|x| candidates(x).unwrap()).collect();
-        assert!(matches!(allocate(&options,75,true,true),Err(Error::Budget)));
-        let two = allocate(&options,108,true,false).unwrap();
-        let four = allocate(&options,108,false,true).unwrap();
-        let mixed = allocate(&options,108,true,true).unwrap();
-        assert!(mixed.sse <= two.sse + 1e-10*two.sse.max(1.0));
-        assert!(mixed.sse <= four.sse + 1e-10*four.sse.max(1.0));
-        let masks = [0, u64::MAX,0x1223_4354_6567_7889,0xabcd_ef01_2345_6789];
-        let exact = dot_exact(&mixed.wires,&masks).unwrap();
-        let dense: i128 = mixed.wires.iter().zip(masks).map(|(wire,mask)|{
-            let (codes,exponents)=unpack(wire).unwrap();
-            (0..LANES).map(|i|{
-                let q=i128::from(codes[i]);
-                (if (mask>>i)&1==0 {q} else {-q}) << (i32::from(exponents[i/WIDTH])+24)
-            }).sum::<i128>()
-        }).sum();
-        assert_eq!(exact,dense);
-        assert_eq!(dot_exact(&mixed.wires,&[]),Err(Error::WrongLength));
+        assert!(matches!(
+            allocate(&options, 75, true, true),
+            Err(Error::Budget)
+        ));
+        let two = allocate(&options, 108, true, false).unwrap();
+        let four = allocate(&options, 108, false, true).unwrap();
+        let mixed = allocate(&options, 108, true, true).unwrap();
+        assert!(mixed.sse <= two.sse + 1e-10 * two.sse.max(1.0));
+        assert!(mixed.sse <= four.sse + 1e-10 * four.sse.max(1.0));
+        let masks = [0, u64::MAX, 0x1223_4354_6567_7889, 0xabcd_ef01_2345_6789];
+        let exact = dot_exact(&mixed.wires, &masks).unwrap();
+        let dense: i128 = mixed
+            .wires
+            .iter()
+            .zip(masks)
+            .map(|(wire, mask)| {
+                let (codes, exponents) = unpack(wire).unwrap();
+                (0..LANES)
+                    .map(|i| {
+                        let q = i128::from(codes[i]);
+                        (if (mask >> i) & 1 == 0 { q } else { -q })
+                            << (i32::from(exponents[i / WIDTH]) + 24)
+                    })
+                    .sum::<i128>()
+            })
+            .sum();
+        assert_eq!(exact, dense);
+        assert_eq!(dot_exact(&mixed.wires, &[]), Err(Error::WrongLength));
     }
 
     #[test]
     fn source_validation_and_boundary_deltas() {
         let mut bad = source(9);
         bad[7] = f64::NAN;
-        assert!(matches!(candidates(&bad),Err(Error::NonFinite)));
+        assert!(matches!(candidates(&bad), Err(Error::NonFinite)));
         let valid = source(77);
         let mut all = candidates(&valid).unwrap();
         let block = all.pop().unwrap();
         let mut wrong = block.clone();
         wrong.base = -25;
-        assert_eq!(pack(&wrong),Err(Error::InvalidExponent));
+        assert_eq!(pack(&wrong), Err(Error::InvalidExponent));
         wrong = block.clone();
         wrong.base = 27;
         wrong.groups[0].exponent = -24;
-        assert_eq!(pack(&wrong),Err(Error::InvalidDelta));
-        assert!(wire_bytes(Delta::Two,&[1,2,3,1]).unwrap() < wire_bytes(Delta::Four,&[1,2,3,1]).unwrap());
+        assert_eq!(pack(&wrong), Err(Error::InvalidDelta));
+        assert!(
+            wire_bytes(Delta::Two, &[1, 2, 3, 1]).unwrap()
+                < wire_bytes(Delta::Four, &[1, 2, 3, 1]).unwrap()
+        );
     }
 }
