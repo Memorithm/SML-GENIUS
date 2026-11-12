@@ -77,37 +77,49 @@ fn decode_fp16(bits: u16) -> f32 {
     }
 }
 
+/// Decode without reloading the same three bitplane words and six-bit
+/// subgroup scale for every coefficient. The wire format and exact f32
+/// multiplication association are unchanged; this is a source-code
+/// optimization of complete-block reconstruction, not a model-speed claim.
 pub fn decode_bpb3k(raw: &[u8]) -> Result<[f32; VALUES], Error> {
     if raw.len() != BYTES {
         return Err(Error::WrongLength { actual: raw.len() });
     }
-    let metadata = &raw[96..];
-    let scales = &metadata[..12];
+    let metadata = &raw[PLANES_BYTES..];
+    let encoded_scales = &metadata[..12];
     let global = decode_fp16(u16::from_le_bytes([metadata[12], metadata[13]]));
-    Ok(std::array::from_fn(|i| {
-        let group = i / 64;
-        let lane = i % 64;
-        let offset = group * 24;
-        let read_word = |p: usize| {
-            let start = offset + p * 8;
-            u64::from_le_bytes(raw[start..start + 8].try_into().unwrap())
+
+    // Twelve 64-bit loads per whole superblock instead of three loads
+    // per reconstructed coefficient (768 loads). No heap allocation.
+    let planes: [[u64; 3]; 4] = std::array::from_fn(|group| {
+        std::array::from_fn(|p| {
+            let offset = group * 24 + p * 8;
+            u64::from_le_bytes(raw[offset..offset + 8].try_into().unwrap())
+        })
+    });
+    let scales: [i32; 16] = std::array::from_fn(|subgroup| {
+        let low = if subgroup < 8 {
+            encoded_scales[subgroup] & 15
+        } else {
+            encoded_scales[subgroup - 8] >> 4
         };
-        let is_negative = (read_word(0) >> lane) & 1 != 0;
-        let magnitude = (((read_word(1) >> lane) & 1) | (((read_word(2) >> lane) & 1) << 1)) as i32;
+        let high = (encoded_scales[8 + subgroup % 4] >> (2 * (subgroup / 4))) & 3;
+        i32::from(low | (high << 4)) - 32
+    });
+
+    Ok(std::array::from_fn(|i| {
+        let [negative, bit0, bit1] = planes[i / 64];
+        let lane = i % 64;
+        let is_negative = (negative >> lane) & 1 != 0;
+        let magnitude = (((bit0 >> lane) & 1) | (((bit1 >> lane) & 1) << 1)) as i32;
         let q = if is_negative {
             -(magnitude + 1)
         } else {
             magnitude
         };
-        let subgroup = i / 16;
-        let low = if subgroup < 8 {
-            scales[subgroup] & 15
-        } else {
-            scales[subgroup - 8] >> 4
-        };
-        let high = (scales[8 + subgroup % 4] >> (2 * (subgroup / 4))) & 3;
-        let scale = i32::from(low | (high << 4)) - 32;
-        global * (scale as f32) * (q as f32)
+        // Preserve original FP32 operation ordering to maintain exact
+        // bitwise parity with the stock ggml Q3_K reference oracle.
+        global * (scales[i / 16] as f32) * (q as f32)
     }))
 }
 
@@ -156,6 +168,29 @@ mod tests {
                     expected[i].to_bits(),
                     "q3 BPB3K bitwise mismatch case={case} index={i}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn cached_planes_and_scales_match_original_on_unaligned_inputs() {
+        for case in 0..32 {
+            let source = q3_fixture(case);
+            let oracle = gguf_k::decode_q3_k(&source).unwrap();
+            let converted = q3_to_bpb3k(&source).unwrap();
+            for offset in 0..32 {
+                let mut buffer = vec![0x5au8; offset + BYTES + 33];
+                buffer[offset..offset + BYTES].copy_from_slice(&converted);
+                let decoded = decode_bpb3k(&buffer[offset..offset + BYTES]).unwrap();
+                for (index, (&actual, &reference)) in decoded.iter().zip(&oracle).enumerate() {
+                    assert_eq!(
+                        actual.to_bits(),
+                        reference.to_bits(),
+                        "case={case} offset={offset} index={index}"
+                    );
+                }
+                assert!(buffer[..offset].iter().all(|&v| v == 0x5a));
+                assert!(buffer[offset + BYTES..].iter().all(|&v| v == 0x5a));
             }
         }
     }
