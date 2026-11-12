@@ -212,9 +212,7 @@ impl LearnedCircuit {
 fn main() {
     let arg = std::env::args().nth(1);
     if arg.as_deref() == Some("--bench-bitslice64") {
-        println!(
-            "POSIT8_BITPLANE64_BENCH_PROTOCOL input_count=65536 warmups=2 rounds=7"
-        );
+        println!("POSIT8_BITPLANE64_BENCH_PROTOCOL input_count=65536 warmups=2 rounds=7");
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
                 .expect("bounded graph synthesis");
