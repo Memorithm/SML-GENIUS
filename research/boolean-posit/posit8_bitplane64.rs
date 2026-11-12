@@ -80,6 +80,33 @@ impl ComplementCircuit {
         Ok(())
     }
 
+    /// Shape-aware CPU execution for any number of independent posit8 pairs.
+    /// A short final block is padded with (0,0) only in local stack storage;
+    /// the caller receives exactly the requested number of output bytes.
+    pub fn evaluate_slice_into(
+        &self,
+        inputs: &[(u8, u8)],
+        scratch: &mut Scratch64,
+        outputs: &mut [u8],
+    ) -> Result<(), &'static str> {
+        if inputs.len() != outputs.len() {
+            return Err("input/output length mismatch");
+        }
+        if scratch.node_masks.len() != self.nodes.len() + 1 {
+            return Err("scratch belongs to a different graph");
+        }
+        for (input_block, output_block) in
+            inputs.chunks(LANES).zip(outputs.chunks_mut(LANES))
+        {
+            let mut padded = [(0u8, 0u8); LANES];
+            padded[..input_block.len()].copy_from_slice(input_block);
+            let mut all_outputs = [0u8; LANES];
+            self.evaluate_batch64_into(&padded, scratch, &mut all_outputs)?;
+            output_block.copy_from_slice(&all_outputs[..input_block.len()]);
+        }
+        Ok(())
+    }
+
     /// Exhaustive reference validation against the scalar posit8 oracle.
     /// Covers 65536 pairs as 1024 consecutive, exact 64-way batches.
     pub fn verify_batch64_exhaustive(&self) -> Result<(), &'static str> {
@@ -90,7 +117,7 @@ impl ComplementCircuit {
                 let packed = (block * LANES + lane) as u16;
                 crate::deinterleave(packed)
             });
-            self.evaluate_batch64_into(&inputs, &mut scratch, &mut output)?;
+            self.evaluate_slice_into(&inputs, &mut scratch, &mut output)?;
             for (lane, &(a, b)) in inputs.iter().enumerate() {
                 if output[lane] != self.operation.oracle(a, b) {
                     return Err("bit-sliced kernel disagrees with posit8 reference");
@@ -133,6 +160,36 @@ mod tests {
             .evaluate_batch64_into(&pairs, &mut scratch, &mut outputs)
             .is_err());
         assert_eq!(outputs, [0x5a; LANES]);
+    }
+
+    #[test]
+    fn arbitrary_batch_lengths_match_exact_reference() {
+        let graph = ComplementCircuit::synthesize(Operation::Mul).unwrap();
+        let mut scratch = graph.new_scratch64();
+        for len in [0usize, 1, 2, 63, 64, 65, 127, 128, 129, 1024] {
+            let input: Vec<(u8, u8)> = (0..len)
+                .map(|i| crate::deinterleave((i * 147 + 0x8080) as u16))
+                .collect();
+            let mut actual = vec![0x5au8; len];
+            graph
+                .evaluate_slice_into(&input, &mut scratch, &mut actual)
+                .unwrap();
+            for (i, &(a, b)) in input.iter().enumerate() {
+                assert_eq!(actual[i], Operation::Mul.oracle(a, b), "len={len} index={i}");
+            }
+        }
+    }
+
+    #[test]
+    fn wrong_output_length_does_not_modify_data() {
+        let graph = ComplementCircuit::synthesize(Operation::Add).unwrap();
+        let mut scratch = graph.new_scratch64();
+        let input = [(0x40u8, 0x40u8); 65];
+        let mut actual = [0x33u8; 64];
+        assert!(graph
+            .evaluate_slice_into(&input, &mut scratch, &mut actual)
+            .is_err());
+        assert_eq!(actual, [0x33u8; 64]);
     }
 
     #[test]
