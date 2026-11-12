@@ -1,0 +1,174 @@
+name: BPB-3 adaptive fixed-budget and fresh trained-weight qualification
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3_adaptive.rs'
+      - 'research/boolean-posit/adaptive_weight_corpus.py'
+      - 'research/boolean-posit/BPB3_ADAPTIVE_PROTOCOL_20261112.md'
+      - '.github/workflows/bpb3-adaptive-real-weights.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3_adaptive.rs'
+      - 'research/boolean-posit/adaptive_weight_corpus.py'
+      - 'research/boolean-posit/BPB3_ADAPTIVE_PROTOCOL_20261112.md'
+      - '.github/workflows/bpb3-adaptive-real-weights.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adaptive-correctness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89 and rustfmt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict Rust formatting
+        id: formatting
+        run: rustfmt --edition 2021 --check research/boolean-posit/bpb3_adaptive.rs
+      - name: Exact wire, Boolean arithmetic, DP and accumulation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition=2021 -D warnings --test research/boolean-posit/bpb3_adaptive.rs -o "$RUNNER_TEMP/bpb3-adaptive-tests"
+          "$RUNNER_TEMP/bpb3-adaptive-tests" --nocapture | tee "$RUNNER_TEMP/bpb3-adaptive-test-log.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/bpb3-adaptive-test-log.txt"
+          rustc --edition=2021 -D warnings -O research/boolean-posit/bpb3_adaptive.rs -o "$RUNNER_TEMP/bpb3-adaptive-eval"
+      - name: Preserve formatted Rust file if formatting fails
+        if: failure() && steps.formatting.outcome == 'failure'
+        shell: bash
+        run: |
+          rustfmt --edition 2021 research/boolean-posit/bpb3_adaptive.rs
+          mkdir -p "$RUNNER_TEMP/format-diagnostic"
+          cp research/boolean-posit/bpb3_adaptive.rs "$RUNNER_TEMP/format-diagnostic/"
+      - name: Upload exact correctness and formatting evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-adaptive-correctness-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/bpb3-adaptive-test-log.txt
+            ${{ runner.temp }}/format-diagnostic/bpb3_adaptive.rs
+          if-no-files-found: warn
+          retention-days: 21
+
+  fresh-trained-weights:
+    needs: adaptive-correctness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin package clients and compile extraction scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/bpb3-adaptive-venv"
+          "$RUNNER_TEMP/bpb3-adaptive-venv/bin/pip" install --disable-pip-version-check \
+            numpy==2.2.6 safetensors==0.6.2 huggingface_hub==0.35.3 hf_xet==1.1.10
+          "$RUNNER_TEMP/bpb3-adaptive-venv/bin/python" -m py_compile research/boolean-posit/adaptive_weight_corpus.py
+      - name: Fetch source- and license-pinned Pythia-14M checkpoint
+        shell: bash
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: |
+          set -euo pipefail
+          export WEIGHTS_DIR="$RUNNER_TEMP/bpb3-adaptive-trained"
+          mkdir -p "$WEIGHTS_DIR"
+          "$RUNNER_TEMP/bpb3-adaptive-venv/bin/python" - <<'PY'
+          import os
+          from huggingface_hub import hf_hub_download
+          model = hf_hub_download(
+              repo_id='EleutherAI/pythia-14m',
+              filename='model.safetensors',
+              revision='94f7c35d5e9f2e9bac8ca839329f505b4d007d5d',
+              local_dir=os.environ['WEIGHTS_DIR'],
+          )
+          print('ADAPTIVE_CHECKPOINT_PINNED', model)
+          PY
+          echo '116a02532db461f91386a5b20f942ff2c8d4de7341e21b55caafc3d7b25f49a1  '"$WEIGHTS_DIR/model.safetensors" | sha256sum -c -
+      - name: Extract never-before-used trained tensor layers 2/3
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/bpb3-adaptive-venv/bin/python" \
+            research/boolean-posit/adaptive_weight_corpus.py \
+            "$RUNNER_TEMP/bpb3-adaptive-trained/model.safetensors" \
+            "$RUNNER_TEMP/bpb3-adaptive-trained/selected" \
+            | tee "$RUNNER_TEMP/bpb3-adaptive-admission.txt"
+          grep -q '^PASS_ADAPTIVE_PYTHIA_FRESH_STRATA tensors=4 dev=24 test=24' "$RUNNER_TEMP/bpb3-adaptive-admission.txt"
+      - name: Build official pinned ggml Q3_K/Q4_K CPU encoder
+        shell: bash
+        env:
+          GGML_SHA: f7591a6a01f9273de03331732bdc0b39721168be
+        run: |
+          set -euo pipefail
+          git init --quiet "$RUNNER_TEMP/bpb3-adaptive-ggml-source"
+          git -C "$RUNNER_TEMP/bpb3-adaptive-ggml-source" remote add origin https://github.com/ggml-org/llama.cpp.git
+          git -C "$RUNNER_TEMP/bpb3-adaptive-ggml-source" -c credential.helper= fetch --no-tags --depth=1 origin "$GGML_SHA"
+          git -C "$RUNNER_TEMP/bpb3-adaptive-ggml-source" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/bpb3-adaptive-ggml-source" rev-parse HEAD)" = "$GGML_SHA"
+          cmake -S "$RUNNER_TEMP/bpb3-adaptive-ggml-source" -B "$RUNNER_TEMP/bpb3-adaptive-ggml-build" \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_CURL=OFF \
+            -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_METAL=OFF \
+            -DGGML_BACKEND_DL=OFF -DBUILD_SHARED_LIBS=ON
+          cmake --build "$RUNNER_TEMP/bpb3-adaptive-ggml-build" --target ggml-base -j 2
+          LIB="$(find "$RUNNER_TEMP/bpb3-adaptive-ggml-build" -type f -name 'libggml-base.so*' | head -n 1)"
+          test -n "$LIB"
+          dirname "$LIB" > "$RUNNER_TEMP/bpb3-adaptive-libdir.txt"
+      - name: Reconstruct all four matrices and compare official Q3_K/Q4_K on identical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+          rustc --edition=2021 -D warnings -O research/boolean-posit/bpb3_adaptive.rs -o "$RUNNER_TEMP/bpb3-adaptive-eval"
+          LIBDIR="$(cat "$RUNNER_TEMP/bpb3-adaptive-libdir.txt")"
+          export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH:-}"
+          rustc --edition=2021 -O research/boolean-posit/reconstruction_e1.rs -L "native=$LIBDIR" -o "$RUNNER_TEMP/bpb3-e1-official"
+          echo 'tensor,split,codec,payload_bytes,bits_per_weight,weight_rmse,bipolar_dot_rmse,weights,mode1_blocks,mode2_blocks,mode3_blocks' > "$RUNNER_TEMP/bpb3-adaptive-results.csv"
+          echo 'tensor,split,family,codec,rows,bpw,wire_bytes_per_256,rmse,nrmse_original_rms,mae,signed_bias,cosine,p95_abs,p99_abs,p999_abs,worst_index,max_abs,dot_rmse,zero_abs_mae,coefficients,dots' > "$RUNNER_TEMP/bpb3-adaptive-native-controls.csv"
+          for tensor in attention_output_layer2 attention_qkv_layer2 mlp_expansion_layer3 mlp_projection_layer3; do
+            FILE="$RUNNER_TEMP/bpb3-adaptive-trained/selected/$tensor.f32le"
+            test "$(stat -c %s "$FILE")" -eq 49152
+            "$RUNNER_TEMP/bpb3-adaptive-eval" --external-f32le "$FILE" > "$RUNNER_TEMP/bpb3-adaptive-$tensor.csv"
+            grep -q '^protocol=bpb3-adaptive-fixed-budget-v1' "$RUNNER_TEMP/bpb3-adaptive-$tensor.csv"
+            test "$(grep -c '^DEV,' "$RUNNER_TEMP/bpb3-adaptive-$tensor.csv")" -eq 2
+            test "$(grep -c '^TEST,' "$RUNNER_TEMP/bpb3-adaptive-$tensor.csv")" -eq 2
+            awk -F, -v tensor="$tensor" 'NR>2 {print tensor "," $0}' "$RUNNER_TEMP/bpb3-adaptive-$tensor.csv" >> "$RUNNER_TEMP/bpb3-adaptive-results.csv"
+            "$RUNNER_TEMP/bpb3-e1-official" --external-f32le "$FILE" > "$RUNNER_TEMP/bpb3-native-$tensor.csv"
+            test "$(grep -c '^DEV,external,' "$RUNNER_TEMP/bpb3-native-$tensor.csv")" -eq 4
+            test "$(grep -c '^TEST,external,' "$RUNNER_TEMP/bpb3-native-$tensor.csv")" -eq 4
+            awk -F, -v tensor="$tensor" 'NR>2 && ($3 == "GGUF_Q3_K" || $3 == "GGUF_Q4_K") {print tensor "," $0}' "$RUNNER_TEMP/bpb3-native-$tensor.csv" >> "$RUNNER_TEMP/bpb3-adaptive-native-controls.csv"
+          done
+          test "$(wc -l < "$RUNNER_TEMP/bpb3-adaptive-results.csv")" -eq 17
+          test "$(wc -l < "$RUNNER_TEMP/bpb3-adaptive-native-controls.csv")" -eq 17
+          sha256sum "$RUNNER_TEMP/bpb3-adaptive-results.csv" "$RUNNER_TEMP/bpb3-adaptive-native-controls.csv" > "$RUNNER_TEMP/bpb3-adaptive-results-sha256.txt"
+          echo 'PASS_ADAPTIVE_TRAINED_WEIGHT_EXPERIMENT: negative or positive findings must be preserved without performance claims'
+      - name: Upload provenance, candidate and original-source native control metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-adaptive-new-pythia-strata-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/bpb3-adaptive-results.csv
+            ${{ runner.temp }}/bpb3-adaptive-native-controls.csv
+            ${{ runner.temp }}/bpb3-adaptive-admission.txt
+            ${{ runner.temp }}/bpb3-adaptive-results-sha256.txt
+            ${{ runner.temp }}/bpb3-adaptive-trained/selected/manifest.json
+          if-no-files-found: warn
+          retention-days: 30
