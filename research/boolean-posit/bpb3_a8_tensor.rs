@@ -105,11 +105,15 @@ impl<'a> TensorView<'a> {
             return Err(TensorError::InvalidHeader);
         }
         let rows = usize::try_from(u32::from_le_bytes(
-            header[4..8].try_into().map_err(|_| TensorError::InvalidHeader)?,
+            header[4..8]
+                .try_into()
+                .map_err(|_| TensorError::InvalidHeader)?,
         ))
         .map_err(|_| TensorError::Overflow)?;
         let pages = usize::try_from(u32::from_le_bytes(
-            header[8..12].try_into().map_err(|_| TensorError::InvalidHeader)?,
+            header[8..12]
+                .try_into()
+                .map_err(|_| TensorError::InvalidHeader)?,
         ))
         .map_err(|_| TensorError::Overflow)?;
         let header_len = directory_bytes(rows)?;
@@ -121,7 +125,9 @@ impl<'a> TensorView<'a> {
             .map(|index| {
                 let at = HEADER_BYTES + index * 4;
                 usize::try_from(u32::from_le_bytes(
-                    bytes[at..at + 4].try_into().map_err(|_| TensorError::InvalidDirectory)?,
+                    bytes[at..at + 4]
+                        .try_into()
+                        .map_err(|_| TensorError::InvalidDirectory)?,
                 ))
                 .map_err(|_| TensorError::Overflow)
             })
@@ -179,9 +185,8 @@ impl<'a> TensorView<'a> {
     pub fn signed_bipolar_matvec(&self, mask: &[u64; 4]) -> Result<Vec<i128>, TensorError> {
         let mut outputs = Vec::with_capacity(self.rows);
         for row in 0..self.rows {
-            outputs.push(
-                a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?,
-            );
+            outputs
+                .push(a8::dot_exact(self.row(row)?, mask).map_err(|_| TensorError::InvalidPage)?);
         }
         Ok(outputs)
     }
@@ -244,7 +249,10 @@ mod tests {
                     paged::page_index_bytes(page_rows).unwrap()
                 })
                 .sum();
-            assert_eq!(encoded.len(), payload + page_overhead + directory_bytes(count).unwrap());
+            assert_eq!(
+                encoded.len(),
+                payload + page_overhead + directory_bytes(count).unwrap()
+            );
         }
     }
 
@@ -253,7 +261,12 @@ mod tests {
         let source: Vec<Vec<u8>> = (0..300).map(make_row).collect();
         let encoded = encode_tensor(&source).unwrap();
         let view = TensorView::new(&encoded).unwrap();
-        for mask in [[0u64; 4], [u64::MAX; 4], [0xaaaa_aaaa_aaaa_aaaa; 4], [0x0123_4567_89ab_cdef; 4]] {
+        for mask in [
+            [0u64; 4],
+            [u64::MAX; 4],
+            [0xaaaa_aaaa_aaaa_aaaa; 4],
+            [0x0123_4567_89ab_cdef; 4],
+        ] {
             let actual = view.signed_bipolar_matvec(&mask).unwrap();
             let reference: Vec<_> = source.iter().map(|row| scalar_oracle(row, &mask)).collect();
             assert_eq!(actual, reference);
@@ -266,20 +279,32 @@ mod tests {
         let original = encode_tensor(&source).unwrap();
         let mut bad = original.clone();
         bad[0] ^= 1;
-        assert!(matches!(TensorView::new(&bad), Err(TensorError::InvalidHeader)));
+        assert!(matches!(
+            TensorView::new(&bad),
+            Err(TensorError::InvalidHeader)
+        ));
         let mut bad = original.clone();
         bad[8] = 3; // declared page count disagrees with row count
-        assert!(matches!(TensorView::new(&bad), Err(TensorError::InvalidDirectory)));
+        assert!(matches!(
+            TensorView::new(&bad),
+            Err(TensorError::InvalidDirectory)
+        ));
         let mut bad = original.clone();
-        bad[16] ^= 1; // first page offset is no longer zero
-        assert!(matches!(TensorView::new(&bad), Err(TensorError::InvalidDirectory)));
+        bad[12] ^= 1; // first page offset is no longer zero
+        assert!(matches!(
+            TensorView::new(&bad),
+            Err(TensorError::InvalidDirectory)
+        ));
         let mut bad = original.clone();
-        bad[20] = 0; // second page offset becomes zero or incorrect
+        bad[16] = 0; // second page offset becomes incorrect
         assert!(TensorView::new(&bad).is_err());
         let mut bad = original.clone();
         let nested_start = directory_bytes(source.len()).unwrap();
         bad[nested_start] ^= 1; // corrupt BA8P magic
-        assert!(matches!(TensorView::new(&bad), Err(TensorError::InvalidPage)));
+        assert!(matches!(
+            TensorView::new(&bad),
+            Err(TensorError::InvalidPage)
+        ));
         let mut bad = original.clone();
         bad.pop();
         assert!(TensorView::new(&bad).is_err());
