@@ -1,6 +1,6 @@
 # BPB-P8-SYNTH0 — Apprentissage de microcircuits posit8 et compilation native
 
-**Statut : recherche expérimentale, sans activation dans le modèle.** Programme inspiré par la proposition de synthèse nCPU, mais toute l'implémentation Rust est développée indépendamment. Aucun code, modèle, poids, jeu de données ou dérivé nCPU n'est importé.
+**Statut : recherche expérimentale, sans activation dans le modèle.** Programme autonome Memorithm : découvrir, qualifier et compiler des circuits booléens arithmétiques natifs. L'implémentation Rust, les oracles, les données synthétiques et les tests sont élaborés au sein du projet, sans importation de code, poids, modèles, tables ou jeux de données provenant d'autres projets.
 
 ## Périmètre scientifique gelé avant les résultats
 
@@ -23,8 +23,8 @@
 
 **SYNTH1** : apprentissage libre d'un réseau combinatoire pour `posit8_add(a,b)` et `posit8_mul(a,b)`, avec le minimum de supervision architecturale, budget de calcul/de profondeur/périmètre, validation de toutes les 65 536 paires. Les réseaux peuvent contenir decode-régime, alignement, arrondi et saturation mais leur recherche est interdite d'utiliser l'ensemble TEST pour la sélection. Confronter les circuits à des additionneurs/concepteurs manuels et des implémentations standard, puis profiler sur CPU hébergé et enfin sur machines admises **exclusivement via Memorithm/RemoteOps**.
 
-## Référence nCPU et licence
+## Indépendance du développement et provenance
 
-Robert C. Price, *nCPU: An End-to-End Neural Computer*, mars 2026, [papier](https://github.com/robertcprice/nCPU/blob/main/paper/ncpu_paper.md) et [ALU Rust/Metal](https://github.com/robertcprice/nCPU/blob/main/kernels/rust_metal/src/neural/neural_alu.rs). Le README revendique « MIT » tandis que le [fichier `LICENSE`](https://github.com/robertcprice/nCPU/blob/main/LICENSE) stipule **CC BY-NC 4.0**. En l'absence de clarification du détenteur des droits, la frontière est strictement **référence conceptuelle seulement**, sans copie de code, de poids entraînés, de tables ou de tests.
+Les circuits, les encodages, les algorithmes de recherche, les oracles, les jeux d'essais et les procédures de compilation sont conçus et implémentés au sein de Memorithm. Aucun extrait de code, poids entraîné, table de correspondance, jeu de données ou test propriétaire externe ne doit être copié. Toute réutilisation future d'un composant tiers exige une revue de provenance et de licence distincte, ainsi qu'une qualification sur les oracles internes.
 
 Documentation normative : [Posit Standard, Posit Working Group (2022)](https://posithub.org/docs/posit_standard-2.pdf). Les programmes restent séparés de l'optimisation propriétaire BPB-3-A8 (ce dernier est un codec à échelle partagée, **pas** un posit scalaire 8 bits).
