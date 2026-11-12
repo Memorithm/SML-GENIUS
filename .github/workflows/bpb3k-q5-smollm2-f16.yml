@@ -121,7 +121,7 @@ jobs:
           done
           grep -q '^BPB3K_Q5_178_REAL_DOT_EXECUTED ' output-arithmetic-q5.txt || fail=1
           grep -q '^BPB3K_Q5_178_REAL_TILED_EXECUTED ' output-longprefill-q5.txt || fail=1
-          grep -qv 'BPB3K_Q5_178_REAL_' output-arithmetic-stock.txt || fail=1
+          if grep -q 'BPB3K_Q5_178_REAL_' output-arithmetic-stock.txt; then fail=1; fi
           echo "Q5_REAL_INFERENCE_CANARY_FAIL=$fail" | tee canary.txt
           test "$fail" -eq 0
       - name: Bounded 4-pair whole-model CPU pilot (no speedup gate)
