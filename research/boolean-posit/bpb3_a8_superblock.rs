@@ -221,6 +221,67 @@ pub fn dot_exact(bytes: &[u8], mask: &[u64; 4]) -> Result<i128, Error> {
     Ok(total)
 }
 
+/// Eight signed INT8 input bitplanes per local 16-value group, prepared
+/// once per activation vector and reusable across all matrix rows.
+pub type Int8Bitplanes = [[u16; 8]; GROUPS];
+
+pub fn prepare_i8_bitplanes(input: &[i8; WEIGHTS]) -> Int8Bitplanes {
+    std::array::from_fn(|g| {
+        let mut masks = [0u16; 8];
+        for lane in 0..WIDTH {
+            let value = input[g * WIDTH + lane] as u8;
+            for (bit, mask) in masks.iter_mut().enumerate() {
+                if (value >> bit) & 1 != 0 {
+                    *mask |= 1u16 << lane;
+                }
+            }
+        }
+        masks
+    })
+}
+
+/// Fused, single-parse signed-INT8 dot in exact 2^-24 units. All input
+/// bitplanes are prepared once across rows, but every weight row is decoded
+/// only once and no dense intermediate weight vector is materialized.
+pub fn dot_i8_prepared(bytes: &[u8], input: &Int8Bitplanes) -> Result<i128, Error> {
+    let (modes, exponents, signs, planes) = parse(bytes)?;
+    let mut total = 0i128;
+    for g in 0..GROUPS {
+        let shift = (g % 4) * WIDTH;
+        let weight_sign = ((signs[g / 4] >> shift) & 0xffff) as u16;
+        let mut group_sum = 0i32;
+        for (plane_index, &weight_bits) in planes[g][..usize::from(modes[g])].iter().enumerate() {
+            for (bit, &activation_bits) in input[g].iter().enumerate() {
+                let selected = weight_bits & activation_bits;
+                let signed_count =
+                    selected.count_ones() as i32 - 2 * (selected & weight_sign).count_ones() as i32;
+                let activation_factor = if bit == 7 { -128 } else { 1i32 << bit };
+                let term = signed_count
+                    .checked_mul(activation_factor)
+                    .and_then(|value| value.checked_mul(1i32 << plane_index))
+                    .ok_or(Error::Overflow)?;
+                group_sum = group_sum.checked_add(term).ok_or(Error::Overflow)?;
+            }
+        }
+        let multiplier = 1i128
+            .checked_shl((i32::from(exponents[g]) + 24) as u32)
+            .ok_or(Error::Overflow)?;
+        total = total
+            .checked_add(
+                i128::from(group_sum)
+                    .checked_mul(multiplier)
+                    .ok_or(Error::Overflow)?,
+            )
+            .ok_or(Error::Overflow)?;
+    }
+    Ok(total)
+}
+
+pub fn dot_i8_fused(bytes: &[u8], input: &[i8; WEIGHTS]) -> Result<i128, Error> {
+    let bitplanes = prepare_i8_bitplanes(input);
+    dot_i8_prepared(bytes, &bitplanes)
+}
+
 pub fn dot_f64(bytes: &[u8], mask: &[u64; 4]) -> Result<f64, Error> {
     let mut total = 0.0;
     for (integer, exponent) in dot_groups(bytes, mask)? {
