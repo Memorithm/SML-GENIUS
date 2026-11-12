@@ -132,8 +132,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, Error> {
     }
     let base = bytes[0] as i16 - 24;
     let mode_bits = u32::from_le_bytes(bytes[1..5].try_into().unwrap());
-    let modes: [u8; GROUPS] =
-        std::array::from_fn(|i| ((mode_bits >> (2 * i)) & 3) as u8 + 1);
+    let modes: [u8; GROUPS] = std::array::from_fn(|i| ((mode_bits >> (2 * i)) & 3) as u8 + 1);
     if modes.contains(&4) {
         return Err(Error::InvalidMode);
     }
@@ -198,8 +197,8 @@ pub fn dot_groups(bytes: &[u8], mask: &[u64; 4]) -> Result<[(i32, i8); GROUPS], 
         let same_sign = !(weight_sign ^ input_sign);
         let mut sum = 0i32;
         for (p, &plane) in planes[g][..usize::from(modes[g])].iter().enumerate() {
-            sum += (2 * (plane & same_sign).count_ones() as i32
-                - plane.count_ones() as i32) * (1 << p);
+            sum += (2 * (plane & same_sign).count_ones() as i32 - plane.count_ones() as i32)
+                * (1 << p);
         }
         (sum, exponents[g])
     }))
@@ -212,7 +211,11 @@ pub fn dot_exact(bytes: &[u8], mask: &[u64; 4]) -> Result<i128, Error> {
             .checked_shl((i32::from(exponent) + 24) as u32)
             .ok_or(Error::Overflow)?;
         total = total
-            .checked_add(i128::from(integer).checked_mul(mul).ok_or(Error::Overflow)?)
+            .checked_add(
+                i128::from(integer)
+                    .checked_mul(mul)
+                    .ok_or(Error::Overflow)?,
+            )
             .ok_or(Error::Overflow)?;
     }
     Ok(total)
@@ -496,9 +499,7 @@ fn main() {
     let rows: Vec<[f32; WEIGHTS]> = bytes
         .chunks_exact(WEIGHTS * 4)
         .map(|chunk| {
-            std::array::from_fn(|i| {
-                f32::from_le_bytes(chunk[4 * i..4 * i + 4].try_into().unwrap())
-            })
+            std::array::from_fn(|i| f32::from_le_bytes(chunk[4 * i..4 * i + 4].try_into().unwrap()))
         })
         .collect();
     assert!(rows.iter().all(|row| row.iter().all(|v| v.is_finite())));
@@ -527,7 +528,10 @@ mod tests {
         assert!(!options.is_empty());
         for block in options {
             let wire = pack(&block).unwrap();
-            assert_eq!(wire.len(), wire_bytes(&block.groups.map(|g| g.mode)).unwrap());
+            assert_eq!(
+                wire.len(),
+                wire_bytes(&block.groups.map(|g| g.mode)).unwrap()
+            );
             let (codes, exponents) = unpack(&wire).unwrap();
             for group in 0..GROUPS {
                 assert_eq!(exponents[group], block.groups[group].exponent);
@@ -558,7 +562,11 @@ mod tests {
             let candidates = candidates(&fixture(trial + 1)).unwrap();
             let wire = pack(&candidates[candidates.len() / 2]).unwrap();
             let (codes, exponents) = unpack(&wire).unwrap();
-            for mask in [[0u64; 4], [u64::MAX; 4], std::array::from_fn(|_| random(&mut rng))] {
+            for mask in [
+                [0u64; 4],
+                [u64::MAX; 4],
+                std::array::from_fn(|_| random(&mut rng)),
+            ] {
                 let actual = dot_groups(&wire, &mask).unwrap();
                 for group in 0..GROUPS {
                     let reference: i32 = (0..WIDTH)
@@ -594,16 +602,20 @@ mod tests {
             }
         }
         assert!((chosen.sse - oracle).abs() <= 1e-10 * oracle.max(1.0));
-        assert_eq!(chosen.total_bytes, chosen.wires.iter().map(Vec::len).sum::<usize>());
+        assert_eq!(
+            chosen.total_bytes,
+            chosen.wires.iter().map(Vec::len).sum::<usize>()
+        );
     }
 
     #[test]
     fn inner_dp_zero_extra_matches_independent_base_exponent_enumeration() {
         let source = fixture(27);
         let candidates = candidates(&source).unwrap();
-        let all_one_plane = candidates.iter().find(|b| {
-            wire_bytes(&b.groups.map(|g| g.mode)).unwrap() == MIN_BYTES
-        }).unwrap();
+        let all_one_plane = candidates
+            .iter()
+            .find(|b| wire_bytes(&b.groups.map(|g| g.mode)).unwrap() == MIN_BYTES)
+            .unwrap();
         let mut optimum = f64::INFINITY;
         for base in -24i8..=27 {
             let mut total = 0.0;
@@ -611,21 +623,25 @@ mod tests {
                 let mut best_group = f64::INFINITY;
                 for offset in -1i16..=2 {
                     let exponent = i16::from(base) + offset;
-                    if !(-24..=27).contains(&exponent) { continue; }
+                    if !(-24..=27).contains(&exponent) {
+                        continue;
+                    }
                     let scale = 2.0f64.powi(i32::from(exponent));
-                    let sse: f64 = (0..WIDTH).map(|i| {
-                        let x = source[group*WIDTH+i];
-                        let quant = (x/scale).round().clamp(-1.0,1.0);
-                        let d = x-quant*scale;
-                        d*d
-                    }).sum();
+                    let sse: f64 = (0..WIDTH)
+                        .map(|i| {
+                            let x = source[group * WIDTH + i];
+                            let quant = (x / scale).round().clamp(-1.0, 1.0);
+                            let d = x - quant * scale;
+                            d * d
+                        })
+                        .sum();
                     best_group = best_group.min(sse);
                 }
                 total += best_group;
             }
             optimum = optimum.min(total);
         }
-        assert!((all_one_plane.sse-optimum).abs() <= 1e-10*optimum.max(1.0));
+        assert!((all_one_plane.sse - optimum).abs() <= 1e-10 * optimum.max(1.0));
     }
 
     #[test]
@@ -637,8 +653,11 @@ mod tests {
         let oracle: i128 = (0..WEIGHTS)
             .map(|i| {
                 let q = i128::from(codes[i]);
-                (if (masks[i/64] >> (i%64)) & 1 != 0 {-q} else {q})
-                    << (i32::from(exponents[i/WIDTH])+24)
+                (if (masks[i / 64] >> (i % 64)) & 1 != 0 {
+                    -q
+                } else {
+                    q
+                }) << (i32::from(exponents[i / WIDTH]) + 24)
             })
             .sum();
         assert_eq!(exact, oracle);
@@ -654,8 +673,11 @@ mod tests {
         let block = allocate(&[fixture(7)], BUDGET_PER_ROW).unwrap();
         let mut wire = block.wires[0].clone();
         let (codes, _) = unpack(&wire).unwrap();
-        let zero = codes.iter().position(|&x| x==0).expect("a zero source code");
-        wire[9 + (zero/64)*8 + (zero%64)/8] |= 1 << (zero % 8);
+        let zero = codes
+            .iter()
+            .position(|&x| x == 0)
+            .expect("a zero source code");
+        wire[9 + (zero / 64) * 8 + (zero % 64) / 8] |= 1 << (zero % 8);
         assert_eq!(unpack(&wire), Err(Error::NegativeZero));
     }
 }
