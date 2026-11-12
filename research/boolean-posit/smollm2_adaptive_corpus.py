@@ -90,9 +90,12 @@ def extract(model: Path, destination: Path) -> None:
                         memory, dtype="<f2", count=count, offset=data_begin + begin
                     ).astype("<f4", copy=True)
                 else:
+                    # Detach the BF16 view from mmap before leaving its
+                    # context; otherwise closing the verified checkpoint
+                    # raises BufferError even after successful extraction.
                     raw = np.frombuffer(
                         memory, dtype="<u2", count=count, offset=data_begin + begin
-                    )
+                    ).copy()
                     values = (raw.astype("<u4") << 16).view("<f4")
                 if not np.all(np.isfinite(values)):
                     raise SystemExit(f"STOP_NONFINITE_SMOLLM2_TENSOR {tensor_name}")
