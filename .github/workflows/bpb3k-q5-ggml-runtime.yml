@@ -45,6 +45,12 @@ jobs:
             research/boolean-posit/bpb3k_q5_ggml_patch.rs -o "$RUNNER_TEMP/q5-patcher"
           rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
             research/boolean-posit/bpb3k_q5_gguf_transcode.rs -o "$RUNNER_TEMP/q5-transcode"
+          "$RUNNER_TEMP/q5-patcher" emit-tiled-probe "$RUNNER_TEMP/q5-exact-unpack.cpp"
+          c++ -std=c++17 -O2 -msse2 -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$RUNNER_TEMP/q5-exact-unpack.cpp" -o "$RUNNER_TEMP/q5-exact-unpack"
+          ASAN_OPTIONS=detect_leaks=0 "$RUNNER_TEMP/q5-exact-unpack" | tee "$RUNNER_TEMP/q5-exact-unpack.log"
+          grep -q '^PASS_Q5_178_EXACT_GENERATED_CXX_TILED_UNPACK_SANITIZER$' "$RUNNER_TEMP/q5-exact-unpack.log"
           echo PASS_Q5_178_RUST_ABI_AND_PREPARE=HOSTED_CPU_FIXTURE_ONLY
       - name: Compile actual SHA-pinned llama.cpp with Q5-178 C and Rust CPU adapters
         shell: bash
