@@ -36,11 +36,7 @@ pub fn page_index_bytes(block_count: usize) -> Result<usize, PageError> {
     }
     let checkpoints = block_count.div_ceil(CHECKPOINT_STRIDE);
     HEADER_BYTES
-        .checked_add(
-            checkpoints
-                .checked_mul(2)
-                .ok_or(PageError::Overflow)?,
-        )
+        .checked_add(checkpoints.checked_mul(2).ok_or(PageError::Overflow)?)
         .ok_or(PageError::Overflow)
 }
 
@@ -50,7 +46,11 @@ fn a8_wire_length(payload: &[u8], offset: usize) -> Result<usize, PageError> {
     let prefix = payload
         .get(offset..offset.checked_add(5).ok_or(PageError::Overflow)?)
         .ok_or(PageError::WrongLength)?;
-    let mode_bits = u32::from_le_bytes(prefix[1..5].try_into().map_err(|_| PageError::WrongLength)?);
+    let mode_bits = u32::from_le_bytes(
+        prefix[1..5]
+            .try_into()
+            .map_err(|_| PageError::WrongLength)?,
+    );
     let mut sum = 0usize;
     for group in 0..16 {
         let code = (mode_bits >> (2 * group)) & 3;
@@ -218,7 +218,10 @@ mod tests {
             assert_eq!(page.get(i).unwrap(), original);
         }
         assert_eq!(page.get(256), Err(PageError::IndexOutOfRange));
-        assert_eq!(serialized.len(), blocks.iter().map(Vec::len).sum::<usize>() + 72);
+        assert_eq!(
+            serialized.len(),
+            blocks.iter().map(Vec::len).sum::<usize>() + 72
+        );
     }
 
     #[test]
@@ -243,20 +246,35 @@ mod tests {
         let good = encode_page(&blocks).unwrap();
         let mut corrupt = good.clone();
         corrupt[0] ^= 1;
-        assert!(matches!(ValidatedPage::new(&corrupt), Err(PageError::InvalidHeader)));
+        assert!(matches!(
+            ValidatedPage::new(&corrupt),
+            Err(PageError::InvalidHeader)
+        ));
         let mut corrupt = good.clone();
         corrupt[8] = 1;
-        assert!(matches!(ValidatedPage::new(&corrupt), Err(PageError::InvalidCheckpoint)));
+        assert!(matches!(
+            ValidatedPage::new(&corrupt),
+            Err(PageError::InvalidCheckpoint)
+        ));
         let mut corrupt = good.clone();
         let payload_start = page_index_bytes(blocks.len()).unwrap();
         corrupt[payload_start + 1] |= 3;
-        assert!(matches!(ValidatedPage::new(&corrupt), Err(PageError::InvalidBlock)));
+        assert!(matches!(
+            ValidatedPage::new(&corrupt),
+            Err(PageError::InvalidBlock)
+        ));
         let mut corrupt = good.clone();
         corrupt.pop();
-        assert!(matches!(ValidatedPage::new(&corrupt), Err(PageError::WrongLength)));
+        assert!(matches!(
+            ValidatedPage::new(&corrupt),
+            Err(PageError::WrongLength)
+        ));
         let mut corrupt = good.clone();
         corrupt.extend_from_slice(&[0]);
-        assert!(matches!(ValidatedPage::new(&corrupt), Err(PageError::WrongLength)));
+        assert!(matches!(
+            ValidatedPage::new(&corrupt),
+            Err(PageError::WrongLength)
+        ));
     }
 
     #[test]
