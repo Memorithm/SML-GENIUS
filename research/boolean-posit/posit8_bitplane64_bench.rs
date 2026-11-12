@@ -26,11 +26,7 @@ fn paired_median(mut rows: Vec<f64>) -> f64 {
     rows.sort_by(f64::total_cmp);
     rows[rows.len() / 2]
 }
-fn time_scalar(
-    circuit: &ComplementCircuit,
-    inputs: &[(u8, u8)],
-    output: &mut [u8],
-) -> f64 {
+fn time_scalar(circuit: &ComplementCircuit, inputs: &[(u8, u8)], output: &mut [u8]) -> f64 {
     let start = Instant::now();
     for (slot, &(a, b)) in output.iter_mut().zip(inputs.iter()) {
         *slot = circuit.evaluate(black_box(a), black_box(b));
@@ -62,7 +58,10 @@ impl ComplementCircuit {
         let mut packed = vec![0u8; inputs.len()];
         time_scalar(self, &inputs, &mut scalar);
         time_bitplanes(self, &inputs, &mut scratch, &mut packed);
-        assert_eq!(scalar, packed, "a performance comparison cannot change outputs");
+        assert_eq!(
+            scalar, packed,
+            "a performance comparison cannot change outputs"
+        );
 
         let mut scalar_times = Vec::with_capacity(ROUNDS);
         let mut packed_times = Vec::with_capacity(ROUNDS);
