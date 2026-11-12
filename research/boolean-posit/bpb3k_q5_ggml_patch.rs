@@ -230,7 +230,6 @@ fn patch(root: &Path, observed_sha: &str) -> Result<(), String> {
     Ok(())
 }
 
-
 const CPP_PROBE_PREFIX: &str = r#"
 #include <cassert>
 #include <cstdint>
