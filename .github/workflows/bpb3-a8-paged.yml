@@ -1,0 +1,54 @@
+name: BPB-3 A8 paged seek index exact wire qualification
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3_a8_paged.rs'
+      - 'research/boolean-posit/BPB3_A8_PAGED_INDEX_20261112.md'
+      - '.github/workflows/bpb3-a8-paged.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3_a8_paged.rs'
+      - 'research/boolean-posit/BPB3_A8_PAGED_INDEX_20261112.md'
+      - '.github/workflows/bpb3-a8-paged.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-page-local-index:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin minimal Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Exact standalone page index formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3_a8_paged.rs
+      - name: Full original A8 and indexed-page Rust correctness tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings --test research/boolean-posit/bpb3_a8_paged.rs -o "$RUNNER_TEMP/bpb3-a8-paged-tests"
+          "$RUNNER_TEMP/bpb3-a8-paged-tests" --nocapture | tee "$RUNNER_TEMP/bpb3-a8-page-test-output.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/bpb3-a8-page-test-output.txt"
+      - name: Preserve CPU-only correctness evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-a8-page-index-${{ github.sha }}
+          path: ${{ runner.temp }}/bpb3-a8-page-test-output.txt
+          if-no-files-found: warn
+          retention-days: 21
