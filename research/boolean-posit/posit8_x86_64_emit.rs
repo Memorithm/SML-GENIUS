@@ -21,10 +21,7 @@ impl LearnedCircuit {
             .len()
             .checked_add(2)
             .ok_or("node count overflow")?;
-        let stack_bytes = scratch
-            .checked_add(15)
-            .ok_or("stack size overflow")?
-            & !15;
+        let stack_bytes = scratch.checked_add(15).ok_or("stack size overflow")? & !15;
         if stack_bytes == 0 || stack_bytes > MAX_LOCAL_BYTES {
             return Err("stack scratch budget exceeded");
         }
@@ -96,7 +93,10 @@ mod tests {
             assert!(!asm.contains("call "));
             assert!(!asm.contains("jmp "));
             assert_eq!(asm.matches("    xor edx, eax").count(), circuit.nodes());
-            assert_eq!(asm.matches("    mov BYTE PTR [rsp + ").count(), circuit.nodes() + 2);
+            assert_eq!(
+                asm.matches("    mov BYTE PTR [rsp + ").count(),
+                circuit.nodes() + 2
+            );
         }
     }
 }
