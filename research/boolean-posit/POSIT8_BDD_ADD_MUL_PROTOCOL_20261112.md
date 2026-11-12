@@ -30,3 +30,7 @@ Pour chaque couple de deux posits8 `a,b`, produire la représentation exacte cal
 **SYNTH2 :** découvrir des sous-structures arithmétiques *composables* (régime, normalisation, retenue, arrondi) sans utiliser 100 % de la table comme exemples d'entraînement. Partition train/validation réellement disjointe, recherche d'un bon ordre de variables gelée sur DEV, équivalence exhaustive finale sur 65 536 couples. Comparer aux circuits écrits manuellement, au nombre de portes physiques estimé, à la taille binaire et au **temps réellement mesuré** face à un noyau posit8 conventionnel natif. Les nouveaux résultats ne seront promus dans SML-GENIUS ou V888-BOOLEEN qu'après leur propre validation indépendante.
 
 Référence normative : [Posit Standard 2022](https://posithub.org/docs/posit_standard-2.pdf). Les mesures sur CPU physiques doivent être admises et isolées exclusivement par Memorithm/RemoteOps. Le travail est réalisé de manière autonome au sein de Memorithm.
+
+## Qualification d'intégration sur la branche principale
+
+Le socle posit8 SYNTH0 a été intégré dans main après réussite de sa CI complète. La présente implémentation SYNTH1 doit être reconstruite et qualifiée comme contribution distincte contre cette base, avec l'ensemble des tests Rust du dépôt, en plus du workflow dédié qui prouve 65 536 résultats par opération et par chemin compilé. Aucune équivalence à une norme indépendante, ni gain de latence et de mémoire n'est déduit de cette intégration.
