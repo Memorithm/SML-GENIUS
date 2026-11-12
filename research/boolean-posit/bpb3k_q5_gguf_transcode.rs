@@ -904,6 +904,79 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+
+    /// Deterministic GGUF envelope mirroring a correctly selective native
+    /// Q5_K conversion without requiring an external C++ quantizer in the
+    /// standalone unit test. This checks the audit's metadata and bytes.
+    fn fixture_native_q5k(source: &Path, destination: &Path) {
+        let mut src = File::open(source).unwrap();
+        let size = src.metadata().unwrap().len();
+        let (start, alignment, mut entries) = tensors(&mut src, size).unwrap();
+        entries.sort_by_key(|e| e.offset);
+        let mut output = fs::read(source).unwrap()[..start as usize].to_vec();
+        for (i, tensor) in entries.iter().enumerate() {
+            let new_offset = output.len() as u64 - start;
+            output[tensor.offset_field as usize..tensor.offset_field as usize + 8]
+                .copy_from_slice(&new_offset.to_le_bytes());
+            let from = (start + tensor.offset) as usize;
+            let end = if let Some(next) = entries.get(i + 1) {
+                (start + next.offset) as usize
+            } else {
+                size as usize
+            };
+            if should_quantize(tensor) {
+                output[tensor.kind_field as usize..tensor.kind_field as usize + 4]
+                    .copy_from_slice(&13u32.to_le_bytes());
+                output.extend(vec![0u8; (tensor.values / 256 * 176) as usize]);
+            } else {
+                let bytes = fs::read(source).unwrap();
+                output.extend_from_slice(&bytes[from..end]);
+            }
+            if i + 1 < entries.len() {
+                let pad = (alignment - (output.len() as u64 - start) % alignment) % alignment;
+                output.extend(vec![0u8; pad as usize]);
+            }
+        }
+        fs::write(destination, output).unwrap();
+    }
+
+    #[test]
+    fn matched_native_q5k_audit_accepts_same_selection_and_rejects_drift() {
+        let root = temp_root();
+        let original = root.join("original.gguf");
+        let sentinel = root.join("sentinel.gguf");
+        let native = root.join("native-q5-k.gguf");
+        let (source, _, _) = fixture();
+        fs::write(&original, source).unwrap();
+        transcode(&original, &sentinel).unwrap();
+        fixture_native_q5k(&original, &native);
+        assert_eq!(audit_matched_native_q5k(&original, &native, &sentinel).unwrap(), 3);
+        let untouched = fs::read(&native).unwrap();
+        let mut altered = untouched.clone();
+        let mut f = File::open(&native).unwrap();
+        let (start, _, items) = tensors(&mut f, altered.len() as u64).unwrap();
+        let q3 = items.iter().find(|t| t.name == "q3.untouched").unwrap();
+        altered[(start + q3.offset + 13) as usize] ^= 0x80;
+        fs::write(&native, &altered).unwrap();
+        assert!(
+            audit_matched_native_q5k(&original, &native, &sentinel)
+                .unwrap_err()
+                .contains("STOP_AUDIT_UNCHANGED_PAYLOAD_DIFFERENCE")
+        );
+        fs::write(&native, &untouched).unwrap();
+        let first = items.iter().find(|t| t.name == "f16.matrix").unwrap();
+        let mut changed = untouched.clone();
+        changed[first.kind_field as usize..first.kind_field as usize + 4]
+            .copy_from_slice(&12u32.to_le_bytes());
+        fs::write(&native, &changed).unwrap();
+        assert!(
+            audit_matched_native_q5k(&original, &native, &sentinel)
+                .unwrap_err()
+                .contains("STOP_AUDIT_Q5_TYPE_MISMATCH")
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn no_conversion_to_standard_q5_k_or_q3_k_identifiers() {
         assert_ne!(Q5_EXPERIMENTAL_TYPE, 13);
