@@ -95,9 +95,7 @@ impl ComplementCircuit {
         if scratch.node_masks.len() != self.nodes.len() + 1 {
             return Err("scratch belongs to a different graph");
         }
-        for (input_block, output_block) in
-            inputs.chunks(LANES).zip(outputs.chunks_mut(LANES))
-        {
+        for (input_block, output_block) in inputs.chunks(LANES).zip(outputs.chunks_mut(LANES)) {
             let mut padded = [(0u8, 0u8); LANES];
             padded[..input_block.len()].copy_from_slice(input_block);
             let mut all_outputs = [0u8; LANES];
@@ -175,7 +173,11 @@ mod tests {
                 .evaluate_slice_into(&input, &mut scratch, &mut actual)
                 .unwrap();
             for (i, &(a, b)) in input.iter().enumerate() {
-                assert_eq!(actual[i], Operation::Mul.oracle(a, b), "len={len} index={i}");
+                assert_eq!(
+                    actual[i],
+                    Operation::Mul.oracle(a, b),
+                    "len={len} index={i}"
+                );
             }
         }
     }
