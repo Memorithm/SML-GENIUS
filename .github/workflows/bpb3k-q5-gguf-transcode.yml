@@ -1,0 +1,42 @@
+name: BPB3-K Q5-178 fail-closed GGUF v3 source transcode
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q5-gguf-transcode.yml'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/bpb3k_q5_source_quantizer.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+      - 'research/boolean-posit/BPB3_K_Q5_GGUF_TRANSCODE.md'
+  push:
+    paths:
+      - '.github/workflows/bpb3k-q5-gguf-transcode.yml'
+      - 'research/boolean-posit/bpb3k_q5_gguf_transcode.rs'
+      - 'research/boolean-posit/bpb3k_q5_source_quantizer.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+permissions:
+  contents: read
+jobs:
+  q5-gguf-source-fidelity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Format, compile and test independent GGUF v3 source transcode (Rust 1.89)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup run 1.89.0 rustfmt --edition 2021 --check \
+            research/boolean-posit/bpb3k_q5_gguf_transcode.rs
+          rustup run 1.89.0 rustc --edition 2021 -D warnings --test \
+            research/boolean-posit/bpb3k_q5_gguf_transcode.rs \
+            -o "$RUNNER_TEMP/q5-gguf-fixture-tests"
+          "$RUNNER_TEMP/q5-gguf-fixture-tests" --nocapture
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -O \
+            research/boolean-posit/bpb3k_q5_gguf_transcode.rs \
+            -o "$RUNNER_TEMP/q5-gguf-experimental-converter"
+          echo PASS_Q5_178_FAIL_CLOSED_GGUF_V3=HOSTED_CPU_FIXTURE_ONLY

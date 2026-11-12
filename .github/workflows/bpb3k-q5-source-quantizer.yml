@@ -1,0 +1,37 @@
+name: BPB3-K Q5-178 source precision quantizer
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q5-source-quantizer.yml'
+      - 'research/boolean-posit/bpb3k_q5_source_quantizer.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+      - 'research/boolean-posit/BPB3_K_Q5_QUANTIZER.md'
+  push:
+    paths:
+      - '.github/workflows/bpb3k-q5-source-quantizer.yml'
+      - 'research/boolean-posit/bpb3k_q5_source_quantizer.rs'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+permissions:
+  contents: read
+jobs:
+  q5-source-quantizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 source-precision quantization quality and exact-tile tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup run 1.89.0 rustfmt --edition 2021 --check \
+            research/boolean-posit/bpb3k_q5_source_quantizer.rs
+          rustup run 1.89.0 rustc -D warnings --edition 2021 -C target-cpu=haswell \
+            --test research/boolean-posit/bpb3k_q5_source_quantizer.rs \
+            -o "$RUNNER_TEMP/bpb3k-q5-quantize-tests"
+          "$RUNNER_TEMP/bpb3k-q5-quantize-tests" --nocapture
+          echo PASS_Q5_SOURCE_PRECISION_AND_TILED=HOSTED_CPU_ONLY

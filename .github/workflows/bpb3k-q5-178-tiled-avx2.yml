@@ -1,0 +1,35 @@
+name: BPB3-K Q5-178 native Rust AVX2 tiled kernel
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bpb3k-q5-178-tiled-avx2.yml'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+      - 'research/boolean-posit/bpb3k_q4_pair228_avx2.rs'
+      - 'research/boolean-posit/BPB3_K_Q5_178_TILED.md'
+  push:
+    paths:
+      - '.github/workflows/bpb3k-q5-178-tiled-avx2.yml'
+      - 'research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs'
+      - 'research/boolean-posit/bpb3k_q4_pair228_avx2.rs'
+permissions:
+  contents: read
+jobs:
+  q5-178-exact-integer-tile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Compile and test exact signed Q5-178 scalar versus AVX2 tiled
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup run 1.89.0 rustc --edition 2021 -D warnings -C target-cpu=haswell \
+            --test research/boolean-posit/bpb3k_q5_178_tiled_avx2.rs \
+            -o "$RUNNER_TEMP/bpb3k-q5-178-tests"
+          "$RUNNER_TEMP/bpb3k-q5-178-tests" --nocapture
+          echo PASS_BPB3K_Q5_178_HOSTED_CPU_INTEGER_TILE=1
