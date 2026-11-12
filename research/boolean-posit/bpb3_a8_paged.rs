@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 #[path = "bpb3_a8_superblock.rs"]
+#[allow(dead_code)]
 mod a8;
 
 const MAGIC: [u8; 4] = *b"BA8P";
@@ -191,7 +192,7 @@ mod tests {
         let groups = std::array::from_fn(|group| {
             let mode = 1 + ((index + group) % 3) as u8;
             let mut codes = [0i8; 16];
-            codes[(index + group) % 16] = if index.is_multiple_of(2) { 1 } else { -1 };
+            codes[(index + group) % 16] = if index % 2 == 0 { 1 } else { -1 };
             a8::Group {
                 mode,
                 exponent: base,
