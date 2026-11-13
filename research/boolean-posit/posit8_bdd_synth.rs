@@ -7,6 +7,12 @@
 #[allow(dead_code)]
 mod source;
 
+#[path = "posit8_x86_64_emit.rs"]
+mod x86_64_emit;
+
+#[path = "posit8_complement_edges.rs"]
+mod complement_edges;
+
 use source::Posit8;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -205,6 +211,84 @@ impl LearnedCircuit {
 }
 fn main() {
     let arg = std::env::args().nth(1);
+    if arg.as_deref() == Some("--bench-bitslice64") {
+        println!("POSIT8_BITPLANE64_BENCH_PROTOCOL input_count=65536 warmups=2 rounds=7");
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph
+                .verify_batch64_exhaustive()
+                .expect("exactness prerequisite to benchmark");
+            graph.benchmark_bitplanes64();
+        }
+        return;
+    }
+    if arg.as_deref() == Some("--verify-bitslice64") {
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph
+                .verify_batch64_exhaustive()
+                .expect("64-lane exhaustive Boolean arithmetic");
+            println!(
+                "POSIT8_BITSLICE64_{} PASS batches=1024 pairs=65536 mismatches=0",
+                operation.name()
+            );
+        }
+        return;
+    }
+    let complemented_operation = match arg.as_deref() {
+        Some("--emit-x86-ce-add") => Some(Operation::Add),
+        Some("--emit-x86-ce-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = complemented_operation {
+        let learned = complement_edges::ComplementCircuit::synthesize(operation)
+            .expect("bounded complemented synthesis");
+        learned
+            .verify_exhaustive()
+            .expect("all 65536 complemented cases");
+        eprintln!(
+            "POSIT8_CE_{} PASS nodes={} pairs=65536",
+            operation.name(),
+            learned.nodes()
+        );
+        print!(
+            "{}",
+            learned
+                .emit_sysv_x86_64()
+                .expect("bounded complemented assembly")
+        );
+        return;
+    }
+    let cached_assembly_operation = match arg.as_deref() {
+        Some("--emit-x86-cached-add") => Some(Operation::Add),
+        Some("--emit-x86-cached-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = cached_assembly_operation {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        print!(
+            "{}",
+            learned
+                .emit_sysv_x86_64_cached()
+                .expect("bounded cached assembly output")
+        );
+        return;
+    }
+    let assembly_operation = match arg.as_deref() {
+        Some("--emit-x86-add") => Some(Operation::Add),
+        Some("--emit-x86-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = assembly_operation {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        print!(
+            "{}",
+            learned.emit_sysv_x86_64().expect("bounded assembly output")
+        );
+        return;
+    }
     let operation = match arg.as_deref() {
         Some("--emit-add") => Some(Operation::Add),
         Some("--emit-mul") => Some(Operation::Mul),
