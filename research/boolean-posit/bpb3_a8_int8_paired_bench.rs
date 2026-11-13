@@ -26,8 +26,8 @@ fn fixtures(rows: usize) -> Vec<Vec<u8>> {
                 let mode = 1 + ((row + group) % 3) as u8;
                 let max = (1i8 << mode) - 1;
                 let codes = std::array::from_fn(|offset| {
-                    let magnitude = ((row * 17 + group * 13 + offset * 7)
-                        % (usize::from(max as u8) + 1)) as i8;
+                    let magnitude =
+                        ((row * 17 + group * 13 + offset * 7) % (usize::from(max as u8) + 1)) as i8;
                     if (row + group + offset) % 2 == 0 {
                         magnitude
                     } else {
