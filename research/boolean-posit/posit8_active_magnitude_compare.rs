@@ -3,15 +3,15 @@
 //! The five recurrent stages have a supplied state topology, not a freely
 //! inferred program structure. An actual x86-64 ABI function is emitted.
 #![forbid(unsafe_code)]
+#[path = "posit8_circuit_synth.rs"]
+#[allow(dead_code)]
+mod arithmetic;
 #[path = "posit8_active_sign_gates.rs"]
 #[allow(dead_code)]
 mod gate_library;
 #[path = "posit8_active_neg8.rs"]
 #[allow(dead_code)]
 mod negation;
-#[path = "posit8_circuit_synth.rs"]
-#[allow(dead_code)]
-mod arithmetic;
 
 use arithmetic::Posit8;
 use gate_library::Gate;
@@ -131,7 +131,10 @@ fn discover(stage: Stage) -> LearnedGate {
         assert!(queried.insert((a, b)));
         queries.push((a, b, label));
         options.retain(|&gate| gate.evaluate(a, b) == label);
-        assert!(!options.is_empty(), "fixed comparator grammar does not cover teacher");
+        assert!(
+            !options.is_empty(),
+            "fixed comparator grammar does not cover teacher"
+        );
     }
     let gate = options[0];
     let mut unseen_errors = 0usize;
@@ -142,7 +145,12 @@ fn discover(stage: Stage) -> LearnedGate {
             }
         }
     }
-    LearnedGate { stage, gate, queries, unseen_errors }
+    LearnedGate {
+        stage,
+        gate,
+        queries,
+        unseen_errors,
+    }
 }
 
 pub struct LearnedMagnitudeComparator {
@@ -163,7 +171,10 @@ impl LearnedMagnitudeComparator {
         }
     }
     pub fn teacher_queries(&self) -> usize {
-        self.gates.iter().map(|gate| gate.queries.len()).sum::<usize>()
+        self.gates
+            .iter()
+            .map(|gate| gate.queries.len())
+            .sum::<usize>()
             + self.magnitude.query_count()
     }
     /// 0 if a<b, 1 if a>b, 2 if a==b. A total order on raw bytes.
@@ -183,7 +194,10 @@ impl LearnedMagnitudeComparator {
     }
     /// Finite posit magnitude comparison. 3 signals NaR on either input.
     pub fn compare_posit_magnitudes(&self, a: u8, b: u8) -> u8 {
-        match (self.magnitude.abs_encoding(a), self.magnitude.abs_encoding(b)) {
+        match (
+            self.magnitude.abs_encoding(a),
+            self.magnitude.abs_encoding(b),
+        ) {
             (Some(first), Some(second)) => self.compare_unsigned(first, second),
             _ => 3,
         }
@@ -193,7 +207,13 @@ impl LearnedMagnitudeComparator {
             (Some(first), Some(second)) => {
                 let first = first.abs();
                 let second = second.abs();
-                if first > second { 1 } else if first == second { 2 } else { 0 }
+                if first > second {
+                    1
+                } else if first == second {
+                    2
+                } else {
+                    0
+                }
             }
             _ => 3,
         }
@@ -202,7 +222,13 @@ impl LearnedMagnitudeComparator {
         let mut errors = 0usize;
         for a in 0..=u8::MAX {
             for b in 0..=u8::MAX {
-                let expected = if a > b { 1 } else if a == b { 2 } else { 0 };
+                let expected = if a > b {
+                    1
+                } else if a == b {
+                    2
+                } else {
+                    0
+                };
                 errors += usize::from(self.compare_unsigned(a, b) != expected);
             }
         }
@@ -213,8 +239,7 @@ impl LearnedMagnitudeComparator {
         for a in 0..=u8::MAX {
             for b in 0..=u8::MAX {
                 errors += usize::from(
-                    self.compare_posit_magnitudes(a, b)
-                    != Self::oracle_posit_magnitude(a, b),
+                    self.compare_posit_magnitudes(a, b) != Self::oracle_posit_magnitude(a, b),
                 );
             }
         }
@@ -236,11 +261,13 @@ impl LearnedMagnitudeComparator {
             writeln!(
                 &mut asm,
                 "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
-            ).unwrap();
+            )
+            .unwrap();
             writeln!(
                 &mut asm,
                 "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1"
-            ).unwrap();
+            )
+            .unwrap();
             asm.push_str(self.gates[0].gate.native_asm());
             asm.push_str("    mov edx, eax\n    mov eax, r11d\n");
             asm.push_str(self.gates[2].gate.native_asm());
@@ -251,11 +278,13 @@ impl LearnedMagnitudeComparator {
             writeln!(
                 &mut asm,
                 "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
-            ).unwrap();
+            )
+            .unwrap();
             writeln!(
                 &mut asm,
                 "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1"
-            ).unwrap();
+            )
+            .unwrap();
             asm.push_str(self.gates[1].gate.native_asm());
             asm.push_str("    mov edx, eax\n    mov eax, r11d\n");
             asm.push_str(self.gates[4].gate.native_asm());
@@ -267,7 +296,8 @@ impl LearnedMagnitudeComparator {
         writeln!(
             &mut asm,
             ".globl {magnitude_symbol}\n.type {magnitude_symbol}, @function\n{magnitude_symbol}:"
-        ).unwrap();
+        )
+        .unwrap();
         asm.push_str("    cmp dil, 128\n    je .Lmag_invalid\n");
         asm.push_str("    cmp sil, 128\n    je .Lmag_invalid\n");
         // At SysV entry rsp%16=8. Reserve 24 bytes so two calls are aligned.
@@ -288,7 +318,10 @@ impl LearnedMagnitudeComparator {
         for gate in &self.gates {
             println!(
                 "SYNTH_LEARN1H_GATE,stage={},gate={:?},teacher_queries={},unseen_errors={}",
-                gate.stage.name(), gate.gate, gate.queries.len(), gate.unseen_errors
+                gate.stage.name(),
+                gate.gate,
+                gate.queries.len(),
+                gate.unseen_errors
             );
         }
         println!(
