@@ -292,9 +292,7 @@ pub fn dot_i8_fused_batch4(
                     let signed_count = i128::from((positive & mask).count_ones())
                         - i128::from((negative & mask).count_ones());
                     sums[lane] = sums[lane]
-                        .checked_add(
-                            signed_count.checked_mul(power).ok_or(Error::Overflow)?,
-                        )
+                        .checked_add(signed_count.checked_mul(power).ok_or(Error::Overflow)?)
                         .ok_or(Error::Overflow)?;
                 }
             }
