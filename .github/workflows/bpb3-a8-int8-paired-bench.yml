@@ -52,8 +52,8 @@ jobs:
           rustc --edition 2021 -D warnings --test research/boolean-posit/bpb3_a8_int8_paired_bench.rs -o "$RUNNER_TEMP/a8-int8-paired-tests"
           "$RUNNER_TEMP/a8-int8-paired-tests" --nocapture | tee "$RUNNER_TEMP/a8-int8-tests.txt"
           grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/a8-int8-tests.txt"
-      - name: Optional exploratory hosted-runner timing (not physical RemoteOps evidence)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Exploratory hosted timing on PR or manual dispatch (not Dell evidence)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
