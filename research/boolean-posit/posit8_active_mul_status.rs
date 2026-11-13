@@ -64,9 +64,7 @@ impl Predicate {
         assert!(self.eligible(a, b));
         // This oracle is accessed only on selected training queries and in
         // the separate, read-only final exhaustive audit.
-        let raw = Posit8(a)
-            .mul(Posit8(b))
-            .0;
+        let raw = Posit8(a).mul(Posit8(b)).0;
         match self {
             Self::Nar => u8::from(raw == 0x80),
             Self::Zero => u8::from(raw == 0),
@@ -186,9 +184,7 @@ impl LearnedMulStatus {
         }
     }
     pub fn oracle_class(a: u8, b: u8) -> u8 {
-        let raw = Posit8(a)
-            .mul(Posit8(b))
-            .0;
+        let raw = Posit8(a).mul(Posit8(b)).0;
         if raw == 0x80 {
             1
         } else if raw == 0 {
