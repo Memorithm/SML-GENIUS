@@ -176,7 +176,12 @@ fn next_batch(
     batch.extend(disagreements.iter().take(quota).copied());
     batch.extend(exploration.iter().take(count - batch.len()).copied());
     if batch.len() < count {
-        batch.extend(disagreements.into_iter().skip(quota).take(count - batch.len()));
+        batch.extend(
+            disagreements
+                .into_iter()
+                .skip(quota)
+                .take(count - batch.len()),
+        );
     }
     batch
 }
@@ -204,7 +209,8 @@ pub fn learn_active_bitwise(operation: Operation) -> BitwiseOutcome {
         );
         assert_eq!(batch.len(), BATCH_QUERIES);
         for packed in batch {
-            committee_disagreements += usize::from(main.evaluate(packed) != shadow.evaluate(packed));
+            committee_disagreements +=
+                usize::from(main.evaluate(packed) != shadow.evaluate(packed));
             let expected = operation.teacher(packed);
             counterexamples += usize::from(main.evaluate(packed) != expected);
             assert!(samples.insert(packed, expected).is_none());
