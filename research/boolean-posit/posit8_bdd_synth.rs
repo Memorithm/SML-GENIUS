@@ -235,6 +235,16 @@ fn main() {
         }
         return;
     }
+    if arg.as_deref() == Some("--verify-bitslice512") {
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph.verify_packed_exhaustive::<8>()
+                .expect("512-lane exhaustive ADD/MUL validation");
+            println!("POSIT8_BITPLANE512_{} PASS batches=128 pairs=65536 mismatches=0", operation.name());
+        }
+        return;
+    }
     if arg.as_deref() == Some("--verify-bitslice256") {
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
