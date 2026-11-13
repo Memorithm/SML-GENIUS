@@ -10,6 +10,9 @@ mod source;
 #[path = "posit8_x86_64_emit.rs"]
 mod x86_64_emit;
 
+#[path = "posit8_complement_edges.rs"]
+mod complement_edges;
+
 use source::Posit8;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -208,6 +211,30 @@ impl LearnedCircuit {
 }
 fn main() {
     let arg = std::env::args().nth(1);
+    let complemented_operation = match arg.as_deref() {
+        Some("--emit-x86-ce-add") => Some(Operation::Add),
+        Some("--emit-x86-ce-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = complemented_operation {
+        let learned = complement_edges::ComplementCircuit::synthesize(operation)
+            .expect("bounded complemented synthesis");
+        learned
+            .verify_exhaustive()
+            .expect("all 65536 complemented cases");
+        eprintln!(
+            "POSIT8_CE_{} PASS nodes={} pairs=65536",
+            operation.name(),
+            learned.nodes()
+        );
+        print!(
+            "{}",
+            learned
+                .emit_sysv_x86_64()
+                .expect("bounded complemented assembly")
+        );
+        return;
+    }
     let cached_assembly_operation = match arg.as_deref() {
         Some("--emit-x86-cached-add") => Some(Operation::Add),
         Some("--emit-x86-cached-mul") => Some(Operation::Mul),
