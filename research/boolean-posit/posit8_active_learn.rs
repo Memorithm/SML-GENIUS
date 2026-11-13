@@ -400,7 +400,10 @@ fn main() {
     };
     if let Some(op) = bitwise_action {
         let outcome = bitwise::learn_active_bitwise(op);
-        if flag.as_deref().is_some_and(|name| name.starts_with("--emit-bitwise")) {
+        if flag
+            .as_deref()
+            .is_some_and(|name| name.starts_with("--emit-bitwise"))
+        {
             print!("{}", outcome.circuit.emit_x86_64_gas(op));
         } else {
             let r = &outcome.report;
