@@ -221,11 +221,10 @@ impl<'a> TensorView<'a> {
             })
         });
         for (row, output) in outputs.iter_mut().enumerate() {
-            *output = a8::dot_i8_fused(self.row(row)?, &masks)
-                .map_err(|error| match error {
-                    a8::Error::Overflow => TensorError::Overflow,
-                    _ => TensorError::InvalidPage,
-                })?;
+            *output = a8::dot_i8_fused(self.row(row)?, &masks).map_err(|error| match error {
+                a8::Error::Overflow => TensorError::Overflow,
+                _ => TensorError::InvalidPage,
+            })?;
         }
         Ok(())
     }
