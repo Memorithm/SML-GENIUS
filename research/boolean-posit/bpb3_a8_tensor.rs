@@ -229,6 +229,49 @@ impl<'a> TensorView<'a> {
         Ok(())
     }
 
+    /// Four distinct signed INT8 vectors against the same stored tensor.
+    /// Prepares all activation masks once and parses each A8 row once
+    /// for four independent outputs, in row-major [row][lane] order.
+    /// Incorrect output cardinality is rejected without modification.
+    pub fn signed_i8_matvec_batch4_into(
+        &self,
+        inputs: &[[i8; 256]; 4],
+        outputs: &mut [[i128; 4]],
+    ) -> Result<(), TensorError> {
+        if outputs.len() != self.rows {
+            return Err(TensorError::WrongLength);
+        }
+        let masks: [[[u16; 16]; 8]; 4] = std::array::from_fn(|lane| {
+            std::array::from_fn(|bit| {
+                std::array::from_fn(|group| {
+                    let mut mask = 0u16;
+                    for offset in 0..16 {
+                        let value = inputs[lane][group * 16 + offset] as u8;
+                        mask |= u16::from((value >> bit) & 1) << offset;
+                    }
+                    mask
+                })
+            })
+        });
+        for (row, output) in outputs.iter_mut().enumerate() {
+            *output =
+                a8::dot_i8_fused_batch4(self.row(row)?, &masks).map_err(|error| match error {
+                    a8::Error::Overflow => TensorError::Overflow,
+                    _ => TensorError::InvalidPage,
+                })?;
+        }
+        Ok(())
+    }
+
+    pub fn signed_i8_matvec_batch4(
+        &self,
+        inputs: &[[i8; 256]; 4],
+    ) -> Result<Vec<[i128; 4]>, TensorError> {
+        let mut outputs = vec![[0i128; 4]; self.rows];
+        self.signed_i8_matvec_batch4_into(inputs, &mut outputs)?;
+        Ok(outputs)
+    }
+
     pub fn signed_i8_matvec(&self, activations: &[i8; 256]) -> Result<Vec<i128>, TensorError> {
         let mut outputs = vec![0; self.rows];
         self.signed_i8_matvec_into(activations, &mut outputs)?;
@@ -437,6 +480,45 @@ mod tests {
                 assert_eq!(outputs[index], expected, "row {index}");
             }
         }
+    }
+
+    #[test]
+    fn four_lane_int8_is_exact_against_independent_scalar_and_single_lane() {
+        let rows: Vec<Vec<u8>> = (0..257).map(make_row).collect();
+        let bytes = encode_tensor(&rows).unwrap();
+        let view = TensorView::new(&bytes).unwrap();
+        let inputs: [[i8; 256]; 4] = [
+            [-128; 256],
+            [127; 256],
+            std::array::from_fn(|i| i as u8 as i8),
+            std::array::from_fn(|i| (i as u8).wrapping_mul(53) as i8),
+        ];
+        let results = view.signed_i8_matvec_batch4(&inputs).unwrap();
+        for lane in 0..4 {
+            let single = view.signed_i8_matvec(&inputs[lane]).unwrap();
+            for (row, wire) in rows.iter().enumerate() {
+                let (weights, exponents) = a8::unpack(wire).unwrap();
+                let scalar: i128 = (0..256)
+                    .map(|i| {
+                        i128::from(weights[i])
+                            * i128::from(inputs[lane][i])
+                            * (1i128 << (i32::from(exponents[i / 16]) + 24))
+                    })
+                    .sum();
+                assert_eq!(results[row][lane], single[row]);
+                assert_eq!(results[row][lane], scalar);
+            }
+        }
+        let mut reused = vec![[0i128; 4]; view.len()];
+        view.signed_i8_matvec_batch4_into(&inputs, &mut reused)
+            .unwrap();
+        assert_eq!(reused, results);
+        let mut short = vec![[91i128; 4]; view.len() - 1];
+        assert_eq!(
+            view.signed_i8_matvec_batch4_into(&inputs, &mut short),
+            Err(TensorError::WrongLength)
+        );
+        assert!(short.iter().all(|row| row.iter().all(|&v| v == 91)));
     }
 
     #[test]
