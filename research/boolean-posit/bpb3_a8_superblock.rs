@@ -221,6 +221,51 @@ pub fn dot_exact(bytes: &[u8], mask: &[u64; 4]) -> Result<i128, Error> {
     Ok(total)
 }
 
+/// Single-parse exact signed INT8 dot in 2^-24 units.
+/// An input bitplane has one 16-bit mask per A8 group; bit 7 contributes
+/// -128 according to two's-complement semantics. The original canonical
+/// weight bytes are read once; no dense coefficient materialization.
+pub fn dot_i8_fused(
+    bytes: &[u8],
+    activation_planes: &[[u16; GROUPS]; 8],
+) -> Result<i128, Error> {
+    let (modes, exponents, signs, planes) = parse(bytes)?;
+    let mut total = 0i128;
+    for g in 0..GROUPS {
+        let sign = ((signs[g / 4] >> (16 * (g % 4))) & 0xffff) as u16;
+        let scale = 1i128
+            .checked_shl((i32::from(exponents[g]) + 24) as u32)
+            .ok_or(Error::Overflow)?;
+        let mut group_sum = 0i128;
+        for (weight_bit, &weights) in planes[g][..usize::from(modes[g])]
+            .iter()
+            .enumerate()
+        {
+            let negative = weights & sign;
+            let positive = weights & !sign;
+            for (input_bit, masks) in activation_planes.iter().enumerate() {
+                let mask = masks[g];
+                let difference = i128::from((positive & mask).count_ones())
+                    - i128::from((negative & mask).count_ones());
+                let input_value = if input_bit == 7 {
+                    -128i128
+                } else {
+                    1i128 << input_bit
+                };
+                let contribution = difference
+                    .checked_mul(1i128 << weight_bit)
+                    .and_then(|v| v.checked_mul(input_value))
+                    .ok_or(Error::Overflow)?;
+                group_sum = group_sum.checked_add(contribution).ok_or(Error::Overflow)?;
+            }
+        }
+        total = total
+            .checked_add(group_sum.checked_mul(scale).ok_or(Error::Overflow)?)
+            .ok_or(Error::Overflow)?;
+    }
+    Ok(total)
+}
+
 pub fn dot_f64(bytes: &[u8], mask: &[u64; 4]) -> Result<f64, Error> {
     let mut total = 0.0;
     for (integer, exponent) in dot_groups(bytes, mask)? {
