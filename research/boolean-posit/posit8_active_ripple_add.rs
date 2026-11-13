@@ -279,7 +279,7 @@ impl LearnedRippleAdder {
     pub fn report(&self) {
         println!(
             "SYNTH_LEARN1I_LOCAL,queries={},max_queries={},candidate_functions={},remaining={},unseen_cases={},unseen_errors={},gates={:?}",
-            self.report.membership_queries, QUERY_BUDGET,
+            self.samples.len(), QUERY_BUDGET,
             self.report.candidate_signatures, self.report.remaining_signatures,
             self.report.unseen_cases, self.report.unseen_errors,
             self.report.gates
