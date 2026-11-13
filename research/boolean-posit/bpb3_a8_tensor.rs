@@ -254,8 +254,8 @@ impl<'a> TensorView<'a> {
             })
         });
         for (row, output) in outputs.iter_mut().enumerate() {
-            *output = a8::dot_i8_fused_batch4(self.row(row)?, &masks)
-                .map_err(|error| match error {
+            *output =
+                a8::dot_i8_fused_batch4(self.row(row)?, &masks).map_err(|error| match error {
                     a8::Error::Overflow => TensorError::Overflow,
                     _ => TensorError::InvalidPage,
                 })?;
@@ -510,7 +510,8 @@ mod tests {
             }
         }
         let mut reused = vec![[0i128; 4]; view.len()];
-        view.signed_i8_matvec_batch4_into(&inputs, &mut reused).unwrap();
+        view.signed_i8_matvec_batch4_into(&inputs, &mut reused)
+            .unwrap();
         assert_eq!(reused, results);
         let mut short = vec![[91i128; 4]; view.len() - 1];
         assert_eq!(
