@@ -8,6 +8,9 @@ use std::fmt::Write;
 #[path = "posit8_bitplane64.rs"]
 mod bitplane64;
 
+#[path = "posit8_bitplane256.rs"]
+mod bitplane256;
+
 #[path = "posit8_bitplane64_bench.rs"]
 mod bitplane64_bench;
 
