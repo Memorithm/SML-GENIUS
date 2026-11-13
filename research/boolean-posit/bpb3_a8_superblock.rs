@@ -304,7 +304,11 @@ pub fn dot_i8_fused_batch4(
         }
         for lane in 0..4 {
             results[lane] = results[lane]
-                .checked_add(i128::from(sums[lane]).checked_mul(scale).ok_or(Error::Overflow)?)
+                .checked_add(
+                    i128::from(sums[lane])
+                        .checked_mul(scale)
+                        .ok_or(Error::Overflow)?,
+                )
                 .ok_or(Error::Overflow)?;
         }
     }
