@@ -225,10 +225,7 @@ pub fn dot_exact(bytes: &[u8], mask: &[u64; 4]) -> Result<i128, Error> {
 /// An input bitplane has one 16-bit mask per A8 group; bit 7 contributes
 /// -128 according to two's-complement semantics. The original canonical
 /// weight bytes are read once; no dense coefficient materialization.
-pub fn dot_i8_fused(
-    bytes: &[u8],
-    activation_planes: &[[u16; GROUPS]; 8],
-) -> Result<i128, Error> {
+pub fn dot_i8_fused(bytes: &[u8], activation_planes: &[[u16; GROUPS]; 8]) -> Result<i128, Error> {
     let (modes, exponents, signs, planes) = parse(bytes)?;
     let mut total = 0i128;
     for g in 0..GROUPS {
@@ -237,10 +234,7 @@ pub fn dot_i8_fused(
             .checked_shl((i32::from(exponents[g]) + 24) as u32)
             .ok_or(Error::Overflow)?;
         let mut group_sum = 0i128;
-        for (weight_bit, &weights) in planes[g][..usize::from(modes[g])]
-            .iter()
-            .enumerate()
-        {
+        for (weight_bit, &weights) in planes[g][..usize::from(modes[g])].iter().enumerate() {
             let negative = weights & sign;
             let positive = weights & !sign;
             for (input_bit, masks) in activation_planes.iter().enumerate() {
