@@ -22,8 +22,15 @@ const EXAMPLES: [u8; 16] = [
     0, 1, 0x40, 0x7f, 0x80, 0x81, 0xc0, 0xff, 2, 0x3f, 0x41, 0x82, 0xfd, 0x10, 0xf0, 0x55,
 ];
 const GATES: [Gate; 9] = [
-    Gate::Zero, Gate::One, Gate::SignA, Gate::SignB, Gate::NotA, Gate::NotB,
-    Gate::And, Gate::Or, Gate::Xor,
+    Gate::Zero,
+    Gate::One,
+    Gate::SignA,
+    Gate::SignB,
+    Gate::NotA,
+    Gate::NotB,
+    Gate::And,
+    Gate::Or,
+    Gate::Xor,
 ];
 
 /// Any conjunction of positive/negative input literals, 3^8 = 6561 choices.
@@ -127,12 +134,18 @@ fn learn_unary(task: UnaryTarget) -> LearnedUnary {
         let Some(raw) = best.1 else {
             break;
         };
-        assert!(samples.len() < UNARY_BUDGET, "unary membership budget exceeded");
+        assert!(
+            samples.len() < UNARY_BUDGET,
+            "unary membership budget exceeded"
+        );
         let label = task.teacher(raw);
         assert!(queried.insert(raw));
         samples.push((raw, label));
         remaining.retain(|model| model.evaluate(raw) == label);
-        assert!(!remaining.is_empty(), "unary Boolean grammar cannot fit teacher");
+        assert!(
+            !remaining.is_empty(),
+            "unary Boolean grammar cannot fit teacher"
+        );
     }
     let circuit = *remaining
         .iter()
@@ -232,7 +245,10 @@ fn learn_gate(task: BinaryTarget, unary: &[LearnedUnary; 3]) -> LearnedGate {
         if score == 0 {
             break;
         }
-        assert!(samples.len() < BINARY_BUDGET, "binary teacher budget exceeded");
+        assert!(
+            samples.len() < BINARY_BUDGET,
+            "binary teacher budget exceeded"
+        );
         let label = task.teacher(a, b);
         let (x, y) = task.features(a, b, unary);
         assert!(queried.insert((a, b)));
@@ -321,10 +337,7 @@ impl LearnedRawMulStatus {
         for (index, unary) in self.unary.iter().enumerate() {
             // Each raw-byte predicate is compiled as a masked compare. The
             // mask and value come from version-space learning, not constants.
-            for (source, dest, bitreg) in [
-                ("dil", "eax", "al"),
-                ("sil", "edx", "dl"),
-            ] {
+            for (source, dest, bitreg) in [("dil", "eax", "al"), ("sil", "edx", "dl")] {
                 writeln!(&mut asm, "    movzx {dest}, {source}").unwrap();
                 writeln!(&mut asm, "    and {dest}, {}", unary.circuit.mask).unwrap();
                 writeln!(&mut asm, "    cmp {dest}, {}", unary.circuit.value).unwrap();
@@ -365,7 +378,10 @@ impl LearnedRawMulStatus {
         for gate in &self.gates {
             println!(
                 "SYNTH_LEARN1F_GATE,task={},gate={:?},queries={},unseen_errors={}",
-                gate.task.name(), gate.gate, gate.samples.len(), gate.unseen_errors
+                gate.task.name(),
+                gate.gate,
+                gate.samples.len(),
+                gate.unseen_errors
             );
         }
         println!(
@@ -389,11 +405,7 @@ mod tests {
     #[test]
     fn eight_raw_bits_are_learned_without_feature_oracle_labels() {
         let model = LearnedRawMulStatus::train();
-        let expected = [
-            (0xff, 0x80),
-            (0xff, 0x00),
-            (0x80, 0x80),
-        ];
+        let expected = [(0xff, 0x80), (0xff, 0x00), (0x80, 0x80)];
         for (learner, &(mask, value)) in model.unary.iter().zip(expected.iter()) {
             assert_eq!(learner.circuit, MaskPredicate { mask, value });
             assert_eq!(learner.samples.len(), 9);
