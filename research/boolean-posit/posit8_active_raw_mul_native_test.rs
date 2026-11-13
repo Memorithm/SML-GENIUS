@@ -21,9 +21,8 @@ fn compiled_raw_bit_predicates_match_teacher_on_all_65536_mul_pairs() {
             // convention with two byte inputs and one byte status output.
             let native = unsafe { mem_posit8_learned_raw_mul_status(a, b) };
             raw_vs_rust += usize::from(native != learned.classify(a, b));
-            raw_vs_teacher += usize::from(
-                native != learner::LearnedRawMulStatus::oracle_status(a, b)
-            );
+            raw_vs_teacher +=
+                usize::from(native != learner::LearnedRawMulStatus::oracle_status(a, b));
             let category = match native {
                 0 => 0,
                 1 => 1,
