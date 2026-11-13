@@ -25,7 +25,7 @@ fn native_byte_comparator_and_linked_magnitude_match_full_integer_oracle() {
             let native_posit = unsafe { mem_posit8_learned_posit_mag_cmp(a, b) };
             mismatched_raw += usize::from(native_raw != model.compare_unsigned(a, b));
             mismatched_posit += usize::from(
-                native_posit != learned::LearnedMagnitudeComparator::oracle_posit_magnitude(a, b)
+                native_posit != learned::LearnedMagnitudeComparator::oracle_posit_magnitude(a, b),
             );
             invalid_count += usize::from(a == 0x80 || b == 0x80);
         }
