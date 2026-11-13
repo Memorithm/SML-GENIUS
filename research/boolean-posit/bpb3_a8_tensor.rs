@@ -198,13 +198,10 @@ impl<'a> TensorView<'a> {
         Ok(())
     }
 
-    /// Exact signed INT8 tensor matvec, with output units of 2^-24.
-    /// Every activation bit is converted to an indicator mask. The identity
-    /// sum(w_i * bit_i) = (sum(w_i) - dot_bipolar(mask)) / 2
-    /// reuses the canonical A8 Boolean POPCOUNT dot without materializing
-    /// dense floating-point weights. Bit 7 has two's-complement weight -128.
-    /// This is a correctness-first nine-pass reference, not a fused kernel.
-    /// Output length is checked before any writes.
+    /// Exact signed INT8 matvec, in units of 2^-24, with one canonical
+    /// A8 parse per row. Eight activation planes are prepared once and
+    /// reused across every tensor row; storage remains original A8 wire.
+    /// No model-level accuracy or throughput claim follows from this path.
     pub fn signed_i8_matvec_into(
         &self,
         activations: &[i8; 256],
@@ -213,37 +210,22 @@ impl<'a> TensorView<'a> {
         if outputs.len() != self.rows {
             return Err(TensorError::WrongLength);
         }
-        let masks: [[u64; 4]; 8] = std::array::from_fn(|bit| {
-            std::array::from_fn(|word| {
-                let mut mask = 0u64;
-                for offset in 0..64 {
-                    let code = activations[word * 64 + offset] as u8;
-                    mask |= u64::from((code >> bit) & 1) << offset;
+        let masks: [[u16; 16]; 8] = std::array::from_fn(|bit| {
+            std::array::from_fn(|group| {
+                let mut mask = 0u16;
+                for offset in 0..16 {
+                    let code = activations[group * 16 + offset] as u8;
+                    mask |= u16::from((code >> bit) & 1) << offset;
                 }
                 mask
             })
         });
-        let all_positive = [0u64; 4];
         for (row, output) in outputs.iter_mut().enumerate() {
-            let wire = self.row(row)?;
-            let sum = a8::dot_exact(wire, &all_positive).map_err(|_| TensorError::InvalidPage)?;
-            let mut result = 0i128;
-            for (bit, mask) in masks.iter().enumerate() {
-                let bipolar = a8::dot_exact(wire, mask).map_err(|_| TensorError::InvalidPage)?;
-                let difference = sum.checked_sub(bipolar).ok_or(TensorError::Overflow)?;
-                if difference % 2 != 0 {
-                    return Err(TensorError::InvalidPage);
-                }
-                let shift = if bit == 7 { -128i128 } else { 1i128 << bit };
-                result = result
-                    .checked_add(
-                        (difference / 2)
-                            .checked_mul(shift)
-                            .ok_or(TensorError::Overflow)?,
-                    )
-                    .ok_or(TensorError::Overflow)?;
-            }
-            *output = result;
+            *output = a8::dot_i8_fused(self.row(row)?, &masks)
+                .map_err(|error| match error {
+                    a8::Error::Overflow => TensorError::Overflow,
+                    _ => TensorError::InvalidPage,
+                })?;
         }
         Ok(())
     }
