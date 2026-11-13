@@ -21,9 +21,8 @@ fn real_machine_code_adds_every_byte_pair_with_both_carries() {
                 // declared x86-64 System V u8/u8/u8 -> u16 signature.
                 let native = unsafe { mem_posit8_learned_ripple_add_u8(a, b, cin) };
                 model_mismatches += usize::from(native != learned.add_byte(a, b, cin));
-                teacher_mismatches += usize::from(
-                    native != u16::from(a) + u16::from(b) + u16::from(cin),
-                );
+                teacher_mismatches +=
+                    usize::from(native != u16::from(a) + u16::from(b) + u16::from(cin));
                 operations += 1;
             }
         }
