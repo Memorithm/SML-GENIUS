@@ -7,7 +7,12 @@
 #[allow(dead_code)]
 mod known_gates;
 
+#[path = "posit8_circuit_synth.rs"]
+#[allow(dead_code)]
+mod oracle;
+
 use known_gates::Gate;
+use oracle::Posit8;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
@@ -59,8 +64,8 @@ impl Predicate {
         assert!(self.eligible(a, b));
         // This oracle is accessed only on selected training queries and in
         // the separate, read-only final exhaustive audit.
-        let raw = known_gates::oracle::Posit8(a)
-            .mul(known_gates::oracle::Posit8(b))
+        let raw = Posit8(a)
+            .mul(Posit8(b))
             .0;
         match self {
             Self::Nar => u8::from(raw == 0x80),
@@ -181,8 +186,8 @@ impl LearnedMulStatus {
         }
     }
     pub fn oracle_class(a: u8, b: u8) -> u8 {
-        let raw = known_gates::oracle::Posit8(a)
-            .mul(known_gates::oracle::Posit8(b))
+        let raw = Posit8(a)
+            .mul(Posit8(b))
             .0;
         if raw == 0x80 {
             1
