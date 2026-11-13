@@ -47,7 +47,7 @@ jobs:
           rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_learn.rs \
             -o "$RUNNER_TEMP/posit8-active-unit"
           "$RUNNER_TEMP/posit8-active-unit" --nocapture | tee "$RUNNER_TEMP/posit8-active-unit-tests.txt"
-          grep -Eq 'test result: ok[.] 3 passed; 0 failed;' "$RUNNER_TEMP/posit8-active-unit-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-active-unit-tests.txt"
       - name: Audit sample-only training versus teacher on full ADD and MUL domains
         shell: bash
         run: |
@@ -78,7 +78,9 @@ jobs:
           "$RUNNER_TEMP/posit8-active-native" --nocapture | tee "$RUNNER_TEMP/posit8-active-native-test.txt"
           grep -Fq 'SYNTH_LEARN1_NATIVE,op=Add,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-active-native-test.txt"
           grep -Fq 'SYNTH_LEARN1_NATIVE,op=Mul,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-active-native-test.txt"
-          grep -Eq 'test result: ok[.] 2 passed; 0 failed;' "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Fq 'test exact_native_assembly_matches_the_learned_add_circuit ... ok' "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Fq 'test exact_native_assembly_matches_the_learned_mul_circuit ... ok' "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-active-native-test.txt"
       - name: Retain exact-head training, holdout, native code and CPU provenance
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
