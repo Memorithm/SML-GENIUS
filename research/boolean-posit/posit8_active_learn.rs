@@ -8,6 +8,9 @@
 #[allow(dead_code)]
 mod arithmetic;
 
+#[path = "posit8_active_bitwise.rs"]
+pub mod bitwise;
+
 use arithmetic::Posit8;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -390,6 +393,36 @@ pub fn learn_active(operation: Operation) -> ActiveOutcome {
 }
 fn main() {
     let flag = std::env::args().nth(1);
+    let bitwise_action = match flag.as_deref() {
+        Some("--emit-bitwise-x86-add") | Some("--report-bitwise-add") => Some(Operation::Add),
+        Some("--emit-bitwise-x86-mul") | Some("--report-bitwise-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(op) = bitwise_action {
+        let outcome = bitwise::learn_active_bitwise(op);
+        if flag.as_deref().is_some_and(|name| name.starts_with("--emit-bitwise")) {
+            print!("{}", outcome.circuit.emit_x86_64_gas(op));
+        } else {
+            let r = &outcome.report;
+            println!(
+                "SYNTH_LEARN1_BITWISE,op={},queries={},budget={},committee_disagreements={},counterexamples={},train_errors={},holdout_errors={},holdout_size={},full_errors={},nodes={},gates={},depth={},exact={}",
+                r.operation.symbol(),
+                r.teacher_queries,
+                MAX_QUERIES,
+                r.committee_disagreements,
+                r.counterexamples,
+                r.train_errors,
+                r.holdout_errors,
+                r.holdout_size,
+                r.full_errors,
+                r.nodes,
+                r.gates,
+                r.depth,
+                r.full_errors == 0
+            );
+        }
+        return;
+    }
     let operation = match flag.as_deref() {
         Some("--emit-x86-add") | Some("--report-add") => Some(Operation::Add),
         Some("--emit-x86-mul") | Some("--report-mul") => Some(Operation::Mul),
