@@ -226,12 +226,10 @@ impl<'a> TensorView<'a> {
         let all_positive = [0u64; 4];
         for (row, output) in outputs.iter_mut().enumerate() {
             let wire = self.row(row)?;
-            let sum = a8::dot_exact(wire, &all_positive)
-                .map_err(|_| TensorError::InvalidPage)?;
+            let sum = a8::dot_exact(wire, &all_positive).map_err(|_| TensorError::InvalidPage)?;
             let mut result = 0i128;
             for (bit, mask) in masks.iter().enumerate() {
-                let bipolar = a8::dot_exact(wire, mask)
-                    .map_err(|_| TensorError::InvalidPage)?;
+                let bipolar = a8::dot_exact(wire, mask).map_err(|_| TensorError::InvalidPage)?;
                 let difference = sum.checked_sub(bipolar).ok_or(TensorError::Overflow)?;
                 if difference % 2 != 0 {
                     return Err(TensorError::InvalidPage);
@@ -250,10 +248,7 @@ impl<'a> TensorView<'a> {
         Ok(())
     }
 
-    pub fn signed_i8_matvec(
-        &self,
-        activations: &[i8; 256],
-    ) -> Result<Vec<i128>, TensorError> {
+    pub fn signed_i8_matvec(&self, activations: &[i8; 256]) -> Result<Vec<i128>, TensorError> {
         let mut outputs = vec![0; self.rows];
         self.signed_i8_matvec_into(activations, &mut outputs)?;
         Ok(outputs)
@@ -369,16 +364,23 @@ mod tests {
             std::array::from_fn(|i| (i as u8).wrapping_mul(37) as i8),
         ];
         for activations in samples {
-            let expected: Vec<i128> = rows.iter().map(|wire| {
-                let (weights, exponents) = a8::unpack(wire).unwrap();
-                (0..256).map(|i| {
-                    i128::from(weights[i]) * i128::from(activations[i])
-                        * (1i128 << (i32::from(exponents[i / 16]) + 24))
-                }).sum()
-            }).collect();
+            let expected: Vec<i128> = rows
+                .iter()
+                .map(|wire| {
+                    let (weights, exponents) = a8::unpack(wire).unwrap();
+                    (0..256)
+                        .map(|i| {
+                            i128::from(weights[i])
+                                * i128::from(activations[i])
+                                * (1i128 << (i32::from(exponents[i / 16]) + 24))
+                        })
+                        .sum()
+                })
+                .collect();
             assert_eq!(view.signed_i8_matvec(&activations).unwrap(), expected);
             let mut reuse = vec![0i128; view.len()];
-            view.signed_i8_matvec_into(&activations, &mut reuse).unwrap();
+            view.signed_i8_matvec_into(&activations, &mut reuse)
+                .unwrap();
             assert_eq!(reuse, expected);
             let mut wrong = vec![99i128; view.len() - 1];
             assert_eq!(
