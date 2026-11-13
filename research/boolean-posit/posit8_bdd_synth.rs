@@ -223,6 +223,17 @@ fn main() {
         }
         return;
     }
+    if arg.as_deref() == Some("--bench-bitslice256") {
+        println!("POSIT8_BITPLANE256_BENCH_PROTOCOL pairs=65536 warmups=2 rounds=7");
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded Boolean graph synthesis");
+            graph.verify_batch256_exhaustive()
+                .expect("full 256-lane exactness before benchmark");
+            graph.benchmark_bitplanes256_against64();
+        }
+        return;
+    }
     if arg.as_deref() == Some("--verify-bitslice256") {
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
