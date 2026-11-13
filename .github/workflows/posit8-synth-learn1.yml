@@ -1,0 +1,100 @@
+name: SYNTH-LEARN1 active posit8 circuit discovery and native ISA
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_learn.rs'
+      - 'research/boolean-posit/posit8_active_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1_ACTIVE_CIRCUITS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_learn.rs'
+      - 'research/boolean-posit/posit8_active_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1_ACTIVE_CIRCUITS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  active-learn-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Verify exact Rust formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_learn.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_native_test.rs
+      - name: Compile and run active acquisition unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_learn.rs \
+            -o "$RUNNER_TEMP/posit8-active-unit"
+          "$RUNNER_TEMP/posit8-active-unit" --nocapture | tee "$RUNNER_TEMP/posit8-active-unit-tests.txt"
+          grep -Eq 'test result: ok[.] 3 passed; 0 failed;' "$RUNNER_TEMP/posit8-active-unit-tests.txt"
+      - name: Audit sample-only training versus teacher on full ADD and MUL domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_learn.rs \
+            -o "$RUNNER_TEMP/posit8-active"
+          "$RUNNER_TEMP/posit8-active" | tee "$RUNNER_TEMP/posit8-active-audit.csv"
+          test "$(grep -c '^SYNTH_LEARN1,op=' "$RUNNER_TEMP/posit8-active-audit.csv")" -eq 2
+          for operation in add mul; do
+            grep -E "^SYNTH_LEARN1,op=$operation,queries=320,budget=320," "$RUNNER_TEMP/posit8-active-audit.csv"
+          done
+      - name: Generate and assemble two directly learned x86-64 Boolean graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for operation in add mul; do
+            "$RUNNER_TEMP/posit8-active" "--emit-x86-$operation" > "$RUNNER_TEMP/posit8-active-$operation.s"
+            grep -q "^mem_posit8_active_$operation:" "$RUNNER_TEMP/posit8-active-$operation.s"
+            gcc -c -x assembler "$RUNNER_TEMP/posit8-active-$operation.s" -o "$RUNNER_TEMP/posit8-active-$operation.o"
+            objdump -d "$RUNNER_TEMP/posit8-active-$operation.o" > "$RUNNER_TEMP/posit8-active-$operation.disasm"
+            wc -c "$RUNNER_TEMP/posit8-active-$operation.o" >> "$RUNNER_TEMP/posit8-active-objects.txt"
+            sha256sum "$RUNNER_TEMP/posit8-active-$operation.o" >> "$RUNNER_TEMP/posit8-active-hashes.txt"
+          done
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-active-add.o" \
+            -C "link-arg=$RUNNER_TEMP/posit8-active-mul.o" \
+            -o "$RUNNER_TEMP/posit8-active-native"
+          "$RUNNER_TEMP/posit8-active-native" --nocapture | tee "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Fq 'SYNTH_LEARN1_NATIVE,op=Add,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Fq 'SYNTH_LEARN1_NATIVE,op=Mul,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-active-native-test.txt"
+          grep -Eq 'test result: ok[.] 2 passed; 0 failed;' "$RUNNER_TEMP/posit8-active-native-test.txt"
+      - name: Retain exact-head training, holdout, native code and CPU provenance
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-active-audit.csv
+            ${{ runner.temp }}/posit8-active-unit-tests.txt
+            ${{ runner.temp }}/posit8-active-native-test.txt
+            ${{ runner.temp }}/posit8-active-add.s
+            ${{ runner.temp }}/posit8-active-mul.s
+            ${{ runner.temp }}/posit8-active-add.o
+            ${{ runner.temp }}/posit8-active-mul.o
+            ${{ runner.temp }}/posit8-active-add.disasm
+            ${{ runner.temp }}/posit8-active-mul.disasm
+            ${{ runner.temp }}/posit8-active-objects.txt
+            ${{ runner.temp }}/posit8-active-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21
