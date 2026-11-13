@@ -1,0 +1,89 @@
+name: SYNTH-LEARN1D full posit8 multiplication Boolean status classifier
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_mul_status.rs'
+      - 'research/boolean-posit/posit8_active_mul_status_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1D_MUL_STATUS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1d-mul-status.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_mul_status.rs'
+      - 'research/boolean-posit/posit8_active_mul_status_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1D_MUL_STATUS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1d-mul-status.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-full-domain-classification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Verify exact Rustfmt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_mul_status.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_mul_status_native_test.rs
+      - name: Learn three Boolean gates and audit complete multiplication status
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_mul_status.rs -o "$RUNNER_TEMP/posit8-mul-status-unit"
+          "$RUNNER_TEMP/posit8-mul-status-unit" --nocapture | tee "$RUNNER_TEMP/posit8-mul-status-unit.txt"
+          grep -Fq 'test tests::learned_gates_are_exact_on_unqueried_operation_subdomains ... ok' "$RUNNER_TEMP/posit8-mul-status-unit.txt"
+          grep -Fq 'test tests::composed_native_class_matches_all_65536_posit8_mul_statuses ... ok' "$RUNNER_TEMP/posit8-mul-status-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-mul-status-unit.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_mul_status.rs -o "$RUNNER_TEMP/posit8-mul-status-learner"
+          "$RUNNER_TEMP/posit8-mul-status-learner" --report | tee "$RUNNER_TEMP/posit8-mul-status-report.txt"
+          grep -E '^SYNTH_LEARN1D,task=nar,gate=Or,teacher_queries=[1-9][0-9]*,eligible=65536,unseen_errors=0' "$RUNNER_TEMP/posit8-mul-status-report.txt"
+          grep -E '^SYNTH_LEARN1D,task=zero,gate=Or,teacher_queries=[1-9][0-9]*,eligible=65025,unseen_errors=0' "$RUNNER_TEMP/posit8-mul-status-report.txt"
+          grep -E '^SYNTH_LEARN1D,task=negative,gate=Xor,teacher_queries=[1-9][0-9]*,eligible=64516,unseen_errors=0' "$RUNNER_TEMP/posit8-mul-status-report.txt"
+          grep -E '^SYNTH_LEARN1D_COMPOSED,operation=mul,teacher_queries=[1-9][0-9]*,domain=65536,errors=0' "$RUNNER_TEMP/posit8-mul-status-report.txt"
+      - name: Assemble learned classifier and exhaustively compare machine code
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/posit8-mul-status-learner" --emit-gas > "$RUNNER_TEMP/posit8-mul-status.s"
+          gcc -c -x assembler "$RUNNER_TEMP/posit8-mul-status.s" -o "$RUNNER_TEMP/posit8-mul-status.o"
+          objdump -d "$RUNNER_TEMP/posit8-mul-status.o" > "$RUNNER_TEMP/posit8-mul-status.disasm"
+          sha256sum "$RUNNER_TEMP/posit8-mul-status.o" > "$RUNNER_TEMP/posit8-mul-status-hash.txt"
+          wc -c "$RUNNER_TEMP/posit8-mul-status.o" > "$RUNNER_TEMP/posit8-mul-status-objects.txt"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_mul_status_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-mul-status.o" \
+            -o "$RUNNER_TEMP/posit8-mul-status-native"
+          "$RUNNER_TEMP/posit8-mul-status-native" --nocapture | tee "$RUNNER_TEMP/posit8-mul-status-native.txt"
+          grep -Fq 'SYNTH_LEARN1D_NATIVE,operation=mul,pairs=65536,' "$RUNNER_TEMP/posit8-mul-status-native.txt"
+          grep -Fq 'native_mismatches=0,oracle_mismatches=0' "$RUNNER_TEMP/posit8-mul-status-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-mul-status-native.txt"
+      - name: Preserve complete reproducible evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1d-mul-status-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-mul-status-unit.txt
+            ${{ runner.temp }}/posit8-mul-status-report.txt
+            ${{ runner.temp }}/posit8-mul-status-native.txt
+            ${{ runner.temp }}/posit8-mul-status.s
+            ${{ runner.temp }}/posit8-mul-status.o
+            ${{ runner.temp }}/posit8-mul-status.disasm
+            ${{ runner.temp }}/posit8-mul-status-hash.txt
+            ${{ runner.temp }}/posit8-mul-status-objects.txt
+          if-no-files-found: warn
+          retention-days: 21
