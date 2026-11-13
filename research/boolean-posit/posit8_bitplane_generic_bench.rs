@@ -70,21 +70,13 @@ impl ComplementCircuit {
                         black_box(&original);
                     }),
                     1 => timing(input.len(), || {
-                        self.eval_packed_stream(
-                            black_box(&input),
-                            &mut scratch4,
-                            &mut generic4,
-                        )
-                        .expect("generic width four shape");
+                        self.eval_packed_stream(black_box(&input), &mut scratch4, &mut generic4)
+                            .expect("generic width four shape");
                         black_box(&generic4);
                     }),
                     _ => timing(input.len(), || {
-                        self.eval_packed_stream(
-                            black_box(&input),
-                            &mut scratch8,
-                            &mut generic8,
-                        )
-                        .expect("generic width eight shape");
+                        self.eval_packed_stream(black_box(&input), &mut scratch8, &mut generic8)
+                            .expect("generic width eight shape");
                         black_box(&generic8);
                     }),
                 };
