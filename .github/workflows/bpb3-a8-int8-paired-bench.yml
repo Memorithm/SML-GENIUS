@@ -1,0 +1,75 @@
+name: BPB-3 A8 exact INT8 paired reference and Batch4 bench
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/bpb3_a8_int8_paired_bench.rs'
+      - 'research/boolean-posit/bpb3_a8_tensor.rs'
+      - 'research/boolean-posit/bpb3_a8_superblock.rs'
+      - 'research/boolean-posit/bpb3_a8_paged.rs'
+      - '.github/workflows/bpb3-a8-int8-paired-bench.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/bpb3_a8_int8_paired_bench.rs'
+      - 'research/boolean-posit/bpb3_a8_tensor.rs'
+      - 'research/boolean-posit/bpb3_a8_superblock.rs'
+      - 'research/boolean-posit/bpb3_a8_paged.rs'
+      - '.github/workflows/bpb3-a8-int8-paired-bench.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired-exact-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact code with no retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Check standalone Rust formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/bpb3_a8_int8_paired_bench.rs
+      - name: Build and execute exact independent integer oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/bpb3_a8_int8_paired_bench.rs -o "$RUNNER_TEMP/a8-int8-paired"
+          "$RUNNER_TEMP/a8-int8-paired" --smoke | tee "$RUNNER_TEMP/a8-int8-smoke.txt"
+          grep -q 'smoke_ok rows=257 lanes=4' "$RUNNER_TEMP/a8-int8-smoke.txt"
+          rustc --edition 2021 -D warnings --test research/boolean-posit/bpb3_a8_int8_paired_bench.rs -o "$RUNNER_TEMP/a8-int8-paired-tests"
+          "$RUNNER_TEMP/a8-int8-paired-tests" --nocapture | tee "$RUNNER_TEMP/a8-int8-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/a8-int8-tests.txt"
+      - name: Optional exploratory hosted-runner timing (not physical RemoteOps evidence)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version --verbose | tee "$RUNNER_TEMP/a8-int8-runner.txt"
+          uname -a | tee -a "$RUNNER_TEMP/a8-int8-runner.txt"
+          lscpu | tee -a "$RUNNER_TEMP/a8-int8-runner.txt"
+          "$RUNNER_TEMP/a8-int8-paired" --measure | tee "$RUNNER_TEMP/a8-int8-hosted-microbench.txt"
+      - name: Retain exact-head correctness and optional exploratory artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bpb3-a8-int8-paired-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/a8-int8-smoke.txt
+            ${{ runner.temp }}/a8-int8-tests.txt
+            ${{ runner.temp }}/a8-int8-runner.txt
+            ${{ runner.temp }}/a8-int8-hosted-microbench.txt
+          if-no-files-found: warn
+          retention-days: 21
