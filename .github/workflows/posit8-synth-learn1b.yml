@@ -1,0 +1,99 @@
+name: SYNTH-LEARN1B eight-bit active Boolean circuit discovery
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_bitwise.rs'
+      - 'research/boolean-posit/posit8_active_bitwise_native_test.rs'
+      - 'research/boolean-posit/posit8_active_learn.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1B_BITWISE_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_bitwise.rs'
+      - 'research/boolean-posit/posit8_active_bitwise_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1B_BITWISE_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1b.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bitwise-learning-and-native-parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89 pinned
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Check independent Rust source formatting
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_learn.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_bitwise.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_bitwise_native_test.rs
+      - name: Compile and execute both active learner test suites
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_learn.rs \
+            -o "$RUNNER_TEMP/posit8-bitwise-unit"
+          "$RUNNER_TEMP/posit8-bitwise-unit" --nocapture | tee "$RUNNER_TEMP/posit8-bitwise-unit.txt"
+          grep -Fq 'test bitwise::tests::bitwise_add_queries_are_unique_and_holdout_isolation_is_exact ... ok' "$RUNNER_TEMP/posit8-bitwise-unit.txt"
+          grep -Fq 'test bitwise::tests::bitwise_mul_fits_all_queries_and_exports_direct_native_gates ... ok' "$RUNNER_TEMP/posit8-bitwise-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-bitwise-unit.txt"
+      - name: Publish actual active learning accuracy with disjoint holdout
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_learn.rs \
+            -o "$RUNNER_TEMP/posit8-bitwise"
+          "$RUNNER_TEMP/posit8-bitwise" --report-bitwise-add | tee "$RUNNER_TEMP/posit8-bitwise-audit.txt"
+          "$RUNNER_TEMP/posit8-bitwise" --report-bitwise-mul | tee -a "$RUNNER_TEMP/posit8-bitwise-audit.txt"
+          for op in add mul; do
+            grep -E "^SYNTH_LEARN1_BITWISE,op=$op,queries=320,budget=320," "$RUNNER_TEMP/posit8-bitwise-audit.txt"
+          done
+      - name: Assemble learned eight-output Boolean DAGs and verify native ABI
+        run: |
+          set -euo pipefail
+          for op in add mul; do
+            "$RUNNER_TEMP/posit8-bitwise" "--emit-bitwise-x86-$op" > "$RUNNER_TEMP/posit8-bitwise-$op.s"
+            grep -q "^mem_posit8_bitwise_$op:" "$RUNNER_TEMP/posit8-bitwise-$op.s"
+            gcc -c -x assembler "$RUNNER_TEMP/posit8-bitwise-$op.s" -o "$RUNNER_TEMP/posit8-bitwise-$op.o"
+            objdump -d "$RUNNER_TEMP/posit8-bitwise-$op.o" > "$RUNNER_TEMP/posit8-bitwise-$op.disasm"
+            sha256sum "$RUNNER_TEMP/posit8-bitwise-$op.o" >> "$RUNNER_TEMP/posit8-bitwise-object-hashes.txt"
+            wc -c "$RUNNER_TEMP/posit8-bitwise-$op.o" >> "$RUNNER_TEMP/posit8-bitwise-objects.txt"
+          done
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_bitwise_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-bitwise-add.o" \
+            -C "link-arg=$RUNNER_TEMP/posit8-bitwise-mul.o" \
+            -o "$RUNNER_TEMP/posit8-bitwise-native"
+          "$RUNNER_TEMP/posit8-bitwise-native" --nocapture | tee "$RUNNER_TEMP/posit8-bitwise-native.txt"
+          grep -Fq 'SYNTH_LEARN1_BITWISE_NATIVE,op=Add,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-bitwise-native.txt"
+          grep -Fq 'SYNTH_LEARN1_BITWISE_NATIVE,op=Mul,pairs=65536,native_mismatches=0,train_queries=320' "$RUNNER_TEMP/posit8-bitwise-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-bitwise-native.txt"
+      - name: Retain reproducible training and native ISA evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1b-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-bitwise-audit.txt
+            ${{ runner.temp }}/posit8-bitwise-unit.txt
+            ${{ runner.temp }}/posit8-bitwise-native.txt
+            ${{ runner.temp }}/posit8-bitwise-add.s
+            ${{ runner.temp }}/posit8-bitwise-mul.s
+            ${{ runner.temp }}/posit8-bitwise-add.o
+            ${{ runner.temp }}/posit8-bitwise-mul.o
+            ${{ runner.temp }}/posit8-bitwise-add.disasm
+            ${{ runner.temp }}/posit8-bitwise-mul.disasm
+            ${{ runner.temp }}/posit8-bitwise-objects.txt
+            ${{ runner.temp }}/posit8-bitwise-object-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21
