@@ -9,7 +9,7 @@
 mod arithmetic;
 
 use arithmetic::Posit8;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
 const INITIAL_QUERIES: usize = 64;
