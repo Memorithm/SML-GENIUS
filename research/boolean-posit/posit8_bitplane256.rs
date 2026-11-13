@@ -129,7 +129,7 @@ impl ComplementCircuit {
             let inputs: [(u8, u8); LANES] = std::array::from_fn(|lane| {
                 crate::deinterleave((batch * LANES + lane) as u16)
             });
-            self.evaluate_batch256_into(&inputs, &mut scratch, &mut outputs)?;
+            self.evaluate_slice256_into(&inputs, &mut scratch, &mut outputs)?;
             for (index, &(a, b)) in inputs.iter().enumerate() {
                 if outputs[index] != self.operation.oracle(a, b) {
                     return Err("256-lane graph result differs from integer oracle");
