@@ -127,7 +127,9 @@ impl LearnedRippleAdder {
                 gate
             });
             let proposal = FiveGateAdder { gates };
-            candidates.entry(proposal.predicted_signature()).or_insert(proposal);
+            candidates
+                .entry(proposal.predicted_signature())
+                .or_insert(proposal);
         }
         let candidate_signatures = candidates.len();
         let mut remaining = candidates;
@@ -145,8 +147,8 @@ impl LearnedRippleAdder {
                     histogram[output] += 1;
                 }
                 let total = remaining.len();
-                let disagreement = total * total
-                    - histogram.iter().map(|size| size * size).sum::<usize>();
+                let disagreement =
+                    total * total - histogram.iter().map(|size| size * size).sum::<usize>();
                 if selected.is_none_or(|(previous, _)| disagreement > previous) {
                     selected = Some((disagreement, case));
                 }
@@ -165,7 +167,10 @@ impl LearnedRippleAdder {
             sample_cases |= 1 << case;
             samples.push((a, b, cin, sum, cout));
             remaining.retain(|&signature, _| ((signature >> (2 * case)) & 3) == label);
-            assert!(!remaining.is_empty(), "full adder not representable in frozen grammar");
+            assert!(
+                !remaining.is_empty(),
+                "full adder not representable in frozen grammar"
+            );
         }
         let learned = *remaining.values().next().expect("candidate retained");
         // After hypothesis selection, count errors on inputs NOT queried.
@@ -177,9 +182,8 @@ impl LearnedRippleAdder {
             }
             unseen_cases += 1;
             let (a, b, cin) = decode_case(case);
-            unseen_errors += usize::from(
-                learned.evaluate(a, b, cin) != full_adder_teacher(a, b, cin),
-            );
+            unseen_errors +=
+                usize::from(learned.evaluate(a, b, cin) != full_adder_teacher(a, b, cin));
         }
         let report = DiscoveryReport {
             membership_queries: samples.len(),
@@ -189,18 +193,18 @@ impl LearnedRippleAdder {
             unseen_errors,
             gates: learned.gates,
         };
-        Self { learned, samples, report }
+        Self {
+            learned,
+            samples,
+            report,
+        }
     }
     pub fn add_byte(&self, a: u8, b: u8, carry_in: u8) -> u16 {
         assert!(carry_in <= 1);
         let mut carry = carry_in;
         let mut out = 0u16;
         for bit in 0..8 {
-            let (sum, carry_out) = self.learned.evaluate(
-                (a >> bit) & 1,
-                (b >> bit) & 1,
-                carry,
-            );
+            let (sum, carry_out) = self.learned.evaluate((a >> bit) & 1, (b >> bit) & 1, carry);
             out |= u16::from(sum) << bit;
             carry = carry_out;
         }
@@ -231,13 +235,29 @@ impl LearnedRippleAdder {
         let [p, g, s, t, c] = self.learned.gates;
         for bit in 0..8 {
             // Propagate = learned G0(a_i,b_i).
-            writeln!(&mut asm, "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1").unwrap();
-            writeln!(&mut asm, "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1").unwrap();
+            writeln!(
+                &mut asm,
+                "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
+            )
+            .unwrap();
+            writeln!(
+                &mut asm,
+                "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1"
+            )
+            .unwrap();
             asm.push_str(p.asm());
             asm.push_str("    mov esi, eax\n");
             // Generate = learned G1(a_i,b_i).
-            writeln!(&mut asm, "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1").unwrap();
-            writeln!(&mut asm, "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1").unwrap();
+            writeln!(
+                &mut asm,
+                "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
+            )
+            .unwrap();
+            writeln!(
+                &mut asm,
+                "    mov edx, r9d\n    shr edx, {bit}\n    and edx, 1"
+            )
+            .unwrap();
             asm.push_str(g.asm());
             asm.push_str("    mov edi, eax\n");
             // Output bit = learned G2(propagate, carry).
@@ -294,7 +314,10 @@ mod tests {
         }
         for case in 0..INPUT_CASES {
             let (a, b, carry) = decode_case(case);
-            assert_eq!(model.learned.evaluate(a, b, carry), full_adder_teacher(a, b, carry));
+            assert_eq!(
+                model.learned.evaluate(a, b, carry),
+                full_adder_teacher(a, b, carry)
+            );
         }
     }
     #[test]
