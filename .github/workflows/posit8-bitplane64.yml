@@ -1,0 +1,89 @@
+name: Posit8 CPU bitplane64 exact Boolean batch execution
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_bitplane64.rs'
+      - 'research/boolean-posit/posit8_bitplane64_bench.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/POSIT8_BITPLANE64_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-bitplane64.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_bitplane64.rs'
+      - 'research/boolean-posit/posit8_bitplane64_bench.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/POSIT8_BITPLANE64_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-bitplane64.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exhaustive-bitplane64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Validate exact Rust source formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane64.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane64_bench.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_complement_edges.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bdd_synth.rs
+      - name: Test all 65536 ADD and MUL operand pairs by 64-way bitplanes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -O -D warnings --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bitslice64-tests"
+          "$RUNNER_TEMP/posit8-bitslice64-tests" --nocapture | tee "$RUNNER_TEMP/posit8-bitslice64-tests.txt"
+          grep -Fq 'test complement_edges::bitplane64::tests::exact_all_65536_additions ... ok' "$RUNNER_TEMP/posit8-bitslice64-tests.txt"
+          grep -Fq 'test complement_edges::bitplane64::tests::exact_all_65536_multiplications ... ok' "$RUNNER_TEMP/posit8-bitslice64-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-bitslice64-tests.txt"
+      - name: Compile standalone optimized binary and verify both operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bitslice64"
+          "$RUNNER_TEMP/posit8-bitslice64" --verify-bitslice64 | tee "$RUNNER_TEMP/posit8-bitslice64-summary.txt"
+          grep -Fq 'POSIT8_BITSLICE64_add PASS batches=1024 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-bitslice64-summary.txt"
+          grep -Fq 'POSIT8_BITSLICE64_mul PASS batches=1024 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-bitslice64-summary.txt"
+      - name: Paired bitplane64 versus scalar DAG benchmark on this CPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "HEAD_SHA=$GITHUB_SHA"
+            rustc --version
+            lscpu
+          } > "$RUNNER_TEMP/posit8-bitplane64-host.txt"
+          "$RUNNER_TEMP/posit8-bitslice64" --bench-bitslice64 | tee "$RUNNER_TEMP/posit8-bitplane64-bench.txt"
+          test "$(grep -c '^POSIT8_BITPLANE64_BENCH,op=' "$RUNNER_TEMP/posit8-bitplane64-bench.txt")" -eq 2
+
+      - name: Retain exact-head batch evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-bitplane64-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-bitslice64-tests.txt
+            ${{ runner.temp }}/posit8-bitslice64-summary.txt
+            ${{ runner.temp }}/posit8-bitplane64-host.txt
+            ${{ runner.temp }}/posit8-bitplane64-bench.txt
+          if-no-files-found: warn
+          retention-days: 21

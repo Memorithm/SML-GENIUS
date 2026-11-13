@@ -211,6 +211,32 @@ impl LearnedCircuit {
 }
 fn main() {
     let arg = std::env::args().nth(1);
+    if arg.as_deref() == Some("--bench-bitslice64") {
+        println!("POSIT8_BITPLANE64_BENCH_PROTOCOL input_count=65536 warmups=2 rounds=7");
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph
+                .verify_batch64_exhaustive()
+                .expect("exactness prerequisite to benchmark");
+            graph.benchmark_bitplanes64();
+        }
+        return;
+    }
+    if arg.as_deref() == Some("--verify-bitslice64") {
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph
+                .verify_batch64_exhaustive()
+                .expect("64-lane exhaustive Boolean arithmetic");
+            println!(
+                "POSIT8_BITSLICE64_{} PASS batches=1024 pairs=65536 mismatches=0",
+                operation.name()
+            );
+        }
+        return;
+    }
     let complemented_operation = match arg.as_deref() {
         Some("--emit-x86-ce-add") => Some(Operation::Add),
         Some("--emit-x86-ce-mul") => Some(Operation::Mul),
