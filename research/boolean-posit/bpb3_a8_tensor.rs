@@ -535,8 +535,8 @@ mod tests {
                         let magnitude = if offset % 3 == 0 {
                             max
                         } else {
-                            ((row * 7 + group * 11 + offset * 13)
-                                % (usize::from(max as u8) + 1)) as i8
+                            ((row * 7 + group * 11 + offset * 13) % (usize::from(max as u8) + 1))
+                                as i8
                         };
                         if (row + group + offset) % 2 == 0 {
                             magnitude
