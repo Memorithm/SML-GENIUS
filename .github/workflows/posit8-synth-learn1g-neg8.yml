@@ -1,0 +1,87 @@
+name: SYNTH-LEARN1G learned complete posit8 byte negation and native ISA
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_neg8.rs'
+      - 'research/boolean-posit/posit8_active_neg8_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1G_NEG8_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1g-neg8.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_neg8.rs'
+      - 'research/boolean-posit/posit8_active_neg8_native_test.rs'
+      - '.github/workflows/posit8-synth-learn1g-neg8.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learned-byte-arithmetic-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict Rust source formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_neg8.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_neg8_native_test.rs
+      - name: Learn gate recurrence and audit all 256 encodings
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_neg8.rs -o "$RUNNER_TEMP/posit8-neg8-tests"
+          "$RUNNER_TEMP/posit8-neg8-tests" --nocapture | tee "$RUNNER_TEMP/posit8-neg8-tests.txt"
+          grep -Fq 'test tests::actively_learns_prefix_or_and_negation_xor ... ok' "$RUNNER_TEMP/posit8-neg8-tests.txt"
+          grep -Fq 'test tests::learned_arithmetic_negation_exact_for_every_posit8_byte ... ok' "$RUNNER_TEMP/posit8-neg8-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-neg8-tests.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_neg8.rs -o "$RUNNER_TEMP/posit8-neg8-learner"
+          "$RUNNER_TEMP/posit8-neg8-learner" --report | tee "$RUNNER_TEMP/posit8-neg8-report.txt"
+          grep -E '^SYNTH_LEARN1G_GATE,stage=prefix,gate=Or,teacher_queries=[1-9][0-9]*,remaining=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-neg8-report.txt"
+          grep -E '^SYNTH_LEARN1G_GATE,stage=negated_bit,gate=Xor,teacher_queries=[1-9][0-9]*,remaining=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-neg8-report.txt"
+          grep -E '^SYNTH_LEARN1G_BYTE,operation=neg8,teacher_queries=[1-9][0-9]*,domain=256,neg_errors=0,abs_errors=0' "$RUNNER_TEMP/posit8-neg8-report.txt"
+      - name: Compile unary arithmetic into machine instructions and full ABI parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/posit8-neg8-learner" --emit-gas > "$RUNNER_TEMP/posit8-neg8.s"
+          gcc -c -x assembler "$RUNNER_TEMP/posit8-neg8.s" -o "$RUNNER_TEMP/posit8-neg8.o"
+          objdump -d "$RUNNER_TEMP/posit8-neg8.o" > "$RUNNER_TEMP/posit8-neg8.disasm"
+          sha256sum "$RUNNER_TEMP/posit8-neg8.o" > "$RUNNER_TEMP/posit8-neg8-hash.txt"
+          wc -c "$RUNNER_TEMP/posit8-neg8.o" > "$RUNNER_TEMP/posit8-neg8-size.txt"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_neg8_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-neg8.o" \
+            -o "$RUNNER_TEMP/posit8-neg8-native"
+          "$RUNNER_TEMP/posit8-neg8-native" --nocapture | tee "$RUNNER_TEMP/posit8-neg8-native.txt"
+          grep -Fq 'SYNTH_LEARN1G_NATIVE,operation=unary_neg8_and_abs8,inputs=256,' "$RUNNER_TEMP/posit8-neg8-native.txt"
+          grep -Fq 'neg_mismatches=0,magnitude_mismatches=0' "$RUNNER_TEMP/posit8-neg8-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-neg8-native.txt"
+      - name: Archive exact-head learned gates, assembly and native byte audit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1g-neg8-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-neg8-tests.txt
+            ${{ runner.temp }}/posit8-neg8-report.txt
+            ${{ runner.temp }}/posit8-neg8-native.txt
+            ${{ runner.temp }}/posit8-neg8.s
+            ${{ runner.temp }}/posit8-neg8.o
+            ${{ runner.temp }}/posit8-neg8.disasm
+            ${{ runner.temp }}/posit8-neg8-hash.txt
+            ${{ runner.temp }}/posit8-neg8-size.txt
+          if-no-files-found: warn
+          retention-days: 21
