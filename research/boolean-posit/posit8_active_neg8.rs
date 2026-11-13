@@ -3,12 +3,12 @@
 //! selected bit labels for multiplication by negative one; the resulting
 //! program is real byte arithmetic, not a four-class status classifier.
 #![forbid(unsafe_code)]
-#[path = "posit8_circuit_synth.rs"]
-#[allow(dead_code)]
-mod oracle;
 #[path = "posit8_active_sign_gates.rs"]
 #[allow(dead_code)]
 mod gate_library;
+#[path = "posit8_circuit_synth.rs"]
+#[allow(dead_code)]
+mod oracle;
 
 use gate_library::Gate;
 use oracle::Posit8;
@@ -103,13 +103,19 @@ fn discover(stage: Stage) -> LearnedStage {
         let Some((raw, bit)) = best.1 else {
             break;
         };
-        assert!(queries.len() < PER_STAGE_BUDGET, "bit-gate query budget exhausted");
+        assert!(
+            queries.len() < PER_STAGE_BUDGET,
+            "bit-gate query budget exhausted"
+        );
         let label = stage.teacher(raw, bit);
         assert!(queried.insert((raw, bit)));
         queries.push((raw, bit, label));
         let (x, y) = Stage::features(raw, bit);
         hypotheses.retain(|&gate| eval_gate(gate, x, y) == label);
-        assert!(!hypotheses.is_empty(), "Boolean gate grammar does not fit bit teacher");
+        assert!(
+            !hypotheses.is_empty(),
+            "Boolean gate grammar does not fit bit teacher"
+        );
     }
     let gate = hypotheses[0];
     let mut unseen_errors = 0usize;
@@ -210,11 +216,19 @@ impl LearnedNegation {
         );
         asm.push_str("    movzx r8d, dil\n    xor ecx, ecx\n    xor r11d, r11d\n");
         for bit in 0..8 {
-            writeln!(&mut asm, "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1").unwrap();
+            writeln!(
+                &mut asm,
+                "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
+            )
+            .unwrap();
             asm.push_str("    mov edx, ecx\n");
             asm.push_str(Self::asm_gate(self.output.gate));
             writeln!(&mut asm, "    shl eax, {bit}\n    or r11d, eax").unwrap();
-            writeln!(&mut asm, "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1").unwrap();
+            writeln!(
+                &mut asm,
+                "    mov eax, r8d\n    shr eax, {bit}\n    and eax, 1"
+            )
+            .unwrap();
             asm.push_str("    mov edx, ecx\n");
             asm.push_str(Self::asm_gate(self.prefix.gate));
             asm.push_str("    mov ecx, eax\n");
