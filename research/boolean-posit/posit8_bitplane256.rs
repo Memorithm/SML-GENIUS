@@ -126,9 +126,8 @@ impl ComplementCircuit {
         let mut scratch = self.new_scratch256();
         let mut outputs = [0u8; LANES];
         for batch in 0..(65536 / LANES) {
-            let inputs: [(u8, u8); LANES] = std::array::from_fn(|lane| {
-                crate::deinterleave((batch * LANES + lane) as u16)
-            });
+            let inputs: [(u8, u8); LANES] =
+                std::array::from_fn(|lane| crate::deinterleave((batch * LANES + lane) as u16));
             self.evaluate_slice256_into(&inputs, &mut scratch, &mut outputs)?;
             for (index, &(a, b)) in inputs.iter().enumerate() {
                 if outputs[index] != self.operation.oracle(a, b) {
