@@ -12,12 +12,18 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 const CANDIDATES: [Gate; 9] = [
-    Gate::Zero, Gate::One, Gate::SignA, Gate::SignB,
-    Gate::NotA, Gate::NotB, Gate::And, Gate::Or, Gate::Xor,
+    Gate::Zero,
+    Gate::One,
+    Gate::SignA,
+    Gate::SignB,
+    Gate::NotA,
+    Gate::NotB,
+    Gate::And,
+    Gate::Or,
+    Gate::Xor,
 ];
 const EXAMPLES: [u8; 16] = [
-    0, 1, 0x40, 0x7f, 0x80, 0x81, 0xc0, 0xff,
-    2, 0x3f, 0x41, 0x82, 0xfd, 0x10, 0xf0, 0x55,
+    0, 1, 0x40, 0x7f, 0x80, 0x81, 0xc0, 0xff, 2, 0x3f, 0x41, 0x82, 0xfd, 0x10, 0xf0, 0x55,
 ];
 const MAX_QUERIES_PER_PREDICATE: usize = 16;
 
@@ -86,19 +92,26 @@ fn discover(task: Predicate) -> LearnedPredicate {
     let mut queried = BTreeSet::new();
     let mut examples = Vec::new();
     loop {
-        let selected = pool.iter().copied().enumerate().filter_map(|(index, (a, b))| {
-            if queried.contains(&(a, b)) {
-                return None;
-            }
-            let (x, y) = task.inputs(a, b);
-            let ones = candidates
-                .iter()
-                .filter(|&&gate| boolean(gate, x, y) != 0)
-                .count();
-            let score = ones * (candidates.len() - ones);
-            Some((score, std::cmp::Reverse(index), a, b))
-        }).max();
-        let Some((score, _, a, b)) = selected else { break };
+        let selected = pool
+            .iter()
+            .copied()
+            .enumerate()
+            .filter_map(|(index, (a, b))| {
+                if queried.contains(&(a, b)) {
+                    return None;
+                }
+                let (x, y) = task.inputs(a, b);
+                let ones = candidates
+                    .iter()
+                    .filter(|&&gate| boolean(gate, x, y) != 0)
+                    .count();
+                let score = ones * (candidates.len() - ones);
+                Some((score, std::cmp::Reverse(index), a, b))
+            })
+            .max();
+        let Some((score, _, a, b)) = selected else {
+            break;
+        };
         if score == 0 {
             break;
         }
@@ -108,15 +121,22 @@ fn discover(task: Predicate) -> LearnedPredicate {
         assert!(queried.insert((a, b)));
         let (x, y) = task.inputs(a, b);
         candidates.retain(|&gate| boolean(gate, x, y) == label);
-        assert!(!candidates.is_empty(), "frozen Boolean grammar cannot fit oracle");
+        assert!(
+            !candidates.is_empty(),
+            "frozen Boolean grammar cannot fit oracle"
+        );
     }
     // Stable frozen complexity priority: direct wires, then single gates.
-    let gate = *candidates.first().expect("at least one consistent hypothesis");
+    let gate = *candidates
+        .first()
+        .expect("at least one consistent hypothesis");
     let mut eligible = 0;
     let mut unseen_errors = 0;
     for a in 0..=u8::MAX {
         for b in 0..=u8::MAX {
-            if !task.eligible(a, b) { continue; }
+            if !task.eligible(a, b) {
+                continue;
+            }
             eligible += 1;
             if !queried.contains(&(a, b)) {
                 let (x, y) = task.inputs(a, b);
@@ -124,7 +144,13 @@ fn discover(task: Predicate) -> LearnedPredicate {
             }
         }
     }
-    LearnedPredicate { task, gate, queries: examples, eligible, unseen_errors }
+    LearnedPredicate {
+        task,
+        gate,
+        queries: examples,
+        eligible,
+        unseen_errors,
+    }
 }
 pub struct LearnedMulStatus {
     nar: LearnedPredicate,
@@ -158,8 +184,15 @@ impl LearnedMulStatus {
         let raw = known_gates::oracle::Posit8(a)
             .mul(known_gates::oracle::Posit8(b))
             .0;
-        if raw == 0x80 { 1 } else if raw == 0 { 2 }
-        else if raw & 0x80 != 0 { 4 } else { 0 }
+        if raw == 0x80 {
+            1
+        } else if raw == 0 {
+            2
+        } else if raw & 0x80 != 0 {
+            4
+        } else {
+            0
+        }
     }
     pub fn audit_all(&self) -> usize {
         let mut errors = 0;
@@ -211,8 +244,11 @@ impl LearnedMulStatus {
         for candidate in [&self.nar, &self.zero, &self.negative] {
             println!(
                 "SYNTH_LEARN1D,task={},gate={:?},teacher_queries={},eligible={},unseen_errors={}",
-                candidate.task.name(), candidate.gate, candidate.queries.len(),
-                candidate.eligible, candidate.unseen_errors
+                candidate.task.name(),
+                candidate.gate,
+                candidate.queries.len(),
+                candidate.eligible,
+                candidate.unseen_errors
             );
         }
         println!(
