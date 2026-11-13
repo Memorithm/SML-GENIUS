@@ -228,7 +228,8 @@ fn main() {
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
                 .expect("bounded Boolean graph synthesis");
-            graph.verify_batch256_exhaustive()
+            graph
+                .verify_batch256_exhaustive()
                 .expect("full 256-lane exactness before benchmark");
             graph.benchmark_bitplanes256_against64();
         }
@@ -238,9 +239,13 @@ fn main() {
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
                 .expect("bounded graph synthesis");
-            graph.verify_batch256_exhaustive()
+            graph
+                .verify_batch256_exhaustive()
                 .expect("256-lane exhaustive arithmetic");
-            println!("POSIT8_BITPLANE256_{} PASS batches=256 pairs=65536 mismatches=0", operation.name());
+            println!(
+                "POSIT8_BITPLANE256_{} PASS batches=256 pairs=65536 mismatches=0",
+                operation.name()
+            );
         }
         return;
     }
