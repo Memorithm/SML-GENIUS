@@ -1,0 +1,89 @@
+name: SYNTH-LEARN1E full posit8 addition Boolean status classifier
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_add_status.rs'
+      - 'research/boolean-posit/posit8_active_add_status_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1E_ADD_STATUS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1e-add-status.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_add_status.rs'
+      - 'research/boolean-posit/posit8_active_add_status_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1E_ADD_STATUS_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1e-add-status.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-add-status-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Check Rust formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_add_status.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_add_status_native_test.rs
+      - name: Learn addition Boolean rules and audit unseen inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_add_status.rs -o "$RUNNER_TEMP/posit8-add-status-unit"
+          "$RUNNER_TEMP/posit8-add-status-unit" --nocapture | tee "$RUNNER_TEMP/posit8-add-status-unit.txt"
+          grep -Fq 'test tests::discover_gates_with_bounded_teacher_queries_and_no_unseen_errors ... ok' "$RUNNER_TEMP/posit8-add-status-unit.txt"
+          grep -Fq 'test tests::full_domain_add_status_classification_is_exact ... ok' "$RUNNER_TEMP/posit8-add-status-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-add-status-unit.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_add_status.rs -o "$RUNNER_TEMP/posit8-add-status-learner"
+          "$RUNNER_TEMP/posit8-add-status-learner" --report | tee "$RUNNER_TEMP/posit8-add-status-report.txt"
+          grep -E '^SYNTH_LEARN1E,task=nar,gate=Or,teacher_queries=[1-9][0-9]*,eligible=65536,unseen_errors=0' "$RUNNER_TEMP/posit8-add-status-report.txt"
+          grep -E '^SYNTH_LEARN1E,task=zero,gate=SignA,teacher_queries=[1-9][0-9]*,eligible=65025,unseen_errors=0' "$RUNNER_TEMP/posit8-add-status-report.txt"
+          grep -E '^SYNTH_LEARN1E,task=negative,gate=Or,teacher_queries=[1-9][0-9]*,eligible=64770,unseen_errors=0' "$RUNNER_TEMP/posit8-add-status-report.txt"
+          grep -E '^SYNTH_LEARN1E_COMPOSED,operation=add,queries=[1-9][0-9]*,domain=65536,errors=0' "$RUNNER_TEMP/posit8-add-status-report.txt"
+      - name: Assemble learned ADD machine code and verify 65536 classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/posit8-add-status-learner" --emit-gas > "$RUNNER_TEMP/posit8-add-status.s"
+          gcc -c -x assembler "$RUNNER_TEMP/posit8-add-status.s" -o "$RUNNER_TEMP/posit8-add-status.o"
+          objdump -d "$RUNNER_TEMP/posit8-add-status.o" > "$RUNNER_TEMP/posit8-add-status.disasm"
+          sha256sum "$RUNNER_TEMP/posit8-add-status.o" > "$RUNNER_TEMP/posit8-add-status-hash.txt"
+          wc -c "$RUNNER_TEMP/posit8-add-status.o" > "$RUNNER_TEMP/posit8-add-status-size.txt"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_add_status_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-add-status.o" \
+            -o "$RUNNER_TEMP/posit8-add-status-native"
+          "$RUNNER_TEMP/posit8-add-status-native" --nocapture | tee "$RUNNER_TEMP/posit8-add-status-native.txt"
+          grep -Fq 'SYNTH_LEARN1E_NATIVE,operation=add,pairs=65536,' "$RUNNER_TEMP/posit8-add-status-native.txt"
+          grep -Fq 'native_mismatches=0,oracle_mismatches=0' "$RUNNER_TEMP/posit8-add-status-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-add-status-native.txt"
+      - name: Archive exact-head native and teacher evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1e-add-status-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-add-status-unit.txt
+            ${{ runner.temp }}/posit8-add-status-report.txt
+            ${{ runner.temp }}/posit8-add-status-native.txt
+            ${{ runner.temp }}/posit8-add-status.s
+            ${{ runner.temp }}/posit8-add-status.o
+            ${{ runner.temp }}/posit8-add-status.disasm
+            ${{ runner.temp }}/posit8-add-status-hash.txt
+            ${{ runner.temp }}/posit8-add-status-size.txt
+          if-no-files-found: warn
+          retention-days: 21
