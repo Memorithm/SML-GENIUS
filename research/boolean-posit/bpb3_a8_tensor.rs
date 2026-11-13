@@ -198,6 +198,62 @@ impl<'a> TensorView<'a> {
         Ok(())
     }
 
+    /// Exact signed INT8 tensor matvec, with output units of 2^-24.
+    /// Every activation bit is converted to an indicator mask. The identity
+    /// sum(w_i * bit_i) = (sum(w_i) - dot_bipolar(mask)) / 2
+    /// reuses the canonical A8 Boolean POPCOUNT dot without materializing
+    /// dense floating-point weights. Bit 7 has two's-complement weight -128.
+    /// This is a correctness-first nine-pass reference, not a fused kernel.
+    /// Output length is checked before any writes.
+    pub fn signed_i8_matvec_into(
+        &self,
+        activations: &[i8; 256],
+        outputs: &mut [i128],
+    ) -> Result<(), TensorError> {
+        if outputs.len() != self.rows {
+            return Err(TensorError::WrongLength);
+        }
+        let masks: [[u64; 4]; 8] = std::array::from_fn(|bit| {
+            std::array::from_fn(|word| {
+                let mut mask = 0u64;
+                for offset in 0..64 {
+                    let code = activations[word * 64 + offset] as u8;
+                    mask |= u64::from((code >> bit) & 1) << offset;
+                }
+                mask
+            })
+        });
+        let all_positive = [0u64; 4];
+        for (row, output) in outputs.iter_mut().enumerate() {
+            let wire = self.row(row)?;
+            let sum = a8::dot_exact(wire, &all_positive).map_err(|_| TensorError::InvalidPage)?;
+            let mut result = 0i128;
+            for (bit, mask) in masks.iter().enumerate() {
+                let bipolar = a8::dot_exact(wire, mask).map_err(|_| TensorError::InvalidPage)?;
+                let difference = sum.checked_sub(bipolar).ok_or(TensorError::Overflow)?;
+                if difference % 2 != 0 {
+                    return Err(TensorError::InvalidPage);
+                }
+                let shift = if bit == 7 { -128i128 } else { 1i128 << bit };
+                result = result
+                    .checked_add(
+                        (difference / 2)
+                            .checked_mul(shift)
+                            .ok_or(TensorError::Overflow)?,
+                    )
+                    .ok_or(TensorError::Overflow)?;
+            }
+            *output = result;
+        }
+        Ok(())
+    }
+
+    pub fn signed_i8_matvec(&self, activations: &[i8; 256]) -> Result<Vec<i128>, TensorError> {
+        let mut outputs = vec![0; self.rows];
+        self.signed_i8_matvec_into(activations, &mut outputs)?;
+        Ok(outputs)
+    }
+
     pub fn signed_bipolar_matvec(&self, mask: &[u64; 4]) -> Result<Vec<i128>, TensorError> {
         let mut outputs = vec![0i128; self.rows];
         self.signed_bipolar_matvec_into(mask, &mut outputs)?;
@@ -292,6 +348,46 @@ mod tests {
                 Err(TensorError::WrongLength)
             );
             assert!(too_short.iter().all(|&value| value == 77));
+        }
+    }
+
+    #[test]
+    fn signed_i8_tensor_matvec_matches_independent_scalar_across_pages() {
+        let rows: Vec<Vec<u8>> = (0..257).map(make_row).collect();
+        let encoded = encode_tensor(&rows).unwrap();
+        let view = TensorView::new(&encoded).unwrap();
+        let samples: [[i8; 256]; 5] = [
+            [0; 256],
+            [-128; 256],
+            [127; 256],
+            std::array::from_fn(|i| if i % 2 == 0 { -128 } else { 127 }),
+            std::array::from_fn(|i| (i as u8).wrapping_mul(37) as i8),
+        ];
+        for activations in samples {
+            let expected: Vec<i128> = rows
+                .iter()
+                .map(|wire| {
+                    let (weights, exponents) = a8::unpack(wire).unwrap();
+                    (0..256)
+                        .map(|i| {
+                            i128::from(weights[i])
+                                * i128::from(activations[i])
+                                * (1i128 << (i32::from(exponents[i / 16]) + 24))
+                        })
+                        .sum()
+                })
+                .collect();
+            assert_eq!(view.signed_i8_matvec(&activations).unwrap(), expected);
+            let mut reuse = vec![0i128; view.len()];
+            view.signed_i8_matvec_into(&activations, &mut reuse)
+                .unwrap();
+            assert_eq!(reuse, expected);
+            let mut wrong = vec![99i128; view.len() - 1];
+            assert_eq!(
+                view.signed_i8_matvec_into(&activations, &mut wrong),
+                Err(TensorError::WrongLength)
+            );
+            assert!(wrong.iter().all(|&value| value == 99));
         }
     }
 
