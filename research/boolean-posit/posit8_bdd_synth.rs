@@ -223,6 +223,16 @@ fn main() {
         }
         return;
     }
+    if arg.as_deref() == Some("--verify-bitslice256") {
+        for operation in [Operation::Add, Operation::Mul] {
+            let graph = complement_edges::ComplementCircuit::synthesize(operation)
+                .expect("bounded graph synthesis");
+            graph.verify_batch256_exhaustive()
+                .expect("256-lane exhaustive arithmetic");
+            println!("POSIT8_BITPLANE256_{} PASS batches=256 pairs=65536 mismatches=0", operation.name());
+        }
+        return;
+    }
     if arg.as_deref() == Some("--verify-bitslice64") {
         for operation in [Operation::Add, Operation::Mul] {
             let graph = complement_edges::ComplementCircuit::synthesize(operation)
