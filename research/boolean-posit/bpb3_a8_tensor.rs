@@ -373,6 +373,73 @@ mod tests {
     }
 
     #[test]
+    fn dense_signed_i8_all_weight_planes_and_scale_boundaries() {
+        // The earlier sparse fixture only has one nonzero coefficient per
+        // group. Exercise all 256 coefficients, all magnitude planes and
+        // both exponent boundaries against an independently decoded oracle.
+        let source: Vec<Vec<u8>> = (0..33)
+            .map(|row| {
+                let base = if row % 2 == 0 { -24 } else { 27 };
+                let groups = std::array::from_fn(|group| {
+                    let mode = 1 + ((row + group) % 3) as u8;
+                    let max = (1i8 << mode) - 1;
+                    let codes = std::array::from_fn(|offset| {
+                        let value = ((row * 7 + group * 11 + offset * 13) % 7) as i8;
+                        let magnitude = value % (max + 1);
+                        if (row + group + offset) % 2 == 0 {
+                            magnitude
+                        } else {
+                            -magnitude
+                        }
+                    });
+                    a8::Group {
+                        mode,
+                        exponent: base,
+                        codes,
+                        sse: 0.0,
+                    }
+                });
+                a8::pack(&a8::Superblock {
+                    base,
+                    groups,
+                    sse: 0.0,
+                })
+                .unwrap()
+            })
+            .collect();
+        let bytes = encode_tensor(&source).unwrap();
+        let view = TensorView::new(&bytes).unwrap();
+        let activations: [[i8; 256]; 4] = [
+            [-128; 256],
+            [127; 256],
+            std::array::from_fn(|i| i as u8 as i8),
+            std::array::from_fn(|i| {
+                if i % 3 == 0 {
+                    -1
+                } else if i % 3 == 1 {
+                    1
+                } else {
+                    -128
+                }
+            }),
+        ];
+        for input in activations {
+            let outputs = view.signed_i8_matvec(&input).unwrap();
+            for (index, row) in source.iter().enumerate() {
+                let (codes, exponents) = a8::unpack(row).unwrap();
+                let expected: i128 = (0..256)
+                    .map(|i| {
+                        i128::from(codes[i])
+                            * i128::from(input[i])
+                            * (1i128 << (i32::from(exponents[i / 16]) + 24))
+                    })
+                    .sum();
+                assert_eq!(outputs[index], expected, "row {index}");
+            }
+        }
+    }
+
+    #[test]
     fn corrupt_directory_and_nested_page_fail_closed() {
         let source: Vec<Vec<u8>> = (0..257).map(make_row).collect();
         let original = encode_tensor(&source).unwrap();
