@@ -288,8 +288,8 @@ fn acquire(
 ) -> Vec<u16> {
     let mut disagreement = Vec::new();
     let mut exploration = Vec::new();
-    for step in 0..=u16::MAX {
-        let candidate = permuted(step, salt);
+    for step in 0..DOMAIN {
+        let candidate = permuted(step as u16, salt);
         if !eligible(candidate, known) {
             continue;
         }
