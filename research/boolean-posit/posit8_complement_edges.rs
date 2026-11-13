@@ -17,6 +17,9 @@ mod bitplane256_bench;
 #[path = "posit8_bitplane_generic.rs"]
 mod bitplane_generic;
 
+#[path = "posit8_bitplane_generic_bench.rs"]
+mod bitplane_generic_bench;
+
 #[path = "posit8_bitplane64_bench.rs"]
 mod bitplane64_bench;
 
