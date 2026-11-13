@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/posit8_x86_64_emit.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
       - 'research/boolean-posit/POSIT8_BDD_ADD_MUL_PROTOCOL_20261112.md'
       - '.github/workflows/bpb3-posit8-bdd.yml'
   push:
     branches: [main]
     paths:
       - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/posit8_x86_64_emit.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
       - 'research/boolean-posit/POSIT8_BDD_ADD_MUL_PROTOCOL_20261112.md'
       - '.github/workflows/bpb3-posit8-bdd.yml'
   workflow_dispatch:
