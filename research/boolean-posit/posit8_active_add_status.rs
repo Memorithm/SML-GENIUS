@@ -2,58 +2,71 @@
 //! for posit8 ADD, with explicitly provided raw-bit magnitude comparisons.
 //! Output is status {1 NaR, 2 zero, 4 negative, 0 positive}, not a posit8 sum.
 #![forbid(unsafe_code)]
-#[path = "posit8_active_sign_gates.rs"]
-#[allow(dead_code)]
-mod learned_gates;
 #[path = "posit8_circuit_synth.rs"]
 #[allow(dead_code)]
 mod arithmetic;
+#[path = "posit8_active_sign_gates.rs"]
+#[allow(dead_code)]
+mod learned_gates;
 use arithmetic::Posit8;
 use learned_gates::Gate;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
 const CANDIDATES: [Gate; 9] = [
-    Gate::Zero, Gate::One, Gate::SignA, Gate::SignB,
-    Gate::NotA, Gate::NotB, Gate::And, Gate::Or, Gate::Xor,
+    Gate::Zero,
+    Gate::One,
+    Gate::SignA,
+    Gate::SignB,
+    Gate::NotA,
+    Gate::NotB,
+    Gate::And,
+    Gate::Or,
+    Gate::Xor,
 ];
 const SYMBOLS: [u8; 16] = [
-    0, 1, 0x40, 0x7f, 0x80, 0x81, 0xc0, 0xff,
-    2, 0x3f, 0x41, 0x82, 0xfd, 0x10, 0xf0, 0x55,
+    0, 1, 0x40, 0x7f, 0x80, 0x81, 0xc0, 0xff, 2, 0x3f, 0x41, 0x82, 0xfd, 0x10, 0xf0, 0x55,
 ];
 const MAX_QUERIES: usize = 16;
 
 #[derive(Clone, Copy, Debug)]
-enum Task { Nar, Zero, Negative }
+enum Task {
+    Nar,
+    Zero,
+    Negative,
+}
 impl Task {
     fn name(self) -> &'static str {
-        match self { Self::Nar => "nar", Self::Zero => "zero", Self::Negative => "negative" }
+        match self {
+            Self::Nar => "nar",
+            Self::Zero => "zero",
+            Self::Negative => "negative",
+        }
     }
     fn eligible(self, a: u8, b: u8) -> bool {
         match self {
             Self::Nar => true,
             Self::Zero => a != 0x80 && b != 0x80,
-            Self::Negative => {
-                a != 0x80 && b != 0x80 && b != a.wrapping_neg()
-            }
+            Self::Negative => a != 0x80 && b != 0x80 && b != a.wrapping_neg(),
         }
     }
     fn magnitude(raw: u8) -> u8 {
-        if raw & 0x80 != 0 { raw.wrapping_neg() } else { raw }
+        if raw & 0x80 != 0 {
+            raw.wrapping_neg()
+        } else {
+            raw
+        }
     }
     fn feature_pair(self, a: u8, b: u8) -> (u8, u8) {
         match self {
             Self::Nar => (u8::from(a == 0x80), u8::from(b == 0x80)),
-            Self::Zero => (
-                u8::from(b == a.wrapping_neg()),
-                u8::from(a == 0 && b == 0)
-            ),
+            Self::Zero => (u8::from(b == a.wrapping_neg()), u8::from(a == 0 && b == 0)),
             Self::Negative => {
                 let mag_a = Self::magnitude(a);
                 let mag_b = Self::magnitude(b);
                 (
                     u8::from(a & 0x80 != 0 && mag_a >= mag_b),
-                    u8::from(b & 0x80 != 0 && mag_b > mag_a)
+                    u8::from(b & 0x80 != 0 && mag_b > mag_a),
                 )
             }
         }
@@ -90,16 +103,33 @@ fn discover(task: Task) -> LearnedRule {
     let mut observations = Vec::new();
     let mut queried = BTreeSet::new();
     loop {
-        let select = candidates_pool.iter().copied().enumerate()
+        let select = candidates_pool
+            .iter()
+            .copied()
+            .enumerate()
             .filter_map(|(index, (a, b))| {
-                if queried.contains(&(a, b)) { return None; }
+                if queried.contains(&(a, b)) {
+                    return None;
+                }
                 let (x, y) = task.feature_pair(a, b);
-                let ones = remaining.iter().filter(|&&gate| gate_value(gate, x, y) == 1).count();
-                Some((ones * (remaining.len() - ones), std::cmp::Reverse(index), a, b))
+                let ones = remaining
+                    .iter()
+                    .filter(|&&gate| gate_value(gate, x, y) == 1)
+                    .count();
+                Some((
+                    ones * (remaining.len() - ones),
+                    std::cmp::Reverse(index),
+                    a,
+                    b,
+                ))
             })
             .max();
-        let Some((score, _, a, b)) = select else { break };
-        if score == 0 { break; }
+        let Some((score, _, a, b)) = select else {
+            break;
+        };
+        if score == 0 {
+            break;
+        }
         assert!(observations.len() < MAX_QUERIES, "query budget exhausted");
         let label = task.teacher(a, b);
         let (x, y) = task.feature_pair(a, b);
@@ -115,7 +145,9 @@ fn discover(task: Task) -> LearnedRule {
     let mut unseen_errors = 0usize;
     for a in 0..=u8::MAX {
         for b in 0..=u8::MAX {
-            if !task.eligible(a, b) { continue; }
+            if !task.eligible(a, b) {
+                continue;
+            }
             eligible_count += 1;
             if !queried.contains(&(a, b)) {
                 let (x, y) = task.feature_pair(a, b);
@@ -123,7 +155,13 @@ fn discover(task: Task) -> LearnedRule {
             }
         }
     }
-    LearnedRule { task, gate, examples: observations, eligible_count, unseen_errors }
+    LearnedRule {
+        task,
+        gate,
+        examples: observations,
+        eligible_count,
+        unseen_errors,
+    }
 }
 
 pub struct LearnedAddStatus {
@@ -145,18 +183,31 @@ impl LearnedAddStatus {
     /// Four-way classification, not posit8 ADD magnitude.
     pub fn classify(&self, a: u8, b: u8) -> u8 {
         let (x, y) = Task::Nar.feature_pair(a, b);
-        if gate_value(self.nar.gate, x, y) == 1 { return 1; }
+        if gate_value(self.nar.gate, x, y) == 1 {
+            return 1;
+        }
         let (x, y) = Task::Zero.feature_pair(a, b);
-        if gate_value(self.zero.gate, x, y) == 1 { return 2; }
+        if gate_value(self.zero.gate, x, y) == 1 {
+            return 2;
+        }
         let (x, y) = Task::Negative.feature_pair(a, b);
-        if gate_value(self.negative.gate, x, y) == 1 { 4 } else { 0 }
+        if gate_value(self.negative.gate, x, y) == 1 {
+            4
+        } else {
+            0
+        }
     }
     pub fn oracle_status(a: u8, b: u8) -> u8 {
         let raw = Posit8(a).add(Posit8(b)).0;
-        if raw == 0x80 { 1 }
-        else if raw == 0 { 2 }
-        else if raw & 0x80 != 0 { 4 }
-        else { 0 }
+        if raw == 0x80 {
+            1
+        } else if raw == 0 {
+            2
+        } else if raw & 0x80 != 0 {
+            4
+        } else {
+            0
+        }
     }
     pub fn audit(&self) -> usize {
         let mut errors = 0;
@@ -189,7 +240,9 @@ impl LearnedAddStatus {
         asm.push_str(Self::gate_asm(self.nar.gate));
         asm.push_str("    test eax, eax\n    jnz .Ladd_status_nar\n");
         // Zero features: b == -a (including both zero), and both zero.
-        asm.push_str("    mov al, dil\n    neg al\n    cmp al, sil\n    sete al\n    movzx eax, al\n");
+        asm.push_str(
+            "    mov al, dil\n    neg al\n    cmp al, sil\n    sete al\n    movzx eax, al\n",
+        );
         asm.push_str("    test dil, dil\n    sete dl\n    test sil, sil\n    sete cl\n    and dl, cl\n    movzx edx, dl\n");
         asm.push_str(Self::gate_asm(self.zero.gate));
         asm.push_str("    test eax, eax\n    jnz .Ladd_status_zero\n");
@@ -213,8 +266,11 @@ impl LearnedAddStatus {
         for learned in [&self.nar, &self.zero, &self.negative] {
             println!(
                 "SYNTH_LEARN1E,task={},gate={:?},teacher_queries={},eligible={},unseen_errors={}",
-                learned.task.name(), learned.gate, learned.examples.len(),
-                learned.eligible_count, learned.unseen_errors
+                learned.task.name(),
+                learned.gate,
+                learned.examples.len(),
+                learned.eligible_count,
+                learned.unseen_errors
             );
         }
         println!(
