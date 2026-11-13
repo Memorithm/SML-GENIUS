@@ -18,9 +18,13 @@ fn native_add_status_matches_the_integer_oracle_on_every_pair() {
             // the assembled symbol signature and full-domain parity below.
             let result = unsafe { mem_posit8_learned_add_status(a, b) };
             native_differences += usize::from(result != learned.classify(a, b));
-            teacher_differences += usize::from(result != learner::LearnedAddStatus::oracle_status(a, b));
+            teacher_differences +=
+                usize::from(result != learner::LearnedAddStatus::oracle_status(a, b));
             let class = match result {
-                0 => 0, 1 => 1, 2 => 2, 4 => 3,
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                4 => 3,
                 _ => panic!("unexpected native status {result}"),
             };
             counts[class] += 1;
