@@ -1,0 +1,98 @@
+name: SYNTH-LEARN1H learned Boolean magnitude compare and native pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_magnitude_compare.rs'
+      - 'research/boolean-posit/posit8_active_magnitude_compare_native_test.rs'
+      - 'research/boolean-posit/posit8_active_neg8.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1H_MAGNITUDE_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1h-magnitude.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_magnitude_compare.rs'
+      - 'research/boolean-posit/posit8_active_magnitude_compare_native_test.rs'
+      - '.github/workflows/posit8-synth-learn1h-magnitude.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learn-magnitude-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install exact Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict formatting checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_magnitude_compare.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_magnitude_compare_native_test.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_neg8.rs
+      - name: Learn comparator gates and exhaust all byte and posit pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_magnitude_compare.rs -o "$RUNNER_TEMP/posit8-magnitude-unit"
+          "$RUNNER_TEMP/posit8-magnitude-unit" --nocapture | tee "$RUNNER_TEMP/posit8-magnitude-unit.txt"
+          grep -Fq 'test tests::five_comparison_gates_are_actively_selected ... ok' "$RUNNER_TEMP/posit8-magnitude-unit.txt"
+          grep -Fq 'test tests::learned_comparison_exact_on_every_posit8_pair ... ok' "$RUNNER_TEMP/posit8-magnitude-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-magnitude-unit.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_magnitude_compare.rs -o "$RUNNER_TEMP/posit8-magnitude-learn"
+          "$RUNNER_TEMP/posit8-magnitude-learn" --report | tee "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_GATE,stage=bit_greater,gate=AAndNotB,teacher_queries=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_GATE,stage=bit_equal,gate=Xnor,teacher_queries=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_GATE,stage=greater_qualified,gate=Existing\(And\),teacher_queries=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_GATE,stage=greater_merge,gate=Existing\(Or\),teacher_queries=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_GATE,stage=equal_merge,gate=Existing\(And\),teacher_queries=[1-9][0-9]*,unseen_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+          grep -E '^SYNTH_LEARN1H_COMPOSED,unary_queries=[1-9][0-9]*,total_queries=[1-9][0-9]*,raw_pairs=65536,raw_errors=0,posit_pairs=65536,posit_errors=0' "$RUNNER_TEMP/posit8-magnitude-report.txt"
+      - name: Compile actual native arithmetic pipeline and exhaustively verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_neg8.rs -o "$RUNNER_TEMP/posit8-negation-learn"
+          "$RUNNER_TEMP/posit8-negation-learn" --emit-gas > "$RUNNER_TEMP/posit8-negation.s"
+          "$RUNNER_TEMP/posit8-magnitude-learn" --emit-gas > "$RUNNER_TEMP/posit8-magnitude.s"
+          for unit in negation magnitude; do
+            gcc -c -x assembler "$RUNNER_TEMP/posit8-$unit.s" -o "$RUNNER_TEMP/posit8-$unit.o"
+            objdump -d "$RUNNER_TEMP/posit8-$unit.o" > "$RUNNER_TEMP/posit8-$unit.disasm"
+            sha256sum "$RUNNER_TEMP/posit8-$unit.o" >> "$RUNNER_TEMP/posit8-objects-hashes.txt"
+          done
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_magnitude_compare_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-negation.o" \
+            -C "link-arg=$RUNNER_TEMP/posit8-magnitude.o" \
+            -o "$RUNNER_TEMP/posit8-magnitude-native"
+          "$RUNNER_TEMP/posit8-magnitude-native" --nocapture | tee "$RUNNER_TEMP/posit8-magnitude-native.txt"
+          grep -Fq 'SYNTH_LEARN1H_NATIVE,raw_pairs=65536,posit_pairs=65536,' "$RUNNER_TEMP/posit8-magnitude-native.txt"
+          grep -Fq 'raw_mismatches=0,posit_mismatches=0,nar_pairs=511' "$RUNNER_TEMP/posit8-magnitude-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-magnitude-native.txt"
+      - name: Retain source SHA, machine code and full-pair audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1h-magnitude-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-magnitude-unit.txt
+            ${{ runner.temp }}/posit8-magnitude-report.txt
+            ${{ runner.temp }}/posit8-magnitude-native.txt
+            ${{ runner.temp }}/posit8-negation.s
+            ${{ runner.temp }}/posit8-negation.o
+            ${{ runner.temp }}/posit8-negation.disasm
+            ${{ runner.temp }}/posit8-magnitude.s
+            ${{ runner.temp }}/posit8-magnitude.o
+            ${{ runner.temp }}/posit8-magnitude.disasm
+            ${{ runner.temp }}/posit8-objects-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21
