@@ -27,11 +27,9 @@ impl LearnedByteMultiplier {
     /// 16-bit sum; never use host integer ADD for production arithmetic.
     fn add_words(&self, lhs: u16, rhs: u16) -> u16 {
         let lower = self.adder.add_byte(lhs as u8, rhs as u8, 0);
-        let upper = self.adder.add_byte(
-            (lhs >> 8) as u8,
-            (rhs >> 8) as u8,
-            (lower >> 8) as u8,
-        );
+        let upper = self
+            .adder
+            .add_byte((lhs >> 8) as u8, (rhs >> 8) as u8, (lower >> 8) as u8);
         (lower & 0xff) | ((upper & 0xff) << 8)
     }
     pub fn multiply(&self, a: u8, b: u8) -> u16 {
@@ -73,8 +71,16 @@ impl LearnedByteMultiplier {
         asm.push_str("    mov byte ptr [rsp+2], 0\n    mov byte ptr [rsp+3], 0\n");
         for shift in 0..8 {
             // partial = (a << shift) & -bit(b,shift), stored little endian.
-            writeln!(&mut asm, "    movzx eax, byte ptr [rsp]\n    shl eax, {shift}").unwrap();
-            writeln!(&mut asm, "    movzx ecx, byte ptr [rsp+1]\n    shr ecx, {shift}").unwrap();
+            writeln!(
+                &mut asm,
+                "    movzx eax, byte ptr [rsp]\n    shl eax, {shift}"
+            )
+            .unwrap();
+            writeln!(
+                &mut asm,
+                "    movzx ecx, byte ptr [rsp+1]\n    shr ecx, {shift}"
+            )
+            .unwrap();
             asm.push_str("    and ecx, 1\n    neg ecx\n    and eax, ecx\n");
             asm.push_str("    mov word ptr [rsp+4], ax\n");
             // Accumulate the 8 low bits and retain the carry-out byte.
@@ -139,7 +145,11 @@ mod tests {
     fn native_emitter_links_real_learned_adder_no_multiply_lookup() {
         let asm = LearnedByteMultiplier::train().emit_gas();
         assert!(asm.contains("mem_posit8_learned_u8_mul_u16:"));
-        assert_eq!(asm.matches("    call mem_posit8_learned_ripple_add_u8").count(), 16);
+        assert_eq!(
+            asm.matches("    call mem_posit8_learned_ripple_add_u8")
+                .count(),
+            16
+        );
         assert!(asm.contains("    mov word ptr [rsp+4], ax"));
         assert!(asm.contains("    lea rsp, [rsp+56]"));
         assert!(!asm.contains("    imul "));
