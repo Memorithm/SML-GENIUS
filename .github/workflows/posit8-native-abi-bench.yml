@@ -1,0 +1,146 @@
+name: Posit8 paired native assembly latency measurement
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_native_bench.rs'
+      - 'research/boolean-posit/POSIT8_NATIVE_BENCH_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-native-abi-bench.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_native_bench.rs'
+      - 'research/boolean-posit/POSIT8_NATIVE_BENCH_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-native-abi-bench.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  native-assembly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Rust format and exact BDD plus compiler tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_x86_64_emit.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_complement_edges.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bdd_synth.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_native_bench.rs
+          rustc --edition 2021 -O -D warnings --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-asm-generator-tests"
+          "$RUNNER_TEMP/posit8-asm-generator-tests" --nocapture | tee "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
+      - name: Compare direct and cached-selector x86 machine code on all pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bdd-gas-generator"
+          for op in add mul; do
+            for mode in direct cached ce; do
+              if [ "$mode" = ce ]; then
+                ARG="--emit-x86-ce-$op"
+                SYMBOL="mem_posit8_ce_$op"
+              elif [ "$mode" = cached ]; then
+                ARG="--emit-x86-cached-$op"
+                SYMBOL="mem_posit8_asm_cached_$op"
+              else
+                ARG="--emit-x86-$op"
+                SYMBOL="mem_posit8_asm_$op"
+              fi
+              PREFIX="$RUNNER_TEMP/posit8-asm-$mode-$op"
+              "$RUNNER_TEMP/posit8-bdd-gas-generator" "$ARG" > "$PREFIX.s"
+              gcc -c -x assembler "$PREFIX.s" -o "$PREFIX.o"
+              objdump -d -M intel "$PREFIX.o" > "$PREFIX-disassembly.txt"
+              nm --defined-only "$PREFIX.o" | grep -q "$SYMBOL"
+              wc -c "$PREFIX.s" "$PREFIX.o" | tee "$PREFIX-sizes.txt"
+              cat > "$PREFIX-verify.rs" <<RS
+          #[path = "$GITHUB_WORKSPACE/research/boolean-posit/posit8_circuit_synth.rs"]
+          #[allow(dead_code)]
+          mod original;
+          unsafe extern "C" {
+              fn $SYMBOL(a: u8, b: u8) -> u8;
+          }
+          #[test]
+          fn all_65536_pairs_equal_reference() {
+              for a in 0..=255u8 {
+                  for b in 0..=255u8 {
+                      let expected = if "$op" == "add" {
+                          original::Posit8(a).add(original::Posit8(b)).0
+                      } else {
+                          original::Posit8(a).mul(original::Posit8(b)).0
+                      };
+                      let actual = unsafe { $SYMBOL(a, b) };
+                      assert_eq!(actual, expected, "a={a} b={b}");
+                  }
+              }
+          }
+          RS
+              rustc --edition 2021 -O -D warnings --test "$PREFIX-verify.rs" \
+                -C link-arg="$PREFIX.o" -o "$PREFIX-verify"
+              "$PREFIX-verify" --nocapture | tee "$PREFIX-verify.txt"
+              grep -Fq 'test all_65536_pairs_equal_reference ... ok' "$PREFIX-verify.txt"
+              grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$PREFIX-verify.txt"
+            done
+            old_size=$(stat -c %s "$RUNNER_TEMP/posit8-asm-direct-$op.o")
+            new_size=$(stat -c %s "$RUNNER_TEMP/posit8-asm-cached-$op.o")
+            ce_size=$(stat -c %s "$RUNNER_TEMP/posit8-asm-ce-$op.o")
+            echo "ISA_CODE_SIZE op=$op direct_obj=$old_size cached_obj=$new_size ce_obj=$ce_size" | tee -a "$RUNNER_TEMP/posit8-asm-size-comparison.txt"
+            test "$new_size" -lt "$old_size"
+          done
+      - name: Benchmark paired native modes on this exact CPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "HEAD_SHA=$GITHUB_SHA"
+            rustc --version
+            uname -m
+            lscpu
+          } > "$RUNNER_TEMP/posit8-bench-host.txt"
+          obj_args=()
+          for op in add mul; do
+            for mode in direct cached ce; do
+              obj="$RUNNER_TEMP/posit8-asm-$mode-$op.o"
+              test -s "$obj"
+              obj_args+=("-C" "link-arg=$obj")
+              sha256sum "$obj" >> "$RUNNER_TEMP/posit8-bench-shas.txt"
+            done
+          done
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_native_bench.rs "${obj_args[@]}" -o "$RUNNER_TEMP/posit8-bench-test"
+          "$RUNNER_TEMP/posit8-bench-test" --nocapture | tee "$RUNNER_TEMP/posit8-bench-test.txt"
+          grep -Eq 'test result: ok[.] 3 passed; 0 failed;' "$RUNNER_TEMP/posit8-bench-test.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_native_bench.rs "${obj_args[@]}" -o "$RUNNER_TEMP/posit8-bench-bin"
+          "$RUNNER_TEMP/posit8-bench-bin" | tee "$RUNNER_TEMP/posit8-bench-measurements.txt"
+          test "$(grep -c '^POSIT8_BENCH,operation=' "$RUNNER_TEMP/posit8-bench-measurements.txt")" -eq 6
+
+      - name: Preserve both machine-code variants and full exhaustive evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-paired-native-bench-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-asm-generator-tests.txt
+            ${{ runner.temp }}/posit8-asm-*.s
+            ${{ runner.temp }}/posit8-asm-*.o
+            ${{ runner.temp }}/posit8-asm-*-disassembly.txt
+            ${{ runner.temp }}/posit8-asm-*-sizes.txt
+            ${{ runner.temp }}/posit8-asm-*-verify.txt
+            ${{ runner.temp }}/posit8-asm-size-comparison.txt
+            ${{ runner.temp }}/posit8-bench-host.txt
+            ${{ runner.temp }}/posit8-bench-shas.txt
+            ${{ runner.temp }}/posit8-bench-test.txt
+            ${{ runner.temp }}/posit8-bench-measurements.txt
+          if-no-files-found: warn
+          retention-days: 21
