@@ -1,0 +1,87 @@
+name: SYNTH-LEARN1C active gate synthesis and native sign subcircuits
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_sign_gates.rs'
+      - 'research/boolean-posit/posit8_active_sign_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1C_SIGN_GATES_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1c-sign.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_sign_gates.rs'
+      - 'research/boolean-posit/posit8_active_sign_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1C_SIGN_GATES_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1c-sign.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  active-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89.0
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict Rustfmt
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_sign_gates.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_sign_native_test.rs
+      - name: Learn gate structure and audit both exhaustive subdomains
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -O -D warnings --test research/boolean-posit/posit8_active_sign_gates.rs \
+            -o "$RUNNER_TEMP/posit8-sign-unit"
+          "$RUNNER_TEMP/posit8-sign-unit" --nocapture | tee "$RUNNER_TEMP/posit8-sign-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-sign-unit.txt"
+          rustc --edition 2021 -O -D warnings research/boolean-posit/posit8_active_sign_gates.rs \
+            -o "$RUNNER_TEMP/posit8-sign-compiler"
+          "$RUNNER_TEMP/posit8-sign-compiler" | tee "$RUNNER_TEMP/posit8-sign-report.txt"
+          grep -E '^SYNTH_LEARN1C,op=add,gate=Or,teacher_queries=[0-9]+,eligible=[0-9]+,unseen_errors=0,exact_subdomain=true' "$RUNNER_TEMP/posit8-sign-report.txt"
+          grep -E '^SYNTH_LEARN1C,op=mul,gate=Xor,teacher_queries=[0-9]+,eligible=64516,unseen_errors=0,exact_subdomain=true' "$RUNNER_TEMP/posit8-sign-report.txt"
+      - name: Assemble genuinely learned one-gate Boolean ISA and verify native ABI
+        run: |
+          set -euo pipefail
+          for op in add mul; do
+            "$RUNNER_TEMP/posit8-sign-compiler" "--emit-x86-$op-sign" > "$RUNNER_TEMP/posit8-sign-$op.s"
+            gcc -x assembler -c "$RUNNER_TEMP/posit8-sign-$op.s" -o "$RUNNER_TEMP/posit8-sign-$op.o"
+            objdump -d "$RUNNER_TEMP/posit8-sign-$op.o" > "$RUNNER_TEMP/posit8-sign-$op.disasm"
+            sha256sum "$RUNNER_TEMP/posit8-sign-$op.o" >> "$RUNNER_TEMP/posit8-sign-hashes.txt"
+          done
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_sign_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-sign-add.o" \
+            -C "link-arg=$RUNNER_TEMP/posit8-sign-mul.o" \
+            -o "$RUNNER_TEMP/posit8-sign-native"
+          "$RUNNER_TEMP/posit8-sign-native" --nocapture | tee "$RUNNER_TEMP/posit8-sign-native.txt"
+          grep -Fq 'SYNTH_LEARN1C_NATIVE,op=add,eligible=' "$RUNNER_TEMP/posit8-sign-native.txt"
+          grep -Fq 'SYNTH_LEARN1C_NATIVE,op=mul,eligible=64516,native_mismatches=0,unseen_errors=0' "$RUNNER_TEMP/posit8-sign-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-sign-native.txt"
+      - name: Retain teacher queries and verified machine code artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1c-sign-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-sign-unit.txt
+            ${{ runner.temp }}/posit8-sign-report.txt
+            ${{ runner.temp }}/posit8-sign-native.txt
+            ${{ runner.temp }}/posit8-sign-add.s
+            ${{ runner.temp }}/posit8-sign-mul.s
+            ${{ runner.temp }}/posit8-sign-add.o
+            ${{ runner.temp }}/posit8-sign-mul.o
+            ${{ runner.temp }}/posit8-sign-add.disasm
+            ${{ runner.temp }}/posit8-sign-mul.disasm
+            ${{ runner.temp }}/posit8-sign-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21
