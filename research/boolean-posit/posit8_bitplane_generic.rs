@@ -65,15 +65,17 @@ impl ComplementCircuit {
             let invert_low = node.low & 1 != 0;
             let invert_high = node.high & 1 != 0;
             for word in 0..W {
-                let low = scratch.gates[low_id][word]
-                    ^ if invert_low { u64::MAX } else { 0 };
-                let high = scratch.gates[high_id][word]
-                    ^ if invert_high { u64::MAX } else { 0 };
+                let low = scratch.gates[low_id][word] ^ if invert_low { u64::MAX } else { 0 };
+                let high = scratch.gates[high_id][word] ^ if invert_high { u64::MAX } else { 0 };
                 let selected = scratch.inputs[variable][word];
                 scratch.gates[index + 1][word] = low ^ ((low ^ high) & selected);
             }
         }
-        if self.roots.iter().any(|&root| root >> 1 >= scratch.gates.len()) {
+        if self
+            .roots
+            .iter()
+            .any(|&root| root >> 1 >= scratch.gates.len())
+        {
             return Err("invalid packed output reference");
         }
         for (lane, result) in outputs.iter_mut().enumerate() {
@@ -159,9 +161,15 @@ mod tests {
                 let mut a = vec![0xa5; len];
                 let mut b = vec![0x5a; len];
                 let mut c = vec![0x33; len];
-                graph.eval_packed_stream(&pairs, &mut scratch1, &mut a).unwrap();
-                graph.eval_packed_stream(&pairs, &mut scratch4, &mut b).unwrap();
-                graph.eval_packed_stream(&pairs, &mut scratch8, &mut c).unwrap();
+                graph
+                    .eval_packed_stream(&pairs, &mut scratch1, &mut a)
+                    .unwrap();
+                graph
+                    .eval_packed_stream(&pairs, &mut scratch4, &mut b)
+                    .unwrap();
+                graph
+                    .eval_packed_stream(&pairs, &mut scratch8, &mut c)
+                    .unwrap();
                 assert_eq!(a, b, "width1/4 len={len}");
                 assert_eq!(b, c, "width4/8 len={len}");
             }
@@ -176,11 +184,19 @@ mod tests {
         let mut normal = graph.new_packed_scratch::<8>();
         let inputs = [(0u8, 0u8); 9];
         let mut output = [0x5au8; 9];
-        assert!(graph.eval_packed_stream(&inputs, &mut zero, &mut output).is_err());
-        assert!(graph.eval_packed_stream(&inputs, &mut too_wide, &mut output).is_err());
-        assert!(graph.eval_packed_chunk(&inputs, &mut normal, &mut output[..8]).is_err());
+        assert!(graph
+            .eval_packed_stream(&inputs, &mut zero, &mut output)
+            .is_err());
+        assert!(graph
+            .eval_packed_stream(&inputs, &mut too_wide, &mut output)
+            .is_err());
+        assert!(graph
+            .eval_packed_chunk(&inputs, &mut normal, &mut output[..8])
+            .is_err());
         normal.gates.pop();
-        assert!(graph.eval_packed_stream(&inputs, &mut normal, &mut output).is_err());
+        assert!(graph
+            .eval_packed_stream(&inputs, &mut normal, &mut output)
+            .is_err());
         assert_eq!(output, [0x5a; 9]);
     }
 }
