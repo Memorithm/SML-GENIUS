@@ -53,8 +53,15 @@ pub enum Gate {
 impl Gate {
     fn candidates() -> [Self; 9] {
         [
-            Self::Zero, Self::One, Self::SignA, Self::SignB,
-            Self::NotA, Self::NotB, Self::And, Self::Or, Self::Xor,
+            Self::Zero,
+            Self::One,
+            Self::SignA,
+            Self::SignB,
+            Self::NotA,
+            Self::NotB,
+            Self::And,
+            Self::Or,
+            Self::Xor,
         ]
     }
     pub fn evaluate(self, a: u8, b: u8) -> u8 {
@@ -100,16 +107,40 @@ impl Gate {
 }
 
 const ADD_POOL: [(u8, u8); 16] = [
-    (0, 0), (1, 1), (0, 0xff), (0xff, 0), (0xff, 0xff),
-    (0x40, 0x40), (0x7f, 1), (0, 0x81), (0x81, 0),
-    (0x81, 0x81), (0xc0, 0xc0), (0xff, 0xc0),
-    (0x40, 0), (0, 0x40), (0x7f, 0x7f), (1, 0),
+    (0, 0),
+    (1, 1),
+    (0, 0xff),
+    (0xff, 0),
+    (0xff, 0xff),
+    (0x40, 0x40),
+    (0x7f, 1),
+    (0, 0x81),
+    (0x81, 0),
+    (0x81, 0x81),
+    (0xc0, 0xc0),
+    (0xff, 0xc0),
+    (0x40, 0),
+    (0, 0x40),
+    (0x7f, 0x7f),
+    (1, 0),
 ];
 const MUL_POOL: [(u8, u8); 16] = [
-    (1, 1), (1, 0x81), (0x81, 1), (0x81, 0x81),
-    (0x40, 0x7f), (0x40, 0xc0), (0xc0, 0x40), (0xc0, 0xc0),
-    (0xff, 0xff), (0xff, 0x7f), (0x7f, 0xff), (0x7f, 0x7f),
-    (1, 0xff), (0xff, 1), (0x81, 0x7f), (0x7f, 0x81),
+    (1, 1),
+    (1, 0x81),
+    (0x81, 1),
+    (0x81, 0x81),
+    (0x40, 0x7f),
+    (0x40, 0xc0),
+    (0xc0, 0x40),
+    (0xc0, 0xc0),
+    (0xff, 0xff),
+    (0xff, 0x7f),
+    (0x7f, 0xff),
+    (0x7f, 0x7f),
+    (1, 0xff),
+    (0xff, 1),
+    (0x81, 0x7f),
+    (0x7f, 0x81),
 ];
 #[derive(Debug)]
 pub struct Discovery {
@@ -152,7 +183,10 @@ pub fn discover(operation: Operation) -> Discovery {
         let expected = operation.teacher(a, b);
         observations.push((a, b, expected));
         remaining.retain(|gate| gate.evaluate(a, b) == expected);
-        assert!(!remaining.is_empty(), "candidate grammar cannot fit teacher");
+        assert!(
+            !remaining.is_empty(),
+            "candidate grammar cannot fit teacher"
+        );
     }
     assert!(!remaining.is_empty() && observations.len() <= pool.len());
     remaining.sort_by_key(|gate| gate.cost());
