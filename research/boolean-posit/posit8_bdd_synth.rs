@@ -7,6 +7,9 @@
 #[allow(dead_code)]
 mod source;
 
+#[path = "posit8_x86_64_emit.rs"]
+mod x86_64_emit;
+
 use source::Posit8;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -205,6 +208,19 @@ impl LearnedCircuit {
 }
 fn main() {
     let arg = std::env::args().nth(1);
+    let assembly_operation = match arg.as_deref() {
+        Some("--emit-x86-add") => Some(Operation::Add),
+        Some("--emit-x86-mul") => Some(Operation::Mul),
+        _ => None,
+    };
+    if let Some(operation) = assembly_operation {
+        let learned = LearnedCircuit::synthesize(operation).expect("bounded synthesis");
+        print!(
+            "{}",
+            learned.emit_sysv_x86_64().expect("bounded assembly output")
+        );
+        return;
+    }
     let operation = match arg.as_deref() {
         Some("--emit-add") => Some(Operation::Add),
         Some("--emit-mul") => Some(Operation::Mul),

@@ -1,0 +1,105 @@
+name: Posit8 true x86-64 GNU assembly lowering and exhaustive ABI verification
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/posit8_x86_64_emit.rs'
+      - 'research/boolean-posit/POSIT8_X86_64_NATIVE_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-x86-64-gas.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/posit8_x86_64_emit.rs'
+      - 'research/boolean-posit/POSIT8_X86_64_NATIVE_PROTOCOL_20261112.md'
+      - '.github/workflows/posit8-x86-64-gas.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-assembly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Format and regression tests for Rust gate-to-assembly compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_x86_64_emit.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bdd_synth.rs
+          rustc --edition 2021 -O -D warnings --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-asm-generator-tests"
+          "$RUNNER_TEMP/posit8-asm-generator-tests" --nocapture | tee "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-asm-generator-tests.txt"
+      - name: Generate, assemble, link, and exhaustively compare ADD and MUL
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bdd-gas-generator"
+          for op in add mul; do
+            SRC="$RUNNER_TEMP/posit8-asm-$op.s"
+            OBJ="$RUNNER_TEMP/posit8-asm-$op.o"
+            "$RUNNER_TEMP/posit8-bdd-gas-generator" "--emit-x86-$op" > "$SRC"
+            gcc -c -x assembler "$SRC" -o "$OBJ"
+            objdump -d -M intel "$OBJ" > "$RUNNER_TEMP/posit8-asm-$op-disassembly.txt"
+            nm --defined-only "$OBJ" | grep -q "mem_posit8_asm_$op"
+            wc -c "$SRC" "$OBJ" | tee "$RUNNER_TEMP/posit8-asm-$op-sizes.txt"
+            cat > "$RUNNER_TEMP/posit8-asm-$op-verify.rs" <<RS
+          #[path = "$GITHUB_WORKSPACE/research/boolean-posit/posit8_circuit_synth.rs"]
+          #[allow(dead_code)]
+          mod original;
+          unsafe extern "C" {
+              fn mem_posit8_asm_$op(a: u8, b: u8) -> u8;
+          }
+          #[test]
+          fn all_65536_pairs_equal_reference() {
+              for a in 0..=255u8 {
+                  for b in 0..=255u8 {
+                      let expected = if "$op" == "add" {
+                          original::Posit8(a).add(original::Posit8(b)).0
+                      } else {
+                          original::Posit8(a).mul(original::Posit8(b)).0
+                      };
+                      let actual = unsafe { mem_posit8_asm_$op(a, b) };
+                      assert_eq!(actual, expected, "a={a} b={b}");
+                  }
+              }
+          }
+          RS
+            rustc --edition 2021 -O -D warnings --test "$RUNNER_TEMP/posit8-asm-$op-verify.rs" \
+              -C link-arg="$OBJ" -o "$RUNNER_TEMP/posit8-asm-$op-verify"
+            "$RUNNER_TEMP/posit8-asm-$op-verify" --nocapture | tee "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
+            grep -Fq 'test all_65536_pairs_equal_reference ... ok' "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
+            grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-asm-$op-verify.txt"
+          done
+      - name: Retain source, native machine code, disassembly and correctness evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-native-x86-sysv-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-asm-generator-tests.txt
+            ${{ runner.temp }}/posit8-asm-add.s
+            ${{ runner.temp }}/posit8-asm-mul.s
+            ${{ runner.temp }}/posit8-asm-add.o
+            ${{ runner.temp }}/posit8-asm-mul.o
+            ${{ runner.temp }}/posit8-asm-add-disassembly.txt
+            ${{ runner.temp }}/posit8-asm-mul-disassembly.txt
+            ${{ runner.temp }}/posit8-asm-add-sizes.txt
+            ${{ runner.temp }}/posit8-asm-mul-sizes.txt
+            ${{ runner.temp }}/posit8-asm-add-verify.txt
+            ${{ runner.temp }}/posit8-asm-mul-verify.txt
+          if-no-files-found: warn
+          retention-days: 21
