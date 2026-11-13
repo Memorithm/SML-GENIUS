@@ -63,7 +63,11 @@ fn is_holdout(input: u16) -> bool {
 #[derive(Clone, Copy, Debug)]
 enum Gate {
     Constant(u8),
-    Select { variable: u8, low: usize, high: usize },
+    Select {
+        variable: u8,
+        low: usize,
+        high: usize,
+    },
 }
 #[derive(Debug)]
 pub struct Circuit {
@@ -179,7 +183,11 @@ impl Circuit {
         loop {
             match self.nodes[at] {
                 Gate::Constant(label) => return label,
-                Gate::Select { variable, low, high } => {
+                Gate::Select {
+                    variable,
+                    low,
+                    high,
+                } => {
                     at = if (packed >> variable) & 1 == 0 {
                         low
                     } else {
@@ -227,7 +235,11 @@ impl Circuit {
                     writeln!(&mut code, "    mov eax, {}", result).unwrap();
                     code.push_str("    ret\n");
                 }
-                Gate::Select { variable, low, high } => {
+                Gate::Select {
+                    variable,
+                    low,
+                    high,
+                } => {
                     let argument = if variable % 2 == 0 { "dil" } else { "sil" };
                     let mask = 1u8 << (variable / 2);
                     writeln!(&mut code, "    test {argument}, {mask}").unwrap();
@@ -296,7 +308,12 @@ fn acquire(
     batch.extend(disagreement.iter().take(disagreement_quota).copied());
     batch.extend(exploration.iter().take(count - batch.len()).copied());
     if batch.len() < count {
-        batch.extend(disagreement.into_iter().skip(disagreement_quota).take(count - batch.len()));
+        batch.extend(
+            disagreement
+                .into_iter()
+                .skip(disagreement_quota)
+                .take(count - batch.len()),
+        );
     }
     batch
 }
