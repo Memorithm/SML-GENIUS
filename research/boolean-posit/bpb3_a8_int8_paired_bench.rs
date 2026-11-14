@@ -115,8 +115,7 @@ fn checked_i128_batch4_into(
         })
     });
     for (row, output) in outputs.iter_mut().enumerate() {
-        *output = a8::dot_i8_fused_batch4_i128_control(view.row(row).unwrap(), &masks)
-            .unwrap();
+        *output = a8::dot_i8_fused_batch4_i128_control(view.row(row).unwrap(), &masks).unwrap();
     }
 }
 
@@ -242,8 +241,8 @@ fn run(rows: usize, measure: bool) {
         "batch4_i32",
         "batch4_i128_control",
     ]
-        .iter()
-        .enumerate()
+    .iter()
+    .enumerate()
     {
         let ns = median(&mut samples[arm]);
         println!(
