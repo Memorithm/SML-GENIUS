@@ -1,0 +1,93 @@
+name: SYNTH-LEARN1F learned raw-bit detectors and native MUL status
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_raw_mul.rs'
+      - 'research/boolean-posit/posit8_active_raw_mul_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1F_RAW_BIT_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1f-raw.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_raw_mul.rs'
+      - 'research/boolean-posit/posit8_active_raw_mul_native_test.rs'
+      - '.github/workflows/posit8-synth-learn1f-raw.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learn-and-compile-raw-predicates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_raw_mul.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_raw_mul_native_test.rs
+      - name: Unit tests including 6561-hypothesis active learning
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_raw_mul.rs -o "$RUNNER_TEMP/posit8-raw-learn-unit"
+          "$RUNNER_TEMP/posit8-raw-learn-unit" --nocapture | tee "$RUNNER_TEMP/posit8-raw-learn-unit.txt"
+          grep -Fq 'test tests::eight_raw_bits_are_learned_without_feature_oracle_labels ... ok' "$RUNNER_TEMP/posit8-raw-learn-unit.txt"
+          grep -Fq 'test tests::learned_boolean_composition_is_exact_on_full_mul_domain ... ok' "$RUNNER_TEMP/posit8-raw-learn-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-raw-learn-unit.txt"
+      - name: Verify exact learned masks and oracle status audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_raw_mul.rs -o "$RUNNER_TEMP/posit8-raw-learn"
+          "$RUNNER_TEMP/posit8-raw-learn" --report | tee "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+          grep -E '^SYNTH_LEARN1F_RAW,task=nar,mask=0xff,value=0x80,queries=[1-9][0-9]*,remaining=1,unseen_errors=0' "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+          grep -E '^SYNTH_LEARN1F_RAW,task=zero,mask=0xff,value=0x00,queries=[1-9][0-9]*,remaining=1,unseen_errors=0' "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+          grep -E '^SYNTH_LEARN1F_RAW,task=sign,mask=0x80,value=0x80,queries=[1-9][0-9]*,remaining=1,unseen_errors=0' "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+          for task in nar zero negative; do
+            grep -E "^SYNTH_LEARN1F_GATE,task=$task,gate=(Or|Xor),queries=[1-9][0-9]*,unseen_errors=0" "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+          done
+          grep -E '^SYNTH_LEARN1F_COMPOSED,op=mul,teacher_queries=[1-9][0-9]*,domain=65536,errors=0' "$RUNNER_TEMP/posit8-raw-learn-report.txt"
+      - name: Assemble learned raw-byte gates and verify native code exhaustively
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/posit8-raw-learn" --emit-gas > "$RUNNER_TEMP/posit8-raw-learn.s"
+          gcc -x assembler -c "$RUNNER_TEMP/posit8-raw-learn.s" -o "$RUNNER_TEMP/posit8-raw-learn.o"
+          objdump -d "$RUNNER_TEMP/posit8-raw-learn.o" > "$RUNNER_TEMP/posit8-raw-learn.disasm"
+          sha256sum "$RUNNER_TEMP/posit8-raw-learn.o" > "$RUNNER_TEMP/posit8-raw-learn-hashes.txt"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_raw_mul_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-raw-learn.o" \
+            -o "$RUNNER_TEMP/posit8-raw-learn-native"
+          "$RUNNER_TEMP/posit8-raw-learn-native" --nocapture | tee "$RUNNER_TEMP/posit8-raw-learn-native.txt"
+          grep -Fq 'SYNTH_LEARN1F_NATIVE,operation=mul,pairs=65536,' "$RUNNER_TEMP/posit8-raw-learn-native.txt"
+          grep -Fq 'rust_mismatches=0,oracle_mismatches=0' "$RUNNER_TEMP/posit8-raw-learn-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-raw-learn-native.txt"
+      - name: Preserve exact-head provenance, learned bits and executable evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1f-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-raw-learn-unit.txt
+            ${{ runner.temp }}/posit8-raw-learn-report.txt
+            ${{ runner.temp }}/posit8-raw-learn-native.txt
+            ${{ runner.temp }}/posit8-raw-learn.s
+            ${{ runner.temp }}/posit8-raw-learn.o
+            ${{ runner.temp }}/posit8-raw-learn.disasm
+            ${{ runner.temp }}/posit8-raw-learn-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21

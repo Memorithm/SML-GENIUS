@@ -1,0 +1,90 @@
+name: SYNTH-LEARN1I actively learned ripple-carry and native byte arithmetic
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_ripple_add.rs'
+      - 'research/boolean-posit/posit8_active_ripple_add_native_test.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1I_RIPPLE_CARRY_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1i-ripple.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_ripple_add.rs'
+      - 'research/boolean-posit/posit8_active_ripple_add_native_test.rs'
+      - '.github/workflows/posit8-synth-learn1i-ripple.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learn-ripple-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89 pinned
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_ripple_add.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_ripple_add_native_test.rs
+      - name: Discover five gates and run complete byte-carry audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_ripple_add.rs \
+            -o "$RUNNER_TEMP/posit8-ripple-unit"
+          "$RUNNER_TEMP/posit8-ripple-unit" --nocapture | tee "$RUNNER_TEMP/posit8-ripple-unit.txt"
+          grep -Fq 'test tests::selected_queries_produce_an_exact_full_adder ... ok' "$RUNNER_TEMP/posit8-ripple-unit.txt"
+          grep -Fq 'test tests::learned_recurrence_reconstructs_all_byte_additions_with_carry ... ok' "$RUNNER_TEMP/posit8-ripple-unit.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-ripple-unit.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_ripple_add.rs \
+            -o "$RUNNER_TEMP/posit8-ripple-learn"
+          "$RUNNER_TEMP/posit8-ripple-learn" --report | tee "$RUNNER_TEMP/posit8-ripple-report.txt"
+          grep -E '^SYNTH_LEARN1I_LOCAL,queries=[1-8],max_queries=8,candidate_functions=[1-9][0-9]*,remaining=1,unseen_cases=[0-9]+,unseen_errors=0' "$RUNNER_TEMP/posit8-ripple-report.txt"
+          grep -E '^SYNTH_LEARN1I_BYTE,operation=unsigned_u8_add_with_carry,inputs=131072,teacher_queries=[1-8],mismatches=0' "$RUNNER_TEMP/posit8-ripple-report.txt"
+      - name: Compile learned Boolean arithmetic and exhaustively verify machine code
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/posit8-ripple-learn" --emit-gas > "$RUNNER_TEMP/posit8-ripple.s"
+          grep -q '^mem_posit8_learned_ripple_add_u8:' "$RUNNER_TEMP/posit8-ripple.s"
+          ! grep -Eq '^[[:space:]]+(add|adc)[[:space:]]' "$RUNNER_TEMP/posit8-ripple.s"
+          gcc -c -x assembler "$RUNNER_TEMP/posit8-ripple.s" -o "$RUNNER_TEMP/posit8-ripple.o"
+          objdump -d "$RUNNER_TEMP/posit8-ripple.o" > "$RUNNER_TEMP/posit8-ripple.disasm"
+          sha256sum "$RUNNER_TEMP/posit8-ripple.o" > "$RUNNER_TEMP/posit8-ripple-hash.txt"
+          wc -c "$RUNNER_TEMP/posit8-ripple.o" > "$RUNNER_TEMP/posit8-ripple-size.txt"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_active_ripple_add_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-ripple.o" \
+            -o "$RUNNER_TEMP/posit8-ripple-native"
+          "$RUNNER_TEMP/posit8-ripple-native" --nocapture | tee "$RUNNER_TEMP/posit8-ripple-native.txt"
+          grep -Fq 'SYNTH_LEARN1I_NATIVE,operation=unsigned_u8_add_with_carry,inputs=131072,' "$RUNNER_TEMP/posit8-ripple-native.txt"
+          grep -Fq 'model_mismatches=0,oracle_mismatches=0' "$RUNNER_TEMP/posit8-ripple-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-ripple-native.txt"
+      - name: Retain source and machine evidence with native parity log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1i-ripple-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-ripple-unit.txt
+            ${{ runner.temp }}/posit8-ripple-report.txt
+            ${{ runner.temp }}/posit8-ripple-native.txt
+            ${{ runner.temp }}/posit8-ripple.s
+            ${{ runner.temp }}/posit8-ripple.o
+            ${{ runner.temp }}/posit8-ripple.disasm
+            ${{ runner.temp }}/posit8-ripple-hash.txt
+            ${{ runner.temp }}/posit8-ripple-size.txt
+          if-no-files-found: warn
+          retention-days: 21
