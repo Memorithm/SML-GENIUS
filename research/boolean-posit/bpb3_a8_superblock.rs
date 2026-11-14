@@ -263,7 +263,7 @@ pub fn dot_i8_fused(bytes: &[u8], activation_planes: &[[u16; GROUPS]; 8]) -> Res
 /// Compute four signed INT8 dots against one canonical A8 block.
 /// The wire is parsed once, and all four products reuse the decoded
 /// group sign/magnitude planes. Outputs are exact in 2^-24 units.
-/// Exact signed four-lane A8 dot in units of 2^-24, parsing the wire once.
+/// Exact signed multi-lane A8 dot in units of 2^-24, parsing the wire once.
 ///
 /// A canonical group contains 16 coefficients, each of magnitude <= 7,
 /// and each signed INT8 activation has magnitude <= 128. Consequently,
@@ -272,18 +272,18 @@ pub fn dot_i8_fused(bytes: &[u8], activation_planes: &[[u16; GROUPS]; 8]) -> Res
 /// The inner accumulation therefore fits in i32, including intermediate
 /// partial sums. Only the dyadic scale application uses checked i128.
 /// No A8 wire change or hardware-specific dependency is introduced.
-pub fn dot_i8_fused_batch4(
+pub fn dot_i8_fused_batch<const LANES: usize>(
     bytes: &[u8],
-    activations: &[[[u16; GROUPS]; 8]; 4],
-) -> Result<[i128; 4], Error> {
+    activations: &[[[u16; GROUPS]; 8]; LANES],
+) -> Result<[i128; LANES], Error> {
     let (modes, exponents, signs, planes) = parse(bytes)?;
-    let mut results = [0i128; 4];
+    let mut results = [0i128; LANES];
     for g in 0..GROUPS {
         let sign = ((signs[g / 4] >> (WIDTH * (g % 4))) & 0xffff) as u16;
         let scale = 1i128
             .checked_shl((i32::from(exponents[g]) + 24) as u32)
             .ok_or(Error::Overflow)?;
-        let mut sums = [0i32; 4];
+        let mut sums = [0i32; LANES];
         for (weight_bit, &weights) in planes[g][..usize::from(modes[g])].iter().enumerate() {
             let negative = weights & sign;
             let positive = weights & !sign;
@@ -294,7 +294,7 @@ pub fn dot_i8_fused_batch4(
                     1i32 << input_bit
                 };
                 let power = (1i32 << weight_bit) * signed_power;
-                for lane in 0..4 {
+                for lane in 0..LANES {
                     let mask = activations[lane][input_bit][g];
                     let signed_count = (positive & mask).count_ones() as i32
                         - (negative & mask).count_ones() as i32;
@@ -302,7 +302,7 @@ pub fn dot_i8_fused_batch4(
                 }
             }
         }
-        for lane in 0..4 {
+        for lane in 0..LANES {
             results[lane] = results[lane]
                 .checked_add(
                     i128::from(sums[lane])
@@ -313,6 +313,15 @@ pub fn dot_i8_fused_batch4(
         }
     }
     Ok(results)
+}
+
+/// Backward-compatible four-lane entrypoint; the generic CPU kernel also
+/// supports eight or more independently prepared activation vectors.
+pub fn dot_i8_fused_batch4(
+    bytes: &[u8],
+    activations: &[[[u16; GROUPS]; 8]; 4],
+) -> Result<[i128; 4], Error> {
+    dot_i8_fused_batch(bytes, activations)
 }
 
 pub fn dot_f64(bytes: &[u8], mask: &[u64; 4]) -> Result<f64, Error> {
