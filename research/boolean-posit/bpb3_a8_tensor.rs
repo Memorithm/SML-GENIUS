@@ -522,6 +522,68 @@ mod tests {
     }
 
     #[test]
+    fn batch4_compact_accumulation_matches_dense_extreme_exponents() {
+        // Exercise all magnitude planes, zero/sign patterns and both legal
+        // exponent boundaries; this stresses the documented i32 bound.
+        let rows: Vec<Vec<u8>> = (0..33)
+            .map(|row| {
+                let base = if row % 2 == 0 { -24 } else { 27 };
+                let groups = std::array::from_fn(|group| {
+                    let mode = 1 + ((row + group) % 3) as u8;
+                    let max = (1i8 << mode) - 1;
+                    let codes = std::array::from_fn(|offset| {
+                        let magnitude = if offset % 3 == 0 {
+                            max
+                        } else {
+                            ((row * 7 + group * 11 + offset * 13) % (usize::from(max as u8) + 1))
+                                as i8
+                        };
+                        if (row + group + offset) % 2 == 0 {
+                            magnitude
+                        } else {
+                            -magnitude
+                        }
+                    });
+                    a8::Group {
+                        mode,
+                        exponent: base,
+                        codes,
+                        sse: 0.0,
+                    }
+                });
+                a8::pack(&a8::Superblock {
+                    base,
+                    groups,
+                    sse: 0.0,
+                })
+                .unwrap()
+            })
+            .collect();
+        let bytes = encode_tensor(&rows).unwrap();
+        let view = TensorView::new(&bytes).unwrap();
+        let inputs: [[i8; 256]; 4] = [
+            [-128; 256],
+            [127; 256],
+            [0; 256],
+            std::array::from_fn(|i| (i as u8).wrapping_mul(73) as i8),
+        ];
+        let outputs = view.signed_i8_matvec_batch4(&inputs).unwrap();
+        for (row, wire) in rows.iter().enumerate() {
+            let (codes, exponents) = a8::unpack(wire).unwrap();
+            for lane in 0..4 {
+                let expected: i128 = (0..256)
+                    .map(|i| {
+                        i128::from(codes[i])
+                            * i128::from(inputs[lane][i])
+                            * (1i128 << (i32::from(exponents[i / 16]) + 24))
+                    })
+                    .sum();
+                assert_eq!(outputs[row][lane], expected, "row {row}, lane {lane}");
+            }
+        }
+    }
+
+    #[test]
     fn corrupt_directory_and_nested_page_fail_closed() {
         let source: Vec<Vec<u8>> = (0..257).map(make_row).collect();
         let original = encode_tensor(&source).unwrap();
