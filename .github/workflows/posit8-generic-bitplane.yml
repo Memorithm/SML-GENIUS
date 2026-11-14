@@ -1,0 +1,95 @@
+name: Posit8 generic 64-to-1024 CPU bitplane exactness and timing
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_bitplane_generic.rs'
+      - 'research/boolean-posit/posit8_bitplane_generic_bench.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/POSIT8_GENERIC_BITPLANE_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-generic-bitplane.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_bitplane_generic.rs'
+      - 'research/boolean-posit/posit8_bitplane_generic_bench.rs'
+      - 'research/boolean-posit/POSIT8_GENERIC_BITPLANE_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-generic-bitplane.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-and-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Exact formatting for modified Boolean engine sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane_generic.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane_generic_bench.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_complement_edges.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bdd_synth.rs
+      - name: Exhaustive constant-width and truncated-tail arithmetic tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-packed-tests"
+          "$RUNNER_TEMP/posit8-packed-tests" --nocapture | tee "$RUNNER_TEMP/posit8-packed-tests.txt"
+          grep -Fq 'test complement_edges::bitplane_generic::tests::exhaustive_add_mul_256_and_512_lanes ... ok' "$RUNNER_TEMP/posit8-packed-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-packed-tests.txt"
+      - name: Optimized Rust binary and 512-lane exhaustive reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-packed"
+          "$RUNNER_TEMP/posit8-packed" --verify-bitslice512 | tee "$RUNNER_TEMP/posit8-packed-verify.txt"
+          grep -Fq 'POSIT8_BITPLANE512_add PASS batches=128 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-packed-verify.txt"
+          grep -Fq 'POSIT8_BITPLANE512_mul PASS batches=128 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-packed-verify.txt"
+          {
+            echo "SHA=$GITHUB_SHA"
+            rustc --version
+            lscpu
+          } > "$RUNNER_TEMP/posit8-packed-host.txt"
+          "$RUNNER_TEMP/posit8-packed" --bench-packed-widths | tee "$RUNNER_TEMP/posit8-packed-bench.txt"
+          test "$(grep -c '^POSIT8_PACKED_BENCH,op=' "$RUNNER_TEMP/posit8-packed-bench.txt")" -eq 2
+      - name: Preserve optional AVX2-target compiler assembly for inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O -C target-cpu=x86-64-v3 \
+            --emit=asm research/boolean-posit/posit8_bdd_synth.rs \
+            -o "$RUNNER_TEMP/posit8-packed-x86-64-v3.s"
+          grep -q 'posit8' "$RUNNER_TEMP/posit8-packed-x86-64-v3.s"
+          {
+            echo "Host-specific vector instructions require kernel-local inspection"
+            grep -Eic 'vpxor|vpand|vpternlog' "$RUNNER_TEMP/posit8-packed-x86-64-v3.s" || true
+          } > "$RUNNER_TEMP/posit8-packed-isa-notes.txt"
+      - name: Archive exact-head correctness performance and native ISA
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-packed-generic-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-packed-tests.txt
+            ${{ runner.temp }}/posit8-packed-verify.txt
+            ${{ runner.temp }}/posit8-packed-host.txt
+            ${{ runner.temp }}/posit8-packed-bench.txt
+            ${{ runner.temp }}/posit8-packed-x86-64-v3.s
+            ${{ runner.temp }}/posit8-packed-isa-notes.txt
+          if-no-files-found: warn
+          retention-days: 21

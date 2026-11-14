@@ -1,0 +1,82 @@
+name: Posit8 exact bitplane256 and paired CPU throughput
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_bitplane256.rs'
+      - 'research/boolean-posit/posit8_bitplane256_bench.rs'
+      - 'research/boolean-posit/posit8_bdd_synth.rs'
+      - 'research/boolean-posit/posit8_complement_edges.rs'
+      - 'research/boolean-posit/POSIT8_BITPLANE256_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-bitplane256.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_bitplane256.rs'
+      - 'research/boolean-posit/posit8_bitplane256_bench.rs'
+      - 'research/boolean-posit/POSIT8_BITPLANE256_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-bitplane256.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-bitplane256:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust 1.89 with rustfmt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict Rustfmt for affected Boolean kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane256.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bitplane256_bench.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_bdd_synth.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_complement_edges.rs
+      - name: Exhaustive 65,536-pair tests for both arithmetic operators
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bitslice256-tests"
+          "$RUNNER_TEMP/posit8-bitslice256-tests" --nocapture | tee "$RUNNER_TEMP/posit8-bitslice256-tests.txt"
+          grep -Fq 'test complement_edges::bitplane256::tests::exhaustive_addition_256_lanes ... ok' "$RUNNER_TEMP/posit8-bitslice256-tests.txt"
+          grep -Fq 'test complement_edges::bitplane256::tests::exhaustive_multiplication_256_lanes ... ok' "$RUNNER_TEMP/posit8-bitslice256-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-bitslice256-tests.txt"
+      - name: Separate optimized binary and prospective paired benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_bdd_synth.rs -o "$RUNNER_TEMP/posit8-bitslice256"
+          "$RUNNER_TEMP/posit8-bitslice256" --verify-bitslice256 | tee "$RUNNER_TEMP/posit8-bitslice256-summary.txt"
+          grep -Fq 'POSIT8_BITPLANE256_add PASS batches=256 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-bitslice256-summary.txt"
+          grep -Fq 'POSIT8_BITPLANE256_mul PASS batches=256 pairs=65536 mismatches=0' "$RUNNER_TEMP/posit8-bitslice256-summary.txt"
+          {
+            echo "SHA=$GITHUB_SHA"
+            rustc --version
+            lscpu
+          } > "$RUNNER_TEMP/posit8-bitslice256-host.txt"
+          "$RUNNER_TEMP/posit8-bitslice256" --bench-bitslice256 | tee "$RUNNER_TEMP/posit8-bitslice256-bench.txt"
+          test "$(grep -c '^POSIT8_BITPLANE256_BENCH,op=' "$RUNNER_TEMP/posit8-bitslice256-bench.txt")" -eq 2
+      - name: Retain pinned CPU, correctness and timing artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-bitplane256-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-bitslice256-tests.txt
+            ${{ runner.temp }}/posit8-bitslice256-summary.txt
+            ${{ runner.temp }}/posit8-bitslice256-host.txt
+            ${{ runner.temp }}/posit8-bitslice256-bench.txt
+          if-no-files-found: warn
+          retention-days: 21
