@@ -1,0 +1,97 @@
+name: SYNTH-LEARN1J learned-carry integer byte multiplication native
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_learned_byte_multiply.rs'
+      - 'research/boolean-posit/posit8_learned_byte_multiply_native_test.rs'
+      - 'research/boolean-posit/posit8_active_ripple_add.rs'
+      - 'research/boolean-posit/SYNTH_LEARN1J_BYTE_MUL_PROTOCOL_20261113.md'
+      - '.github/workflows/posit8-synth-learn1j-mul.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_learned_byte_multiply.rs'
+      - 'research/boolean-posit/posit8_learned_byte_multiply_native_test.rs'
+      - '.github/workflows/posit8-synth-learn1j-mul.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-composition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Exact Rust 1.89 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict Rustfmt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_ripple_add.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_learned_byte_multiply.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_learned_byte_multiply_native_test.rs
+      - name: Verify Rust composition on all 65536 products
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_learned_byte_multiply.rs \
+            -o "$RUNNER_TEMP/posit8-byte-mul-tests"
+          "$RUNNER_TEMP/posit8-byte-mul-tests" --nocapture | tee "$RUNNER_TEMP/posit8-byte-mul-tests.txt"
+          grep -Fq 'test tests::learned_shift_and_add_exact_for_every_byte_product ... ok' "$RUNNER_TEMP/posit8-byte-mul-tests.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-byte-mul-tests.txt"
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_learned_byte_multiply.rs \
+            -o "$RUNNER_TEMP/posit8-byte-mul"
+          "$RUNNER_TEMP/posit8-byte-mul" --report | tee "$RUNNER_TEMP/posit8-byte-mul-report.txt"
+          grep -E '^SYNTH_LEARN1J_MULTIPLY,operation=unsigned_u8_mul_u16,teacher_queries=[1-8],partial_products=8,learned_add8_calls_per_product=16,input_pairs=65536,errors=0' "$RUNNER_TEMP/posit8-byte-mul-report.txt"
+      - name: Assemble and link actual learned carry-gate multiplication
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O research/boolean-posit/posit8_active_ripple_add.rs \
+            -o "$RUNNER_TEMP/posit8-byte-adder-learner"
+          "$RUNNER_TEMP/posit8-byte-adder-learner" --emit-gas > "$RUNNER_TEMP/posit8-byte-add.s"
+          "$RUNNER_TEMP/posit8-byte-mul" --emit-gas > "$RUNNER_TEMP/posit8-byte-mul.s"
+          for unit in add mul; do
+            gcc -c -x assembler "$RUNNER_TEMP/posit8-byte-$unit.s" -o "$RUNNER_TEMP/posit8-byte-$unit.o"
+            objdump -d "$RUNNER_TEMP/posit8-byte-$unit.o" > "$RUNNER_TEMP/posit8-byte-$unit.disasm"
+            sha256sum "$RUNNER_TEMP/posit8-byte-$unit.o" >> "$RUNNER_TEMP/posit8-byte-mul-hashes.txt"
+          done
+          test "$(grep -c 'call mem_posit8_learned_ripple_add_u8' "$RUNNER_TEMP/posit8-byte-mul.s")" -eq 16
+          ! grep -Eq '^[[:space:]]+(imul|mul)[[:space:]]' "$RUNNER_TEMP/posit8-byte-mul.s"
+          rustc --edition 2021 -D warnings -O --test research/boolean-posit/posit8_learned_byte_multiply_native_test.rs \
+            -C "link-arg=$RUNNER_TEMP/posit8-byte-add.o" \
+            -C "link-arg=$RUNNER_TEMP/posit8-byte-mul.o" \
+            -o "$RUNNER_TEMP/posit8-byte-mul-native"
+          "$RUNNER_TEMP/posit8-byte-mul-native" --nocapture | tee "$RUNNER_TEMP/posit8-byte-mul-native.txt"
+          grep -Fq 'SYNTH_LEARN1J_NATIVE,operation=unsigned_u8_mul_u16,pairs=65536,' "$RUNNER_TEMP/posit8-byte-mul-native.txt"
+          grep -Fq 'native_mismatches=0,oracle_mismatches=0' "$RUNNER_TEMP/posit8-byte-mul-native.txt"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-byte-mul-native.txt"
+      - name: Retain exactly qualified native artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-synth-learn1j-byte-mul-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-byte-mul-tests.txt
+            ${{ runner.temp }}/posit8-byte-mul-report.txt
+            ${{ runner.temp }}/posit8-byte-mul-native.txt
+            ${{ runner.temp }}/posit8-byte-add.s
+            ${{ runner.temp }}/posit8-byte-add.o
+            ${{ runner.temp }}/posit8-byte-add.disasm
+            ${{ runner.temp }}/posit8-byte-mul.s
+            ${{ runner.temp }}/posit8-byte-mul.o
+            ${{ runner.temp }}/posit8-byte-mul.disasm
+            ${{ runner.temp }}/posit8-byte-mul-hashes.txt
+          if-no-files-found: warn
+          retention-days: 21
