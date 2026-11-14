@@ -315,6 +315,53 @@ pub fn dot_i8_fused_batch4(
     Ok(results)
 }
 
+/// Historical checked-i128 four-lane control, retained solely for
+/// bit-exact paired comparison with the production research i32 inner loop.
+/// It uses the same canonical wire parse, activation masks, dyadic scaling
+/// and four outputs as dot_i8_fused_batch4; not a second runtime default.
+pub fn dot_i8_fused_batch4_i128_control(
+    bytes: &[u8],
+    activations: &[[[u16; GROUPS]; 8]; 4],
+) -> Result<[i128; 4], Error> {
+    let (modes, exponents, signs, planes) = parse(bytes)?;
+    let mut results = [0i128; 4];
+    for g in 0..GROUPS {
+        let sign = ((signs[g / 4] >> (WIDTH * (g % 4))) & 0xffff) as u16;
+        let scale = 1i128
+            .checked_shl((i32::from(exponents[g]) + 24) as u32)
+            .ok_or(Error::Overflow)?;
+        let mut sums = [0i128; 4];
+        for (weight_bit, &weights) in planes[g][..usize::from(modes[g])].iter().enumerate() {
+            let negative = weights & sign;
+            let positive = weights & !sign;
+            for input_bit in 0..8 {
+                let signed_power = if input_bit == 7 {
+                    -128i128
+                } else {
+                    1i128 << input_bit
+                };
+                let power = (1i128 << weight_bit)
+                    .checked_mul(signed_power)
+                    .ok_or(Error::Overflow)?;
+                for lane in 0..4 {
+                    let mask = activations[lane][input_bit][g];
+                    let signed_count = i128::from((positive & mask).count_ones())
+                        - i128::from((negative & mask).count_ones());
+                    sums[lane] = sums[lane]
+                        .checked_add(signed_count.checked_mul(power).ok_or(Error::Overflow)?)
+                        .ok_or(Error::Overflow)?;
+                }
+            }
+        }
+        for lane in 0..4 {
+            results[lane] = results[lane]
+                .checked_add(sums[lane].checked_mul(scale).ok_or(Error::Overflow)?)
+                .ok_or(Error::Overflow)?;
+        }
+    }
+    Ok(results)
+}
+
 pub fn dot_f64(bytes: &[u8], mask: &[u64; 4]) -> Result<f64, Error> {
     let mut total = 0.0;
     for (integer, exponent) in dot_groups(bytes, mask)? {
