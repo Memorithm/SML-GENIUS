@@ -1,5 +1,6 @@
 //! CPU-only exploratory BPB-3 A8 INT8 comparison over the SAME canonical wires.
 //! No native Q3_K comparison, full-model quality evidence or speed claim.
+//! A fourth arm isolates historical checked-i128 vs bounded-i32 Batch4.
 //! The independent decoded integer oracle runs BEFORE any timed samples.
 #![forbid(unsafe_code)]
 
@@ -93,6 +94,32 @@ fn reference_nine_pass_into(
     }
 }
 
+/// Same one-parse, four-lane A8 traversal as Batch4, but with the historical
+/// fully checked i128 local accumulator. This isolates the i32 change.
+fn checked_i128_batch4_into(
+    view: &tensor::TensorView<'_>,
+    inputs: &[[i8; WIDTH]; LANES],
+    outputs: &mut [[i128; LANES]],
+) {
+    assert_eq!(outputs.len(), view.len());
+    let masks: [[[u16; 16]; 8]; LANES] = std::array::from_fn(|lane| {
+        std::array::from_fn(|bit| {
+            std::array::from_fn(|group| {
+                let mut mask = 0u16;
+                for offset in 0..16 {
+                    let code = inputs[lane][group * 16 + offset] as u8;
+                    mask |= u16::from((code >> bit) & 1) << offset;
+                }
+                mask
+            })
+        })
+    });
+    for (row, output) in outputs.iter_mut().enumerate() {
+        *output = a8::dot_i8_fused_batch4_i128_control(view.row(row).unwrap(), &masks)
+            .unwrap();
+    }
+}
+
 fn evaluate(
     arm: usize,
     view: &tensor::TensorView<'_>,
@@ -116,6 +143,10 @@ fn evaluate(
         }
         2 => {
             view.signed_i8_matvec_batch4_into(inputs, batch).unwrap();
+            black_box(&*batch);
+        }
+        3 => {
+            checked_i128_batch4_into(view, inputs, batch);
             black_box(&*batch);
         }
         _ => unreachable!(),
@@ -156,6 +187,13 @@ fn verify(
             }
         }
     }
+    let compact = batch.to_vec();
+    evaluate(3, view, inputs, singles, batch);
+    assert_eq!(
+        batch,
+        compact.as_slice(),
+        "i128 historical control differs from i32 Batch4"
+    );
     checksum
 }
 
@@ -180,11 +218,11 @@ fn run(rows: usize, measure: bool) {
         );
         return;
     }
-    let mut samples: [Vec<u128>; 3] = std::array::from_fn(|_| Vec::with_capacity(ROUNDS));
+    let mut samples: [Vec<u128>; 4] = std::array::from_fn(|_| Vec::with_capacity(ROUNDS));
     for round in 0..ROUNDS {
         // Rotate the order to reduce time-drift bias across implementations.
-        for step in 0..3 {
-            let arm = (round + step) % 3;
+        for step in 0..4 {
+            let arm = (round + step) % 4;
             let begin = Instant::now();
             for _ in 0..REPEATS {
                 evaluate(
@@ -198,7 +236,12 @@ fn run(rows: usize, measure: bool) {
             samples[arm].push(begin.elapsed().as_nanos() / REPEATS as u128);
         }
     }
-    for (arm, name) in ["reference_nine_pass_4x", "fused_single_4x", "batch4"]
+    for (arm, name) in [
+        "reference_nine_pass_4x",
+        "fused_single_4x",
+        "batch4_i32",
+        "batch4_i128_control",
+    ]
         .iter()
         .enumerate()
     {
