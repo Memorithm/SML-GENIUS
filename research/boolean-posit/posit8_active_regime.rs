@@ -83,7 +83,10 @@ fn learn_gate(teacher: Teacher) -> (Gate, usize) {
         let (a, b) = case_bits(case);
         let answer = teacher.answer(a, b);
         candidates.retain(|&gate| gate.apply(a, b) == answer);
-        assert!(!candidates.is_empty(), "teacher outside declared gate grammar");
+        assert!(
+            !candidates.is_empty(),
+            "teacher outside declared gate grammar"
+        );
         queried |= 1 << case;
         queries += 1;
         assert!(queries <= 4, "gate learning budget exceeded");
