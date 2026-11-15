@@ -1,0 +1,78 @@
+name: EXP-MUL1 learned-significand full posit8 multiplication
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_learned_significand_mul.rs'
+      - 'research/boolean-posit/posit8_learned_byte_multiply.rs'
+      - 'research/boolean-posit/posit8_active_ripple_add.rs'
+      - 'research/boolean-posit/posit8_independent_oracle.rs'
+      - 'research/boolean-posit/posit8_circuit_synth.rs'
+      - 'research/boolean-posit/POSIT8_LEARNED_SIGNIFICAND_MUL_PROTOCOL_20261115.md'
+      - '.github/workflows/posit8-learned-significand-mul.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_learned_significand_mul.rs'
+      - '.github/workflows/posit8-learned-significand-mul.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-hybrid-mul:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Strict formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_learned_significand_mul.rs
+      - name: Exact decoding and both oracle comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test \
+            research/boolean-posit/posit8_learned_significand_mul.rs \
+            -o "$RUNNER_TEMP/posit8-hybrid-tests"
+          "$RUNNER_TEMP/posit8-hybrid-tests" --nocapture |
+            tee "$RUNNER_TEMP/posit8-hybrid-tests.log"
+          grep -Fq 'test tests::full_multiplication_matches_two_distinct_declared_oracles ... ok' \
+            "$RUNNER_TEMP/posit8-hybrid-tests.log"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' \
+            "$RUNNER_TEMP/posit8-hybrid-tests.log"
+      - name: Standalone program independently audits full domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O \
+            research/boolean-posit/posit8_learned_significand_mul.rs \
+            -o "$RUNNER_TEMP/posit8-hybrid-mul"
+          "$RUNNER_TEMP/posit8-hybrid-mul" --audit |
+            tee "$RUNNER_TEMP/posit8-hybrid-mul-report.log"
+          grep -Fq 'POSIT8_LEARNED_SIGNIFICAND_MUL,pairs=65536,' \
+            "$RUNNER_TEMP/posit8-hybrid-mul-report.log"
+          grep -Fq 'errors=0,full_posit_gate_learning=false' \
+            "$RUNNER_TEMP/posit8-hybrid-mul-report.log"
+      - name: Retain exact-head audit artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-learned-significand-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/posit8-hybrid-tests.log
+            ${{ runner.temp }}/posit8-hybrid-mul-report.log
+          if-no-files-found: warn
+          retention-days: 21
