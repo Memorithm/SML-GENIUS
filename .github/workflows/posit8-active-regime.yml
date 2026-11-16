@@ -1,0 +1,78 @@
+name: REGIME-LEARN1 active posit8 prefix gates
+
+on:
+  pull_request:
+    paths:
+      - 'research/boolean-posit/posit8_active_regime.rs'
+      - 'research/boolean-posit/posit8_learned_significand_mul.rs'
+      - 'research/boolean-posit/POSIT8_ACTIVE_REGIME_PROTOCOL_20261115.md'
+      - '.github/workflows/posit8-active-regime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/boolean-posit/posit8_active_regime.rs'
+      - 'research/boolean-posit/posit8_learned_significand_mul.rs'
+      - '.github/workflows/posit8-active-regime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learned-regime-and-integrated-mul:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pinned Rust 1.89
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup default 1.89.0
+      - name: Formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_active_regime.rs
+          rustfmt --edition 2021 --check research/boolean-posit/posit8_learned_significand_mul.rs
+      - name: Learned regime exact independent test
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test             research/boolean-posit/posit8_active_regime.rs             -o "$RUNNER_TEMP/regime-tests"
+          "$RUNNER_TEMP/regime-tests" --nocapture | tee "$RUNNER_TEMP/regime-tests.log"
+          grep -Fq 'test tests::every_positive_magnitude_has_correct_regime_prefix_length ... ok' "$RUNNER_TEMP/regime-tests.log"
+          rustc --edition 2021 -D warnings -O             research/boolean-posit/posit8_active_regime.rs             -o "$RUNNER_TEMP/regime-learn"
+          "$RUNNER_TEMP/regime-learn" | tee "$RUNNER_TEMP/regime-report.log"
+          grep -Fq 'POSIT8_ACTIVE_REGIME,magnitudes=127,' "$RUNNER_TEMP/regime-report.log"
+          grep -Fq 'errors=0,fixed_topology=true' "$RUNNER_TEMP/regime-report.log"
+      - name: Verify exact integrated posit8 multiplication
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --edition 2021 -D warnings -O --test             research/boolean-posit/posit8_learned_significand_mul.rs             -o "$RUNNER_TEMP/posit8-mul-tests"
+          "$RUNNER_TEMP/posit8-mul-tests" --nocapture |
+            tee "$RUNNER_TEMP/posit8-mul-tests.log"
+          grep -Fq 'test tests::full_multiplication_matches_two_distinct_declared_oracles ... ok' "$RUNNER_TEMP/posit8-mul-tests.log"
+          grep -Eq 'test result: ok[.] [1-9][0-9]* passed; 0 failed;' "$RUNNER_TEMP/posit8-mul-tests.log"
+          rustc --edition 2021 -D warnings -O             research/boolean-posit/posit8_learned_significand_mul.rs             -o "$RUNNER_TEMP/posit8-mul-learner"
+          "$RUNNER_TEMP/posit8-mul-learner" --audit |
+            tee "$RUNNER_TEMP/posit8-mul-report.log"
+          grep -Fq 'POSIT8_LEARNED_SIGNIFICAND_MUL,pairs=65536,' "$RUNNER_TEMP/posit8-mul-report.log"
+          grep -Eq 'teacher_queries=[1-8],regime_gate_queries=[1-8],errors=0,full_posit_gate_learning=false' "$RUNNER_TEMP/posit8-mul-report.log"
+      - name: Retain inspectable evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: posit8-regime-learn1-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/regime-tests.log
+            ${{ runner.temp }}/regime-report.log
+            ${{ runner.temp }}/posit8-mul-tests.log
+            ${{ runner.temp }}/posit8-mul-report.log
+          if-no-files-found: warn
+          retention-days: 21
