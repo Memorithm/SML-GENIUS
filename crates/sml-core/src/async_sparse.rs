@@ -50,7 +50,10 @@ pub enum SparseAgendaError {
         pending: usize,
         incoming: usize,
     },
-    RetrogradeTime { last_committed: u64, proposed: u64 },
+    RetrogradeTime {
+        last_committed: u64,
+        proposed: u64,
+    },
     SequenceExhausted,
 }
 
@@ -316,9 +319,7 @@ impl<const BITS: usize> SbgSparseEventIngress<BITS> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::rae_dirty_journal::{
-        SbgDirtyJournalError, SbgRoutingDirtyJournal,
-    };
+    use crate::semantic::rae_dirty_journal::{SbgDirtyJournalError, SbgRoutingDirtyJournal};
 
     fn request(time: u64, feature: usize) -> SparseEventRequest {
         SparseEventRequest {
@@ -418,15 +419,27 @@ mod tests {
         assert_eq!(evidence.dirty_words, 2);
         assert_eq!(agenda.pending_count(), 2);
         assert_eq!(
-            agenda.poll_next(|_| Ok::<(), ()>(())).unwrap().unwrap().target,
+            agenda
+                .poll_next(|_| Ok::<(), ()>(()))
+                .unwrap()
+                .unwrap()
+                .target,
             SparseEventTarget::Feature(64)
         );
         assert_eq!(
-            agenda.poll_next(|_| Ok::<(), ()>(())).unwrap().unwrap().target,
+            agenda
+                .poll_next(|_| Ok::<(), ()>(()))
+                .unwrap()
+                .unwrap()
+                .target,
             SparseEventTarget::Feature(129)
         );
         journal
-            .flush(2, |deltas| ingress.submit_dirty_words(2, deltas, &mut agenda).map(|_| ()))
+            .flush(2, |deltas| {
+                ingress
+                    .submit_dirty_words(2, deltas, &mut agenda)
+                    .map(|_| ())
+            })
             .unwrap();
         assert_eq!(agenda.pending_count(), 0);
     }
@@ -454,7 +467,11 @@ mod tests {
         assert_eq!(small.pending_count(), 0);
         let mut enough = AsyncSparseAgenda::new(2).unwrap();
         journal
-            .flush(1, |deltas| ingress.submit_dirty_words(1, deltas, &mut enough).map(|_| ()))
+            .flush(1, |deltas| {
+                ingress
+                    .submit_dirty_words(1, deltas, &mut enough)
+                    .map(|_| ())
+            })
             .unwrap();
         assert_eq!(enough.pending_count(), 2);
     }
