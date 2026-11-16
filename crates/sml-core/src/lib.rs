@@ -53,6 +53,7 @@ pub mod anf_wide_sparse;
 pub mod anf_wide_unanchored_learn;
 pub mod atlas;
 pub mod audit;
+pub mod async_sparse;
 pub mod bit_mixer;
 pub mod bool_coder;
 pub mod boolean_associative_focus;
