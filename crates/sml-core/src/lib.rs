@@ -51,6 +51,7 @@ pub mod anf_wide_active_learn;
 pub mod anf_wide_overlap_learn;
 pub mod anf_wide_sparse;
 pub mod anf_wide_unanchored_learn;
+pub mod async_sparse;
 pub mod atlas;
 pub mod audit;
 pub mod bit_mixer;
