@@ -16,6 +16,10 @@ mod declared_oracle;
 #[allow(dead_code)]
 mod independent;
 
+#[path = "posit8_active_regime.rs"]
+#[allow(dead_code)]
+mod learned_regime;
+
 use learned_multiplier::LearnedByteMultiplier;
 
 // Posit Standard (2022), Sections 3.2–3.3 and 4.1: n=8, es=2,
@@ -46,13 +50,11 @@ fn fields(raw: u8) -> Option<Fields> {
     }
     let negative = raw & 0x80 != 0;
     let magnitude = if negative { raw.wrapping_neg() } else { raw };
-    let mut cursor = 6i32;
-    let regime_bit = (magnitude >> 6) & 1;
-    let mut run_length = 0i32;
-    while cursor >= 0 && ((magnitude >> cursor) & 1) == regime_bit {
-        run_length += 1;
-        cursor -= 1;
-    }
+    // Actively selected XNOR / AND gates replace the imperative prefix loop.
+    // Only gate identities are learned; wiring and regime arithmetic remain fixed.
+    let (regime_bit, run_len) = learned_regime::detector().run_length(magnitude);
+    let run_length = i32::from(run_len);
+    let mut cursor = 6 - run_length;
     let regime = if regime_bit == 1 {
         run_length - 1
     } else {
@@ -183,8 +185,9 @@ fn main() {
         None | Some("--audit") => {
             let errors = model.audit_declared_oracle();
             println!(
-                "POSIT8_LEARNED_SIGNIFICAND_MUL,pairs=65536,teacher_queries={},errors={},full_posit_gate_learning=false",
+                "POSIT8_LEARNED_SIGNIFICAND_MUL,pairs=65536,teacher_queries={},regime_gate_queries={},errors={},full_posit_gate_learning=false",
                 model.teacher_queries(),
+                learned_regime::detector().membership_queries(),
                 errors
             );
             if errors != 0 {
@@ -230,6 +233,14 @@ mod tests {
         assert_eq!(m.multiply(1, 1), 1); // nonzero underflow saturates
         assert_eq!(m.multiply(MAX_POS, MAX_POS), MAX_POS);
         assert_eq!(m.multiply(0x81, 0x7f), 0x81);
+    }
+
+    #[test]
+    fn learned_regime_gate_budget_and_exhaustive_reference() {
+        let learned = learned_regime::detector();
+        assert!(learned.membership_queries() > 0);
+        assert!(learned.membership_queries() <= 8);
+        assert_eq!(learned.audit_all_magnitudes(), 0);
     }
 
     #[test]
