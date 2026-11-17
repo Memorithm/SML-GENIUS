@@ -10,7 +10,7 @@ use crate::{
             RaeShadowQualification,
         },
         rae_runtime_capture::{RaeNativeCaptureError, RaeNativeRuntimeCapture},
-        SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticRewriteStep,
+        SemanticBitField, SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticRewriteStep,
         SemanticRewriter, SemanticState,
     },
 };
@@ -41,6 +41,26 @@ pub struct RaeShadowSession {
 pub enum RaeShadowSetupError {
     Observation(RaeNativeCaptureError),
     Qualification(RaeQualificationError),
+    NotFresh,
+}
+
+/// Exact, bounded reuse of the fully computed native MOR decision.
+/// The cache key includes all inputs on which SemanticMorBridge::route
+/// depends: the R field and PreviousRoute. Context (signatures, registry,
+/// engine and runtime hints) is immutable within this RoutedSemantic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RaeExactMorCache<const S: usize> {
+    routing: SemanticBitField<S>,
+    previous_route: PreviousRoute,
+    result: SemanticMorRoute,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RaeMorReuseCounts {
+    /// Number of actual bridge/MOR computations performed.
+    pub mor_evaluations: u64,
+    /// Number of calls answered by the exact equality cache.
+    pub exact_mor_reuses: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +73,9 @@ pub struct RoutedSemantic<K, const S: usize> {
     rae_observer: Option<RaeNativeRuntimeCapture<S>>,
     rae_shadow: Option<RaeShadowSession>,
     rae_shadow_evidence: Vec<RaeNativeDispatch>,
+    exact_mor_cache_enabled: bool,
+    exact_mor_cache: Option<RaeExactMorCache<S>>,
+    exact_mor_counts: RaeMorReuseCounts,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoutedSemanticError<E> {
@@ -82,6 +105,9 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
             rae_observer: None,
             rae_shadow: None,
             rae_shadow_evidence: Vec::new(),
+            exact_mor_cache_enabled: false,
+            exact_mor_cache: None,
+            exact_mor_counts: RaeMorReuseCounts::default(),
         })
     }
     #[must_use]
@@ -164,6 +190,25 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
     pub fn rae_shadow_evidence(&self) -> &[RaeNativeDispatch] {
         &self.rae_shadow_evidence
     }
+
+    /// Activate actual calculation avoidance only on exact native MOR
+    /// route-input identity. This does not use learned REA predictions
+    /// to skip any route, expert, recurrent or Delta-KV memory step.
+    ///
+    /// A model-specific context is immutable within this instance.
+    /// Freshness is mandatory; no old cache can cross model revisions.
+    pub fn enable_rae_exact_mor_reuse(&mut self) -> Result<(), RaeShadowSetupError> {
+        if !self.cycles.is_empty() || self.exact_mor_cache_enabled {
+            return Err(RaeShadowSetupError::NotFresh);
+        }
+        self.exact_mor_cache_enabled = true;
+        Ok(())
+    }
+
+    #[must_use]
+    pub const fn rae_exact_mor_counts(&self) -> RaeMorReuseCounts {
+        self.exact_mor_counts
+    }
 }
 impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for RoutedSemantic<K, S> {
     type Error = RoutedSemanticError<K::Error>;
@@ -182,17 +227,36 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
         let step = inner
             .rewrite(state, depth)
             .map_err(RoutedSemanticError::Kernel)?;
-        let route = self
-            .context
-            .bridge
-            .route(
-                &step.state,
-                &self.context.registry,
-                &self.context.engine,
-                &self.context.runtime_hints,
-                &self.previous,
-            )
-            .map_err(RoutedSemanticError::Routing)?;
+        // Only R and previous-route hysteresis feed the native bridge.
+        // Full equality is required: no threshold, hash collision, guessed
+        // invalidation, or 'no rising edge' can authorize a cached route.
+        let cached = self.exact_mor_cache_enabled
+            && self.exact_mor_cache.as_ref().is_some_and(|entry| {
+                entry.routing == step.state.routing && entry.previous_route == self.previous
+            });
+        let route = if cached {
+            self.exact_mor_cache
+                .as_ref()
+                .expect("exact cache entry checked above")
+                .result
+                .clone()
+        } else {
+            self.context
+                .bridge
+                .route(
+                    &step.state,
+                    &self.context.registry,
+                    &self.context.engine,
+                    &self.context.runtime_hints,
+                    &self.previous,
+                )
+                .map_err(RoutedSemanticError::Routing)?
+        };
+        let next_mor_cache = self.exact_mor_cache_enabled.then(|| RaeExactMorCache {
+            routing: step.state.routing.clone(),
+            previous_route: self.previous.clone(),
+            result: route.clone(),
+        });
         let previous = PreviousRoute {
             primary: route.decision.selected_experts.first().copied(),
             selected: route.decision.selected_experts.clone(),
@@ -247,6 +311,14 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
         self.inner = inner;
         self.previous = previous;
         self.rae_observer = next_observer;
+        if self.exact_mor_cache_enabled {
+            self.exact_mor_cache = next_mor_cache;
+        }
+        if cached {
+            self.exact_mor_counts.exact_mor_reuses += 1;
+        } else {
+            self.exact_mor_counts.mor_evaluations += 1;
+        }
         if let Some(evidence) = candidate_evidence {
             // Shadow decisions never replace `route.decision` above.
             self.rae_shadow_evidence.push(evidence);
