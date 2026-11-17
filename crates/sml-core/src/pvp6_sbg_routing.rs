@@ -10,8 +10,8 @@ use crate::{
             RaeShadowQualification,
         },
         rae_runtime_capture::{RaeNativeCaptureError, RaeNativeRuntimeCapture},
-        SemanticBitField, SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticRewriteStep,
-        SemanticRewriter, SemanticState,
+        SemanticBitField, SemanticMorBridge, SemanticMorError, SemanticMorRoute,
+        SemanticRewriteStep, SemanticRewriter, SemanticState,
     },
 };
 use std::sync::Arc;
@@ -500,8 +500,7 @@ mod tests {
     #[test]
     fn exact_mor_cache_invalidation_on_changed_previous_hysteresis() {
         let state = SemanticState::<8>::zeroed().unwrap();
-        let mut optimized =
-            RoutedSemantic::new(IdentityRewriter, context(false), 4).unwrap();
+        let mut optimized = RoutedSemantic::new(IdentityRewriter, context(false), 4).unwrap();
         optimized.enable_rae_exact_mor_reuse().unwrap();
         optimized.rewrite(&state, 1).unwrap();
         assert_eq!(optimized.rae_exact_mor_counts().exact_mor_reuses, 0);
