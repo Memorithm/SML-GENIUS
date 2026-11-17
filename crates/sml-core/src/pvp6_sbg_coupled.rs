@@ -496,3 +496,128 @@ mod expert_update_tests {
         assert_eq!(k, before);
     }
 }
+
+#[cfg(test)]
+mod rae_p0_p1_p2_integration_tests {
+    use super::fixtures::coupled;
+    use crate::{
+        semantic::{
+            rae_learned_route::{RaeReplayPolicy, RaeTrainPolicy, RAE_LEARNING_PPM},
+            rae_native_trace::SbgRaeNativeFrame,
+            rae_qualification::{
+                dispatch_native_shadow, qualify_native_rae, RaeDispatchMode, RaeNativeCase,
+                RaeShadowBudgets,
+            },
+            run_semantic_recurrent, SemanticState,
+        },
+        HaltingPolicy,
+    };
+
+    fn execute_model_case(initial: SemanticState<8>) -> Vec<SbgRaeNativeFrame> {
+        let policy = HaltingPolicy {
+            min_depth: 8,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let mut normal = coupled();
+        let normal_output = run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+        let mut instrumented = coupled();
+        instrumented.enable_rae_observation(&initial).unwrap();
+        let with_trace = run_semantic_recurrent(initial, &mut instrumented, policy).unwrap();
+
+        // Same real SBG → MOR → expert ANF → dynamic Delta-KV memory
+        // execution and outputs. Observation does not change the route,
+        // recurrent halting behavior or selected expert pages.
+        assert_eq!(with_trace, normal_output);
+        assert_eq!(instrumented.cycles(), normal.cycles());
+        assert_eq!(instrumented.memory_usage(), normal.memory_usage());
+        assert_eq!(instrumented.memory(), normal.memory());
+        let recorder = instrumented
+            .experts()
+            .routed()
+            .rae_observer()
+            .unwrap();
+        assert_eq!(recorder.accounting().native_routes_observed, 8);
+        let frames = recorder.frames();
+        assert_eq!(frames.len(), 8);
+        for (row, native) in frames
+            .iter()
+            .zip(instrumented.experts().routed().cycles())
+        {
+            assert_eq!(row.selected_experts, native.route.decision.selected_experts);
+            assert_eq!(row.cycle, u64::from(native.depth));
+        }
+        frames.to_vec()
+    }
+
+    #[test]
+    fn real_coupled_model_train_and_two_heldout_cases_are_shadow_only() {
+        let mut training = SemanticState::<8>::zeroed().unwrap();
+        training.value.set(0, true).unwrap();
+        training.routing.set(0, true).unwrap();
+
+        let mut first_holdout = SemanticState::<8>::zeroed().unwrap();
+        first_holdout.routing.set(7, true).unwrap();
+        let mut second_holdout = SemanticState::<8>::zeroed().unwrap();
+        second_holdout.value.set(3, true).unwrap();
+        second_holdout.ambiguity.set(5, true).unwrap();
+        second_holdout.routing.set(0, true).unwrap();
+        second_holdout.routing.set(7, true).unwrap();
+
+        let train = execute_model_case(training);
+        let hold1 = execute_model_case(first_holdout);
+        let hold2 = execute_model_case(second_holdout);
+        let (learned, evidence) = qualify_native_rae::<8>(
+            "sml-model-p0-revision-pinned-by-ci",
+            RaeNativeCase {
+                case_id: "TRAIN-coupled-1",
+                frames: &train,
+            },
+            &[
+                RaeNativeCase {
+                    case_id: "HOLDOUT-coupled-2",
+                    frames: &hold1,
+                },
+                RaeNativeCase {
+                    case_id: "HOLDOUT-coupled-3",
+                    frames: &hold2,
+                },
+            ],
+            2,
+            RaeTrainPolicy {
+                minimum_exposures: 1,
+                minimum_precision_ppm: RAE_LEARNING_PPM,
+                max_associations: 16,
+            },
+            2,
+            RaeShadowBudgets::default(),
+        )
+        .unwrap();
+        assert_eq!(evidence.train_frames, 8);
+        assert_eq!(evidence.rising.frames, 16);
+        assert_eq!(evidence.persistent.frames, 16);
+        assert_eq!(evidence.contextual.frames, 16);
+        assert!(evidence.rising.native_selected_pages >= 16);
+        assert!(!evidence.production_skip_authorized);
+
+        for frame in hold1.iter().chain(&hold2) {
+            for replay in [
+                RaeReplayPolicy::RisingOnly,
+                RaeReplayPolicy::PersistentActive,
+                RaeReplayPolicy::RisingWithContextRecheck,
+            ] {
+                let dispatch = dispatch_native_shadow(
+                    "sml-model-p0-revision-pinned-by-ci",
+                    &evidence,
+                    &learned,
+                    frame,
+                    RaeDispatchMode::Shadow,
+                    replay,
+                )
+                .unwrap();
+                assert_eq!(dispatch.executed_native_pages, frame.selected_experts);
+                assert!(!dispatch.native_mor_bypassed);
+            }
+        }
+    }
+}
