@@ -441,6 +441,76 @@ mod tests {
         assert_eq!(routed.cycles()[1].previous.primary, Some(PageId(1)));
         assert_eq!(routed.inner().cycles().len(), 2);
     }
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct IdentityRewriter;
+
+    impl SemanticRewriter<8> for IdentityRewriter {
+        type Error = core::convert::Infallible;
+
+        fn rewrite(
+            &mut self,
+            state: &SemanticState<8>,
+            _depth: u32,
+        ) -> Result<SemanticRewriteStep<8>, Self::Error> {
+            Ok(SemanticRewriteStep {
+                state: state.clone(),
+                stability_blocked: false,
+            })
+        }
+    }
+
+    #[test]
+    fn exact_native_mor_reuse_removes_real_route_evaluations_and_preserves_outputs() {
+        let state = SemanticState::<8>::zeroed().unwrap();
+        let ctx = context(false);
+        let mut baseline = RoutedSemantic::new(IdentityRewriter, ctx.clone(), 8).unwrap();
+        let mut optimized = RoutedSemantic::new(IdentityRewriter, ctx, 8).unwrap();
+        optimized.enable_rae_exact_mor_reuse().unwrap();
+        for depth in 1..=6 {
+            let reference = baseline.rewrite(&state, depth).unwrap();
+            let candidate = optimized.rewrite(&state, depth).unwrap();
+            assert_eq!(reference, candidate);
+            assert_eq!(baseline.cycles(), optimized.cycles());
+            assert_eq!(baseline.previous(), optimized.previous());
+        }
+        // Cycle 1 establishes a previous route; cycle 2 must recompute
+        // with hysteresis. From cycle 3 onward both exact inputs repeat.
+        let counts = optimized.rae_exact_mor_counts();
+        assert_eq!(counts.mor_evaluations, 2);
+        assert_eq!(counts.exact_mor_reuses, 4);
+        assert_eq!(baseline.rae_exact_mor_counts().mor_evaluations, 6);
+        assert_eq!(baseline.rae_exact_mor_counts().exact_mor_reuses, 0);
+
+        let mut changed = state.clone();
+        changed.routing.set(0, true).unwrap();
+        let reference = baseline.rewrite(&changed, 7).unwrap();
+        let candidate = optimized.rewrite(&changed, 7).unwrap();
+        assert_eq!(reference, candidate);
+        assert_eq!(baseline.cycles(), optimized.cycles());
+        assert_eq!(optimized.rae_exact_mor_counts().mor_evaluations, 3);
+        assert_eq!(optimized.rae_exact_mor_counts().exact_mor_reuses, 4);
+
+        // Mid-trajectory reconfiguration is refused.
+        assert_eq!(
+            optimized.enable_rae_exact_mor_reuse(),
+            Err(RaeShadowSetupError::NotFresh)
+        );
+    }
+
+    #[test]
+    fn exact_mor_cache_invalidation_on_changed_previous_hysteresis() {
+        let state = SemanticState::<8>::zeroed().unwrap();
+        let mut optimized =
+            RoutedSemantic::new(IdentityRewriter, context(false), 4).unwrap();
+        optimized.enable_rae_exact_mor_reuse().unwrap();
+        optimized.rewrite(&state, 1).unwrap();
+        assert_eq!(optimized.rae_exact_mor_counts().exact_mor_reuses, 0);
+        optimized.rewrite(&state, 2).unwrap();
+        assert_eq!(optimized.rae_exact_mor_counts().exact_mor_reuses, 0);
+        optimized.rewrite(&state, 3).unwrap();
+        assert_eq!(optimized.rae_exact_mor_counts().exact_mor_reuses, 1);
+    }
+
     #[test]
     fn downstream_route_failure_rolls_back_anf_trace_and_state() {
         let mut routed = RoutedSemantic::new(kernel(), context(true), 8).unwrap();
