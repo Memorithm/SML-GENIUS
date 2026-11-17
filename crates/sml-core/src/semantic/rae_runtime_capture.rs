@@ -155,10 +155,7 @@ impl<const BITS: usize> RaeNativeRuntimeCapture<BITS> {
         if reconstructed != state.routing.words() {
             return Err(RaeNativeCaptureError::ReconstructedMismatch);
         }
-        let rising_bits = rising
-            .iter()
-            .map(|word| u64::from(word.count_ones()))
-            .sum();
+        let rising_bits = rising.iter().map(|word| u64::from(word.count_ones())).sum();
         let falling_bits = falling
             .iter()
             .map(|word| u64::from(word.count_ones()))
@@ -210,8 +207,12 @@ mod tests {
         let mut recorder = RaeNativeRuntimeCapture::new(&first, 0, 2).unwrap();
         let mut high = first.clone();
         high.routing.set(64, true).unwrap();
-        recorder.observe_native(1, &high, &[PageId(1)], false).unwrap();
-        recorder.observe_native(2, &high, &[PageId(1)], false).unwrap();
+        recorder
+            .observe_native(1, &high, &[PageId(1)], false)
+            .unwrap();
+        recorder
+            .observe_native(2, &high, &[PageId(1)], false)
+            .unwrap();
         assert_eq!(recorder.frames()[0].rising_words, vec![0, 1]);
         assert_eq!(recorder.frames()[1].rising_routing_bits, 0);
         assert_eq!(recorder.frames()[1].selected_experts, vec![PageId(1)]);
@@ -235,7 +236,9 @@ mod tests {
             Err(RaeNativeCaptureError::ExpertOutOfRange(PageId(2)))
         );
         assert_eq!(recorder, before);
-        recorder.observe_native(1, &state, &[PageId(0)], false).unwrap();
+        recorder
+            .observe_native(1, &state, &[PageId(0)], false)
+            .unwrap();
         let saved = recorder.clone();
         assert_eq!(
             recorder.observe_native(1, &state, &[PageId(0)], false),
@@ -253,8 +256,12 @@ mod tests {
         let mut second = initial.clone();
         second.value.set(3, true).unwrap();
         let mut observer = RaeNativeRuntimeCapture::new(&initial, 0, 2).unwrap();
-        observer.observe_native(1, &initial, &[PageId(0)], false).unwrap();
-        observer.observe_native(2, &second, &[PageId(0)], false).unwrap();
+        observer
+            .observe_native(1, &initial, &[PageId(0)], false)
+            .unwrap();
+        observer
+            .observe_native(2, &second, &[PageId(0)], false)
+            .unwrap();
         assert_eq!(observer.frames()[1].rising_routing_bits, 0);
         assert!(observer.frames()[1].context_invalidated);
     }
