@@ -28,7 +28,6 @@ pub struct SbgRouteCycle {
     pub previous: PreviousRoute,
     pub route: SemanticMorRoute,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// Frozen shadow configuration. Always observational: native MOR stays active.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RaeShadowSession {
