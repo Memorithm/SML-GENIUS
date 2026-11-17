@@ -89,11 +89,12 @@ silently imported into this SML-only PR.
 A 24-pair native CPU timing harness has now been implemented as
 `rae_p1_paired_native_cpu_cost_profile`, explicitly **ignored** in
 ordinary CI. It executes the *same* actual coupled MOR → ANF expert →
-Delta-KV model with and without the observer, alternates order, checks
-exact final state/route/memory parity for each pair, and emits
-machine-readable per-case wall-clock nanoseconds and full-scan/dirty
-word/reconciliation counts. The benchmark measures **observer
-overhead**, not an accelerated execution path.
+Delta-KV model with and without the **observer plus exact MOR route
+reuse**, alternates order, checks final state/route/memory parity for
+each pair, and emits per-case wall-clock nanoseconds, full-scan/dirty
+word/reconciliation counts **and actual MOR calls elided**. This
+measures the combined observation+cache path; it does not isolate
+cache benefit or establish an overall speedup without analysis.
 
 The harness rejects missing `SML_RAE_SOURCE_SHA` (40 hex characters)
 or `SML_RAE_RUNNER` identifiers. A real source SHA must be verified
@@ -135,6 +136,48 @@ could be made available.
 **This is a safe P2 shadow rollout foundation, not production
 optimization enabled.**
 
+## P2b — active, exact-native computational elimination (not learned skipping)
+
+**A real computation-avoidance path is now opt-in and operational in
+the SML routing loop.** `enable_rae_exact_mor_reuse()` activates a
+single-entry cache for the entire `SemanticMorRoute` decision on a
+fresh `RoutedSemantic`, including when wrapped by
+`RoutedExpertSemantic` or the full `CoupledSbgLoop`.
+
+The identity key is the **complete current SBG R bitfield** and the
+**complete previous-route/hysteresis state**, both checked by exact
+equality. The `SemanticMorBridge`, registry, routing engine and runtime
+hints are owned by the instance and immutable through its public API.
+The current native bridge derives all router and expert affinities
+exclusively from R, while prior-route hysteresis is an explicit input.
+On a cache hit the original `bridge.route()` operation is **not
+executed**: both the bridge's repeated signature comparisons and MOR
+ranking are avoided. Its previous result is returned unchanged.
+Every ANF expert, recurrent transition and Delta-KV memory cycle still
+executes exactly as in the native baseline.
+
+An R mutation, change in the previous-route input, a first cycle or a
+new kernel instance triggers the authoritative native MOR calculation.
+A failed route/recurrent/observation step cannot commit speculative
+cache state. Counters `mor_evaluations` and `exact_mor_reuses` distinguish
+actual calls from avoided recomputations.
+
+This exact reuse is **different from speculative learned REA page
+skipping**. It makes no decision based on missing front events,
+untrusted learned confidence or numerical FLAT softmax bounds. This
+design has an algorithmic test asserting 4 native MOR calls avoided in
+6 identical-routing cycles after hysteresis settles, versus 6 native
+MOR calls for the unoptimized baseline. A changed R bit invalidates
+the cache. A full coupled model comparison verifies preservation of
+the model state, selected expert pages and Delta-KV contents.
+
+**The public default is still disabled.** A caller must explicitly
+enable `enable_rae_exact_mor_reuse()` before its first cycle. A
+separate opt-in Shadow learned candidate can coexist, but does not
+skip required native pages. This is an implemented active computational
+short circuit, **not** evidence of total speedup or a license to skip
+MOR decisions when the state/previous-route key differs.
+
 ## Required verification
 
 ```bash
@@ -142,6 +185,7 @@ cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked -p sml-core semantic::rae_runtime_capture
 cargo test --locked -p sml-core semantic::rae_qualification
+cargo test --locked -p sml-core exact_native_mor_reuse_removes_real_route_evaluations_and_preserves_outputs
 cargo test --locked -p sml-core real_coupled_model_train_and_two_heldout_cases_are_shadow_only
 cargo test --locked -p sml-core --example sbg_rae_dirty_mor
 cargo test --locked --workspace
@@ -163,5 +207,6 @@ HEAD CI and external Trusted RSI controls are mandatory before merge.
 5. Model-owned promotion/revocation controls that can fail closed
    under live K/V, state, version, registry or memory changes.
 
-Until those blockers are closed, do not advertise native MOR bypass
-or industrial speedup.
+Until those blockers are closed, do not advertise **learned MOR
+bypass** or industrial speedup. Exact-key MOR memoization is a
+separate, implemented calculation avoidance mode.
