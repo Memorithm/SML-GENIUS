@@ -570,6 +570,7 @@ mod rae_p0_p1_p2_integration_tests {
         second_holdout.routing.set(0, true).unwrap();
         second_holdout.routing.set(7, true).unwrap();
 
+        let shadow_initial = second_holdout.clone();
         let train = execute_model_case(training);
         let hold1 = execute_model_case(first_holdout);
         let hold2 = execute_model_case(second_holdout);
@@ -624,6 +625,45 @@ mod rae_p0_p1_p2_integration_tests {
                 assert_eq!(dispatch.executed_native_pages, frame.selected_experts);
                 assert!(!dispatch.native_mor_bypassed);
             }
+        }
+
+        // The frozen policy is activated as SHADOW within the real
+        // MOR→ANF-expert→Delta-KV pipeline, not merely on saved trace rows.
+        let mut shadow_kernel = coupled();
+        shadow_kernel
+            .enable_rae_shadow(
+                &shadow_initial,
+                learned,
+                evidence,
+                RaeReplayPolicy::RisingOnly,
+                "sml-model-p0-revision-pinned-by-ci",
+            )
+            .unwrap();
+        let mut native_kernel = coupled();
+        let policy = HaltingPolicy {
+            min_depth: 8,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let native_output =
+            run_semantic_recurrent(shadow_initial.clone(), &mut native_kernel, policy).unwrap();
+        let observed_output =
+            run_semantic_recurrent(shadow_initial, &mut shadow_kernel, policy).unwrap();
+        assert_eq!(native_output, observed_output);
+        assert_eq!(native_kernel.cycles(), shadow_kernel.cycles());
+        assert_eq!(native_kernel.memory(), shadow_kernel.memory());
+        let routed = shadow_kernel.experts().routed();
+        assert_eq!(routed.rae_shadow_evidence().len(), 8);
+        for (shadow, native) in routed
+            .rae_shadow_evidence()
+            .iter()
+            .zip(routed.cycles())
+        {
+            assert_eq!(
+                shadow.executed_native_pages,
+                native.route.decision.selected_experts
+            );
+            assert!(!shadow.native_mor_bypassed);
         }
     }
     /// Resource study must be scheduled through Memorithm/RemoteOps on an
