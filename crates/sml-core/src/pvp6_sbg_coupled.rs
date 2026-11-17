@@ -664,11 +664,8 @@ mod rae_p0_p1_p2_integration_tests {
         // calculation-elimination path. It never skips experts or DKV.
         let mut exact_kernel = coupled();
         exact_kernel.enable_rae_exact_mor_reuse().unwrap();
-        let exact_output = run_semantic_recurrent(
-            shadow_initial.clone(),
-            &mut exact_kernel,
-            policy,
-        ).unwrap();
+        let exact_output =
+            run_semantic_recurrent(shadow_initial.clone(), &mut exact_kernel, policy).unwrap();
         assert_eq!(exact_output, native_output);
         assert_eq!(exact_kernel.cycles(), native_kernel.cycles());
         assert_eq!(exact_kernel.memory(), native_kernel.memory());
@@ -774,7 +771,11 @@ mod rae_p0_p1_p2_integration_tests {
                 stats.dirty_words_delivered,
                 stats.whole_state_words_scanned,
                 stats.full_reconciliation_words,
-                observed.experts().routed().rae_exact_mor_counts().exact_mor_reuses,
+                observed
+                    .experts()
+                    .routed()
+                    .rae_exact_mor_counts()
+                    .exact_mor_reuses,
             );
         }
     }
