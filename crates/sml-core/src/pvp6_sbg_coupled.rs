@@ -532,18 +532,11 @@ mod rae_p0_p1_p2_integration_tests {
         assert_eq!(instrumented.cycles(), normal.cycles());
         assert_eq!(instrumented.memory_usage(), normal.memory_usage());
         assert_eq!(instrumented.memory(), normal.memory());
-        let recorder = instrumented
-            .experts()
-            .routed()
-            .rae_observer()
-            .unwrap();
+        let recorder = instrumented.experts().routed().rae_observer().unwrap();
         assert_eq!(recorder.accounting().native_routes_observed, 8);
         let frames = recorder.frames();
         assert_eq!(frames.len(), 8);
-        for (row, native) in frames
-            .iter()
-            .zip(instrumented.experts().routed().cycles())
-        {
+        for (row, native) in frames.iter().zip(instrumented.experts().routed().cycles()) {
             assert_eq!(row.selected_experts, native.route.decision.selected_experts);
             assert_eq!(row.cycle, u64::from(native.depth));
         }
