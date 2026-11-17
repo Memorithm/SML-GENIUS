@@ -4,6 +4,7 @@ use crate::{
     mor::{ExpertRuntimeHint, MixtureOfRouters, PreviousRoute},
     mor_registry::MorRouterRegistry,
     semantic::{
+        rae_runtime_capture::{RaeNativeCaptureError, RaeNativeRuntimeCapture},
         SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticRewriteStep,
         SemanticRewriter, SemanticState,
     },
@@ -29,6 +30,7 @@ pub struct RoutedSemantic<K, const S: usize> {
     previous: PreviousRoute,
     max_cycles: u32,
     cycles: Arc<Vec<SbgRouteCycle>>,
+    rae_observer: Option<RaeNativeRuntimeCapture<S>>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoutedSemanticError<E> {
@@ -37,6 +39,7 @@ pub enum RoutedSemanticError<E> {
     Allocation,
     Kernel(E),
     Routing(SemanticMorError),
+    Rae(RaeNativeCaptureError),
 }
 impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
     pub fn new(
@@ -53,6 +56,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
             previous: PreviousRoute::default(),
             max_cycles,
             cycles: Arc::new(Vec::new()),
+            rae_observer: None,
         })
     }
     #[must_use]
@@ -75,6 +79,25 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
     #[must_use]
     pub fn previous(&self) -> &PreviousRoute {
         &self.previous
+    }
+
+    /// Opt-in passive observation at the actual SBG→MOR decision boundary.
+    /// Only a fresh kernel may enable it; no routing decision is substituted.
+    pub fn enable_rae_observation(
+        &mut self,
+        baseline: &SemanticState<S>,
+    ) -> Result<(), RaeNativeCaptureError> {
+        if !self.cycles.is_empty() || self.rae_observer.is_some() {
+            return Err(RaeNativeCaptureError::TooManyFrames);
+        }
+        let expert_count = self.context.registry.policy().expert_count as usize;
+        self.rae_observer = Some(RaeNativeRuntimeCapture::new(baseline, 0, expert_count)?);
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn rae_observer(&self) -> Option<&RaeNativeRuntimeCapture<S>> {
+        self.rae_observer.as_ref()
     }
 }
 impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for RoutedSemantic<K, S> {
@@ -109,6 +132,19 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
             primary: route.decision.selected_experts.first().copied(),
             selected: route.decision.selected_experts.clone(),
         };
+        // Observe the already-computed native decision, on a tentative
+        // observer snapshot. This NEVER calls MOR again or changes selection.
+        let mut next_observer = self.rae_observer.clone();
+        if let Some(observer) = &mut next_observer {
+            observer
+                .observe_native(
+                    u64::from(depth),
+                    &step.state,
+                    &route.decision.selected_experts,
+                    !self.previous.selected.is_empty(),
+                )
+                .map_err(RoutedSemanticError::Rae)?;
+        }
         Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| RoutedSemanticError::Allocation)?;
@@ -119,6 +155,7 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
         });
         self.inner = inner;
         self.previous = previous;
+        self.rae_observer = next_observer;
         Ok(step)
     }
 }
