@@ -22,6 +22,7 @@ pub mod mor_routing;
 pub mod rae_dirty_journal;
 pub mod rae_learned_route;
 pub mod rae_native_trace;
+pub mod rae_runtime_capture;
 pub mod recurrent;
 pub mod rising_edge;
 pub mod session;
