@@ -613,4 +613,93 @@ mod rae_p0_p1_p2_integration_tests {
             }
         }
     }
+    /// Resource study must be scheduled through Memorithm/RemoteOps on an
+    /// explicitly pinned, isolated runner; never run as a normal CI test.
+    /// Each row compares the same native model and initial state, reversing
+    /// execution order every iteration to reduce fixed ordering bias.
+    #[test]
+    #[ignore = "RemoteOps-only physical profiling; requires pinned SHA and runner"]
+    fn rae_p1_paired_native_cpu_cost_profile() {
+        use std::time::Instant;
+
+        let sha = std::env::var("SML_RAE_SOURCE_SHA")
+            .expect("RemoteOps must provide the exact source revision");
+        let runner = std::env::var("SML_RAE_RUNNER")
+            .expect("RemoteOps must identify its admitted runner");
+        assert_eq!(sha.len(), 40, "require full source SHA");
+        assert!(sha.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!runner.trim().is_empty());
+        const REPS: usize = 24;
+        println!(
+            "rae_p1,source_sha={},runner={},case,order,baseline_ns,shadow_ns,dirty_words,whole_words,reconciliation_words",
+            sha, runner,
+        );
+        for sample in 0..REPS {
+            let mut initial = SemanticState::<8>::zeroed().unwrap();
+            if sample % 2 != 0 {
+                initial.routing.set(0, true).unwrap();
+            }
+            if sample % 3 == 0 {
+                initial.value.set(0, true).unwrap();
+            }
+            if sample % 5 == 0 {
+                initial.meaning_mask.set(4, true).unwrap();
+            }
+            let policy = HaltingPolicy {
+                min_depth: 8,
+                max_depth: 8,
+                stable_hamming_threshold: 0,
+            };
+            let mut normal = coupled();
+            let mut observed = coupled();
+            observed.enable_rae_observation(&initial).unwrap();
+
+            let baseline_output;
+            let shadow_output;
+            let baseline_ns;
+            let shadow_ns;
+            if sample % 2 == 0 {
+                let before = Instant::now();
+                baseline_output =
+                    run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+                baseline_ns = before.elapsed().as_nanos();
+                let before = Instant::now();
+                shadow_output =
+                    run_semantic_recurrent(initial.clone(), &mut observed, policy).unwrap();
+                shadow_ns = before.elapsed().as_nanos();
+            } else {
+                let before = Instant::now();
+                shadow_output =
+                    run_semantic_recurrent(initial.clone(), &mut observed, policy).unwrap();
+                shadow_ns = before.elapsed().as_nanos();
+                let before = Instant::now();
+                baseline_output =
+                    run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+                baseline_ns = before.elapsed().as_nanos();
+            }
+            assert_eq!(baseline_output, shadow_output);
+            assert_eq!(normal.cycles(), observed.cycles());
+            assert_eq!(normal.memory(), observed.memory());
+            let stats = observed
+                .experts()
+                .routed()
+                .rae_observer()
+                .unwrap()
+                .accounting();
+            assert_eq!(stats.native_routes_observed, 8);
+            println!(
+                "rae_p1,{},{},{},{},{},{},{},{},{}",
+                sha,
+                runner,
+                sample,
+                if sample % 2 == 0 { "baseline-first" } else { "shadow-first" },
+                baseline_ns,
+                shadow_ns,
+                stats.dirty_words_delivered,
+                stats.whole_state_words_scanned,
+                stats.full_reconciliation_words,
+            );
+        }
+    }
+
 }
