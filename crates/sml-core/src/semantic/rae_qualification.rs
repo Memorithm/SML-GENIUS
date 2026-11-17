@@ -259,9 +259,7 @@ pub fn dispatch_native_shadow(
     if frame.selected_experts.is_empty() {
         return Err(RaeQualificationError::EmptyNativeReference);
     }
-    if trained.expert_count() != frame.required_pages_words.len() * 64
-        && trained.expert_count().div_ceil(64) != frame.required_pages_words.len()
-    {
+    if trained.expert_count().div_ceil(64) != frame.required_pages_words.len() {
         return Err(RaeQualificationError::InvalidModelGeometry);
     }
     let counterfactual_pages = if mode == RaeDispatchMode::Shadow {
@@ -297,7 +295,6 @@ pub fn dispatch_native_shadow(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::SemanticBitField;
 
     fn frame(cycle: u64, routing: bool, rise: bool, page: u32) -> SbgRaeNativeFrame {
         let bit = u64::from(routing);
@@ -386,6 +383,5 @@ mod tests {
             RaeShadowBudgets::default(),
         ).unwrap_err();
         assert_eq!(err, RaeQualificationError::TrainHoldoutCaseOverlap);
-        let _ = SemanticBitField::<64>::zeroed().unwrap();
     }
 }
