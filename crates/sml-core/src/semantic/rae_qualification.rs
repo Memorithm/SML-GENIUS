@@ -105,11 +105,7 @@ fn valid_identity(value: &str) -> bool {
     !value.is_empty() && value.len() <= 128 && value == value.trim()
 }
 
-fn update(
-    totals: &mut RaeShadowPolicyTotals,
-    frame: &SbgRaeNativeFrame,
-    counts: RaeHoldoutCounts,
-) {
+fn update(totals: &mut RaeShadowPolicyTotals, frame: &SbgRaeNativeFrame, counts: RaeHoldoutCounts) {
     totals.frames += 1;
     totals.native_selected_pages += counts.required_pages;
     totals.predicted_pages += counts.selected_pages;
@@ -319,10 +315,19 @@ mod tests {
         let second = [frame(1, true, true, 1), frame(2, true, false, 1)];
         let (learned, report) = qualify_native_rae::<64>(
             "repo-sha-pinned",
-            RaeNativeCase { case_id: "TRAIN-1", frames: &train },
+            RaeNativeCase {
+                case_id: "TRAIN-1",
+                frames: &train,
+            },
             &[
-                RaeNativeCase { case_id: "HOLDOUT-2", frames: &first },
-                RaeNativeCase { case_id: "HOLDOUT-3", frames: &second },
+                RaeNativeCase {
+                    case_id: "HOLDOUT-2",
+                    frames: &first,
+                },
+                RaeNativeCase {
+                    case_id: "HOLDOUT-3",
+                    frames: &second,
+                },
             ],
             2,
             RaeTrainPolicy {
@@ -375,13 +380,20 @@ mod tests {
         };
         let err = qualify_native_rae::<64>(
             "rev",
-            RaeNativeCase { case_id: "case", frames: &rows },
-            &[RaeNativeCase { case_id: "case", frames: &rows }],
+            RaeNativeCase {
+                case_id: "case",
+                frames: &rows,
+            },
+            &[RaeNativeCase {
+                case_id: "case",
+                frames: &rows,
+            }],
             2,
             policy,
             1,
             RaeShadowBudgets::default(),
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert_eq!(err, RaeQualificationError::TrainHoldoutCaseOverlap);
     }
 }
