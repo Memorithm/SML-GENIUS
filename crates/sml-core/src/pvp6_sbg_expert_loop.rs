@@ -60,6 +60,13 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> RoutedExper
             .replace_bank(id, expected_revision, bank)
             .map_err(RoutedExpertError::Expert)
     }
+    /// Enable passive routing telemetry in the actual expert execution loop.
+    pub fn enable_rae_observation(
+        &mut self,
+        baseline: &SemanticState<S>,
+    ) -> Result<(), crate::semantic::rae_runtime_capture::RaeNativeCaptureError> {
+        self.routed.enable_rae_observation(baseline)
+    }
     #[must_use]
     pub fn routed(&self) -> &RoutedSemantic<K, S> {
         &self.routed
