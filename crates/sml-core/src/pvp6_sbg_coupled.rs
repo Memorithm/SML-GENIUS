@@ -114,6 +114,13 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
             .enable_rae_shadow(baseline, trained, qualification, replay, expected_revision)
     }
 
+    /// Activate exact MOR decision caching without skipping ANF or Delta-KV.
+    pub fn enable_rae_exact_mor_reuse(
+        &mut self,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.experts.enable_rae_exact_mor_reuse()
+    }
+
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
         &self.experts
