@@ -655,7 +655,7 @@ mod rae_p0_p1_p2_integration_tests {
         let native_output =
             run_semantic_recurrent(shadow_initial.clone(), &mut native_kernel, policy).unwrap();
         let observed_output =
-            run_semantic_recurrent(shadow_initial, &mut shadow_kernel, policy).unwrap();
+            run_semantic_recurrent(shadow_initial.clone(), &mut shadow_kernel, policy).unwrap();
         assert_eq!(native_output, observed_output);
         assert_eq!(native_kernel.cycles(), shadow_kernel.cycles());
         assert_eq!(native_kernel.memory(), shadow_kernel.memory());
@@ -665,7 +665,7 @@ mod rae_p0_p1_p2_integration_tests {
         let mut exact_kernel = coupled();
         exact_kernel.enable_rae_exact_mor_reuse().unwrap();
         let exact_output = run_semantic_recurrent(
-            second_holdout.clone(),
+            shadow_initial.clone(),
             &mut exact_kernel,
             policy,
         ).unwrap();
