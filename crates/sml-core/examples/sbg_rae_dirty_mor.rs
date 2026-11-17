@@ -68,7 +68,15 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         ],
         SemanticMorTopK::One,
     )?;
-    let engine = MixtureOfRouters::new(MorPolicy::default())?;
+    // This fixture tests singleton-page learning. The native default MOR
+    // permits multiple experts (and correctly returned [PageId(1), PageId(0)]
+    // on a high R bit), so explicitly select a singleton budget here rather
+    // than imposing a false one-expert expectation on production routing.
+    let engine = MixtureOfRouters::new(MorPolicy {
+        max_routers: 1,
+        max_experts: 1,
+        ..MorPolicy::default()
+    })?;
     let baseline = SemanticState::<BITS>::zeroed()?;
     let mut trace = SbgRaeNativeTrace::new(&baseline, 0, 2)?;
     let mut journal = SbgRoutingDirtyJournal::new(zero, 0);
