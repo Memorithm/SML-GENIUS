@@ -94,6 +94,13 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
             .replace_expert(id, expected_revision, bank)
             .map_err(CoupledSbgError::Experts)
     }
+    /// Observe original MOR decisions while preserving all expert and DKV work.
+    pub fn enable_rae_observation(
+        &mut self,
+        baseline: &SemanticState<S>,
+    ) -> Result<(), crate::semantic::rae_runtime_capture::RaeNativeCaptureError> {
+        self.experts.enable_rae_observation(baseline)
+    }
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
         &self.experts
