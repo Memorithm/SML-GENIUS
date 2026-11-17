@@ -86,13 +86,47 @@ A QK model's norm metadata/causal counts require an independent
 FLAT adapter and separate exact-head qualification; they are not
 silently imported into this SML-only PR.
 
-Physical comparisons of complete baseline vs observed runtime,
-with training/holdout case IDs, exact source SHA and paired
-repetitions, must execute on admitted machines under the sole
-Memorithm/RemoteOps control plane. Until observed and archived,
-physical latency/RSS/cache/DRAM/power savings are **not measured**.
-This PR adds model-level counters and exact parity tests, not
-fabricated hardware results.
+A 24-pair native CPU timing harness has now been implemented as
+`rae_p1_paired_native_cpu_cost_profile`, explicitly **ignored** in
+ordinary CI. It executes the *same* actual coupled MOR → ANF expert →
+Delta-KV model with and without the observer, alternates order, checks
+exact final state/route/memory parity for each pair, and emits
+machine-readable per-case wall-clock nanoseconds and full-scan/dirty
+word/reconciliation counts. The benchmark measures **observer
+overhead**, not an accelerated execution path.
+
+The harness rejects missing `SML_RAE_SOURCE_SHA` (40 hex characters)
+or `SML_RAE_RUNNER` identifiers. A real source SHA must be verified
+from the exact checkout, not merely typed. The sole authorized physical
+control plane is Memorithm/RemoteOps, and it must admit an isolated
+runner before launching the harness:
+
+```bash
+SML_RAE_SOURCE_SHA="$(git rev-parse HEAD)" \\
+SML_RAE_RUNNER="<authorized RemoteOps runner identifier>" \\
+cargo test --locked --release -p sml-core \\
+  rae_p1_paired_native_cpu_cost_profile \\
+  -- --ignored --exact --nocapture
+```
+
+The `--exact` filter uses the test's fully qualified path, so callers
+must supply that name if the command selects zero tests. Prefer the
+non-exact substring filter in isolated execution until the fully
+qualified path is known. A correct alternative is:
+
+```bash
+SML_RAE_SOURCE_SHA="$(git rev-parse HEAD)" \\
+SML_RAE_RUNNER="<authorized RemoteOps runner identifier>" \\
+cargo test --locked --release -p sml-core \\
+  rae_p1_paired_native_cpu_cost_profile -- --ignored --nocapture
+```
+
+Physical comparisons, including provenance, paired repetitions,
+runner workload isolation, case IDs and resource counters, must execute
+on admitted machines under the sole Memorithm/RemoteOps control plane.
+Until run logs are observed and archived, physical latency/RSS/cache/
+DRAM/power savings are **not measured**. Ordinary GitHub CI does
+not substitute for this evidence.
 
 ## P2 — activation mode and rollback
 
