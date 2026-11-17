@@ -118,7 +118,11 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         actual_mor_routes += 1;
 
-        let expected = if high { vec![PageId(1)] } else { vec![PageId(0)] };
+        let expected = if high {
+            vec![PageId(1)]
+        } else {
+            vec![PageId(0)]
+        };
         assert_eq!(frame.selected_experts, expected);
         assert_eq!(frame.rising_routing_bits, u64::from(high && tick != 8));
         assert_eq!(evidence.dirty_words, usize::from(tick != 8));
