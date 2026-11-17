@@ -81,6 +81,13 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> RoutedExper
             .enable_rae_shadow(baseline, trained, qualification, replay, expected_revision)
     }
 
+    /// Reuse only exact native MOR route-input matches; experts still run.
+    pub fn enable_rae_exact_mor_reuse(
+        &mut self,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.routed.enable_rae_exact_mor_reuse()
+    }
+
     #[must_use]
     pub fn routed(&self) -> &RoutedSemantic<K, S> {
         &self.routed
