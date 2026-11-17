@@ -179,15 +179,16 @@ impl<const BITS: usize> RaeNativeRuntimeCapture<BITS> {
             active_routing_bits: active_bits,
             context_invalidated: external_context_invalidated || vma_changed,
         };
-        let mut frames = self.frames.clone();
-        frames
+        // All fallible validations are complete. Reserve exactly one frame
+        // before committing; do not clone the entire accumulated trace on
+        // every tick (quadratic overhead on long observation sessions).
+        self.frames
             .try_reserve(1)
             .map_err(|_| RaeNativeCaptureError::Allocation)?;
-        frames.push(frame);
         self.journal = journal;
         self.reconstructed = reconstructed;
         self.previous_state = state.clone();
-        self.frames = frames;
+        self.frames.push(frame);
         self.last_tick = tick;
         self.counters.native_routes_observed += 1;
         self.counters.dirty_words_delivered += dirty_words;
