@@ -258,11 +258,15 @@ pub fn dispatch_native_shadow(
     if trained.expert_count().div_ceil(64) != frame.required_pages_words.len() {
         return Err(RaeQualificationError::InvalidModelGeometry);
     }
-    let counterfactual_pages = if mode == RaeDispatchMode::Shadow {
+    let (counterfactual_pages, fallback_applied) = if mode == RaeDispatchMode::Shadow {
         let mask = trained
             .predict_frame(frame, replay)
             .map_err(RaeQualificationError::Learned)?;
-        mask.iter()
+        // MOR returns pages in score order; a diagnostic bitset has
+        // original page order. Compare masks, never ordered Vec positions.
+        let mismatch = mask != frame.required_pages_words;
+        let candidate = mask
+            .iter()
             .enumerate()
             .flat_map(|(word, bits)| {
                 let mut rest = *bits;
@@ -275,11 +279,11 @@ pub fn dispatch_native_shadow(
                     Some(PageId((word * 64 + bit) as u32))
                 })
             })
-            .collect()
+            .collect();
+        (candidate, mismatch)
     } else {
-        Vec::new()
+        (Vec::new(), false)
     };
-    let fallback_applied = counterfactual_pages != frame.selected_experts;
     Ok(RaeNativeDispatch {
         executed_native_pages: frame.selected_experts.clone(),
         counterfactual_pages,
@@ -357,6 +361,19 @@ mod tests {
         assert!(dispatch.counterfactual_pages.is_empty());
         assert!(dispatch.fallback_applied);
         assert!(!dispatch.native_mor_bypassed);
+        let disabled = dispatch_native_shadow(
+            "repo-sha-pinned",
+            &report,
+            &learned,
+            &second[1],
+            RaeDispatchMode::Disabled,
+            RaeReplayPolicy::RisingOnly,
+        )
+        .unwrap();
+        assert_eq!(disabled.executed_native_pages, vec![PageId(1)]);
+        assert!(disabled.counterfactual_pages.is_empty());
+        assert!(!disabled.fallback_applied);
+        assert!(!disabled.native_mor_bypassed);
         assert_eq!(
             dispatch_native_shadow(
                 "wrong-sha",
