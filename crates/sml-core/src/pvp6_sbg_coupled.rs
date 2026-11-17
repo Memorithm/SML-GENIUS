@@ -654,11 +654,7 @@ mod rae_p0_p1_p2_integration_tests {
         assert_eq!(native_kernel.memory(), shadow_kernel.memory());
         let routed = shadow_kernel.experts().routed();
         assert_eq!(routed.rae_shadow_evidence().len(), 8);
-        for (shadow, native) in routed
-            .rae_shadow_evidence()
-            .iter()
-            .zip(routed.cycles())
-        {
+        for (shadow, native) in routed.rae_shadow_evidence().iter().zip(routed.cycles()) {
             assert_eq!(
                 shadow.executed_native_pages,
                 native.route.decision.selected_experts
