@@ -105,19 +105,6 @@ runner before launching the harness:
 SML_RAE_SOURCE_SHA="$(git rev-parse HEAD)" \\
 SML_RAE_RUNNER="<authorized RemoteOps runner identifier>" \\
 cargo test --locked --release -p sml-core \\
-  rae_p1_paired_native_cpu_cost_profile \\
-  -- --ignored --exact --nocapture
-```
-
-The `--exact` filter uses the test's fully qualified path, so callers
-must supply that name if the command selects zero tests. Prefer the
-non-exact substring filter in isolated execution until the fully
-qualified path is known. A correct alternative is:
-
-```bash
-SML_RAE_SOURCE_SHA="$(git rev-parse HEAD)" \\
-SML_RAE_RUNNER="<authorized RemoteOps runner identifier>" \\
-cargo test --locked --release -p sml-core \\
   rae_p1_paired_native_cpu_cost_profile -- --ignored --nocapture
 ```
 
