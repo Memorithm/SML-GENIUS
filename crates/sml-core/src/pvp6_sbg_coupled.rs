@@ -101,6 +101,19 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
     ) -> Result<(), crate::semantic::rae_runtime_capture::RaeNativeCaptureError> {
         self.experts.enable_rae_observation(baseline)
     }
+    /// A shadow candidate never changes coupled expert or Delta-KV work.
+    pub fn enable_rae_shadow(
+        &mut self,
+        baseline: &SemanticState<S>,
+        trained: crate::semantic::rae_learned_route::RaeTrainedEventRouter,
+        qualification: crate::semantic::rae_qualification::RaeShadowQualification,
+        replay: crate::semantic::rae_learned_route::RaeReplayPolicy,
+        expected_revision: &str,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.experts
+            .enable_rae_shadow(baseline, trained, qualification, replay, expected_revision)
+    }
+
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
         &self.experts
