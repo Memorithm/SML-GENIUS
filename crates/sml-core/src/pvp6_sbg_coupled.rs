@@ -659,6 +659,21 @@ mod rae_p0_p1_p2_integration_tests {
         assert_eq!(native_output, observed_output);
         assert_eq!(native_kernel.cycles(), shadow_kernel.cycles());
         assert_eq!(native_kernel.memory(), shadow_kernel.memory());
+
+        // An independently opt-in *exact* route cache is a real
+        // calculation-elimination path. It never skips experts or DKV.
+        let mut exact_kernel = coupled();
+        exact_kernel.enable_rae_exact_mor_reuse().unwrap();
+        let exact_output = run_semantic_recurrent(
+            second_holdout.clone(),
+            &mut exact_kernel,
+            policy,
+        ).unwrap();
+        assert_eq!(exact_output, native_output);
+        assert_eq!(exact_kernel.cycles(), native_kernel.cycles());
+        assert_eq!(exact_kernel.memory(), native_kernel.memory());
+        let saved = exact_kernel.experts().routed().rae_exact_mor_counts();
+        assert_eq!(saved.mor_evaluations + saved.exact_mor_reuses, 8);
         let routed = shadow_kernel.experts().routed();
         assert_eq!(routed.rae_shadow_evidence().len(), 8);
         for (shadow, native) in routed.rae_shadow_evidence().iter().zip(routed.cycles()) {
@@ -687,7 +702,7 @@ mod rae_p0_p1_p2_integration_tests {
         assert!(!runner.trim().is_empty());
         const REPS: usize = 24;
         println!(
-            "rae_p1,source_sha={},runner={},case,order,baseline_ns,shadow_ns,dirty_words,whole_words,reconciliation_words",
+            "rae_p1,source_sha={},runner={},case,order,baseline_ns,shadow_ns,dirty_words,whole_words,reconciliation_words,mor_calls_elided",
             sha, runner,
         );
         for sample in 0..REPS {
@@ -709,6 +724,7 @@ mod rae_p0_p1_p2_integration_tests {
             let mut normal = coupled();
             let mut observed = coupled();
             observed.enable_rae_observation(&initial).unwrap();
+            observed.enable_rae_exact_mor_reuse().unwrap();
 
             let baseline_output;
             let shadow_output;
@@ -744,7 +760,7 @@ mod rae_p0_p1_p2_integration_tests {
                 .accounting();
             assert_eq!(stats.native_routes_observed, 8);
             println!(
-                "rae_p1,{},{},{},{},{},{},{},{},{}",
+                "rae_p1,{},{},{},{},{},{},{},{},{},{}",
                 sha,
                 runner,
                 sample,
@@ -758,6 +774,7 @@ mod rae_p0_p1_p2_integration_tests {
                 stats.dirty_words_delivered,
                 stats.whole_state_words_scanned,
                 stats.full_reconciliation_words,
+                observed.experts().routed().rae_exact_mor_counts().exact_mor_reuses,
             );
         }
     }
