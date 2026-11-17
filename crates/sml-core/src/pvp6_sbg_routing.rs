@@ -4,6 +4,11 @@ use crate::{
     mor::{ExpertRuntimeHint, MixtureOfRouters, PreviousRoute},
     mor_registry::MorRouterRegistry,
     semantic::{
+        rae_learned_route::{RaeReplayPolicy, RaeTrainedEventRouter},
+        rae_qualification::{
+            dispatch_native_shadow, RaeDispatchMode, RaeNativeDispatch, RaeQualificationError,
+            RaeShadowQualification,
+        },
         rae_runtime_capture::{RaeNativeCaptureError, RaeNativeRuntimeCapture},
         SemanticMorBridge, SemanticMorError, SemanticMorRoute, SemanticRewriteStep,
         SemanticRewriter, SemanticState,
@@ -24,6 +29,22 @@ pub struct SbgRouteCycle {
     pub route: SemanticMorRoute,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Frozen shadow configuration. Always observational: native MOR stays active.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RaeShadowSession {
+    trained: RaeTrainedEventRouter,
+    qualification: RaeShadowQualification,
+    replay: RaeReplayPolicy,
+    expected_revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RaeShadowSetupError {
+    Observation(RaeNativeCaptureError),
+    Qualification(RaeQualificationError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoutedSemantic<K, const S: usize> {
     inner: K,
     context: SbgRoutingContext<S>,
@@ -31,6 +52,8 @@ pub struct RoutedSemantic<K, const S: usize> {
     max_cycles: u32,
     cycles: Arc<Vec<SbgRouteCycle>>,
     rae_observer: Option<RaeNativeRuntimeCapture<S>>,
+    rae_shadow: Option<RaeShadowSession>,
+    rae_shadow_evidence: Vec<RaeNativeDispatch>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoutedSemanticError<E> {
@@ -40,6 +63,7 @@ pub enum RoutedSemanticError<E> {
     Kernel(E),
     Routing(SemanticMorError),
     Rae(RaeNativeCaptureError),
+    RaeQualification(RaeQualificationError),
 }
 impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
     pub fn new(
@@ -57,6 +81,8 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
             max_cycles,
             cycles: Arc::new(Vec::new()),
             rae_observer: None,
+            rae_shadow: None,
+            rae_shadow_evidence: Vec::new(),
         })
     }
     #[must_use]
@@ -95,9 +121,49 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> RoutedSemantic<K, S> {
         Ok(())
     }
 
+    /// Enable a learned candidate only in observational mode.
+    /// Any mismatch rejects enablement before touching the live kernel.
+    pub fn enable_rae_shadow(
+        &mut self,
+        baseline: &SemanticState<S>,
+        trained: RaeTrainedEventRouter,
+        qualification: RaeShadowQualification,
+        replay: RaeReplayPolicy,
+        expected_revision: &str,
+    ) -> Result<(), RaeShadowSetupError> {
+        if expected_revision != qualification.pinned_code_revision
+            || trained.training_dataset_id() != qualification.train_case_id
+        {
+            return Err(RaeShadowSetupError::Qualification(
+                RaeQualificationError::MismatchedModelRevision,
+            ));
+        }
+        if trained.feature_width() != S
+            || trained.expert_count() != self.context.registry.policy().expert_count as usize
+        {
+            return Err(RaeShadowSetupError::Qualification(
+                RaeQualificationError::InvalidModelGeometry,
+            ));
+        }
+        self.enable_rae_observation(baseline)
+            .map_err(RaeShadowSetupError::Observation)?;
+        self.rae_shadow = Some(RaeShadowSession {
+            trained,
+            qualification,
+            replay,
+            expected_revision: expected_revision.to_owned(),
+        });
+        Ok(())
+    }
+
     #[must_use]
     pub fn rae_observer(&self) -> Option<&RaeNativeRuntimeCapture<S>> {
         self.rae_observer.as_ref()
+    }
+
+    #[must_use]
+    pub fn rae_shadow_evidence(&self) -> &[RaeNativeDispatch] {
+        &self.rae_shadow_evidence
     }
 }
 impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for RoutedSemantic<K, S> {
@@ -145,6 +211,32 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
                 )
                 .map_err(RoutedSemanticError::Rae)?;
         }
+        let candidate_evidence = if let Some(shadow) = &self.rae_shadow {
+            let frame = next_observer
+                .as_ref()
+                .and_then(|observer| observer.frames().last())
+                .ok_or(RoutedSemanticError::RaeQualification(
+                    RaeQualificationError::EmptyNativeReference,
+                ))?;
+            Some(
+                dispatch_native_shadow(
+                    &shadow.expected_revision,
+                    &shadow.qualification,
+                    &shadow.trained,
+                    frame,
+                    RaeDispatchMode::Shadow,
+                    shadow.replay,
+                )
+                .map_err(RoutedSemanticError::RaeQualification)?,
+            )
+        } else {
+            None
+        };
+        if candidate_evidence.is_some() {
+            self.rae_shadow_evidence
+                .try_reserve(1)
+                .map_err(|_| RoutedSemanticError::Allocation)?;
+        }
         Arc::make_mut(&mut self.cycles)
             .try_reserve(1)
             .map_err(|_| RoutedSemanticError::Allocation)?;
@@ -156,6 +248,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
         self.inner = inner;
         self.previous = previous;
         self.rae_observer = next_observer;
+        if let Some(evidence) = candidate_evidence {
+            // Shadow decisions never replace `route.decision` above.
+            self.rae_shadow_evidence.push(evidence);
+        }
         Ok(step)
     }
 }
