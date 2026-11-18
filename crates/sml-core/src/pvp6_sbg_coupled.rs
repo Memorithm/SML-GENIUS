@@ -779,4 +779,95 @@ mod rae_p0_p1_p2_integration_tests {
             );
         }
     }
+    /// Distinguishes the true cost of exact native MOR memoization from the
+    /// full R reconciliation cost of the optional REA observer. This is a
+    /// profile, not an inference-quality or physical-speed guarantee.
+    ///
+    /// Model parity is mandatory on EVERY one of 24 samples. Each sample
+    /// executes 3 arms in rotating order on the same initial state:
+    /// native, exact cache only, and observer + exact cache.
+    #[test]
+    #[ignore = "RemoteOps-only pinned Dell three-arm native CPU comparison"]
+    fn rae_p2_three_arm_native_cpu_cost_profile() {
+        use std::time::Instant;
+
+        let sha = std::env::var("SML_RAE_SOURCE_SHA")
+            .expect("RemoteOps must supply exact SML source revision");
+        let runner =
+            std::env::var("SML_RAE_RUNNER").expect("RemoteOps must identify admitted runner");
+        assert_eq!(sha.len(), 40);
+        assert!(sha.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!runner.trim().is_empty());
+
+        println!(
+            "rae_p2,source_sha={},runner={},case,first_arm,baseline_ns,cache_only_ns,observed_cache_ns,cache_mor_elisions,observed_mor_elisions,dirty_words,whole_words,reconciliation_words",
+            sha, runner,
+        );
+        const REPS: usize = 24;
+        for sample in 0..REPS {
+            let mut initial = SemanticState::<8>::zeroed().unwrap();
+            if sample % 2 != 0 {
+                initial.routing.set(0, true).unwrap();
+            }
+            if sample % 3 == 0 {
+                initial.value.set(0, true).unwrap();
+            }
+            if sample % 5 == 0 {
+                initial.meaning_mask.set(4, true).unwrap();
+            }
+            let policy = HaltingPolicy {
+                min_depth: 8,
+                max_depth: 8,
+                stable_hamming_threshold: 0,
+            };
+
+            let mut kernels = [coupled(), coupled(), coupled()];
+            kernels[1].enable_rae_exact_mor_reuse().unwrap();
+            kernels[2].enable_rae_exact_mor_reuse().unwrap();
+            kernels[2].enable_rae_observation(&initial).unwrap();
+
+            let mut durations = [0_u128; 3];
+            let mut results = Vec::with_capacity(3);
+            for order_position in 0..3 {
+                let arm = (sample + order_position) % 3;
+                let before = Instant::now();
+                let result =
+                    run_semantic_recurrent(initial.clone(), &mut kernels[arm], policy).unwrap();
+                durations[arm] = before.elapsed().as_nanos();
+                results.push(result);
+            }
+            assert_eq!(results[0], results[1], "native/model parity");
+            assert_eq!(results[1], results[2], "native/model parity");
+            assert_eq!(kernels[0].cycles(), kernels[1].cycles());
+            assert_eq!(kernels[0].cycles(), kernels[2].cycles());
+            assert_eq!(kernels[0].memory(), kernels[1].memory());
+            assert_eq!(kernels[0].memory(), kernels[2].memory());
+            assert_eq!(kernels[0].memory_usage(), kernels[1].memory_usage());
+            assert_eq!(kernels[0].memory_usage(), kernels[2].memory_usage());
+
+            let isolated = kernels[1].experts().routed().rae_exact_mor_counts();
+            let observed = kernels[2].experts().routed().rae_exact_mor_counts();
+            let recorder = kernels[2].experts().routed().rae_observer().unwrap();
+            let trace = recorder.accounting();
+            assert_eq!(isolated.mor_evaluations + isolated.exact_mor_reuses, 8);
+            assert_eq!(observed.mor_evaluations + observed.exact_mor_reuses, 8);
+            assert_eq!(trace.native_routes_observed, 8);
+            assert_eq!(isolated.exact_mor_reuses, observed.exact_mor_reuses);
+            println!(
+                "rae_p2,{},{},{},{},{},{},{},{},{},{},{},{}",
+                sha,
+                runner,
+                sample,
+                sample % 3,
+                durations[0],
+                durations[1],
+                durations[2],
+                isolated.exact_mor_reuses,
+                observed.exact_mor_reuses,
+                trace.dirty_words_delivered,
+                trace.whole_state_words_scanned,
+                trace.full_reconciliation_words,
+            );
+        }
+    }
 }
