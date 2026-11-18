@@ -94,6 +94,33 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize, const Q: us
             .replace_expert(id, expected_revision, bank)
             .map_err(CoupledSbgError::Experts)
     }
+    /// Observe original MOR decisions while preserving all expert and DKV work.
+    pub fn enable_rae_observation(
+        &mut self,
+        baseline: &SemanticState<S>,
+    ) -> Result<(), crate::semantic::rae_runtime_capture::RaeNativeCaptureError> {
+        self.experts.enable_rae_observation(baseline)
+    }
+    /// A shadow candidate never changes coupled expert or Delta-KV work.
+    pub fn enable_rae_shadow(
+        &mut self,
+        baseline: &SemanticState<S>,
+        trained: crate::semantic::rae_learned_route::RaeTrainedEventRouter,
+        qualification: crate::semantic::rae_qualification::RaeShadowQualification,
+        replay: crate::semantic::rae_learned_route::RaeReplayPolicy,
+        expected_revision: &str,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.experts
+            .enable_rae_shadow(baseline, trained, qualification, replay, expected_revision)
+    }
+
+    /// Activate exact MOR decision caching without skipping ANF or Delta-KV.
+    pub fn enable_rae_exact_mor_reuse(
+        &mut self,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.experts.enable_rae_exact_mor_reuse()
+    }
+
     #[must_use]
     pub fn experts(&self) -> &RoutedExpertSemantic<K, S, D> {
         &self.experts
@@ -487,5 +514,269 @@ mod expert_update_tests {
         assert_eq!(k, before);
         assert!(k.replace_expert(PageId(99), 0, bank).is_err());
         assert_eq!(k, before);
+    }
+}
+
+#[cfg(test)]
+mod rae_p0_p1_p2_integration_tests {
+    use super::fixtures::coupled;
+    use crate::{
+        semantic::{
+            rae_learned_route::{RaeReplayPolicy, RaeTrainPolicy, RAE_LEARNING_PPM},
+            rae_native_trace::SbgRaeNativeFrame,
+            rae_qualification::{
+                dispatch_native_shadow, qualify_native_rae, RaeDispatchMode, RaeNativeCase,
+                RaeShadowBudgets,
+            },
+            run_semantic_recurrent, SemanticState,
+        },
+        HaltingPolicy,
+    };
+
+    fn execute_model_case(initial: SemanticState<8>) -> Vec<SbgRaeNativeFrame> {
+        let policy = HaltingPolicy {
+            min_depth: 8,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let mut normal = coupled();
+        let normal_output = run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+        let mut instrumented = coupled();
+        instrumented.enable_rae_observation(&initial).unwrap();
+        let with_trace = run_semantic_recurrent(initial, &mut instrumented, policy).unwrap();
+
+        // Same real SBG → MOR → expert ANF → dynamic Delta-KV memory
+        // execution and outputs. Observation does not change the route,
+        // recurrent halting behavior or selected expert pages.
+        assert_eq!(with_trace, normal_output);
+        assert_eq!(instrumented.cycles(), normal.cycles());
+        assert_eq!(instrumented.memory_usage(), normal.memory_usage());
+        assert_eq!(instrumented.memory(), normal.memory());
+        let recorder = instrumented.experts().routed().rae_observer().unwrap();
+        assert_eq!(recorder.accounting().native_routes_observed, 8);
+        let frames = recorder.frames();
+        assert_eq!(frames.len(), 8);
+        for (row, native) in frames.iter().zip(instrumented.experts().routed().cycles()) {
+            assert_eq!(row.selected_experts, native.route.decision.selected_experts);
+            assert_eq!(row.cycle, u64::from(native.depth));
+        }
+        frames.to_vec()
+    }
+
+    #[test]
+    fn real_coupled_model_train_and_two_heldout_cases_are_shadow_only() {
+        let mut training = SemanticState::<8>::zeroed().unwrap();
+        training.value.set(0, true).unwrap();
+        training.routing.set(0, true).unwrap();
+
+        let mut first_holdout = SemanticState::<8>::zeroed().unwrap();
+        first_holdout.routing.set(7, true).unwrap();
+        let mut second_holdout = SemanticState::<8>::zeroed().unwrap();
+        second_holdout.value.set(3, true).unwrap();
+        second_holdout.ambiguity.set(5, true).unwrap();
+        second_holdout.routing.set(0, true).unwrap();
+        second_holdout.routing.set(7, true).unwrap();
+
+        let shadow_initial = second_holdout.clone();
+        let train = execute_model_case(training);
+        let hold1 = execute_model_case(first_holdout);
+        let hold2 = execute_model_case(second_holdout);
+        let (learned, evidence) = qualify_native_rae::<8>(
+            "sml-model-p0-revision-pinned-by-ci",
+            RaeNativeCase {
+                case_id: "TRAIN-coupled-1",
+                frames: &train,
+            },
+            &[
+                RaeNativeCase {
+                    case_id: "HOLDOUT-coupled-2",
+                    frames: &hold1,
+                },
+                RaeNativeCase {
+                    case_id: "HOLDOUT-coupled-3",
+                    frames: &hold2,
+                },
+            ],
+            2,
+            RaeTrainPolicy {
+                minimum_exposures: 1,
+                minimum_precision_ppm: RAE_LEARNING_PPM,
+                max_associations: 16,
+            },
+            2,
+            RaeShadowBudgets::default(),
+        )
+        .unwrap();
+        assert_eq!(evidence.train_frames, 8);
+        assert_eq!(evidence.rising.frames, 16);
+        assert_eq!(evidence.persistent.frames, 16);
+        assert_eq!(evidence.contextual.frames, 16);
+        assert!(evidence.rising.native_selected_pages >= 16);
+        assert!(!evidence.production_skip_authorized);
+
+        for frame in hold1.iter().chain(&hold2) {
+            for replay in [
+                RaeReplayPolicy::RisingOnly,
+                RaeReplayPolicy::PersistentActive,
+                RaeReplayPolicy::RisingWithContextRecheck,
+            ] {
+                let dispatch = dispatch_native_shadow(
+                    "sml-model-p0-revision-pinned-by-ci",
+                    &evidence,
+                    &learned,
+                    frame,
+                    RaeDispatchMode::Shadow,
+                    replay,
+                )
+                .unwrap();
+                assert_eq!(dispatch.executed_native_pages, frame.selected_experts);
+                assert!(!dispatch.native_mor_bypassed);
+            }
+        }
+
+        // The frozen policy is activated as SHADOW within the real
+        // MOR→ANF-expert→Delta-KV pipeline, not merely on saved trace rows.
+        let mut shadow_kernel = coupled();
+        shadow_kernel
+            .enable_rae_shadow(
+                &shadow_initial,
+                learned,
+                evidence,
+                RaeReplayPolicy::RisingOnly,
+                "sml-model-p0-revision-pinned-by-ci",
+            )
+            .unwrap();
+        let mut native_kernel = coupled();
+        let policy = HaltingPolicy {
+            min_depth: 8,
+            max_depth: 8,
+            stable_hamming_threshold: 0,
+        };
+        let native_output =
+            run_semantic_recurrent(shadow_initial.clone(), &mut native_kernel, policy).unwrap();
+        let observed_output =
+            run_semantic_recurrent(shadow_initial.clone(), &mut shadow_kernel, policy).unwrap();
+        assert_eq!(native_output, observed_output);
+        assert_eq!(native_kernel.cycles(), shadow_kernel.cycles());
+        assert_eq!(native_kernel.memory(), shadow_kernel.memory());
+
+        // An independently opt-in *exact* route cache is a real
+        // calculation-elimination path. It never skips experts or DKV.
+        let mut exact_kernel = coupled();
+        exact_kernel.enable_rae_exact_mor_reuse().unwrap();
+        let exact_output =
+            run_semantic_recurrent(shadow_initial.clone(), &mut exact_kernel, policy).unwrap();
+        assert_eq!(exact_output, native_output);
+        assert_eq!(exact_kernel.cycles(), native_kernel.cycles());
+        assert_eq!(exact_kernel.memory(), native_kernel.memory());
+        let saved = exact_kernel.experts().routed().rae_exact_mor_counts();
+        assert_eq!(saved.mor_evaluations + saved.exact_mor_reuses, 8);
+        let routed = shadow_kernel.experts().routed();
+        assert_eq!(routed.rae_shadow_evidence().len(), 8);
+        for (shadow, native) in routed.rae_shadow_evidence().iter().zip(routed.cycles()) {
+            assert_eq!(
+                shadow.executed_native_pages,
+                native.route.decision.selected_experts
+            );
+            assert!(!shadow.native_mor_bypassed);
+        }
+    }
+    /// Resource study must be scheduled through Memorithm/RemoteOps on an
+    /// explicitly pinned, isolated runner; never run as a normal CI test.
+    /// Each row compares the same native model and initial state, reversing
+    /// execution order every iteration to reduce fixed ordering bias.
+    #[test]
+    #[ignore = "RemoteOps-only physical profiling; requires pinned SHA and runner"]
+    fn rae_p1_paired_native_cpu_cost_profile() {
+        use std::time::Instant;
+
+        let sha = std::env::var("SML_RAE_SOURCE_SHA")
+            .expect("RemoteOps must provide the exact source revision");
+        let runner =
+            std::env::var("SML_RAE_RUNNER").expect("RemoteOps must identify its admitted runner");
+        assert_eq!(sha.len(), 40, "require full source SHA");
+        assert!(sha.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!runner.trim().is_empty());
+        const REPS: usize = 24;
+        println!(
+            "rae_p1,source_sha={},runner={},case,order,baseline_ns,shadow_ns,dirty_words,whole_words,reconciliation_words,mor_calls_elided",
+            sha, runner,
+        );
+        for sample in 0..REPS {
+            let mut initial = SemanticState::<8>::zeroed().unwrap();
+            if sample % 2 != 0 {
+                initial.routing.set(0, true).unwrap();
+            }
+            if sample % 3 == 0 {
+                initial.value.set(0, true).unwrap();
+            }
+            if sample % 5 == 0 {
+                initial.meaning_mask.set(4, true).unwrap();
+            }
+            let policy = HaltingPolicy {
+                min_depth: 8,
+                max_depth: 8,
+                stable_hamming_threshold: 0,
+            };
+            let mut normal = coupled();
+            let mut observed = coupled();
+            observed.enable_rae_observation(&initial).unwrap();
+            observed.enable_rae_exact_mor_reuse().unwrap();
+
+            let baseline_output;
+            let shadow_output;
+            let baseline_ns;
+            let shadow_ns;
+            if sample % 2 == 0 {
+                let before = Instant::now();
+                baseline_output =
+                    run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+                baseline_ns = before.elapsed().as_nanos();
+                let before = Instant::now();
+                shadow_output =
+                    run_semantic_recurrent(initial.clone(), &mut observed, policy).unwrap();
+                shadow_ns = before.elapsed().as_nanos();
+            } else {
+                let before = Instant::now();
+                shadow_output =
+                    run_semantic_recurrent(initial.clone(), &mut observed, policy).unwrap();
+                shadow_ns = before.elapsed().as_nanos();
+                let before = Instant::now();
+                baseline_output =
+                    run_semantic_recurrent(initial.clone(), &mut normal, policy).unwrap();
+                baseline_ns = before.elapsed().as_nanos();
+            }
+            assert_eq!(baseline_output, shadow_output);
+            assert_eq!(normal.cycles(), observed.cycles());
+            assert_eq!(normal.memory(), observed.memory());
+            let stats = observed
+                .experts()
+                .routed()
+                .rae_observer()
+                .unwrap()
+                .accounting();
+            assert_eq!(stats.native_routes_observed, 8);
+            println!(
+                "rae_p1,{},{},{},{},{},{},{},{},{},{}",
+                sha,
+                runner,
+                sample,
+                if sample % 2 == 0 {
+                    "baseline-first"
+                } else {
+                    "shadow-first"
+                },
+                baseline_ns,
+                shadow_ns,
+                stats.dirty_words_delivered,
+                stats.whole_state_words_scanned,
+                stats.full_reconciliation_words,
+                observed
+                    .experts()
+                    .routed()
+                    .rae_exact_mor_counts()
+                    .exact_mor_reuses,
+            );
+        }
     }
 }

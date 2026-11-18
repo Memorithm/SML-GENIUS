@@ -60,6 +60,34 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize, const D: usize> RoutedExper
             .replace_bank(id, expected_revision, bank)
             .map_err(RoutedExpertError::Expert)
     }
+    /// Enable passive routing telemetry in the actual expert execution loop.
+    pub fn enable_rae_observation(
+        &mut self,
+        baseline: &SemanticState<S>,
+    ) -> Result<(), crate::semantic::rae_runtime_capture::RaeNativeCaptureError> {
+        self.routed.enable_rae_observation(baseline)
+    }
+    /// Enable candidate scoring in the real expert loop, with native MOR
+    /// still selecting every page executed by the ANF atlas.
+    pub fn enable_rae_shadow(
+        &mut self,
+        baseline: &SemanticState<S>,
+        trained: crate::semantic::rae_learned_route::RaeTrainedEventRouter,
+        qualification: crate::semantic::rae_qualification::RaeShadowQualification,
+        replay: crate::semantic::rae_learned_route::RaeReplayPolicy,
+        expected_revision: &str,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.routed
+            .enable_rae_shadow(baseline, trained, qualification, replay, expected_revision)
+    }
+
+    /// Reuse only exact native MOR route-input matches; experts still run.
+    pub fn enable_rae_exact_mor_reuse(
+        &mut self,
+    ) -> Result<(), crate::pvp6_sbg_routing::RaeShadowSetupError> {
+        self.routed.enable_rae_exact_mor_reuse()
+    }
+
     #[must_use]
     pub fn routed(&self) -> &RoutedSemantic<K, S> {
         &self.routed
