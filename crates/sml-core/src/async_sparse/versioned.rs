@@ -302,11 +302,13 @@ mod tests {
         let before = agenda.clone();
         assert_eq!(
             agenda.submit_from(stamp(4, 7), &[rising(1, 1), rising(1, 2)]),
-            Err(SparseGenerationError::Agenda(SparseAgendaError::QueueFull {
-                capacity: 1,
-                pending: 0,
-                incoming: 2,
-            }))
+            Err(SparseGenerationError::Agenda(
+                SparseAgendaError::QueueFull {
+                    capacity: 1,
+                    pending: 0,
+                    incoming: 2,
+                }
+            ))
         );
         assert_eq!(agenda, before);
         agenda.submit_from(stamp(4, 7), &[rising(1, 3)]).unwrap();
