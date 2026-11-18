@@ -252,7 +252,10 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
                 )
                 .map_err(RoutedSemanticError::Routing)?
         };
-        let next_mor_cache = self.exact_mor_cache_enabled.then(|| RaeExactMorCache {
+        // Keep the existing entry on an exact hit. Refreshing the same
+        // cache would clone the full route and both key fields on *every*
+        // cycle, erasing much of the skipped ranking work.
+        let next_mor_cache = (self.exact_mor_cache_enabled && !cached).then(|| RaeExactMorCache {
             routing: step.state.routing.clone(),
             previous_route: self.previous.clone(),
             result: route.clone(),
@@ -311,8 +314,8 @@ impl<K: SemanticRewriter<S> + Clone, const S: usize> SemanticRewriter<S> for Rou
         self.inner = inner;
         self.previous = previous;
         self.rae_observer = next_observer;
-        if self.exact_mor_cache_enabled {
-            self.exact_mor_cache = next_mor_cache;
+        if let Some(refreshed_cache) = next_mor_cache {
+            self.exact_mor_cache = Some(refreshed_cache);
         }
         if cached {
             self.exact_mor_counts.exact_mor_reuses += 1;
