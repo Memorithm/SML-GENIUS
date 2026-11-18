@@ -310,7 +310,14 @@ mod tests {
         );
         assert_eq!(agenda, before);
         agenda.submit_from(stamp(4, 7), &[rising(1, 3)]).unwrap();
-        assert_eq!(agenda.poll_next(|_| Ok::<(), ()>(())).unwrap().unwrap().sequence, 1);
+        assert_eq!(
+            agenda
+                .poll_next(|_| Ok::<(), ()>(()))
+                .unwrap()
+                .unwrap()
+                .sequence,
+            1
+        );
         assert_eq!(agenda.stale_retired(), 0);
     }
 
