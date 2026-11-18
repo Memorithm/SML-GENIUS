@@ -6,6 +6,9 @@
 
 use std::collections::BTreeMap;
 
+/// Opt-in source-generation guard for causally stale queued events.
+pub mod versioned;
+
 use crate::{
     semantic::{rae_dirty_journal::SbgDirtyRoutingWord, SemanticBitField},
     PageId,
