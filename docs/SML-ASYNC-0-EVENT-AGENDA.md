@@ -31,6 +31,31 @@ initial substrate:
   **future** asynchronous executor. It is not parallel execution and has
   no hardware-performance claim.
 
+## SML-ASYNC-1 — opt-in causal generation guard
+
+\`async_sparse::versioned::VersionedSparseAgenda\` is a functional,
+bounded wrapper around the existing deterministic agenda. Before submission,
+the model owner registers a monotonic \`(source_id, generation)\`. A complete
+batch is accepted only for that source's current generation, preserving its
+logical time and event order. An old queued event becomes stale if the source
+advances; the guarded poll retires it **without calling the handler** and
+increments a separate \`stale_retired\` counter. Other sources remain eligible.
+The original \`AsyncSparseAgenda\` API and unguarded semantics are unchanged.
+
+The wrapper reports committed events separately from stale retirements and
+preserves a live event and its stamp on handler failure. Regressing generations,
+unknown sources and stale submissions are rejected without partial admission;
+a full queue remains bounded. Five new Rust tests cover stale retirement,
+independent sources, retry, rejection and empty batches.
+
+**Safety boundary:** advancing a generation is only valid when the caller owns
+the *complete* invalidation set for that source and will reemit any required
+memory/context/recurrent work in the new generation. Source stamping alone
+does not justify skipping native MOR or any model dependency. This is not yet
+wired into the actual SBG mutation boundary and is not a physical speed or
+quality result. Model parity and a complete mutation-source audit are required
+before enabling it in the runtime.
+
 ## Gaps before architectural promotion
 
 1. **Real model integration**: place ownership at the actual mutator of SBG R
