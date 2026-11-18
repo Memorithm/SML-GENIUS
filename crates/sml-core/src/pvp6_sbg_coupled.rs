@@ -793,8 +793,8 @@ mod rae_p0_p1_p2_integration_tests {
 
         let sha = std::env::var("SML_RAE_SOURCE_SHA")
             .expect("RemoteOps must supply exact SML source revision");
-        let runner = std::env::var("SML_RAE_RUNNER")
-            .expect("RemoteOps must identify admitted runner");
+        let runner =
+            std::env::var("SML_RAE_RUNNER").expect("RemoteOps must identify admitted runner");
         assert_eq!(sha.len(), 40);
         assert!(sha.bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert!(!runner.trim().is_empty());
@@ -870,5 +870,4 @@ mod rae_p0_p1_p2_integration_tests {
             );
         }
     }
-
 }
