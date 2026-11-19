@@ -5,16 +5,13 @@
 //! or memory work until a complete upstream mutation contract is proved.
 
 use crate::semantic::{
-    rae_dirty_journal::{
-        SbgDirtyJournalError, SbgJournalEvidence, SbgRoutingDirtyJournal,
-    },
+    rae_dirty_journal::{SbgDirtyJournalError, SbgJournalEvidence, SbgRoutingDirtyJournal},
     SemanticBitField, SemanticBitFieldError,
 };
 
 use super::{
     versioned::{
-        SbgVersionedIngressError, SparseGenerationError, SparseSourceStamp,
-        VersionedSparseAgenda,
+        SbgVersionedIngressError, SparseGenerationError, SparseSourceStamp, VersionedSparseAgenda,
     },
     SbgSparseEventIngress, SparseAgendaError, SparseAgendaEvidence, SparseDispatchError,
     SparseEvent, SparseEventKind, SparseEventRequest, SparseIngressEvidence,
@@ -35,7 +32,7 @@ pub struct SbgCausalFlushEvidence {
 /// Opt-in R mutation source, exact dirty-word ingress and generation-aware
 /// bounded agenda sharing a single transactional acknowledgement boundary.
 ///
-/// Writes through \`set\` are sparse. \`replace\` explicitly scans every
+/// Writes through `set` are sparse. `replace` explicitly scans every
 /// packed R word. No untracked external SBG writes are observed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgCausalEventBridge<const BITS: usize> {
@@ -107,10 +104,7 @@ impl<const BITS: usize> SbgCausalEventBridge<BITS> {
     /// Only the model owner may advance a source generation. It must reemit
     /// all causally required work, including held-state and non-R memory
     /// invalidations, before using stale-event retirement as an optimization.
-    pub fn advance_generation(
-        &mut self,
-        next: u64,
-    ) -> Result<(), SparseGenerationError> {
+    pub fn advance_generation(&mut self, next: u64) -> Result<(), SparseGenerationError> {
         self.agenda.set_source_generation(self.source_id, next)?;
         self.generation = next;
         Ok(())
@@ -153,9 +147,9 @@ impl<const BITS: usize> SbgCausalEventBridge<BITS> {
         };
         let mut emitted = None;
         let journal = self.journal.flush(tick, |deltas| {
-            let evidence = self
-                .ingress
-                .submit_dirty_words_versioned(tick, deltas, stamp, &mut self.agenda)?;
+            let evidence =
+                self.ingress
+                    .submit_dirty_words_versioned(tick, deltas, stamp, &mut self.agenda)?;
             emitted = Some(evidence);
             Ok::<(), SbgVersionedIngressError>(())
         })?;
@@ -207,8 +201,7 @@ mod tests {
     #[test]
     fn newer_generation_retires_previous_edge_without_losing_new_edges() {
         let mut bridge =
-            SbgCausalEventBridge::new(SemanticBitField::<65>::zeroed().unwrap(), 0, 4, 42)
-                .unwrap();
+            SbgCausalEventBridge::new(SemanticBitField::<65>::zeroed().unwrap(), 0, 4, 42).unwrap();
         bridge.set(0, true).unwrap();
         bridge.flush(1).unwrap();
         bridge.advance_generation(1).unwrap();
@@ -241,16 +234,17 @@ mod tests {
     #[test]
     fn backpressure_preserves_journal_and_ingress_for_retry() {
         let mut bridge =
-            SbgCausalEventBridge::new(SemanticBitField::<65>::zeroed().unwrap(), 0, 1, 2)
-                .unwrap();
+            SbgCausalEventBridge::new(SemanticBitField::<65>::zeroed().unwrap(), 0, 1, 2).unwrap();
         bridge.set(0, true).unwrap();
         bridge.set(64, true).unwrap();
         let before = bridge.clone();
         assert!(matches!(
             bridge.flush(1),
-            Err(SbgDirtyJournalError::Sink(SbgVersionedIngressError::Source(
-                SparseGenerationError::Agenda(SparseAgendaError::QueueFull { .. })
-            )))
+            Err(SbgDirtyJournalError::Sink(
+                SbgVersionedIngressError::Source(SparseGenerationError::Agenda(
+                    SparseAgendaError::QueueFull { .. }
+                ))
+            ))
         ));
         assert_eq!(bridge, before);
         // Revert one pending mutation, leaving one legitimate rising front.
@@ -260,7 +254,11 @@ mod tests {
         assert_eq!(bridge.pending_events(), 1);
         assert_eq!(bridge.pending_words(), 0);
         assert_eq!(
-            bridge.poll_next(|_| Ok::<(), ()>(())).unwrap().unwrap().target,
+            bridge
+                .poll_next(|_| Ok::<(), ()>(()))
+                .unwrap()
+                .unwrap()
+                .target,
             SparseEventTarget::Feature(0)
         );
     }
@@ -268,8 +266,7 @@ mod tests {
     #[test]
     fn non_r_memory_invalidation_is_retained_and_spurious_edges_rejected() {
         let mut bridge =
-            SbgCausalEventBridge::new(SemanticBitField::<1>::zeroed().unwrap(), 0, 1, 4)
-                .unwrap();
+            SbgCausalEventBridge::new(SemanticBitField::<1>::zeroed().unwrap(), 0, 1, 4).unwrap();
         bridge.advance_generation(1).unwrap();
         let invalidation = SparseEventRequest {
             logical_time: 2,
@@ -287,7 +284,11 @@ mod tests {
         );
         assert_eq!(bridge, before);
         assert_eq!(
-            bridge.poll_next(|_| Ok::<(), ()>(())).unwrap().unwrap().kind,
+            bridge
+                .poll_next(|_| Ok::<(), ()>(()))
+                .unwrap()
+                .unwrap()
+                .kind,
             SparseEventKind::MemoryInvalidation
         );
         assert_eq!(bridge.agenda_evidence().committed, 1);
@@ -296,8 +297,7 @@ mod tests {
     #[test]
     fn handler_failure_retains_authoritative_current_event() {
         let mut bridge =
-            SbgCausalEventBridge::new(SemanticBitField::<1>::zeroed().unwrap(), 0, 1, 4)
-                .unwrap();
+            SbgCausalEventBridge::new(SemanticBitField::<1>::zeroed().unwrap(), 0, 1, 4).unwrap();
         bridge.set(0, true).unwrap();
         bridge.flush(1).unwrap();
         let before = bridge.clone();
