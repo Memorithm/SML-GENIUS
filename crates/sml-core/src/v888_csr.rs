@@ -168,4 +168,3 @@ pub struct V888CsrStep {
     pub contacts: u64,
     pub loops: u64,
 }
-
