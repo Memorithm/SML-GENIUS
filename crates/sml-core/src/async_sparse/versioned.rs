@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use super::{
     AsyncSparseAgenda, SparseAgendaError, SparseAgendaEvidence, SparseDispatchError, SparseEvent,
-    SparseEventRequest,
+    SparseEventRequest, SparseIngressError,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +36,14 @@ pub enum SparseGenerationError {
     Agenda(SparseAgendaError),
 }
 
+/// Explicit error boundary between raw SBG delta validation and the causal
+/// admission of stamped events. The journal can retry unchanged on either.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SbgVersionedIngressError {
+    Ingress(SparseIngressError),
+    Source(SparseGenerationError),
+}
+
 /// Bounded, single-event logical-time agenda with explicit causal generations.
 ///
 /// A submission is all-or-nothing. When a source advances, previously queued
@@ -60,6 +68,18 @@ impl VersionedSparseAgenda {
             stamps: BTreeMap::new(),
             stale_retired: 0,
         })
+    }
+
+    /// Construct a guarded agenda and register its first model-owned source
+    /// without an additional fallible setup stage.
+    pub fn with_source(
+        capacity: usize,
+        source_id: u64,
+        initial_generation: u64,
+    ) -> Result<Self, SparseAgendaError> {
+        let mut agenda = Self::new(capacity)?;
+        agenda.generations.insert(source_id, initial_generation);
+        Ok(agenda)
     }
 
     /// Register or advance the model-owned generation of one event source.

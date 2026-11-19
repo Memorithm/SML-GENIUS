@@ -56,6 +56,37 @@ wired into the actual SBG mutation boundary and is not a physical speed or
 quality result. Model parity and a complete mutation-source audit are required
 before enabling it in the runtime.
 
+## SML-ASYNC-2 — native tracked R writer to causally stamped ingress
+
+The optional `async_sparse::causal_bridge::SbgCausalEventBridge` now
+composes **actual model-owned R point writes** via
+`SbgRoutingDirtyJournal::set`, exact sparse rising/falling edge extraction,
+and `VersionedSparseAgenda` with causal source generations. Unlike a
+full-snapshot compatibility adapter, point writes record only their changed
+packed word at mutation time; whole-R `replace` explicitly scans every word.
+The original unversioned ingress and native MOR execution remain available
+and unchanged.
+
+The journal, previous acknowledged packed words and bounded stamped queue
+advance **only after successful admission**. A full queue, invalid padding,
+out-of-order word metadata or failed source generation admission therefore
+preserves the original journal for retry. Five focused tests exercise
+ordered true R edges, stale-generation retirement, full-queue rollback,
+explicit memory invalidation and handler retry.
+
+The public bridge also admits `ContextInvalidation`,
+`MemoryInvalidation` and `Wake` events independently of R fronts, and
+rejects manual rising/falling events that could bypass the writer.
+
+**Promotion boundary:** this bridge owns its own R field; the existing
+`RoutedSemantic` / `CoupledSbgLoop` mutator has **not** yet been
+replaced with it. In particular, generation changes do not automatically
+prove that held-state, memory and non-R invalidations have been reemitted.
+Model-level equivalence, complete mutation ownership and a safe fallback to
+full native MOR are required before using stamped event retirement in
+production. No speed, memory-bandwidth, energy or trained-model gain is
+claimed.
+
 ## Gaps before architectural promotion
 
 1. **Real model integration**: place ownership at the actual mutator of SBG R
