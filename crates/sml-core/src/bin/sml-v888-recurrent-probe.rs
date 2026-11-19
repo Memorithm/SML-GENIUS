@@ -214,7 +214,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!(
         "step2_source_bits_examined={} step2_source_words_examined={} step2_active_sources={} route_lookups={}",
-        second.source_bits_examined, second.active_sources, counters.route_lookups
+        second.source_bits_examined,
+        second.source_words_examined,
+        second.active_sources,
+        counters.route_lookups
     );
     println!("SML_V888_RECURRENT_CONSUMER=PASS");
     println!("SML_V888_MODEL_QUALITY=NOT_MEASURED");
