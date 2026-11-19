@@ -235,15 +235,14 @@ impl<const BITS: usize> SbgSparseEventIngress<BITS> {
         self.last_tick
     }
 
-    /// Compatible with SbgRoutingDirtyJournal::flush(tick, |deltas| ...).
-    /// Invalid metadata, a non-monotonic tick or a full agenda leaves both
-    /// prior feature state and queued events untouched.
-    pub fn submit_dirty_words(
-        &mut self,
+    /// Validate and transform the native dirty-word slice without modifying
+    /// the ingress baseline or an agenda. Both admission paths below reuse
+    /// the same exact sparse edge extraction and ordering.
+    fn prepare_dirty_words(
+        &self,
         tick: u64,
         deltas: &[SbgDirtyRoutingWord],
-        agenda: &mut AsyncSparseAgenda,
-    ) -> Result<SparseIngressEvidence, SparseIngressError> {
+    ) -> Result<(SparseIngressEvidence, Vec<SparseEventRequest>), SparseIngressError> {
         if tick <= self.last_tick {
             return Err(SparseIngressError::NonIncreasingTick {
                 previous: self.last_tick,
@@ -303,19 +302,61 @@ impl<const BITS: usize> SbgSparseEventIngress<BITS> {
                 falls &= falls - 1;
             }
         }
-        agenda
-            .submit_batch(&requests)
-            .map_err(SparseIngressError::Agenda)?;
+
+        Ok((
+            SparseIngressEvidence {
+                tick,
+                dirty_words: deltas.len(),
+                rising,
+                falling,
+            },
+            requests,
+        ))
+    }
+
+    fn commit_dirty_words(&mut self, tick: u64, deltas: &[SbgDirtyRoutingWord]) {
         for delta in deltas {
             self.previous_words[delta.index] = delta.next;
         }
         self.last_tick = tick;
-        Ok(SparseIngressEvidence {
-            tick,
-            dirty_words: deltas.len(),
-            rising,
-            falling,
-        })
+    }
+
+    /// Compatible with SbgRoutingDirtyJournal::flush(tick, |deltas| ...).
+    /// Invalid metadata, a non-monotonic tick or a full agenda leaves both
+    /// prior feature state and queued events untouched.
+    pub fn submit_dirty_words(
+        &mut self,
+        tick: u64,
+        deltas: &[SbgDirtyRoutingWord],
+        agenda: &mut AsyncSparseAgenda,
+    ) -> Result<SparseIngressEvidence, SparseIngressError> {
+        let (evidence, requests) = self.prepare_dirty_words(tick, deltas)?;
+        agenda
+            .submit_batch(&requests)
+            .map_err(SparseIngressError::Agenda)?;
+        self.commit_dirty_words(tick, deltas);
+        Ok(evidence)
+    }
+
+    /// The same native dirty-word ingress with explicit model-owned causal
+    /// source stamping. The previously acknowledged packed words are updated
+    /// only after the entire batch is accepted at the current generation.
+    /// Failed version, capacity and metadata checks preserve both baselines.
+    pub fn submit_dirty_words_versioned(
+        &mut self,
+        tick: u64,
+        deltas: &[SbgDirtyRoutingWord],
+        stamp: versioned::SparseSourceStamp,
+        agenda: &mut versioned::VersionedSparseAgenda,
+    ) -> Result<SparseIngressEvidence, versioned::SbgVersionedIngressError> {
+        let (evidence, requests) = self
+            .prepare_dirty_words(tick, deltas)
+            .map_err(versioned::SbgVersionedIngressError::Ingress)?;
+        agenda
+            .submit_from(stamp, &requests)
+            .map_err(versioned::SbgVersionedIngressError::Source)?;
+        self.commit_dirty_words(tick, deltas);
+        Ok(evidence)
     }
 }
 
