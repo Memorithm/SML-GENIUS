@@ -352,6 +352,19 @@ impl BooleanWorkspace {
         Some((self.words[index / 64] & (1_u64 << (index % 64))) != 0)
     }
 
+    /// Iterates active Boolean coordinates in ascending order.
+    ///
+    /// Scans packed 64-bit words and visits only set bits within each word.
+    /// This iterator allocates no intermediate active-index vector.
+    #[must_use]
+    pub fn active_indices(&self) -> ActiveBitIndices<'_> {
+        ActiveBitIndices {
+            words: &self.words,
+            next_word: 0,
+            pending: 0,
+        }
+    }
+
     /// Returns the Hamming distance between equally-sized workspaces.
     pub fn hamming_distance(&self, other: &Self) -> Result<u64, WorkspaceError> {
         if self.len_bits != other.len_bits {
@@ -388,6 +401,35 @@ impl BooleanWorkspace {
         Ok(address)
     }
 }
+
+/// Allocation-free iterator over set coordinates in a Boolean workspace.
+///
+/// Each packed word is examined once. Within a nonzero word, trailing-zero
+/// extraction enumerates only active bits. Coordinates are increasing.
+#[derive(Debug, Clone)]
+pub struct ActiveBitIndices<'a> {
+    words: &'a [u64],
+    next_word: usize,
+    pending: u64,
+}
+
+impl Iterator for ActiveBitIndices<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.pending != 0 {
+                let bit = self.pending.trailing_zeros() as usize;
+                self.pending &= self.pending - 1;
+                return Some((self.next_word - 1) * 64 + bit);
+            }
+            self.pending = *self.words.get(self.next_word)?;
+            self.next_word += 1;
+        }
+    }
+}
+
+impl std::iter::FusedIterator for ActiveBitIndices<'_> {}
 
 /// Errors produced by workspace operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
