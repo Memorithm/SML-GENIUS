@@ -106,14 +106,13 @@ impl<'a> Graph<'a> {
         if input.len() != self.nodes {
             return Err(invalid("workspace shape"));
         }
-        // Admission before execution; count this full source-bit scan explicitly.
+        // Admit active edges before any mutation. Packed words are scanned once;
+        // zero bits never enter the CSR fan-out calculation.
         let mut admitted = 0_u64;
         let mut active_sources = 0_u64;
-        for source in 0..self.nodes {
-            if input.get(source) == Some(true) {
-                active_sources += 1;
-                admitted += (self.offset(source + 1) - self.offset(source)) as u64;
-            }
+        for source in input.active_indices() {
+            active_sources += 1;
+            admitted += (self.offset(source + 1) - self.offset(source)) as u64;
         }
         if admitted > max_edges {
             return Err(invalid("active edge budget exceeded"));
@@ -121,10 +120,7 @@ impl<'a> Graph<'a> {
         let mut bits = vec![false; self.nodes];
         let mut contacts = 0_u64;
         let mut loops = 0_u64;
-        for source in 0..self.nodes {
-            if input.get(source) != Some(true) {
-                continue;
-            }
+        for source in input.active_indices() {
             for edge in self.offset(source)..self.offset(source + 1) {
                 let target = self.target(edge);
                 bits[target] = true;
@@ -139,7 +135,9 @@ impl<'a> Graph<'a> {
                 recurrent_cycles: 1,
                 ..ExecutionCounters::default()
             },
+            // Logical bits covered by two packed-word scans (not scalar bit loads).
             source_bits_examined: 2 * self.nodes as u64,
+            source_words_examined: 2 * self.nodes.div_ceil(64) as u64,
             active_sources,
             edges: admitted,
             contacts,
@@ -152,6 +150,7 @@ struct Step {
     output: BooleanWorkspace,
     counters: ExecutionCounters,
     source_bits_examined: u64,
+    source_words_examined: u64,
     active_sources: u64,
     edges: u64,
     contacts: u64,
@@ -214,7 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         first.edges, second.edges, second.contacts, second.loops
     );
     println!(
-        "step2_source_bits_examined={} step2_active_sources={} route_lookups={}",
+        "step2_source_bits_examined={} step2_source_words_examined={} step2_active_sources={} route_lookups={}",
         second.source_bits_examined, second.active_sources, counters.route_lookups
     );
     println!("SML_V888_RECURRENT_CONSUMER=PASS");
@@ -266,6 +265,7 @@ mod tests {
             assert_eq!(result.counters.pairwise_comparisons, 0);
             assert_eq!(result.counters.recurrent_cycles, 1);
             assert_eq!(result.source_bits_examined, 6);
+            assert_eq!(result.source_words_examined, 2);
             assert_eq!(result.active_sources, u64::from((mask as u32).count_ones()));
             let expected_contacts = [5_u64, 5, 7]
                 .into_iter()
