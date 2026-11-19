@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 
 /// Opt-in source-generation guard for causally stale queued events.
 pub mod versioned;
+/// Opt-in transactional native SBG point-writer to stamped event agenda.
+pub mod causal_bridge;
 
 use crate::{
     semantic::{rae_dirty_journal::SbgDirtyRoutingWord, SemanticBitField},
