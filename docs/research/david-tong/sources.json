@@ -1,0 +1,353 @@
+{
+  "schema_version": 1,
+  "project": "Memorithm/SML-GENIUS",
+  "source_catalog": "https://davidtong.org/teaching/",
+  "catalog_items": 23,
+  "checked_at": "2026-11-19",
+  "method": "inventaire des 23 pages de cours; inspection de sommaires de PDF sélectionnés; URLs PDF ajoutées uniquement si contrôlées; aucune ingestion brute du contenu",
+  "source_policy": "Les pages et PDF ne sont PAS attribués sous licence d'entraînement IA explicite. Ne pas redistribuer de PDF ou de passages substantiels, ni entraîner sur les notes intégrales, sans autorisation ou analyse juridique documentée.",
+  "items": [
+    {
+      "id": "TONG-01",
+      "author": "David Tong",
+      "title": "Dynamics and Relativity",
+      "course_url": "https://davidtong.org/teaching/dynamics-and-relativity/",
+      "priority": 2,
+      "topic_selection": "Newton, scaling and causality",
+      "memorithm_candidates": [
+        "sml-core",
+        "V888-BOOLEEN"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-02",
+      "author": "David Tong",
+      "title": "Classical Dynamics",
+      "course_url": "https://davidtong.org/teaching/classical-dynamics/",
+      "priority": 1,
+      "topic_selection": "Lagrangien, Hamiltonien, Noether et stabilité",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "FLAT-ATTENTION"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-03",
+      "author": "David Tong",
+      "title": "Vector Calculus",
+      "course_url": "https://davidtong.org/teaching/vector-calculus/",
+      "priority": 1,
+      "topic_selection": "gradients, flux, Laplacien et tenseurs",
+      "memorithm_candidates": [
+        "scirust",
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-04",
+      "author": "David Tong",
+      "title": "Electromagnetism",
+      "course_url": "https://davidtong.org/teaching/electromagnetism/",
+      "priority": 2,
+      "topic_selection": "équations de Maxwell, champs et invariances de jauge",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "scirust"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-05",
+      "author": "David Tong",
+      "title": "Quantum Mechanics",
+      "course_url": "https://davidtong.org/teaching/quantum-mechanics/",
+      "priority": 2,
+      "topic_selection": "états, opérateurs, spectres et probabilités",
+      "memorithm_candidates": [
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-06",
+      "author": "David Tong",
+      "title": "Topics in Quantum Mechanics",
+      "course_url": "https://davidtong.org/teaching/topics-in-quantum-mechanics/",
+      "priority": 2,
+      "topic_selection": "méthode variationnelle, entropie et états quantiques",
+      "memorithm_candidates": [
+        "ProofLab",
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-07",
+      "author": "David Tong",
+      "title": "Solid State Physics",
+      "course_url": "https://davidtong.org/teaching/solid-state-physics/",
+      "priority": 2,
+      "topic_selection": "réseaux, localisation, Bloch et excitations",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "FLAT-ATTENTION"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-08",
+      "author": "David Tong",
+      "title": "Quantum Hall Effect",
+      "course_url": "https://davidtong.org/teaching/quantum-hall-effect/",
+      "priority": 2,
+      "topic_selection": "topologie, invariants et modes de bord",
+      "memorithm_candidates": [
+        "ProofLab",
+        "scirust"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-09",
+      "author": "David Tong",
+      "title": "Fluid Mechanics",
+      "course_url": "https://davidtong.org/teaching/fluid-mechanics/",
+      "priority": 2,
+      "topic_selection": "conservation, stabilité, ondes et turbulence",
+      "memorithm_candidates": [
+        "FLAT-ATTENTION",
+        "scirust"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-10",
+      "author": "David Tong",
+      "title": "Kinetic Theory",
+      "course_url": "https://davidtong.org/teaching/kinetic-theory/",
+      "priority": 1,
+      "topic_selection": "processus stochastiques, Langevin, Fokker-Planck, réponse linéaire",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "V888-BOOLEEN"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-11",
+      "author": "David Tong",
+      "title": "Mathematical Biology",
+      "course_url": "https://davidtong.org/teaching/mathematical-biology/",
+      "priority": 1,
+      "topic_selection": "dynamique discrète, chaos, réaction-diffusion, Turing, Fokker-Planck",
+      "memorithm_candidates": [
+        "V888-BOOLEEN",
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified",
+      "verified_pdf_url": "https://davidtong.org/pdfs/teaching/mathematical-biology/mathbio.pdf"
+    },
+    {
+      "id": "TONG-12",
+      "author": "David Tong",
+      "title": "Statistical Physics",
+      "course_url": "https://davidtong.org/teaching/statistical-physics/",
+      "priority": 1,
+      "topic_selection": "entropie, partition, Ising et transitions de phase",
+      "memorithm_candidates": [
+        "V888-BOOLEEN",
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified",
+      "verified_pdf_url": "https://davidtong.org/pdfs/teaching/statistical-physics/statphys.pdf"
+    },
+    {
+      "id": "TONG-13",
+      "author": "David Tong",
+      "title": "Statistical Field Theory",
+      "course_url": "https://davidtong.org/teaching/statistical-field-theory/",
+      "priority": 1,
+      "topic_selection": "spins vers champs, corrélations, RG et symétries",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "FLAT-ATTENTION"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified",
+      "verified_pdf_url": "https://davidtong.org/pdfs/teaching/statistical-field-theory/sft.pdf"
+    },
+    {
+      "id": "TONG-14",
+      "author": "David Tong",
+      "title": "General Relativity",
+      "course_url": "https://davidtong.org/teaching/general-relativity/",
+      "priority": 2,
+      "topic_selection": "géodésiques, courbure, tenseurs et transport parallèle",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "scirust"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-15",
+      "author": "David Tong",
+      "title": "Cosmology",
+      "course_url": "https://davidtong.org/teaching/cosmology/",
+      "priority": 3,
+      "topic_selection": "spectres, perturbations, croissance de structures",
+      "memorithm_candidates": [
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-16",
+      "author": "David Tong",
+      "title": "Quantum Field Theory",
+      "course_url": "https://davidtong.org/teaching/quantum-field-theory/",
+      "priority": 2,
+      "topic_selection": "symétries, intégrales de chemin, graphes et invariants",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-17",
+      "author": "David Tong",
+      "title": "Gauge Theory",
+      "course_url": "https://davidtong.org/teaching/gauge-theory/",
+      "priority": 2,
+      "topic_selection": "jauge, réseau, défauts topologiques et RG",
+      "memorithm_candidates": [
+        "SML-GENIUS",
+        "scirust"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-18",
+      "author": "David Tong",
+      "title": "Particle Physics",
+      "course_url": "https://davidtong.org/teaching/particle-physics/",
+      "priority": 3,
+      "topic_selection": "classification, symétries et vulgarisation scientifique",
+      "memorithm_candidates": [
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-19",
+      "author": "David Tong",
+      "title": "The Standard Model",
+      "course_url": "https://davidtong.org/teaching/standard-model/",
+      "priority": 3,
+      "topic_selection": "symétries, brisure, anomalies et représentations",
+      "memorithm_candidates": [
+        "ProofLab",
+        "SML-GENIUS"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-20",
+      "author": "David Tong",
+      "title": "Supersymmetric Quantum Mechanics",
+      "course_url": "https://davidtong.org/teaching/supersymmetric-quantum-mechanics/",
+      "priority": 3,
+      "topic_selection": "cohomologie, théorie de Morse, indices",
+      "memorithm_candidates": [
+        "scirust",
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-21",
+      "author": "David Tong",
+      "title": "Supersymmetric Field Theory",
+      "course_url": "https://davidtong.org/teaching/supersymmetric-field-theory/",
+      "priority": 3,
+      "topic_selection": "dualité, invariants et espace des solutions",
+      "memorithm_candidates": [
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-22",
+      "author": "David Tong",
+      "title": "String Theory",
+      "course_url": "https://davidtong.org/teaching/string-theory/",
+      "priority": 3,
+      "topic_selection": "théorie conforme, actions, dualités",
+      "memorithm_candidates": [
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    },
+    {
+      "id": "TONG-23",
+      "author": "David Tong",
+      "title": "Solitons and D-Branes",
+      "course_url": "https://davidtong.org/teaching/solitons/",
+      "priority": 3,
+      "topic_selection": "défauts, vortex, parois de domaines et topologie",
+      "memorithm_candidates": [
+        "V888-BOOLEEN",
+        "ProofLab"
+      ],
+      "access_checked_at": "2026-11-19",
+      "reuse_status": "metadata_reference_only_rights_to_train_on_full_notes_unverified"
+    }
+  ],
+  "additional_references": [
+    {
+      "id": "AT-01",
+      "author": "See linked journal article",
+      "title": "Equivalence of the Ashkin-Teller and the four-state Potts-glass models of neural networks",
+      "url": "https://doi.org/10.1103/PhysRevE.64.067102",
+      "scope": "equivalence sous paramètres particuliers et hypothèses du modèle; ne pas généraliser"
+    },
+    {
+      "id": "AT-02",
+      "title": "Phase Diagram of the Ashkin–Teller Model",
+      "url": "https://doi.org/10.1007/s00220-023-04925-0",
+      "scope": "couplage de deux spins Ising et limite Potts à 4 états"
+    },
+    {
+      "id": "RIGHTS-01",
+      "author": "David Tong",
+      "title": "Statistical Field Theory: ancien avis de reproduction",
+      "url": "https://www.damtp.cam.ac.uk/user/tong/sft/",
+      "scope": "attribution, pas de modification, pas de profit; ne vaut pas autorisation explicite de formation d'IA"
+    }
+  ]
+}
