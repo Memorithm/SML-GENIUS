@@ -49,8 +49,8 @@ fn packed_target_writes_match_independent_dense_csr_oracle() {
             let mut expected_contacts = 0_u64;
             let mut expected_loops = 0_u64;
             let mut expected_sources = 0_u64;
-            for source in 0..nodes {
-                if !bits[source] {
+            for (source, active) in bits.iter().copied().enumerate() {
+                if !active {
                     continue;
                 }
                 expected_sources += 1;
@@ -101,8 +101,8 @@ fn packed_recurrent_cycles_match_dense_reference_through_word_boundaries() {
     let mut current = BooleanWorkspace::from_bits(&expected);
     for _ in 0..9 {
         let mut next = vec![false; nodes];
-        for source in 0..nodes {
-            if expected[source] {
+        for (source, active) in expected.iter().copied().enumerate() {
+            if active {
                 for edge in graph.offset(source)..graph.offset(source + 1) {
                     next[graph.target(edge)] = true;
                 }
