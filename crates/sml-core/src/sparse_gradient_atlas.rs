@@ -778,6 +778,19 @@ struct QuantizedPage {
     used: u64,
 }
 
+/// Deterministic maximum-probability next byte under one frozen Q4 atlas.
+/// This is a two-byte-context research decoder, not a trained SML-25B model.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Q4NextBytePrediction {
+    pub byte: u8,
+    /// Log2 probability assigned to the selected byte by the atlas.
+    pub log2_probability: f64,
+    /// Eight independent-bit heads or 255 MSB-tree internal heads evaluated.
+    pub evaluated_heads: u16,
+    /// Q4 pages loaded from disk for this prediction (cache-sensitive).
+    pub page_loads: u64,
+}
+
 impl QuantizedSparseAtlas {
     /// Opens an export of an [`ByteFactorization::IndependentBits`] atlas.
     pub fn open(path: &Path, config: SparseConfig) -> Result<Self> {
@@ -865,6 +878,50 @@ impl QuantizedSparseAtlas {
             sum += (f64::from(signed) / 2.0) * feature_sign(a, b, feature);
         }
         Ok(sigmoid(sum / SCALE))
+    }
+
+    /// Decode the exact MAP byte under the *existing* fixed two-byte-context Q4
+    /// predictor. Every MSB tree head is evaluated once before comparing all
+    /// 256 complete byte paths: choosing each bit greedily would not generally
+    /// maximize the probability of the whole byte.
+    ///
+    /// This reuses trained Q4 probabilities and does not learn a new router,
+    /// add recurrent state, or establish language-model quality. It performs
+    /// up to 255 routed page lookups per byte, which must be measured physically.
+    pub fn predict_next_byte(&mut self, a: u8, b: u8) -> Result<Q4NextBytePrediction> {
+        let page_loads_before = self.page_loads;
+        let mut probabilities = [0.0_f64; 256];
+        let mut heads = 0_u16;
+        for (head, value) in probabilities.iter_mut().enumerate() {
+            if self.factorization.is_head(head) {
+                *value = self.probability(a, b, head)?;
+                heads += 1;
+            }
+        }
+
+        let mut best_byte = 0_u8;
+        let mut best_score = f64::NEG_INFINITY;
+        for byte in 0..=u8::MAX {
+            let mut score = 0.0_f64;
+            for (head, value) in self.factorization.decisions(byte) {
+                let p = probabilities[head];
+                score += if value { p.log2() } else { (1.0 - p).log2() };
+            }
+            // Explicit lowest-byte tie break; no arbitrary output on equal scores.
+            if score > best_score {
+                best_score = score;
+                best_byte = byte;
+            }
+        }
+        if !best_score.is_finite() {
+            return Err("nonfinite Q4 byte prediction".into());
+        }
+        Ok(Q4NextBytePrediction {
+            byte: best_byte,
+            log2_probability: best_score,
+            evaluated_heads: heads,
+            page_loads: self.page_loads - page_loads_before,
+        })
     }
 
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
