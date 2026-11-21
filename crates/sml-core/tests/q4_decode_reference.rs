@@ -548,7 +548,7 @@ fn conformance_harness_accepts_production_and_rejects_a_greedy_top_k() {
                     TieRule::WithinTolerance,
                 )
                 .unwrap();
-                // Production MAP as a k = 1 API.
+                // Production MAP as a k = 1 API, tie-exact since the F12 fix.
                 check_topk_impl(
                     |a, b, _k| {
                         atlas
@@ -560,7 +560,7 @@ fn conformance_harness_accepts_production_and_rejects_a_greedy_top_k() {
                     ctx,
                     &[1],
                     DEFAULT_TOL_BITS,
-                    TieRule::WithinTolerance,
+                    TieRule::LowestByte,
                 )
                 .unwrap();
             }
@@ -586,14 +586,14 @@ fn conformance_harness_accepts_production_and_rejects_a_greedy_top_k() {
 }
 
 #[test]
-fn f12_mathematical_ties_are_not_always_broken_by_lowest_byte() {
+fn f12_mathematical_ties_are_broken_by_lowest_byte() {
     // Q4 logits are multiples of 1/8, so a factor sigmoid(z) on one branch
-    // and 1 - sigmoid(-z) on another are mathematically equal but computed
-    // as different f64 values, and the 8 log2 factors are summed in path
-    // order. Two bytes with EQUAL model probability can then compare
-    // unequal, and `predict_next_byte` may return a higher byte than the
-    // documented lowest-byte rule. Characterization test (MsbTree): it
-    // asserts the current behaviour and must flip when the fix lands.
+    // and 1 - sigmoid(-z) on another are mathematically equal. Before the
+    // tie-exact scoring of `predict_next_byte`, they were computed as two
+    // f64 values and summed in path order, so the cases in F12_KNOWN
+    // returned a higher byte than the documented lowest-byte rule. The
+    // decoder must now return the oracle's lowest tied byte, with a
+    // bitwise-equal score, for every exact tie (more: SML_F12_SCAN=N).
     let scan = std::env::var("SML_F12_SCAN")
         .ok()
         .and_then(|v| v.parse::<u64>().ok());
@@ -613,25 +613,31 @@ fn f12_mathematical_ties_are_not_always_broken_by_lowest_byte() {
                 .unwrap();
             if top[0].1.to_bits() == top[1].1.to_bits() {
                 exact_ties += 1;
-                let got = atlas.predict_next_byte(a, b).unwrap().byte;
-                if got != top[0].0 {
-                    // Prove the tie is mathematical, not an oracle artifact.
-                    assert_eq!(
-                        signed_logit_multiset(&fixture.oracle, a, b, got),
-                        signed_logit_multiset(&fixture.oracle, a, b, top[0].0)
-                    );
-                    violations.push((index, (a, b), top[0].0, got));
+                let prediction = atlas.predict_next_byte(a, b).unwrap();
+                assert_eq!(prediction.log2_probability.to_bits(), top[0].1.to_bits());
+                if prediction.byte != top[0].0 {
+                    violations.push((index, (a, b), top[0].0, prediction.byte));
                 }
             }
         }
     }
     eprintln!("f12: {exact_ties} exact MAP ties, violations {violations:?}");
     if scan.is_none() {
-        assert_eq!(violations, F12_KNOWN.to_vec());
+        assert_eq!(exact_ties as usize, F12_KNOWN.len());
+        for &(index, ctx, lowest, former) in F12_KNOWN {
+            let mut rng = Rng(0x7135_0000 + index);
+            let oracle = ReferenceQ4::from_bytes(random_atlas(&mut rng, 1, index)).unwrap();
+            assert_eq!(
+                signed_logit_multiset(&oracle, ctx.0, ctx.1, lowest),
+                signed_logit_multiset(&oracle, ctx.0, ctx.1, former)
+            );
+        }
     }
+    assert!(violations.is_empty(), "{violations:?}");
 }
 
-/// (atlas index, context, oracle lowest tied byte, production MAP byte),
+/// (atlas index, context, oracle lowest tied byte, production MAP byte
+/// BEFORE the tie-exact fix),
 /// found with `SML_F12_SCAN=8000`.
 const F12_KNOWN: &[(u64, (u8, u8), u8, u8)] = &[
     (1469, (0, 0), 142, 214),
@@ -657,4 +663,44 @@ fn signed_logit_multiset(oracle: &ReferenceQ4, a: u8, b: u8, byte: u8) -> Vec<f6
         .collect();
     v.sort_by(f64::total_cmp);
     v
+}
+
+#[test]
+fn issue_1014_full_distribution_api_matches_oracle_and_map() {
+    let mut rng = Rng(0x1014);
+    for atlas_index in 0..20u64 {
+        let pages = 1 + (rng.next() % 16) as usize;
+        let fixture = Fixture::new("dist", random_atlas(&mut rng, pages, atlas_index));
+        for f in MODES {
+            let mut atlas = fixture.open(f, pages.min(32));
+            for (a, b) in contexts(&mut rng, 4) {
+                let dist = atlas.next_byte_log2_distribution(a, b).unwrap();
+                let oracle = fixture.oracle.log2_distribution(f, a, b).unwrap();
+                let sum: f64 = dist.iter().map(|s| s.exp2()).sum();
+                assert!((sum - 1.0).abs() < 1e-12, "{f:?} sum {sum}");
+                for byte in 0..256 {
+                    assert!((dist[byte] - oracle[byte]).abs() < 1e-12, "{f:?} {byte}");
+                }
+                // Product of the eight conditional decisions.
+                for byte in [0u8, 0x41, 0x7f, 0x80, 0xff] {
+                    let mut p = 1.0;
+                    for (head, bit) in f.decisions(byte) {
+                        let q = atlas.probability(a, b, head).unwrap();
+                        p *= if bit { q } else { 1.0 - q };
+                    }
+                    assert!((dist[usize::from(byte)].exp2() - p).abs() <= 1e-7 * p);
+                }
+                let map = atlas.predict_next_byte(a, b).unwrap();
+                let top = exact_top_k(&dist, 1).unwrap()[0];
+                assert_eq!((map.byte, map.log2_probability), top);
+                assert_topk_conformant(
+                    |x, y, k| exact_top_k(&atlas.next_byte_log2_distribution(x, y).unwrap(), k),
+                    &fixture.oracle,
+                    f,
+                    (a, b),
+                    16,
+                );
+            }
+        }
+    }
 }

@@ -906,29 +906,24 @@ impl QuantizedSparseAtlas {
     /// This reuses trained Q4 probabilities and does not learn a new router,
     /// add recurrent state, or establish language-model quality. It performs
     /// up to 255 routed page lookups per byte, which must be measured physically.
+    ///
+    /// Byte scores come from [`Self::next_byte_log2_distribution`], which is
+    /// tie-exact: bytes with equal model probability (equal factor
+    /// multisets, common because Q4 logits are multiples of 1/8) get
+    /// bitwise-equal scores, so the lowest-byte rule really applies.
     pub fn predict_next_byte(&mut self, a: u8, b: u8) -> Result<Q4NextBytePrediction> {
         let page_loads_before = self.page_loads;
-        let mut probabilities = [0.0_f64; 256];
-        let mut heads = 0_u16;
-        for (head, value) in probabilities.iter_mut().enumerate() {
-            if self.factorization.is_head(head) {
-                *value = self.probability(a, b, head)?;
-                heads += 1;
-            }
-        }
-
+        let heads = (0..256)
+            .filter(|&head| self.factorization.is_head(head))
+            .count() as u16;
+        let scores = self.next_byte_log2_distribution(a, b)?;
         let mut best_byte = 0_u8;
         let mut best_score = f64::NEG_INFINITY;
-        for byte in 0..=u8::MAX {
-            let mut score = 0.0_f64;
-            for (head, value) in self.factorization.decisions(byte) {
-                let p = probabilities[head];
-                score += if value { p.log2() } else { (1.0 - p).log2() };
-            }
+        for (byte, &score) in scores.iter().enumerate() {
             // Explicit lowest-byte tie break; no arbitrary output on equal scores.
             if score > best_score {
                 best_score = score;
-                best_byte = byte;
+                best_byte = byte as u8;
             }
         }
         if !best_score.is_finite() {
@@ -951,10 +946,7 @@ impl QuantizedSparseAtlas {
     /// are summed in ascending order, so bytes with equal model probability
     /// get bitwise-equal scores.
     ///
-    /// Its argmax (lowest byte on ties) equals [`Self::predict_next_byte`]
-    /// except on exact mathematical ties, where the current MAP decoder can
-    /// return a higher tied byte (Grok audit F12, fixed separately in #1019).
-    /// This method does not change `predict_next_byte` or any other output.
+    /// Its argmax (lowest byte on ties) is [`Self::predict_next_byte`].
     pub fn next_byte_log2_distribution(&mut self, a: u8, b: u8) -> Result<[f64; 256]> {
         let mut logits = [0.0_f64; 256];
         for (head, value) in logits.iter_mut().enumerate() {
@@ -1369,5 +1361,57 @@ mod tests {
         .unwrap();
         assert!(SparseGradientAtlas::reopen(&dir, config).is_err());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Grok Q4 audit F12: bytes 142 and 214 have the same multiset of signed
+    /// head logits under this 1-page MSB atlas at context (0, 0), hence the
+    /// same model probability; the documented rule selects the lower byte.
+    /// The former path-order `log2(p)`/`log2(1 - p)` scoring returned 214.
+    #[test]
+    fn q4_map_breaks_mathematical_ties_by_lowest_byte() {
+        let mut state = 0x7135_0000_u64 + 1469;
+        let mut next = || {
+            state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        };
+        let bytes: Vec<u8> = (0..PAGE_PARAMETERS / 2)
+            .map(|_| [0x77_u8, 0x88, 0x78, 0x87][(next() % 4) as usize])
+            .collect();
+        let path = temp("q4-tie");
+        fs::write(&path, &bytes).unwrap();
+        let config = SparseConfig {
+            pages: 1,
+            max_cached_pages: 1,
+            learning_rate: 0.1,
+        };
+        let mut q4 = QuantizedSparseAtlas::open_with_factorization(
+            &path,
+            config,
+            ByteFactorization::MsbTree,
+        )
+        .unwrap();
+        let mut multiset = |byte: u8| {
+            let mut v: Vec<f64> = ByteFactorization::MsbTree
+                .decisions(byte)
+                .iter()
+                .map(|&(head, bit)| {
+                    let z = q4.head_score(0, 0, head).unwrap().clamp(-16.0, 16.0);
+                    if bit {
+                        z
+                    } else {
+                        -z
+                    }
+                })
+                .collect();
+            v.sort_by(f64::total_cmp);
+            v
+        };
+        assert_eq!(multiset(142), multiset(214));
+        let prediction = q4.predict_next_byte(0, 0).unwrap();
+        assert_eq!(prediction.byte, 142);
+        fs::remove_file(path).unwrap();
     }
 }
