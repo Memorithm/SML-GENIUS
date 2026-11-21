@@ -64,10 +64,14 @@ fn packed_target_writes_match_independent_dense_csr_oracle() {
             }
             let step = graph.step(&input, expected_edges).unwrap();
             assert_eq!(step.output, BooleanWorkspace::from_bits(&expected));
-            assert_eq!(step.output.active_indices().collect::<Vec<_>>(),
-                expected.iter().enumerate()
+            assert_eq!(
+                step.output.active_indices().collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .enumerate()
                     .filter_map(|(i, active)| active.then_some(i))
-                    .collect::<Vec<_>>());
+                    .collect::<Vec<_>>()
+            );
             assert_eq!(step.active_sources, expected_sources);
             assert_eq!(step.edges, expected_edges);
             assert_eq!(step.contacts, expected_contacts);
