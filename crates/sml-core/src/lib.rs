@@ -165,6 +165,7 @@ pub mod pvp6_sbg_experts;
 pub mod pvp6_sbg_kernel;
 pub mod pvp6_sbg_routing;
 pub mod pvp6_sbg_trace;
+pub mod q4_checkpoint;
 pub mod routing_train;
 pub mod rtlr_boolean_hybrid;
 pub mod rtlr_cost_gate;
