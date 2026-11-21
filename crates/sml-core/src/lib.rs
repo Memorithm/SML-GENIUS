@@ -147,6 +147,7 @@ pub mod mor_sequence_train;
 pub mod mor_specialization;
 pub mod mor_temporal;
 pub mod mor_temporal_search;
+pub mod next_byte_eval;
 pub mod paired_panel;
 pub mod pascal_gf2;
 pub mod pascal_vector_projection;
@@ -165,6 +166,7 @@ pub mod pvp6_sbg_experts;
 pub mod pvp6_sbg_kernel;
 pub mod pvp6_sbg_routing;
 pub mod pvp6_sbg_trace;
+pub mod q4_checkpoint;
 pub mod q4_decode_reference;
 pub mod routing_train;
 pub mod rtlr_boolean_hybrid;
@@ -331,6 +333,26 @@ impl BooleanWorkspace {
             words,
             len_bits: bits.len(),
         }
+    }
+
+    /// Creates an all-zero packed workspace without allocating an intermediate
+    /// byte-per-node Boolean vector. Used by validated recurrent CSR kernels.
+    #[must_use]
+    pub(crate) fn zeroed(len_bits: usize) -> Self {
+        Self {
+            words: vec![0_u64; len_bits.div_ceil(64)],
+            len_bits,
+        }
+    }
+
+    /// ORs one validated active target directly into the packed output.
+    /// A checked index prevents accidentally setting unused tail bits.
+    pub(crate) fn activate(&mut self, index: usize) {
+        assert!(
+            index < self.len_bits,
+            "active target outside Boolean workspace"
+        );
+        self.words[index / 64] |= 1_u64 << (index % 64);
     }
 
     /// Number of meaningful bits in the workspace.
