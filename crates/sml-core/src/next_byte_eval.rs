@@ -508,6 +508,206 @@ impl NextBytePredictor for Order2Counts {
     }
 }
 
+/// Lets an owned or borrowed predictor be an expert of a mixture.
+impl<P: NextBytePredictor + ?Sized> NextBytePredictor for &mut P {
+    fn arm(&self) -> &str {
+        (**self).arm()
+    }
+
+    fn begin_document(&mut self) -> Result<()> {
+        (**self).begin_document()
+    }
+
+    fn log2_probability(&mut self, history: &[u8], next: u8) -> Result<f64> {
+        (**self).log2_probability(history, next)
+    }
+
+    fn top1(&mut self, history: &[u8]) -> Result<u8> {
+        (**self).top1(history)
+    }
+
+    fn page_loads(&self) -> u64 {
+        (**self).page_loads()
+    }
+}
+
+/// Fixed a priori weight of the first expert in [`LinearMixture`] (NBE-2
+/// arm `mix_q4_order2_linear_half`). NOT tuned on DEV or anything else.
+pub const LINEAR_MIXTURE_WEIGHT: f64 = 0.5;
+
+/// `log2(2^x + 2^y)` without overflow or underflow.
+fn log2_add(x: f64, y: f64) -> f64 {
+    let (hi, lo) = if x >= y { (x, y) } else { (y, x) };
+    hi + (lo - hi).exp2().ln_1p() / std::f64::consts::LN_2
+}
+
+/// `P(c|h) = w P_a(c|h) + (1 - w) P_b(c|h)` with a constant weight `w`.
+///
+/// By concavity of `log2`, its total loss can never exceed the mean of the two
+/// experts' losses on the same positions (NBE-2 gate M1).
+pub struct LinearMixture<A, B> {
+    arm: String,
+    a: A,
+    b: B,
+    log2_wa: f64,
+    log2_wb: f64,
+}
+
+impl<A: NextBytePredictor, B: NextBytePredictor> LinearMixture<A, B> {
+    pub fn new(arm: impl Into<String>, a: A, b: B, weight_a: f64) -> Result<Self> {
+        if !(weight_a > 0.0 && weight_a < 1.0) {
+            return Err("linear mixture weight must lie strictly inside (0, 1)".into());
+        }
+        Ok(Self {
+            arm: arm.into(),
+            a,
+            b,
+            log2_wa: weight_a.log2(),
+            log2_wb: (1.0 - weight_a).log2(),
+        })
+    }
+}
+
+impl<A: NextBytePredictor, B: NextBytePredictor> NextBytePredictor for LinearMixture<A, B> {
+    fn arm(&self) -> &str {
+        &self.arm
+    }
+
+    fn begin_document(&mut self) -> Result<()> {
+        self.a.begin_document()?;
+        self.b.begin_document()
+    }
+
+    fn log2_probability(&mut self, history: &[u8], next: u8) -> Result<f64> {
+        let la = self.a.log2_probability(history, next)?;
+        let lb = self.b.log2_probability(history, next)?;
+        Ok(log2_add(self.log2_wa + la, self.log2_wb + lb).min(0.0))
+    }
+
+    /// Exact argmax over all 256 bytes (256 calls per expert; slow for Q4).
+    fn top1(&mut self, history: &[u8]) -> Result<u8> {
+        let mut scores = [0f64; 256];
+        for (c, score) in scores.iter_mut().enumerate() {
+            *score = self.log2_probability(history, c as u8)?;
+        }
+        argmax_lowest(scores.iter().enumerate().map(|(c, s)| (c as u8, *s)))
+    }
+
+    fn page_loads(&self) -> u64 {
+        self.a.page_loads() + self.b.page_loads()
+    }
+}
+
+/// Per-document causal Bayesian model average of two experts (NBE-2 arm
+/// `mix_q4_order2_bayes_doc`). Prior 1/2 each, reset at every
+/// `begin_document`; the posterior at position `i` uses only the already
+/// revealed bytes `history[FIRST_SCORED_POSITION..i]`, never the target.
+///
+/// Its total loss over a document is at most `min(L_a, L_b) + 1` bit (prior
+/// 1/2), so over `D` documents at most `min + D` bits (NBE-2 gate M2).
+pub struct CausalBayesMixture<A, B> {
+    arm: String,
+    a: A,
+    b: B,
+    /// Cumulative log2 likelihood of each expert on revealed bytes.
+    log2_la: f64,
+    log2_lb: f64,
+    consumed: usize,
+    /// Expert log2 probabilities from the last `log2_probability` call:
+    /// `(history length, byte, la, lb)`. Reused when that byte is revealed, so
+    /// each expert sees exactly one probability call per position.
+    pending: Option<(usize, u8, f64, f64)>,
+}
+
+impl<A: NextBytePredictor, B: NextBytePredictor> CausalBayesMixture<A, B> {
+    pub fn new(arm: impl Into<String>, a: A, b: B) -> Self {
+        Self {
+            arm: arm.into(),
+            a,
+            b,
+            log2_la: 0.0,
+            log2_lb: 0.0,
+            consumed: FIRST_SCORED_POSITION,
+            pending: None,
+        }
+    }
+
+    /// Current posterior weight of the first expert (for tests/diagnostics).
+    #[must_use]
+    pub fn weight_a(&self) -> f64 {
+        let norm = log2_add(self.log2_la, self.log2_lb);
+        (self.log2_la - norm).exp2()
+    }
+
+    fn sync(&mut self, history: &[u8]) -> Result<()> {
+        if history.len() < self.consumed {
+            return Err("bayes mixture: history shrank without begin_document".into());
+        }
+        while self.consumed < history.len() {
+            let j = self.consumed;
+            let t = history[j];
+            let (la, lb) = match self.pending {
+                Some((len, byte, la, lb)) if len == j && byte == t => (la, lb),
+                _ => (
+                    self.a.log2_probability(&history[..j], t)?,
+                    self.b.log2_probability(&history[..j], t)?,
+                ),
+            };
+            self.log2_la += la;
+            self.log2_lb += lb;
+            self.consumed += 1;
+        }
+        self.pending = None;
+        Ok(())
+    }
+
+    fn log2_weights(&self) -> (f64, f64) {
+        let norm = log2_add(self.log2_la, self.log2_lb);
+        (self.log2_la - norm, self.log2_lb - norm)
+    }
+}
+
+impl<A: NextBytePredictor, B: NextBytePredictor> NextBytePredictor for CausalBayesMixture<A, B> {
+    fn arm(&self) -> &str {
+        &self.arm
+    }
+
+    fn begin_document(&mut self) -> Result<()> {
+        self.log2_la = 0.0;
+        self.log2_lb = 0.0;
+        self.consumed = FIRST_SCORED_POSITION;
+        self.pending = None;
+        self.a.begin_document()?;
+        self.b.begin_document()
+    }
+
+    fn log2_probability(&mut self, history: &[u8], next: u8) -> Result<f64> {
+        self.sync(history)?;
+        let la = self.a.log2_probability(history, next)?;
+        let lb = self.b.log2_probability(history, next)?;
+        self.pending = Some((history.len(), next, la, lb));
+        let (wa, wb) = self.log2_weights();
+        Ok(log2_add(wa + la, wb + lb).min(0.0))
+    }
+
+    /// Exact argmax over all 256 bytes (256 calls per expert; slow for Q4).
+    fn top1(&mut self, history: &[u8]) -> Result<u8> {
+        self.sync(history)?;
+        let (wa, wb) = self.log2_weights();
+        let mut scores = [0f64; 256];
+        for (c, score) in scores.iter_mut().enumerate() {
+            let la = self.a.log2_probability(history, c as u8)?;
+            let lb = self.b.log2_probability(history, c as u8)?;
+            *score = log2_add(wa + la, wb + lb);
+        }
+        argmax_lowest(scores.iter().enumerate().map(|(c, s)| (c as u8, *s)))
+    }
+
+    fn page_loads(&self) -> u64 {
+        self.a.page_loads() + self.b.page_loads()
+    }
+}
+
 /// Role of a document in the frozen stream-fit manifest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ManifestRole {

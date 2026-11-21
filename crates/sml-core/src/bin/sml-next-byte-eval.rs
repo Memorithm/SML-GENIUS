@@ -16,8 +16,9 @@ use sml_core::{
     byte_factorization::ByteFactorization,
     next_byte_eval::{
         check_normalized, file_sha256, load_verified_document, reproduces_exactly, ArmReport,
-        FrozenManifest, ManifestRole, NextByteEvaluator, NextBytePredictor, Order2Counts,
-        Q4AtlasPredictor, Result, UnigramCounts,
+        CausalBayesMixture, FrozenManifest, LinearMixture, ManifestRole, NextByteEvaluator,
+        NextBytePredictor, Order2Counts, Q4AtlasPredictor, Result, UnigramCounts,
+        LINEAR_MIXTURE_WEIGHT,
     },
     q4_checkpoint::{CheckpointSchema, Q4Checkpoint},
     sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig},
@@ -38,6 +39,13 @@ const CACHE_PAGES: usize = 32;
 const GROUPED_BATCH_BYTES: usize = 4096;
 /// Max |trait-path bpc - grouped-path bpc| (float summation order only).
 const PATH_CONSISTENCY_TOLERANCE: f64 = 1e-6;
+/// NBE-2 (`docs/SML-NEXT-BYTE-NBE2-MIXTURE-PREREGISTRATION.md`): published
+/// order-2 DEV value of RemoteOps run 44912119606. Runs with a mixture arm
+/// must reproduce it exactly before any mixture row is accepted.
+const PINNED_ORDER2_BPC: &str = "3.592544112";
+/// Absolute slack per scored position for the NBE-2 theorem gates (float
+/// summation order only).
+const MIXTURE_GATE_TOLERANCE_PER_BYTE: f64 = 1e-9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
@@ -50,6 +58,16 @@ enum Arm {
     Q4Atlas,
     Order2,
     Unigram,
+    /// NBE-2: fixed 1/2-1/2 linear mixture of the Q4 atlas and order-2 counts.
+    MixHalf,
+    /// NBE-2: per-document causal Bayesian average of the same two experts.
+    MixBayes,
+}
+
+impl Arm {
+    fn is_mixture(self) -> bool {
+        matches!(self, Arm::MixHalf | Arm::MixBayes)
+    }
 }
 
 struct Args {
@@ -65,7 +83,7 @@ struct Args {
     top1: bool,
 }
 
-const USAGE: &str = "usage: sml-next-byte-eval --mode pinned|synthetic --data-root DIR --manifest MANIFEST.tsv [--checkpoint STREAM_FIT_OUTPUT_DIR] [--arms q4,order2,unigram] [--no-top1]\n  synthetic only: [--q4 WEIGHTS.q4] [--pages N] [--factorization msb|bits] [--expected-q4-bpc X.XXXXXXXXX]";
+const USAGE: &str = "usage: sml-next-byte-eval --mode pinned|synthetic --data-root DIR --manifest MANIFEST.tsv [--checkpoint STREAM_FIT_OUTPUT_DIR] [--arms q4,order2,unigram[,mix_half,mix_bayes]] [--no-top1]\n  synthetic only: [--q4 WEIGHTS.q4] [--pages N] [--factorization msb|bits] [--expected-q4-bpc X.XXXXXXXXX]";
 
 fn parse(argv: &[String]) -> Result<Args> {
     let mut mode = None;
@@ -112,6 +130,8 @@ fn parse(argv: &[String]) -> Result<Args> {
                         "q4" => Arm::Q4Atlas,
                         "order2" => Arm::Order2,
                         "unigram" => Arm::Unigram,
+                        "mix_half" => Arm::MixHalf,
+                        "mix_bayes" => Arm::MixBayes,
                         _ => return Err(USAGE.into()),
                     };
                     if list.contains(&arm) {
@@ -130,11 +150,24 @@ fn parse(argv: &[String]) -> Result<Args> {
     if q4.is_some() && checkpoint.is_some() {
         return Err("--q4 and --checkpoint are mutually exclusive".into());
     }
-    if arms.contains(&Arm::Q4Atlas) != (q4.is_some() || checkpoint.is_some()) {
+    let needs_q4 = arms.iter().any(|a| *a == Arm::Q4Atlas || a.is_mixture());
+    if needs_q4 != (q4.is_some() || checkpoint.is_some()) {
         return Err(
             "--checkpoint (or synthetic --q4) is required exactly when the q4 arm is selected"
                 .into(),
         );
+    }
+    if arms.iter().any(|a| a.is_mixture()) {
+        // NBE-2: the theorem gates compare mixture losses with both experts'
+        // losses on the same run, so both expert rows must be scored first.
+        let first_mix = arms.iter().position(|a| a.is_mixture()).unwrap_or(0);
+        let before = &arms[..first_mix];
+        if !before.contains(&Arm::Q4Atlas) || !before.contains(&Arm::Order2) {
+            return Err("mixture arms require q4 and order2 arms listed before them".into());
+        }
+        if mode == Mode::Pinned && top1 {
+            return Err("pinned mixture runs are pre-registered without top-1 (--no-top1)".into());
+        }
     }
     if mode == Mode::Pinned && q4.is_some() {
         return Err(
@@ -342,11 +375,15 @@ fn run(args: &Args) -> Result<()> {
     let need_counts = args
         .arms
         .iter()
-        .any(|a| matches!(a, Arm::Order2 | Arm::Unigram));
+        .any(|a| matches!(a, Arm::Order2 | Arm::Unigram) || a.is_mixture());
     let mut order2 = None;
     let mut unigram = None;
     if need_counts {
-        let mut o2 = args.arms.contains(&Arm::Order2).then(Order2Counts::default);
+        let mut o2 = args
+            .arms
+            .iter()
+            .any(|a| *a == Arm::Order2 || a.is_mixture())
+            .then(Order2Counts::default);
         let mut u1 = args
             .arms
             .contains(&Arm::Unigram)
@@ -366,8 +403,11 @@ fn run(args: &Args) -> Result<()> {
 
     // 3. Every arm through the same trait and evaluator, in pre-registered order.
     println!("{}", ArmReport::tsv_header());
+    let mut losses: Vec<(Arm, f64, u64, u64)> = Vec::new();
     for arm in &args.arms {
         let mut q4_predictor;
+        let mut mix_half;
+        let mut mix_bayes;
         let predictor: &mut dyn NextBytePredictor = match arm {
             Arm::Q4Atlas => {
                 let atlas = open_q4()?.ok_or("missing Q4 input")?;
@@ -376,6 +416,25 @@ fn run(args: &Args) -> Result<()> {
             }
             Arm::Order2 => order2.as_mut().ok_or("order2 not fitted")?,
             Arm::Unigram => unigram.as_mut().ok_or("unigram not fitted")?,
+            Arm::MixHalf => {
+                let atlas = open_q4()?.ok_or("missing Q4 input")?;
+                mix_half = LinearMixture::new(
+                    "mix_q4_order2_linear_half",
+                    Q4AtlasPredictor::new("q4_atlas_s2a", atlas, factorization),
+                    order2.as_mut().ok_or("order2 not fitted")?,
+                    LINEAR_MIXTURE_WEIGHT,
+                )?;
+                &mut mix_half
+            }
+            Arm::MixBayes => {
+                let atlas = open_q4()?.ok_or("missing Q4 input")?;
+                mix_bayes = CausalBayesMixture::new(
+                    "mix_q4_order2_bayes_doc",
+                    Q4AtlasPredictor::new("q4_atlas_s2a", atlas, factorization),
+                    order2.as_mut().ok_or("order2 not fitted")?,
+                );
+                &mut mix_bayes
+            }
         };
         let mut evaluator = NextByteEvaluator::new(predictor, args.top1);
         for document in &dev {
@@ -395,15 +454,82 @@ fn run(args: &Args) -> Result<()> {
         // Post-scoring sanity probe (does not affect reported page loads).
         let probe = &dev[0][..dev[0].len().min(2)];
         if probe.len() == 2 {
+            if arm.is_mixture() {
+                // Stateful mixtures start a fresh document for the probe.
+                predictor.begin_document()?;
+            }
             check_normalized(predictor, probe)?;
         }
         println!("{}", report.tsv_row());
+        losses.push((
+            *arm,
+            report.total_loss_bits,
+            report.scored_bytes,
+            report.documents,
+        ));
+    }
+    if args.arms.iter().any(|a| a.is_mixture()) {
+        mixture_gates(&losses, pinned)?;
     }
     println!(
         "NEXT_BYTE_EVAL_DONE arms={} test=UNOPENED promotion=NOT_PROMOTED",
         args.arms.len()
     );
     Ok(())
+}
+
+/// NBE-2 validity gates, evaluated after every arm row is printed. A failure
+/// makes the whole run INVALID (non-zero exit; rows are discarded).
+/// - O2: pinned runs reproduce the published order-2 DEV value exactly.
+/// - M1: `L_half <= (L_q4 + L_o2) / 2` (concavity of log2).
+/// - M2: `L_bayes <= min(L_q4, L_o2) + documents` bits (prior 1/2 per document).
+fn mixture_gates(losses: &[(Arm, f64, u64, u64)], pinned: bool) -> Result<()> {
+    let find = |arm: Arm| losses.iter().find(|(a, ..)| *a == arm).copied();
+    let (_, l_q4, n, _) = find(Arm::Q4Atlas).ok_or("mixture gates need the q4 row")?;
+    let (_, l_o2, n_o2, _) = find(Arm::Order2).ok_or("mixture gates need the order2 row")?;
+    if n == 0 || n != n_o2 {
+        return Err("RUN_INVALID: experts scored different positions".into());
+    }
+    let tolerance = MIXTURE_GATE_TOLERANCE_PER_BYTE * n as f64;
+    let o2_bpc = l_o2 / n as f64;
+    let o2_status = if !pinned {
+        "NOT_APPLICABLE"
+    } else if reproduces_exactly(o2_bpc, PINNED_ORDER2_BPC) {
+        "PASS"
+    } else {
+        "FAIL"
+    };
+    let mut ok = o2_status != "FAIL";
+    let mut line = format!(
+        "MIXTURE_GATES order2_bpc={o2_bpc:.9} order2_expected={} order2_repro={o2_status}",
+        if pinned { PINNED_ORDER2_BPC } else { "NA" }
+    );
+    if let Some((_, l_half, n_half, _)) = find(Arm::MixHalf) {
+        let bound = 0.5 * (l_q4 + l_o2);
+        let pass = n_half == n && l_half <= bound + tolerance;
+        ok &= pass;
+        line.push_str(&format!(
+            " m1_jensen={} m1_slack_bits={:.6}",
+            if pass { "PASS" } else { "FAIL" },
+            bound - l_half
+        ));
+    }
+    if let Some((_, l_bayes, n_bayes, docs)) = find(Arm::MixBayes) {
+        let bound = l_q4.min(l_o2) + docs as f64;
+        let pass = n_bayes == n && l_bayes <= bound + tolerance;
+        ok &= pass;
+        line.push_str(&format!(
+            " m2_bayes_bound={} m2_slack_bits={:.6}",
+            if pass { "PASS" } else { "FAIL" },
+            bound - l_bayes
+        ));
+    }
+    println!("{line}");
+    if ok {
+        Ok(())
+    } else {
+        Err("RUN_INVALID: an NBE-2 mixture validity gate failed".into())
+    }
 }
 
 fn main() {
