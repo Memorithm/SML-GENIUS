@@ -1,6 +1,7 @@
 use sml_core::{
     byte_factorization::ByteFactorization,
     elastic_ngram_paged_sha::{hex, sha256},
+    q4_decode_reference::ReferenceQ4,
     sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig},
 };
 use std::{
@@ -117,5 +118,153 @@ fn q4_cli_uses_real_file_digest_and_refuses_tampering() {
         .unwrap();
     assert!(!rejected.status.success());
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("SHA256 mismatch"));
+    fs::remove_file(path).unwrap();
+}
+
+/// Deterministic SplitMix64 stream for synthetic Q4 atlases.
+fn splitmix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+/// Synthetic Q4 atlas families for #1014: near-uniform (all weights 0 or
+/// small), concentrated (large-magnitude levels), extreme (every nibble
+/// +7 or -8), and uniformly random nibbles.
+fn family_atlas(family: &str, pages: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed;
+    (0..pages * 512)
+        .map(|_| {
+            let r = splitmix(&mut state);
+            match family {
+                "zero" => 0,
+                "near_uniform" => [0x00, 0x01, 0x10, 0xf0, 0x0f][(r % 5) as usize],
+                "concentrated" => [0x77, 0x88, 0x78, 0x87, 0x66, 0x99][(r % 6) as usize],
+                "extreme_pos" => 0x77,
+                "extreme_neg" => 0x88,
+                _ => r as u8,
+            }
+        })
+        .collect()
+}
+
+/// Sorted signed logits (+z for a 1 bit, -z for a 0 bit) along `byte`'s
+/// decisions, from the independent oracle: equal multisets prove an exact
+/// mathematical tie between two bytes.
+fn signed_logits(oracle: &ReferenceQ4, f: ByteFactorization, a: u8, b: u8, byte: u8) -> Vec<f64> {
+    let mut v: Vec<f64> = f
+        .decisions(byte)
+        .iter()
+        .map(|&(head, bit)| {
+            let z = oracle.head_logit(a, b, head).unwrap();
+            if bit {
+                z
+            } else {
+                -z
+            }
+        })
+        .collect();
+    v.sort_by(f64::total_cmp);
+    v
+}
+
+#[test]
+fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
+    let families = [
+        "zero",
+        "near_uniform",
+        "concentrated",
+        "extreme_pos",
+        "extreme_neg",
+        "random",
+    ];
+    let contexts = [
+        (0u8, 0u8),
+        (0xff, 0xff),
+        (b'H', b'i'),
+        (0x00, 0xff),
+        (0xa3, 0x71),
+    ];
+    let (mut checked, mut exact_tie_skips) = (0u32, 0u32);
+    for (index, family) in families.iter().enumerate() {
+        for seed in 0..4u64 {
+            let pages = 1 + (seed as usize % 3);
+            let bytes = family_atlas(family, pages, 0x1014_0000 + 16 * index as u64 + seed);
+            let path = fixture(&format!("dist-{family}"), &bytes);
+            let oracle = ReferenceQ4::from_bytes(bytes).unwrap();
+            for f in [
+                ByteFactorization::IndependentBits,
+                ByteFactorization::MsbTree,
+            ] {
+                let mut atlas =
+                    QuantizedSparseAtlas::open_with_factorization(&path, config(pages as u64), f)
+                        .unwrap();
+                for &(a, b) in &contexts {
+                    let log2 = atlas.next_byte_log2_distribution(a, b).unwrap();
+                    let linear = atlas.next_byte_distribution(a, b).unwrap();
+                    // 256 masses sum to 1 (tolerance 1e-12; observed ~1e-15).
+                    let sum: f64 = linear.iter().sum();
+                    assert!((sum - 1.0).abs() < 1e-12, "{family} {f:?} sum {sum}");
+                    for byte in 0..=u8::MAX {
+                        let p = linear[usize::from(byte)];
+                        assert!(p > 0.0 && log2[usize::from(byte)].is_finite());
+                        // Product of the eight conditional decisions, from the
+                        // public head probabilities (relative 1e-7: 1 - p is
+                        // cancellation-limited at |logit| = 16).
+                        let mut product = 1.0;
+                        for (head, bit) in f.decisions(byte) {
+                            let q = atlas.probability(a, b, head).unwrap();
+                            product *= if bit { q } else { 1.0 - q };
+                        }
+                        assert!(
+                            (p - product).abs() <= 1e-7 * product,
+                            "{family} {f:?} byte {byte}: {p} vs {product}"
+                        );
+                    }
+                    // Argmax (lowest byte on ties) reproduces predict_next_byte,
+                    // except on PROVEN exact mathematical ties (audit F12, #1019).
+                    let mut best = 0usize;
+                    for byte in 1..256 {
+                        if log2[byte] > log2[best] {
+                            best = byte;
+                        }
+                    }
+                    let map = atlas.predict_next_byte(a, b).unwrap();
+                    assert!((map.log2_probability - log2[best]).abs() < 1e-7);
+                    if map.byte as usize != best {
+                        assert_eq!(
+                            signed_logits(&oracle, f, a, b, map.byte),
+                            signed_logits(&oracle, f, a, b, best as u8),
+                            "{family} {f:?} ctx ({a},{b}): argmax {best} != MAP {} without an exact tie",
+                            map.byte
+                        );
+                        exact_tie_skips += 1;
+                    }
+                    checked += 1;
+                }
+            }
+            fs::remove_file(path).unwrap();
+        }
+    }
+    assert_eq!(checked, 6 * 4 * 2 * 5);
+    eprintln!(
+        "#1014: {checked} distributions, {exact_tie_skips} proven exact-tie MAP differences (F12)"
+    );
+}
+
+#[test]
+fn issue_1014_zero_atlas_distribution_is_exactly_uniform() {
+    let path = fixture("dist-uniform", &[0u8; 512]);
+    for f in [
+        ByteFactorization::IndependentBits,
+        ByteFactorization::MsbTree,
+    ] {
+        let mut atlas = QuantizedSparseAtlas::open_with_factorization(&path, config(1), f).unwrap();
+        let log2 = atlas.next_byte_log2_distribution(7, 9).unwrap();
+        assert!(log2.iter().all(|&s| s == -8.0));
+        assert_eq!(atlas.predict_next_byte(7, 9).unwrap().byte, 0);
+    }
     fs::remove_file(path).unwrap();
 }
