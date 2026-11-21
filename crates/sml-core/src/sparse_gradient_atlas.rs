@@ -153,6 +153,17 @@ fn sigmoid(x: f64) -> f64 {
     1.0 / (1.0 + (-x.clamp(-16.0, 16.0)).exp())
 }
 
+/// `log2(sigmoid(x))` without forming `1 - p`: `-log2(1 + e^-x)` for
+/// `x >= 0`, `(x - ln(1 + e^x)) / ln 2` otherwise.
+fn log2_sigmoid(x: f64) -> f64 {
+    let ln = if x >= 0.0 {
+        -(-x).exp().ln_1p()
+    } else {
+        x - x.exp().ln_1p()
+    };
+    ln / std::f64::consts::LN_2
+}
+
 fn binary_loss_bits(probability: f64, target: bool) -> f64 {
     if target {
         -probability.log2()
@@ -856,6 +867,13 @@ impl QuantizedSparseAtlas {
     }
 
     pub fn probability(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
+        Ok(sigmoid(self.head_score(a, b, bit)?))
+    }
+
+    /// Unclamped head logit `sum / SCALE`; [`Self::probability`] applies
+    /// the logistic (with its clamp) to exactly this value, so its output
+    /// is bitwise unchanged by this split.
+    fn head_score(&mut self, a: u8, b: u8, bit: usize) -> Result<f64> {
         if !self.factorization.is_head(bit) {
             return Err("invalid output head".into());
         }
@@ -877,7 +895,7 @@ impl QuantizedSparseAtlas {
             };
             sum += (f64::from(signed) / 2.0) * feature_sign(a, b, feature);
         }
-        Ok(sigmoid(sum / SCALE))
+        Ok(sum / SCALE)
     }
 
     /// Decode the exact MAP byte under the *existing* fixed two-byte-context Q4
@@ -922,6 +940,55 @@ impl QuantizedSparseAtlas {
             evaluated_heads: heads,
             page_loads: self.page_loads - page_loads_before,
         })
+    }
+
+    /// Full next-byte distribution as 256 log2 probabilities, indexed by
+    /// byte, under the frozen Q4 weights (#1014), for both factorizations.
+    /// The probability of a byte is the product of the eight
+    /// [`ByteFactorization::decisions`] factors and `sum(2^score) = 1` up to
+    /// rounding (about 1e-15). Each factor is `log2 sigmoid(+-z)` of the
+    /// clamped head logit (no `1 - p` cancellation) and the eight factors
+    /// are summed in ascending order, so bytes with equal model probability
+    /// get bitwise-equal scores.
+    ///
+    /// Its argmax (lowest byte on ties) equals [`Self::predict_next_byte`]
+    /// except on exact mathematical ties, where the current MAP decoder can
+    /// return a higher tied byte (Grok audit F12, fixed separately in #1019).
+    /// This method does not change `predict_next_byte` or any other output.
+    pub fn next_byte_log2_distribution(&mut self, a: u8, b: u8) -> Result<[f64; 256]> {
+        let mut logits = [0.0_f64; 256];
+        for (head, value) in logits.iter_mut().enumerate() {
+            if self.factorization.is_head(head) {
+                *value = self.head_score(a, b, head)?.clamp(-16.0, 16.0);
+            }
+        }
+        let mut scores = [0.0_f64; 256];
+        for (byte, score) in scores.iter_mut().enumerate() {
+            let mut factors = [0.0_f64; 8];
+            for (factor, (head, value)) in factors
+                .iter_mut()
+                .zip(self.factorization.decisions(byte as u8))
+            {
+                let z = logits[head];
+                *factor = log2_sigmoid(if value { z } else { -z });
+            }
+            factors.sort_by(f64::total_cmp);
+            *score = factors.iter().sum();
+            if !score.is_finite() {
+                return Err("nonfinite Q4 byte score".into());
+            }
+        }
+        Ok(scores)
+    }
+
+    /// Full next-byte distribution as 256 linear probabilities
+    /// (`2^score` of [`Self::next_byte_log2_distribution`]).
+    pub fn next_byte_distribution(&mut self, a: u8, b: u8) -> Result<[f64; 256]> {
+        let mut out = self.next_byte_log2_distribution(a, b)?;
+        for value in &mut out {
+            *value = value.exp2();
+        }
+        Ok(out)
     }
 
     pub fn evaluate_document(&mut self, document: &[u8]) -> Result<(f64, u64)> {
