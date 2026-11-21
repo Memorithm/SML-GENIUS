@@ -5,8 +5,9 @@
 //! synapse or a trained neural operation. Contact multiplicities are only
 //! accounted, never treated as learned weights.
 //!
-//! This implementation scans all source bits twice per step (see
-//! `source_bits_examined`); it is NOT an event-sparse physical kernel, and its
+//! This implementation scans packed source words twice using active-bit iteration
+//! rather than visiting every zero bit in the CSR fan-out loops. It is NOT an
+//! event-sparse physical kernel, and its
 //! existence does not qualify V888 as a useful language-model topology.
 //! A consumer must pin graph provenance, compare matched topology controls,
 //! and independently qualify quality and resource use before promotion.
@@ -117,14 +118,13 @@ impl<'a> V888CsrGraph<'a> {
         if input.len() != self.nodes {
             return Err(invalid("workspace shape"));
         }
-        // Admission before execution; count this full source-bit scan explicitly.
+        // Admit active edges before any mutation. Packed words are scanned once;
+        // zero bits never enter the CSR fan-out calculation.
         let mut admitted = 0_u64;
         let mut active_sources = 0_u64;
-        for source in 0..self.nodes {
-            if input.get(source) == Some(true) {
-                active_sources += 1;
-                admitted += (self.offset(source + 1) - self.offset(source)) as u64;
-            }
+        for source in input.active_indices() {
+            active_sources += 1;
+            admitted += (self.offset(source + 1) - self.offset(source)) as u64;
         }
         if admitted > max_edges {
             return Err(invalid("active edge budget exceeded"));
@@ -132,10 +132,7 @@ impl<'a> V888CsrGraph<'a> {
         let mut bits = vec![false; self.nodes];
         let mut contacts = 0_u64;
         let mut loops = 0_u64;
-        for source in 0..self.nodes {
-            if input.get(source) != Some(true) {
-                continue;
-            }
+        for source in input.active_indices() {
             for edge in self.offset(source)..self.offset(source + 1) {
                 let target = self.target(edge);
                 bits[target] = true;
@@ -150,7 +147,9 @@ impl<'a> V888CsrGraph<'a> {
                 recurrent_cycles: 1,
                 ..ExecutionCounters::default()
             },
+            // Logical bits covered by two packed-word scans (not scalar bit loads).
             source_bits_examined: 2 * self.nodes as u64,
+            source_words_examined: 2 * self.nodes.div_ceil(64) as u64,
             active_sources,
             edges: admitted,
             contacts,
@@ -163,6 +162,8 @@ pub struct V888CsrStep {
     pub output: BooleanWorkspace,
     pub counters: ExecutionCounters,
     pub source_bits_examined: u64,
+    /// Total packed words observed in two passes; not a physical DRAM traffic measurement.
+    pub source_words_examined: u64,
     pub active_sources: u64,
     pub edges: u64,
     pub contacts: u64,
