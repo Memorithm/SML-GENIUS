@@ -101,13 +101,7 @@ fn q4_cli_uses_real_file_digest_and_refuses_tampering() {
     let exe = env!("CARGO_BIN_EXE_sml-q4-byte-generate");
     let digest = hex(&sha256(&bytes));
     let success = Command::new(exe)
-        .args([
-            path.to_str().unwrap(),
-            &digest,
-            "msb",
-            "0102",
-            "2",
-        ])
+        .args([path.to_str().unwrap(), &digest, "msb", "0102", "2"])
         .output()
         .unwrap();
     assert!(success.status.success(), "{:?}", success.stderr);
@@ -118,13 +112,7 @@ fn q4_cli_uses_real_file_digest_and_refuses_tampering() {
 
     fs::write(&path, vec![1u8; 512]).unwrap();
     let rejected = Command::new(exe)
-        .args([
-            path.to_str().unwrap(),
-            &digest,
-            "msb",
-            "0102",
-            "2",
-        ])
+        .args([path.to_str().unwrap(), &digest, "msb", "0102", "2"])
         .output()
         .unwrap();
     assert!(!rejected.status.success());
