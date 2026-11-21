@@ -345,7 +345,10 @@ impl BooleanWorkspace {
     /// ORs one validated active target directly into the packed output.
     /// A checked index prevents accidentally setting unused tail bits.
     pub(crate) fn activate(&mut self, index: usize) {
-        assert!(index < self.len_bits, "active target outside Boolean workspace");
+        assert!(
+            index < self.len_bits,
+            "active target outside Boolean workspace"
+        );
         self.words[index / 64] |= 1_u64 << (index % 64);
     }
 
