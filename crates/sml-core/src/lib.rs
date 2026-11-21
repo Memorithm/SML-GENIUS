@@ -332,6 +332,26 @@ impl BooleanWorkspace {
         }
     }
 
+    /// Creates an all-zero packed workspace without allocating an intermediate
+    /// byte-per-node Boolean vector. Used by validated recurrent CSR kernels.
+    #[must_use]
+    pub(crate) fn zeroed(len_bits: usize) -> Self {
+        Self {
+            words: vec![0_u64; len_bits.div_ceil(64)],
+            len_bits,
+        }
+    }
+
+    /// ORs one validated active target directly into the packed output.
+    /// A checked index prevents accidentally setting unused tail bits.
+    pub(crate) fn activate(&mut self, index: usize) {
+        assert!(
+            index < self.len_bits,
+            "active target outside Boolean workspace"
+        );
+        self.words[index / 64] |= 1_u64 << (index % 64);
+    }
+
     /// Number of meaningful bits in the workspace.
     #[must_use]
     pub const fn len(&self) -> usize {
