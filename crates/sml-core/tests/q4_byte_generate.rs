@@ -1,7 +1,6 @@
 use sml_core::{
     byte_factorization::ByteFactorization,
     elastic_ngram_paged_sha::{hex, sha256},
-    q4_decode_reference::ReferenceQ4,
     sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig},
 };
 use std::{
@@ -150,26 +149,6 @@ fn family_atlas(family: &str, pages: usize, seed: u64) -> Vec<u8> {
         .collect()
 }
 
-/// Sorted signed logits (+z for a 1 bit, -z for a 0 bit) along `byte`'s
-/// decisions, from the independent oracle: equal multisets prove an exact
-/// mathematical tie between two bytes.
-fn signed_logits(oracle: &ReferenceQ4, f: ByteFactorization, a: u8, b: u8, byte: u8) -> Vec<f64> {
-    let mut v: Vec<f64> = f
-        .decisions(byte)
-        .iter()
-        .map(|&(head, bit)| {
-            let z = oracle.head_logit(a, b, head).unwrap();
-            if bit {
-                z
-            } else {
-                -z
-            }
-        })
-        .collect();
-    v.sort_by(f64::total_cmp);
-    v
-}
-
 #[test]
 fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
     let families = [
@@ -187,13 +166,12 @@ fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
         (0x00, 0xff),
         (0xa3, 0x71),
     ];
-    let (mut checked, mut exact_tie_skips) = (0u32, 0u32);
+    let mut checked = 0u32;
     for (index, family) in families.iter().enumerate() {
         for seed in 0..4u64 {
             let pages = 1 + (seed as usize % 3);
             let bytes = family_atlas(family, pages, 0x1014_0000 + 16 * index as u64 + seed);
             let path = fixture(&format!("dist-{family}"), &bytes);
-            let oracle = ReferenceQ4::from_bytes(bytes).unwrap();
             for f in [
                 ByteFactorization::IndependentBits,
                 ByteFactorization::MsbTree,
@@ -224,7 +202,7 @@ fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
                         );
                     }
                     // Argmax (lowest byte on ties) reproduces predict_next_byte,
-                    // except on PROVEN exact mathematical ties (audit F12, #1019).
+                    // exact ties included since the F12 fix (#1019).
                     let mut best = 0usize;
                     for byte in 1..256 {
                         if log2[byte] > log2[best] {
@@ -232,16 +210,8 @@ fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
                         }
                     }
                     let map = atlas.predict_next_byte(a, b).unwrap();
-                    assert!((map.log2_probability - log2[best]).abs() < 1e-7);
-                    if map.byte as usize != best {
-                        assert_eq!(
-                            signed_logits(&oracle, f, a, b, map.byte),
-                            signed_logits(&oracle, f, a, b, best as u8),
-                            "{family} {f:?} ctx ({a},{b}): argmax {best} != MAP {} without an exact tie",
-                            map.byte
-                        );
-                        exact_tie_skips += 1;
-                    }
+                    assert_eq!(map.byte as usize, best, "{family} {f:?} ctx ({a},{b})");
+                    assert_eq!(map.log2_probability.to_bits(), log2[best].to_bits());
                     checked += 1;
                 }
             }
@@ -249,9 +219,6 @@ fn issue_1014_full_distribution_normalised_product_of_decisions_and_map() {
         }
     }
     assert_eq!(checked, 6 * 4 * 2 * 5);
-    eprintln!(
-        "#1014: {checked} distributions, {exact_tie_skips} proven exact-tie MAP differences (F12)"
-    );
 }
 
 #[test]
