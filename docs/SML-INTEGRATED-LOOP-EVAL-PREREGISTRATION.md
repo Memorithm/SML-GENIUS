@@ -104,8 +104,21 @@ the frozen corpus) runs:
 ```bash
 cargo run --locked --release -p sml-core --bin sml-next-byte-eval -- \
   --mode pinned --data-root DATA_ROOT --manifest MANIFEST.tsv \
-  --q4 /home/remoteops/sml-artifacts/sml50m-hf500-cc-s2a-b13217cadac12443b5aef00ec22bc72dd57759b1/weights.q4
+  --checkpoint /home/remoteops/sml-artifacts/sml50m-hf500-cc-s2a-b13217cadac12443b5aef00ec22bc72dd57759b1
 ```
+
+**Execution amendment (2026-11-21, before any number of this evaluation
+exists).** The Q4 arm is read through the fail-closed loader of #1016
+(`Q4Checkpoint::open_verified_pinned`) instead of a bare `--q4` file: a
+headerless `weights.q4` cannot prove its own factorization (audit F8). In
+pinned mode the CLI refuses `--q4` and additionally requires the sealed S2a
+directory to be the `SML50M_STREAM_CONTINUE_V1` continuation, scored on this
+manifest and DEV roster (583 files, 16,317,746 events), with 48,829 pages,
+32 cached pages, MSB-tree, and a recorded `dev_q4_bpc` of exactly
+`4.007063135`. Arms, metrics, positions and validity gates are unchanged; the
+reproduction gate still re-measures the value instead of trusting the record.
+It prints a `CHECKPOINT_V1` line (metrics/snapshot/Q4 SHA-256) after the
+`NEXT_BYTE_EVAL_V1` header. Tests: `crates/sml-core/tests/next_byte_eval_checkpoint.rs`.
 
 It records stdout verbatim. Results are published as a separate results
 document that keeps negative outcomes; promotion stays `NOT_PROMOTED`.

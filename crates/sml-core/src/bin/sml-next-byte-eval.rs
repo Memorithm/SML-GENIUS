@@ -5,6 +5,13 @@
 //! a TEST split. Count baselines are fitted on TRAIN rows only. In `pinned`
 //! mode every input hash, dimension and the S2a reproduction gate is fixed in
 //! code; `synthetic` mode exists only for CI fixtures and is labelled so.
+//!
+//! The Q4 arm reads a stream-fit output directory through the fail-closed
+//! `Q4Checkpoint` loader (`--checkpoint DIR`): page count, cache size and
+//! factorization come from the sealed `snapshot.tsv`/`metrics.tsv`, and in
+//! pinned mode the recorded manifest, DEV roster and `dev_q4_bpc` must equal
+//! the pre-registered values. A bare `--q4 FILE` is accepted in synthetic mode
+//! only (a headerless Q4 file cannot prove its own factorization).
 use sml_core::{
     byte_factorization::ByteFactorization,
     next_byte_eval::{
@@ -12,6 +19,7 @@ use sml_core::{
         FrozenManifest, ManifestRole, NextByteEvaluator, NextBytePredictor, Order2Counts,
         Q4AtlasPredictor, Result, UnigramCounts,
     },
+    q4_checkpoint::{CheckpointSchema, Q4Checkpoint},
     sparse_gradient_atlas::{QuantizedSparseAtlas, SparseConfig},
 };
 use std::{env, path::PathBuf};
@@ -49,6 +57,7 @@ struct Args {
     data_root: PathBuf,
     manifest: PathBuf,
     q4: Option<PathBuf>,
+    checkpoint: Option<PathBuf>,
     pages: u64,
     factorization: ByteFactorization,
     arms: Vec<Arm>,
@@ -56,13 +65,14 @@ struct Args {
     top1: bool,
 }
 
-const USAGE: &str = "usage: sml-next-byte-eval --mode pinned|synthetic --data-root DIR --manifest MANIFEST.tsv [--q4 WEIGHTS.q4] [--arms q4,order2,unigram] [--no-top1]\n  synthetic only: [--pages N] [--factorization msb|bits] [--expected-q4-bpc X.XXXXXXXXX]";
+const USAGE: &str = "usage: sml-next-byte-eval --mode pinned|synthetic --data-root DIR --manifest MANIFEST.tsv [--checkpoint STREAM_FIT_OUTPUT_DIR] [--arms q4,order2,unigram] [--no-top1]\n  synthetic only: [--q4 WEIGHTS.q4] [--pages N] [--factorization msb|bits] [--expected-q4-bpc X.XXXXXXXXX]";
 
 fn parse(argv: &[String]) -> Result<Args> {
     let mut mode = None;
     let mut data_root = None;
     let mut manifest = None;
     let mut q4 = None;
+    let mut checkpoint = None;
     let mut pages = None;
     let mut factorization = None;
     let mut arms = None;
@@ -86,6 +96,7 @@ fn parse(argv: &[String]) -> Result<Args> {
             "--data-root" => data_root = Some(PathBuf::from(value)),
             "--manifest" => manifest = Some(PathBuf::from(value)),
             "--q4" => q4 = Some(PathBuf::from(value)),
+            "--checkpoint" => checkpoint = Some(PathBuf::from(value)),
             "--pages" => pages = Some(value.parse::<u64>()?),
             "--factorization" => {
                 factorization = Some(match value.as_str() {
@@ -116,8 +127,22 @@ fn parse(argv: &[String]) -> Result<Args> {
     }
     let mode = mode.ok_or(USAGE)?;
     let arms = arms.unwrap_or_else(|| vec![Arm::Q4Atlas, Arm::Order2, Arm::Unigram]);
-    if arms.contains(&Arm::Q4Atlas) != q4.is_some() {
-        return Err("--q4 is required exactly when the q4 arm is selected".into());
+    if q4.is_some() && checkpoint.is_some() {
+        return Err("--q4 and --checkpoint are mutually exclusive".into());
+    }
+    if arms.contains(&Arm::Q4Atlas) != (q4.is_some() || checkpoint.is_some()) {
+        return Err(
+            "--checkpoint (or synthetic --q4) is required exactly when the q4 arm is selected"
+                .into(),
+        );
+    }
+    if mode == Mode::Pinned && q4.is_some() {
+        return Err(
+            "pinned mode reads the Q4 arm only through --checkpoint (verified loader)".into(),
+        );
+    }
+    if checkpoint.is_some() && (pages.is_some() || factorization.is_some()) {
+        return Err("--checkpoint records pages and factorization; overrides are refused".into());
     }
     let (pages, factorization, expected_q4_bpc) = match mode {
         Mode::Pinned => {
@@ -141,12 +166,47 @@ fn parse(argv: &[String]) -> Result<Args> {
         data_root: data_root.ok_or(USAGE)?,
         manifest: manifest.ok_or(USAGE)?,
         q4,
+        checkpoint,
         pages,
         factorization,
         arms,
         expected_q4_bpc,
         top1,
     })
+}
+
+/// Open `dir` through the fail-closed loader and bind it to this evaluation:
+/// the checkpoint must have been scored on this exact manifest and DEV roster.
+/// Pinned mode additionally requires the S2a continuation with its frozen Q4
+/// SHA-256, dimensions, factorization and verbatim `dev_q4_bpc`.
+fn verify_checkpoint(
+    dir: &std::path::Path,
+    pinned: bool,
+    manifest_sha256: &str,
+    dev_documents: u64,
+    dev_events: u64,
+) -> Result<Q4Checkpoint> {
+    let ckpt = if pinned {
+        Q4Checkpoint::open_verified_pinned(dir, PINNED_Q4_SHA256)?
+    } else {
+        Q4Checkpoint::open_verified(dir)?
+    };
+    if ckpt.manifest_sha256 != manifest_sha256 {
+        return Err("checkpoint was scored on a different manifest".into());
+    }
+    if ckpt.dev_files != dev_documents || ckpt.dev_events != dev_events {
+        return Err("checkpoint DEV roster differs from this manifest's DEV rows".into());
+    }
+    if pinned
+        && (ckpt.schema != CheckpointSchema::Continue
+            || ckpt.config.pages != PINNED_PAGES
+            || ckpt.config.max_cached_pages != CACHE_PAGES
+            || ckpt.factorization != ByteFactorization::MsbTree
+            || ckpt.dev_q4_bpc != PINNED_DEV_Q4_BPC)
+    {
+        return Err("checkpoint is not the pre-registered S2a continuation".into());
+    }
+    Ok(ckpt)
 }
 
 fn run(args: &Args) -> Result<()> {
@@ -181,16 +241,48 @@ fn run(args: &Args) -> Result<()> {
         max_cached_pages: CACHE_PAGES,
         learning_rate: 0.15,
     };
-    let q4_sha = match &args.q4 {
-        Some(path) => {
+    let checkpoint = match &args.checkpoint {
+        Some(dir) => Some(verify_checkpoint(
+            dir,
+            pinned,
+            &manifest.manifest_sha256,
+            dev.len() as u64,
+            dev_events,
+        )?),
+        None => None,
+    };
+    let q4_sha = match (&args.q4, &checkpoint) {
+        (Some(path), None) => {
             let sha = file_sha256(path)?;
             if pinned && sha != PINNED_Q4_SHA256 {
                 return Err("Q4 SHA-256 differs from the pre-registered S2a pin".into());
             }
             Some(sha)
         }
-        None => None,
+        (None, Some(ckpt)) => Some(ckpt.q4_sha256.clone()),
+        _ => None,
     };
+    // Synthetic runs from a checkpoint gate on its own recorded dev_q4_bpc
+    // unless an explicit value is given; pinned runs always use the pin.
+    let expected_q4_bpc = match (&args.expected_q4_bpc, &checkpoint) {
+        (Some(value), _) => Some(value.clone()),
+        (None, Some(ckpt)) => Some(ckpt.dev_q4_bpc.clone()),
+        (None, None) => None,
+    };
+    let open_q4 = || -> Result<Option<QuantizedSparseAtlas>> {
+        match (&args.q4, &checkpoint) {
+            (Some(path), None) => Ok(Some(QuantizedSparseAtlas::open_with_factorization(
+                path,
+                config,
+                args.factorization,
+            )?)),
+            (None, Some(ckpt)) => Ok(Some(ckpt.open_atlas()?)),
+            _ => Ok(None),
+        }
+    };
+    let factorization = checkpoint
+        .as_ref()
+        .map_or(args.factorization, |c| c.factorization);
     println!(
         "NEXT_BYTE_EVAL_V1 mode={} manifest_sha256={} q4_sha256={} dev_documents={} dev_bytes={dev_bytes} dev_events={dev_events} train_documents={} test=UNOPENED promotion=NOT_PROMOTED",
         if pinned { "PINNED" } else { "SYNTHETIC_UNPINNED" },
@@ -199,12 +291,26 @@ fn run(args: &Args) -> Result<()> {
         dev.len(),
         manifest.role(ManifestRole::Train).count(),
     );
+    if let Some(ckpt) = &checkpoint {
+        println!(
+            "CHECKPOINT_V1 schema={} metrics_sha256={} snapshot_sha256={} q4_sha256={} pages={} cache_pages={} factorization={:?} recorded_dev_q4_bpc={} recorded_dev_f32_bpc={} parent_q4_sha256={} loader=q4_checkpoint::open_verified{}",
+            ckpt.schema.as_str(),
+            ckpt.metrics_sha256,
+            ckpt.snapshot_sha256,
+            ckpt.q4_sha256,
+            ckpt.config.pages,
+            ckpt.config.max_cached_pages,
+            ckpt.factorization,
+            ckpt.dev_q4_bpc,
+            ckpt.dev_f32_bpc,
+            ckpt.parent_q4_sha256.as_deref().unwrap_or("NA"),
+            if pinned { "_pinned" } else { "" },
+        );
+    }
 
     // 1. Reproduction gate on a cold atlas, through the exact S2a scoring path.
     let mut gate_bpc = None;
-    if let Some(path) = &args.q4 {
-        let mut atlas =
-            QuantizedSparseAtlas::open_with_factorization(path, config, args.factorization)?;
+    if let Some(mut atlas) = open_q4()? {
         let mut loss = 0f64;
         let mut events = 0u64;
         for document in &dev {
@@ -216,14 +322,14 @@ fn run(args: &Args) -> Result<()> {
             return Err("gate scored a different number of DEV positions".into());
         }
         let measured = loss / events as f64;
-        let status = match &args.expected_q4_bpc {
+        let status = match &expected_q4_bpc {
             Some(expected) if reproduces_exactly(measured, expected) => "PASS",
             Some(_) => "FAIL",
             None => "NOT_APPLICABLE",
         };
         println!(
             "REPRODUCTION_GATE measured_dev_q4_bpc={measured:.9} expected={} status={status} grouped_page_loads={}",
-            args.expected_q4_bpc.as_deref().unwrap_or("NA"),
+            expected_q4_bpc.as_deref().unwrap_or("NA"),
             atlas.page_loads(),
         );
         if status == "FAIL" {
@@ -264,13 +370,8 @@ fn run(args: &Args) -> Result<()> {
         let mut q4_predictor;
         let predictor: &mut dyn NextBytePredictor = match arm {
             Arm::Q4Atlas => {
-                let path = args.q4.as_ref().ok_or("missing Q4 path")?;
-                let atlas = QuantizedSparseAtlas::open_with_factorization(
-                    path,
-                    config,
-                    args.factorization,
-                )?;
-                q4_predictor = Q4AtlasPredictor::new("q4_atlas_s2a", atlas, args.factorization);
+                let atlas = open_q4()?.ok_or("missing Q4 input")?;
+                q4_predictor = Q4AtlasPredictor::new("q4_atlas_s2a", atlas, factorization);
                 &mut q4_predictor
             }
             Arm::Order2 => order2.as_mut().ok_or("order2 not fitted")?,
