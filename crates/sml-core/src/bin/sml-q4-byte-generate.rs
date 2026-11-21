@@ -47,7 +47,8 @@ fn main() -> Result<()> {
     }
 
     let stat = fs::symlink_metadata(path)?;
-    if !stat.is_file() || stat.file_type().is_symlink()
+    if !stat.is_file()
+        || stat.file_type().is_symlink()
         || stat.len() == 0
         || stat.len() > MAX_Q4_BYTES
         || stat.len() % PAGE_Q4_BYTES != 0
