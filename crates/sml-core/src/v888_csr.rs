@@ -129,19 +129,19 @@ impl<'a> V888CsrGraph<'a> {
         if admitted > max_edges {
             return Err(invalid("active edge budget exceeded"));
         }
-        let mut bits = vec![false; self.nodes];
+        let mut output = BooleanWorkspace::zeroed(self.nodes);
         let mut contacts = 0_u64;
         let mut loops = 0_u64;
         for source in input.active_indices() {
             for edge in self.offset(source)..self.offset(source + 1) {
                 let target = self.target(edge);
-                bits[target] = true;
+                output.activate(target);
                 contacts += self.count(edge);
                 loops += u64::from(source == target);
             }
         }
         Ok(V888CsrStep {
-            output: BooleanWorkspace::from_bits(&bits),
+            output,
             counters: ExecutionCounters {
                 boolean_ops: admitted,
                 recurrent_cycles: 1,
