@@ -405,8 +405,8 @@ fn bitslice_into<const BITS: usize>(
         if shared {
             products[0] = active;
             for mask in 1_usize..64 {
-                products[mask] = products[mask & (mask - 1)]
-                    & planes[mask.trailing_zeros() as usize];
+                products[mask] =
+                    products[mask & (mask - 1)] & planes[mask.trailing_zeros() as usize];
             }
         }
         for (gate_index, gate) in gates.iter().enumerate() {
@@ -637,17 +637,25 @@ mod tests {
         let bank = Pvp6Bank::new(gates).unwrap();
         for count in [1, 63, 64, 65, 129] {
             let queries: Vec<_> = (0..count).map(|i| (i * 37 + 3) % 64).collect();
-            let workload = Pvp6Workload::new(
-                5, count as u32, 2, Pvp6PopulationProfile::AffineUniform,
-            );
-            let result = bank.evaluate_on(Pvp6ExecutionPath::Bitsliced, workload, &queries).unwrap();
-            let scalar = bank.evaluate_on(
-                Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan), workload, &queries,
-            ).unwrap();
+            let workload =
+                Pvp6Workload::new(5, count as u32, 2, Pvp6PopulationProfile::AffineUniform);
+            let result = bank
+                .evaluate_on(Pvp6ExecutionPath::Bitsliced, workload, &queries)
+                .unwrap();
+            let scalar = bank
+                .evaluate_on(
+                    Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
+                    workload,
+                    &queries,
+                )
+                .unwrap();
             assert_eq!(result, scalar);
             for (g, gate) in bank.gates().iter().enumerate() {
                 for i in 0..count * 2 {
-                    assert_eq!(result.value(g, i), Some(literal_oracle(gate.monomials(), queries[i % count])));
+                    assert_eq!(
+                        result.value(g, i),
+                        Some(literal_oracle(gate.monomials(), queries[i % count]))
+                    );
                 }
             }
         }
