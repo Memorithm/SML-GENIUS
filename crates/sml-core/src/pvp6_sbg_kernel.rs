@@ -241,7 +241,9 @@ mod tests {
     #[test]
     fn bitsliced_recurrent_path_preserves_states_traces_and_usage() {
         let mut selected = kernel(&[0, 1], 8);
-        let mut sliced = selected.clone().with_execution_path(Pvp6ExecutionPath::Bitsliced);
+        let mut sliced = selected
+            .clone()
+            .with_execution_path(Pvp6ExecutionPath::Bitsliced);
         let mut a = SemanticState::zeroed().unwrap();
         a.routing.set(7, true).unwrap();
         let mut b = a.clone();
