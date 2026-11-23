@@ -2,7 +2,7 @@
 //! A population label is a diagnostic policy hint, not a measured distribution.
 use crate::{
     pascal_vector_projection::{Pvp6PopulationProfile, Pvp6Selection, Pvp6Workload},
-    pvp6_executor::{Pvp6Bank, Pvp6ExecutionError},
+    pvp6_executor::{Pvp6Bank, Pvp6ExecutionError, Pvp6ExecutionPath},
     pvp6_sbg::{SbgAnfError, SbgAnfPlan},
     semantic::{SemanticRewriteStep, SemanticRewriter, SemanticState, SemanticStateDelta},
 };
@@ -21,6 +21,7 @@ pub struct SbgAnfCycle {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SbgAnfKernel<const S: usize, const D: usize> {
     bank: Pvp6Bank<D>,
+    execution_path: Pvp6ExecutionPath,
     plan: SbgAnfPlan<S, D>,
     population: Pvp6PopulationProfile,
     density: u32,
@@ -54,6 +55,7 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
         };
         Ok(Self {
             bank,
+            execution_path: Pvp6ExecutionPath::Selected,
             plan,
             population,
             density,
@@ -65,6 +67,19 @@ impl<const S: usize, const D: usize> SbgAnfKernel<S, D> {
             cycles: Arc::new(Vec::new()),
         })
     }
+    /// Explicit diagnostic execution arm; default construction preserves the
+    /// historical selector. No calibration from synthetic GB-CUDA chains is used.
+    #[must_use]
+    pub fn with_execution_path(mut self, path: Pvp6ExecutionPath) -> Self {
+        self.execution_path = path;
+        self
+    }
+
+    #[must_use]
+    pub fn execution_path(&self) -> Pvp6ExecutionPath {
+        self.execution_path
+    }
+
     #[must_use]
     pub fn bank(&self) -> &Pvp6Bank<D> {
         &self.bank
@@ -123,7 +138,7 @@ impl<const S: usize, const D: usize> SemanticRewriter<S> for SbgAnfKernel<S, D> 
         let workload = Pvp6Workload::new(self.density, queries.len() as u32, 1, self.population);
         let batch = self
             .bank
-            .evaluate(workload, &queries)
+            .evaluate_on(self.execution_path, workload, &queries)
             .map_err(SbgAnfKernelError::Execution)?;
         let next = self
             .plan
@@ -223,6 +238,22 @@ mod tests {
         assert_eq!(outcome.state.value.get(0), Ok(false));
         assert_eq!(outcome.state.routing.get(7), Ok(true));
     }
+    #[test]
+    fn bitsliced_recurrent_path_preserves_states_traces_and_usage() {
+        let mut selected = kernel(&[0, 1], 8);
+        let mut sliced = selected.clone().with_execution_path(Pvp6ExecutionPath::Bitsliced);
+        let mut a = SemanticState::zeroed().unwrap();
+        a.routing.set(7, true).unwrap();
+        let mut b = a.clone();
+        for depth in 1..=8 {
+            a = selected.rewrite(&a, depth).unwrap().state;
+            b = sliced.rewrite(&b, depth).unwrap().state;
+            assert_eq!(a, b);
+            assert_eq!(selected.cycles(), sliced.cycles());
+            assert_eq!(selected.usage(), sliced.usage());
+        }
+    }
+
     #[test]
     fn stable_projection_respects_minimum_depth() {
         let mut kernel = kernel(&[0], 8);
