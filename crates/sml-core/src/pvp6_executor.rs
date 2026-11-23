@@ -398,9 +398,24 @@ fn bitslice_into<const BITS: usize>(
         } else {
             (1_u64 << lanes) - 1
         };
+        // Dense six-variable banks reuse the same products across gates.
+        // Materialize all 64 supports once per query chunk, never across states.
+        let mut products = [0_u64; 64];
+        let shared = BITS == 64 && gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64;
+        if shared {
+            products[0] = active;
+            for mask in 1_usize..64 {
+                products[mask] = products[mask & (mask - 1)]
+                    & planes[mask.trailing_zeros() as usize];
+            }
+        }
         for (gate_index, gate) in gates.iter().enumerate() {
             let mut output = 0_u64;
             for &mask in &gate.monomials {
+                if shared {
+                    output ^= products[usize::from(mask)];
+                    continue;
+                }
                 let mut product = active;
                 let mut support = mask;
                 while support != 0 {
@@ -612,6 +627,30 @@ mod tests {
                 Pvp6SelectionError::ZeroDensity
             ))
         );
+    }
+
+    #[test]
+    fn shared_products_match_sparse_oracle_with_tail_and_reuse() {
+        let gates: Vec<Pvp6Gate<64>> = (0..16)
+            .map(|g| Pvp6Gate::from_monomials(&[0, 1, 3, 7, 16 + g]).unwrap())
+            .collect();
+        let bank = Pvp6Bank::new(gates).unwrap();
+        for count in [1, 63, 64, 65, 129] {
+            let queries: Vec<_> = (0..count).map(|i| (i * 37 + 3) % 64).collect();
+            let workload = Pvp6Workload::new(
+                5, count as u32, 2, Pvp6PopulationProfile::AffineUniform,
+            );
+            let result = bank.evaluate_on(Pvp6ExecutionPath::Bitsliced, workload, &queries).unwrap();
+            let scalar = bank.evaluate_on(
+                Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan), workload, &queries,
+            ).unwrap();
+            assert_eq!(result, scalar);
+            for (g, gate) in bank.gates().iter().enumerate() {
+                for i in 0..count * 2 {
+                    assert_eq!(result.value(g, i), Some(literal_oracle(gate.monomials(), queries[i % count])));
+                }
+            }
+        }
     }
 
     #[test]
