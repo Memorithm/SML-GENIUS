@@ -132,7 +132,9 @@ fn recurrent(overlap: bool) {
     }
     report(
         "recurrent",
-        &format!("gates={GATES} density=8 degree_cap=3 overlap={overlap} queries={LANES} depth={DEPTH}"),
+        &format!(
+            "gates={GATES} density=8 degree_cap=3 overlap={overlap} queries={LANES} depth={DEPTH}"
+        ),
         &mut times,
     );
 }
