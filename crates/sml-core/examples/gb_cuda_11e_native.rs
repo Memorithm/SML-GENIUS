@@ -139,9 +139,7 @@ fn decision(bank: &Pvp6Bank<64>, shape: &str) {
         }
     }
     for (name, values) in ["scan", "cached"].into_iter().zip(samples) {
-        println!(
-            "GB_CUDA_11E_DECISION {shape} path={name} calls={CALLS} ns={values:?}"
-        );
+        println!("GB_CUDA_11E_DECISION {shape} path={name} calls={CALLS} ns={values:?}");
     }
 }
 
