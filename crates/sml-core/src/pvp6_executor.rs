@@ -394,12 +394,14 @@ fn use_shared_products<const BITS: usize>(
         Pvp6ExecutionPath::Bitsliced => {
             gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64
         }
-        Pvp6ExecutionPath::BitslicedCost => gates
-            .iter()
-            .flat_map(|g| &g.monomials)
-            .map(|m| m.count_ones() as usize)
-            .fold(0_usize, usize::saturating_add)
-            > 63,
+        Pvp6ExecutionPath::BitslicedCost => {
+            gates
+                .iter()
+                .flat_map(|g| &g.monomials)
+                .map(|m| m.count_ones() as usize)
+                .fold(0_usize, usize::saturating_add)
+                > 63
+        }
         _ => false,
     }
 }
@@ -702,9 +704,15 @@ mod tests {
         let high = vec![Pvp6Gate::<64>::from_monomials(&[7, 11, 13, 14]).unwrap(); 16];
         assert!(!use_shared_products(&low, Pvp6ExecutionPath::BitslicedCost));
         assert!(use_shared_products(&high, Pvp6ExecutionPath::BitslicedCost));
-        assert!(use_shared_products(&low, Pvp6ExecutionPath::BitslicedShared));
+        assert!(use_shared_products(
+            &low,
+            Pvp6ExecutionPath::BitslicedShared
+        ));
         assert!(use_shared_products(&low, Pvp6ExecutionPath::Bitsliced));
-        assert!(!use_shared_products(&high, Pvp6ExecutionPath::BitslicedUnshared));
+        assert!(!use_shared_products(
+            &high,
+            Pvp6ExecutionPath::BitslicedUnshared
+        ));
     }
 
     #[test]
