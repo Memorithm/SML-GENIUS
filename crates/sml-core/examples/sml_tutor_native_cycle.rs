@@ -161,10 +161,123 @@ fn cycle(train: &[Row], checkpoint: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// Version 2 stores both learned gates. Do not fit XOR again on resume.
+fn restore_xor(text: &str) -> Result<LocalAnfNetwork, Box<dyn Error>> {
+    if text.len() > 128 {
+        return Err("XOR checkpoint too large".into());
+    }
+    let mut net = initial();
+    net.gates_mut()[0] = decode(text)?;
+    Ok(net)
+}
+
+fn and_rows(start: usize, end: usize) -> Vec<Row> {
+    (start..end)
+        .map(|a| (a, a & 1 != 0 && a & 2 != 0))
+        .collect()
+}
+
+fn encode_bank(xor: &LocalAnfGate, and: &LocalAnfGate) -> String {
+    format!("SML_TUTOR_BANK_V2\n{}{}", encode(xor), encode(and))
+}
+
+fn decode_bank(text: &str) -> Result<(LocalAnfNetwork, LocalAnfNetwork), Box<dyn Error>> {
+    let lines: Vec<_> = text.lines().collect();
+    if text.len() > 256 || lines.len() != 7 || lines[0] != "SML_TUTOR_BANK_V2" {
+        return Err("bank checkpoint schema".into());
+    }
+    let xor = restore_xor(&lines[1..4].join("\n"))?;
+    let and = restore_xor(&lines[4..7].join("\n"))?;
+    Ok((xor, and))
+}
+
+fn verify_bank(text: &str) -> Result<(), Box<dyn Error>> {
+    let (xor, and) = decode_bank(text)?;
+    let x = residual_output_errors(&xor, &data(&independent_rows(8, 16)), 0, 0, BASELINE)?;
+    let a = residual_output_errors(&and, &data(&and_rows(8, 16)), 0, 0, BASELINE)?;
+    if x != (0, 8) || a != (0, 8) {
+        return Err("bank retention gate failed".into());
+    }
+    println!("SML_TUTOR_BANK_RELOAD=PASS xor_errors=0 and_errors=0 samples_per_skill=8");
+    Ok(())
+}
+
+fn extend_and(xor_text: &str, train: &[Row]) -> Result<String, Box<dyn Error>> {
+    let xor = restore_xor(xor_text)?;
+    let xor_test = data(&independent_rows(8, 16));
+    if residual_output_errors(&xor, &xor_test, 0, 0, BASELINE)? != (0, 8) {
+        return Err("parent XOR checkpoint failed retention".into());
+    }
+    let mut and = initial();
+    let before = and.clone();
+    let fit = fit_residual_gate(&and, &data(train), 0, 0, BASELINE, &[1, 2, 3, 4], 4)?;
+    let decision = validate_and_commit(
+        &mut and,
+        &data(&and_rows(4, 8)),
+        0,
+        0,
+        BASELINE,
+        &fit,
+    )?;
+    if !decision.committed || fit.train_errors != 0 || decision.candidate_validation_errors != 0 {
+        return Err("AND DEV rejected candidate".into());
+    }
+    let test = data(&and_rows(8, 16));
+    let baseline = residual_output_errors(&before, &test, 0, 0, BASELINE)?;
+    let after = residual_output_errors(&and, &test, 0, 0, BASELINE)?;
+    if baseline != (2, 8) || after != (0, 8) || and == before {
+        return Err("AND TEST veto".into());
+    }
+    let bank = encode_bank(&xor.gates()[0], &and.gates()[0]);
+    let (reloaded_xor, reloaded_and) = decode_bank(&bank)?;
+    if reloaded_xor != xor || reloaded_and != and {
+        return Err("bank coefficient roundtrip changed".into());
+    }
+    verify_bank(&bank)?;
+    println!("SML_TUTOR_AND_LEARNED=PASS before_errors=2 after_errors=0 samples=8");
+    println!("SML_TUTOR_XOR_RETAINED=PASS");
+    Ok(bank)
+}
+
+// Publish a complete immutable checkpoint only after fsync. Same-directory
+// hard_link provides atomic no-clobber publication on the target Linux FS.
+fn publish_bank(path: &Path, text: &str) -> Result<(), Box<dyn Error>> {
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let temp = parent.join(format!(".sml-tutor-bank-{}.tmp", std::process::id()));
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let result = (|| -> std::io::Result<()> {
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        fs::hard_link(&temp, path)?;
+        fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    })();
+    drop(file);
+    let cleanup = fs::remove_file(&temp);
+    result?;
+    cleanup?;
+    fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
+    if args.len() == 2 && args[0] == "--verify-bank" {
+        return verify_bank(&fs::read_to_string(&args[1])?);
+    }
+    if args.len() == 4 && args[0] == "--resume-and" {
+        let parent = fs::read_to_string(&args[1])?;
+        let raw = fs::read_to_string(&args[2])?;
+        if raw.len() > 128 {
+            return Err("AND TRAIN file too large".into());
+        }
+        let bank = extend_and(&parent, &parse_train(&raw)?)?;
+        publish_bank(Path::new(&args[3]), &bank)?;
+        println!("SML_TUTOR_BANK_CHECKPOINT=ISOLATED");
+        return Ok(());
+    }
     if args.len() != 2 {
-        return Err("usage: sml_tutor_native_cycle TRAIN_FILE NEW_CHECKPOINT".into());
+        return Err("usage: TRAIN NEW_GATE | --resume-and XOR_GATE TRAIN NEW_BANK | --verify-bank BANK".into());
     }
     let raw = fs::read_to_string(&args[0])?;
     if raw.len() > 128 {
@@ -199,6 +312,23 @@ mod tests {
             (0, 8)
         );
         assert_eq!(decode(&encode(&net.gates()[0])).unwrap(), net.gates()[0]);
+    }
+
+    #[test]
+    fn resume_adds_and_without_changing_xor() {
+        let xor_train = parse_train("0|0|0\n1|0|1\n0|1|1\n1|1|0\n").unwrap();
+        let net = initial();
+        let fitted =
+            fit_residual_gate(&net, &data(&xor_train), 0, 0, BASELINE, &[1, 2, 3, 4], 4).unwrap();
+        let parent = encode(&fitted.gate);
+        let and_train = parse_train("0|0|0\n1|0|0\n0|1|0\n1|1|1\n").unwrap();
+        let bank = extend_and(&parent, &and_train).unwrap();
+        let (xor, and) = decode_bank(&bank).unwrap();
+        assert_eq!(xor.gates()[0], fitted.gate);
+        assert_eq!(and.gates()[0].nonzero_monomials(), 1);
+        assert!(verify_bank(&bank).is_ok());
+        assert!(extend_and("broken", &and_train).is_err());
+        assert!(extend_and(&parent, &xor_train).is_err());
     }
 
     #[test]
