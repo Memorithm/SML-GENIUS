@@ -52,7 +52,15 @@ fn report(scope: &str, shape: &str, times: &mut [Vec<u128>; 5]) {
 
 fn batch(gates: usize, density: usize, degree: u32, overlap: bool, count: usize) {
     let bank = bank(gates, density, degree, overlap);
-    let queries: Vec<_> = (0..count).map(|i| if overlap { (i * 13 + i / 11) % 8 } else { (i * 19 + i / 3 + 5) % 64 }).collect();
+    let queries: Vec<_> = (0..count)
+        .map(|i| {
+            if overlap {
+                (i * 13 + i / 11) % 8
+            } else {
+                (i * 19 + i / 3 + 5) % 64
+            }
+        })
+        .collect();
     let workload = Pvp6Workload::new(
         density as u32,
         count as u32,
@@ -73,7 +81,11 @@ fn batch(gates: usize, density: usize, degree: u32, overlap: bool, count: usize)
         for j in 0..5 {
             let i = (rep + j) % 5;
             let start = Instant::now();
-            let path = if i == 4 && gates <= 8 { Pvp6ExecutionPath::Selected } else { PATHS[i].1 };
+            let path = if i == 4 && gates <= 8 {
+                Pvp6ExecutionPath::Selected
+            } else {
+                PATHS[i].1
+            };
             let actual = black_box(bank.evaluate_on(path, workload, &queries).unwrap());
             let elapsed = start.elapsed().as_nanos();
             assert_eq!(actual, expected);
