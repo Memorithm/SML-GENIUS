@@ -89,6 +89,8 @@ impl<const BITS: usize> Pvp6Gate<BITS> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pvp6Bank<const BITS: usize> {
     gates: Vec<Pvp6Gate<BITS>>,
+    // Immutable six-variable routing metadata, never query/state dependent.
+    degree_cost: usize,
 }
 
 impl<const BITS: usize> Pvp6Bank<BITS> {
@@ -97,12 +99,39 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         if gates.is_empty() {
             return Err(Pvp6ExecutionError::EmptyBank);
         }
-        Ok(Self { gates })
+        let degree_cost = if BITS == 64 { word_and_cost(&gates) } else { 0 };
+        Ok(Self { gates, degree_cost })
     }
 
     #[must_use]
     pub fn gates(&self) -> &[Pvp6Gate<BITS>] {
         &self.gates
+    }
+
+    /// Experimental frozen hybrid route, resolved using immutable bank metadata.
+    /// No production routing change. Rebuild the bank to replace coefficients.
+    #[must_use]
+    pub fn diagnostic_hybrid_path(&self) -> Pvp6ExecutionPath {
+        self.hybrid_path(self.degree_cost)
+    }
+
+    /// Diagnostic control: resolve the same route by rescanning the bank.
+    #[must_use]
+    pub fn diagnostic_hybrid_scan_path(&self) -> Pvp6ExecutionPath {
+        if BITS != 64 || self.gates.len() <= 8 {
+            return Pvp6ExecutionPath::Selected;
+        }
+        self.hybrid_path(word_and_cost(&self.gates))
+    }
+
+    fn hybrid_path(&self, cost: usize) -> Pvp6ExecutionPath {
+        if BITS != 64 || self.gates.len() <= 8 {
+            Pvp6ExecutionPath::Selected
+        } else if cost > 63 {
+            Pvp6ExecutionPath::BitslicedShared
+        } else {
+            Pvp6ExecutionPath::BitslicedUnshared
+        }
     }
 
     /// Evaluates all gates for the declared query workload.
@@ -380,6 +409,14 @@ fn sparse_eval(monomials: &[u16], query: usize) -> bool {
     })
 }
 
+fn word_and_cost<const BITS: usize>(gates: &[Pvp6Gate<BITS>]) -> usize {
+    gates
+        .iter()
+        .flat_map(|g| &g.monomials)
+        .map(|m| m.count_ones() as usize)
+        .fold(0_usize, usize::saturating_add)
+}
+
 /// Compare the exact word-AND counts of the two implementations. This is
 /// an uncalibrated candidate, not a latency model: lookup and loop costs differ.
 fn use_shared_products<const BITS: usize>(
@@ -394,14 +431,7 @@ fn use_shared_products<const BITS: usize>(
         Pvp6ExecutionPath::Bitsliced => {
             gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64
         }
-        Pvp6ExecutionPath::BitslicedCost => {
-            gates
-                .iter()
-                .flat_map(|g| &g.monomials)
-                .map(|m| m.count_ones() as usize)
-                .fold(0_usize, usize::saturating_add)
-                > 63
-        }
+        Pvp6ExecutionPath::BitslicedCost => word_and_cost(gates) > 63,
         _ => false,
     }
 }
@@ -713,6 +743,54 @@ mod tests {
             &high,
             Pvp6ExecutionPath::BitslicedUnshared
         ));
+    }
+
+    #[test]
+    fn prepared_hybrid_matches_scan_and_scalar_after_rebuild() {
+        for count in [1, 8, 9, 16, 65] {
+            for terms in [&[0_u16][..], &[0, 1, 2, 4], &[7, 11, 13, 14]] {
+                let bank =
+                    Pvp6Bank::<64>::new(vec![Pvp6Gate::from_monomials(terms).unwrap(); count])
+                        .unwrap();
+                let path = bank.diagnostic_hybrid_path();
+                assert_eq!(path, bank.diagnostic_hybrid_scan_path());
+                assert_eq!(
+                    path,
+                    if count <= 8 {
+                        Pvp6ExecutionPath::Selected
+                    } else if count * terms.iter().map(|m| m.count_ones() as usize).sum::<usize>()
+                        > 63
+                    {
+                        Pvp6ExecutionPath::BitslicedShared
+                    } else {
+                        Pvp6ExecutionPath::BitslicedUnshared
+                    }
+                );
+                let qs: Vec<_> = (0..65).map(|i| i % 64).collect();
+                let workload = Pvp6Workload::new(
+                    terms.len() as u32,
+                    65,
+                    2,
+                    Pvp6PopulationProfile::AffineUniform,
+                );
+                assert_eq!(
+                    bank.evaluate_on(path, workload, &qs).unwrap(),
+                    bank.evaluate_on(
+                        Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
+                        workload,
+                        &qs,
+                    )
+                    .unwrap()
+                );
+            }
+        }
+        let wide =
+            Pvp6Bank::<128>::new(vec![Pvp6Gate::from_monomials(&[127]).unwrap(); 16]).unwrap();
+        assert_eq!(wide.diagnostic_hybrid_path(), Pvp6ExecutionPath::Selected);
+        assert_eq!(
+            wide.diagnostic_hybrid_scan_path(),
+            Pvp6ExecutionPath::Selected
+        );
     }
 
     #[test]
