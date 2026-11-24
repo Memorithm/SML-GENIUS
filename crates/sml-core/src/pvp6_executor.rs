@@ -24,6 +24,8 @@ pub enum Pvp6ExecutionPath {
     Selected,
     Scalar(Pvp6Architecture),
     Bitsliced,
+    /// Diagnostic control: recompute products independently for each gate.
+    BitslicedUnshared,
 }
 
 /// One canonical ANF gate for a packed Boolean domain.
@@ -207,13 +209,14 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         let architecture = match path {
             Pvp6ExecutionPath::Selected => selection.architecture,
             Pvp6ExecutionPath::Scalar(architecture) => architecture,
-            Pvp6ExecutionPath::Bitsliced => {
+            Pvp6ExecutionPath::Bitsliced | Pvp6ExecutionPath::BitslicedUnshared => {
                 bitslice_into(
                     &self.gates,
                     queries,
                     query_count,
                     words_per_gate,
                     &mut packed,
+                    path == Pvp6ExecutionPath::Bitsliced,
                 );
                 return Ok(Pvp6BatchResult {
                     selection,
@@ -379,9 +382,12 @@ fn bitslice_into<const BITS: usize>(
     query_count: usize,
     words_per_gate: usize,
     packed: &mut [u64],
+    allow_shared: bool,
 ) {
     let variables = BITS.trailing_zeros() as usize;
     let mut planes = [0_u64; usize::BITS as usize];
+    let shared =
+        allow_shared && BITS == 64 && gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64;
     for chunk in 0..words_per_gate {
         let start = chunk * 64;
         let lanes = (query_count - start).min(64);
@@ -401,7 +407,6 @@ fn bitslice_into<const BITS: usize>(
         // Dense six-variable banks reuse the same products across gates.
         // Materialize all 64 supports once per query chunk, never across states.
         let mut products = [0_u64; 64];
-        let shared = BITS == 64 && gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64;
         if shared {
             products[0] = active;
             for mask in 1_usize..64 {
