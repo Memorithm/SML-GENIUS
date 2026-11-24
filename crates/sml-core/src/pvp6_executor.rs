@@ -26,6 +26,10 @@ pub enum Pvp6ExecutionPath {
     Bitsliced,
     /// Diagnostic control: recompute products independently for each gate.
     BitslicedUnshared,
+    /// Force the full product table for six-variable banks; otherwise unshared.
+    BitslicedShared,
+    /// Experimental degree-cost rule; not the production selector.
+    BitslicedCost,
 }
 
 /// One canonical ANF gate for a packed Boolean domain.
@@ -209,14 +213,17 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         let architecture = match path {
             Pvp6ExecutionPath::Selected => selection.architecture,
             Pvp6ExecutionPath::Scalar(architecture) => architecture,
-            Pvp6ExecutionPath::Bitsliced | Pvp6ExecutionPath::BitslicedUnshared => {
+            Pvp6ExecutionPath::Bitsliced
+            | Pvp6ExecutionPath::BitslicedUnshared
+            | Pvp6ExecutionPath::BitslicedShared
+            | Pvp6ExecutionPath::BitslicedCost => {
                 bitslice_into(
                     &self.gates,
                     queries,
                     query_count,
                     words_per_gate,
                     &mut packed,
-                    path == Pvp6ExecutionPath::Bitsliced,
+                    path,
                 );
                 return Ok(Pvp6BatchResult {
                     selection,
@@ -373,6 +380,30 @@ fn sparse_eval(monomials: &[u16], query: usize) -> bool {
     })
 }
 
+/// Compare the exact word-AND counts of the two implementations. This is
+/// an uncalibrated candidate, not a latency model: lookup and loop costs differ.
+fn use_shared_products<const BITS: usize>(
+    gates: &[Pvp6Gate<BITS>],
+    path: Pvp6ExecutionPath,
+) -> bool {
+    if BITS != 64 {
+        return false;
+    }
+    match path {
+        Pvp6ExecutionPath::BitslicedShared => true,
+        Pvp6ExecutionPath::Bitsliced => {
+            gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64
+        }
+        Pvp6ExecutionPath::BitslicedCost => gates
+            .iter()
+            .flat_map(|g| &g.monomials)
+            .map(|m| m.count_ones() as usize)
+            .fold(0_usize, usize::saturating_add)
+            > 63,
+        _ => false,
+    }
+}
+
 /// Gate-major bit-sliced evaluation. Each chunk of 64 logical queries is
 /// transposed once, then every gate reads the same bitplanes: a monomial is the
 /// AND of its variable planes and a gate is the XOR of its monomials.
@@ -382,12 +413,11 @@ fn bitslice_into<const BITS: usize>(
     query_count: usize,
     words_per_gate: usize,
     packed: &mut [u64],
-    allow_shared: bool,
+    path: Pvp6ExecutionPath,
 ) {
     let variables = BITS.trailing_zeros() as usize;
     let mut planes = [0_u64; usize::BITS as usize];
-    let shared =
-        allow_shared && BITS == 64 && gates.iter().map(|g| g.monomials.len()).sum::<usize>() >= 64;
+    let shared = use_shared_products(gates, path);
     for chunk in 0..words_per_gate {
         let start = chunk * 64;
         let lanes = (query_count - start).min(64);
@@ -667,6 +697,17 @@ mod tests {
     }
 
     #[test]
+    fn cost_rule_distinguishes_degree_at_equal_density() {
+        let low = vec![Pvp6Gate::<64>::from_monomials(&[0, 1, 2, 4]).unwrap(); 16];
+        let high = vec![Pvp6Gate::<64>::from_monomials(&[7, 11, 13, 14]).unwrap(); 16];
+        assert!(!use_shared_products(&low, Pvp6ExecutionPath::BitslicedCost));
+        assert!(use_shared_products(&high, Pvp6ExecutionPath::BitslicedCost));
+        assert!(use_shared_products(&low, Pvp6ExecutionPath::BitslicedShared));
+        assert!(use_shared_products(&low, Pvp6ExecutionPath::Bitsliced));
+        assert!(!use_shared_products(&high, Pvp6ExecutionPath::BitslicedUnshared));
+    }
+
+    #[test]
     fn malformed_gates_and_batches_fail_closed() {
         assert_eq!(
             Pvp6Gate::<BITS>::from_monomials(&[1, 1]),
@@ -789,12 +830,15 @@ mod tests {
         qualify_width::<2048>();
     }
 
-    const ALL_PATHS: [Pvp6ExecutionPath; 5] = [
+    const ALL_PATHS: [Pvp6ExecutionPath; 8] = [
         Pvp6ExecutionPath::Selected,
         Pvp6ExecutionPath::Scalar(Pvp6Architecture::PascalAnfMaterialize),
         Pvp6ExecutionPath::Scalar(Pvp6Architecture::SparseAnfScan),
         Pvp6ExecutionPath::Scalar(Pvp6Architecture::SubmaskCoefficientQuery),
         Pvp6ExecutionPath::Bitsliced,
+        Pvp6ExecutionPath::BitslicedUnshared,
+        Pvp6ExecutionPath::BitslicedShared,
+        Pvp6ExecutionPath::BitslicedCost,
     ];
 
     fn lcg(state: &mut u64) -> u64 {
