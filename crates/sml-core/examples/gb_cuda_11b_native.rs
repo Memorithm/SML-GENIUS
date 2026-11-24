@@ -19,9 +19,7 @@ const PATHS: [(&str, Pvp6ExecutionPath); 4] = [
 ];
 
 fn bank(gates: usize, density: usize, degree: u32, overlap: bool) -> Pvp6Bank<64> {
-    let supports: Vec<u16> = (0_u16..64)
-        .filter(|m| m.count_ones() <= degree)
-        .collect();
+    let supports: Vec<u16> = (0_u16..64).filter(|m| m.count_ones() <= degree).collect();
     assert!(density <= supports.len());
     Pvp6Bank::new(
         (0..gates)
@@ -102,13 +100,7 @@ fn recurrent(overlap: bool) {
         .collect();
     let outputs = (0..S).map(coordinate).collect();
     let plan = SbgAnfPlan::<S, 64>::new(inputs, outputs).unwrap();
-    let base = SbgAnfKernel::new(
-        bank,
-        plan,
-        Pvp6PopulationProfile::AffineUniform,
-        DEPTH,
-    )
-    .unwrap();
+    let base = SbgAnfKernel::new(bank, plan, Pvp6PopulationProfile::AffineUniform, DEPTH).unwrap();
     let mut initial = SemanticState::<S>::zeroed().unwrap();
     for i in 0..S {
         initial.value.set(i, (i * 37 + i / 7) % 11 < 5).unwrap();
