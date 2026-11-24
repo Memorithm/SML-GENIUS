@@ -211,14 +211,7 @@ fn extend_and(xor_text: &str, train: &[Row]) -> Result<String, Box<dyn Error>> {
     let mut and = initial();
     let before = and.clone();
     let fit = fit_residual_gate(&and, &data(train), 0, 0, BASELINE, &[1, 2, 3, 4], 4)?;
-    let decision = validate_and_commit(
-        &mut and,
-        &data(&and_rows(4, 8)),
-        0,
-        0,
-        BASELINE,
-        &fit,
-    )?;
+    let decision = validate_and_commit(&mut and, &data(&and_rows(4, 8)), 0, 0, BASELINE, &fit)?;
     if !decision.committed || fit.train_errors != 0 || decision.candidate_validation_errors != 0 {
         return Err("AND DEV rejected candidate".into());
     }
@@ -242,9 +235,15 @@ fn extend_and(xor_text: &str, train: &[Row]) -> Result<String, Box<dyn Error>> {
 // Publish a complete immutable checkpoint only after fsync. Same-directory
 // hard_link provides atomic no-clobber publication on the target Linux FS.
 fn publish_bank(path: &Path, text: &str) -> Result<(), Box<dyn Error>> {
-    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let temp = parent.join(format!(".sml-tutor-bank-{}.tmp", std::process::id()));
-    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
     let result = (|| -> std::io::Result<()> {
         file.write_all(text.as_bytes())?;
         file.sync_all()?;
@@ -277,7 +276,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
     if args.len() != 2 {
-        return Err("usage: TRAIN NEW_GATE | --resume-and XOR_GATE TRAIN NEW_BANK | --verify-bank BANK".into());
+        return Err(
+            "usage: TRAIN NEW_GATE | --resume-and XOR_GATE TRAIN NEW_BANK | --verify-bank BANK"
+                .into(),
+        );
     }
     let raw = fs::read_to_string(&args[0])?;
     if raw.len() > 128 {
