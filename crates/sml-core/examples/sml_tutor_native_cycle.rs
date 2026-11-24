@@ -400,8 +400,7 @@ mod tests {
         let zero = initial();
         let feedback = train_feedback(&zero, &x, "xor").unwrap();
         assert_eq!(feedback[1], "TRAIN|xor|1|0|0|1|0");
-        let fitted =
-            fit_residual_gate(&zero, &data(&x), 0, 0, BASELINE, &[1, 2, 3, 4], 4).unwrap();
+        let fitted = fit_residual_gate(&zero, &data(&x), 0, 0, BASELINE, &[1, 2, 3, 4], 4).unwrap();
         let bank = extend_and(&encode(&fitted.gate), &a).unwrap();
         let rows = score_train_bank(&bank, &x, &a).unwrap();
         assert_eq!(rows.len(), 8);
