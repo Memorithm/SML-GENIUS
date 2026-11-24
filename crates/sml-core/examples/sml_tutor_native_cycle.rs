@@ -259,8 +259,68 @@ fn publish_bank(path: &Path, text: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// Read-only TRAIN feedback from an actual reloaded native gate. Labels never
+// enter the source vector; the oracle check protects the curriculum boundary.
+fn train_feedback(
+    net: &LocalAnfNetwork,
+    train: &[Row],
+    skill: &str,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut feedback = Vec::new();
+    for &(address, label) in train {
+        let a = address & 1 != 0;
+        let b = address & 2 != 0;
+        let expected = match skill {
+            "xor" => a ^ b,
+            "and" => a & b,
+            _ => return Err("unsupported feedback skill".into()),
+        };
+        if address >= 4 || label != expected {
+            return Err("TRAIN label contradicts independent oracle".into());
+        }
+        let mut source = [0_u64; WIDTH];
+        source[1] = u64::from(a);
+        source[2] = u64::from(b);
+        let mut next = [0_u64; 1];
+        let mut scratch = [0_u64; 16];
+        net.step_lanes(&mut source, &mut next, &mut scratch);
+        let prediction = net.readout().evaluate_lanes(&source, &mut scratch) & 1;
+        feedback.push(format!(
+            "TRAIN|{skill}|{}|{}|0|{}|{prediction}",
+            u8::from(a),
+            u8::from(b),
+            u8::from(label)
+        ));
+    }
+    Ok(feedback)
+}
+
+fn score_train_bank(
+    bank: &str,
+    xor_train: &[Row],
+    and_train: &[Row],
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let (xor, and) = decode_bank(bank)?;
+    let mut rows = train_feedback(&xor, xor_train, "xor")?;
+    rows.extend(train_feedback(&and, and_train, "and")?);
+    Ok(rows)
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
+    if args.len() == 4 && args[0] == "--score-train-bank" {
+        let bank = fs::read_to_string(&args[1])?;
+        let xor = fs::read_to_string(&args[2])?;
+        let and = fs::read_to_string(&args[3])?;
+        if xor.len() > 128 || and.len() > 128 {
+            return Err("TRAIN file too large".into());
+        }
+        let rows = score_train_bank(&bank, &parse_train(&xor)?, &parse_train(&and)?)?;
+        for row in rows {
+            println!("{row}");
+        }
+        return Ok(());
+    }
     if args.len() == 2 && args[0] == "--verify-bank" {
         return verify_bank(&fs::read_to_string(&args[1])?);
     }
@@ -331,6 +391,23 @@ mod tests {
         assert!(verify_bank(&bank).is_ok());
         assert!(extend_and("broken", &and_train).is_err());
         assert!(extend_and(&parent, &xor_train).is_err());
+    }
+
+    #[test]
+    fn feedback_reads_model_predictions_without_training_or_label_inputs() {
+        let x = parse_train("0|0|0\n1|0|1\n0|1|1\n1|1|0\n").unwrap();
+        let a = parse_train("0|0|0\n1|0|0\n0|1|0\n1|1|1\n").unwrap();
+        let zero = initial();
+        let feedback = train_feedback(&zero, &x, "xor").unwrap();
+        assert_eq!(feedback[1], "TRAIN|xor|1|0|0|1|0");
+        let fitted =
+            fit_residual_gate(&zero, &data(&x), 0, 0, BASELINE, &[1, 2, 3, 4], 4).unwrap();
+        let bank = extend_and(&encode(&fitted.gate), &a).unwrap();
+        let rows = score_train_bank(&bank, &x, &a).unwrap();
+        assert_eq!(rows.len(), 8);
+        assert_eq!(rows[1], "TRAIN|xor|1|0|0|1|1");
+        assert_eq!(rows[7], "TRAIN|and|1|1|0|1|1");
+        assert!(score_train_bank(&bank, &a, &a).is_err());
     }
 
     #[test]
