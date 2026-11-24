@@ -79,7 +79,12 @@ fn initial() -> LocalAnfNetwork {
 }
 
 fn encode(gate: &LocalAnfGate) -> String {
-    let inputs = gate.inputs().iter().map(usize::to_string).collect::<Vec<_>>().join(",");
+    let inputs = gate
+        .inputs()
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     let coeff = (0..gate.monomial_count()).fold(0_u64, |word, m| {
         word | (u64::from(gate.coefficient(m)) << m)
     });
@@ -110,8 +115,10 @@ fn cycle(train: &[Row], checkpoint: &Path) -> Result<(), Box<dyn Error>> {
     let decision = validate_and_commit(&mut net, &dev, 0, 0, BASELINE, &fit)?;
     println!(
         "SML_TUTOR_DEV baseline_errors={} candidate_errors={} samples={} committed={}",
-        decision.baseline_validation_errors, decision.candidate_validation_errors,
-        decision.validation_samples, decision.committed
+        decision.baseline_validation_errors,
+        decision.candidate_validation_errors,
+        decision.validation_samples,
+        decision.committed
     );
     if !decision.committed || fit.train_errors != 0 || decision.candidate_validation_errors != 0 {
         return Err("DEV rejected candidate".into());
@@ -138,12 +145,17 @@ fn cycle(train: &[Row], checkpoint: &Path) -> Result<(), Box<dyn Error>> {
     if residual_output_errors(&reloaded, &test, 0, 0, BASELINE)? != (after, tested) {
         return Err("reloaded checkpoint differs".into());
     }
-    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(checkpoint)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(checkpoint)?;
     file.write_all(encoded.as_bytes())?;
     file.sync_all()?;
     println!(
         "SML_TUTOR_NATIVE_LEARNER=PASS train_samples={} train_errors={} learned_monomials={}",
-        fit.train_samples, fit.train_errors, net.gates()[0].nonzero_monomials()
+        fit.train_samples,
+        fit.train_errors,
+        net.gates()[0].nonzero_monomials()
     );
     println!("SML_TUTOR_CHECKPOINT=ISOLATED");
     Ok(())
@@ -173,10 +185,19 @@ mod tests {
         let fit = fit_residual_gate(&net, &data(&train), 0, 0, BASELINE, &[1, 2, 3, 4], 4).unwrap();
         assert_eq!(fit.train_errors, 0);
         let decision = validate_and_commit(
-            &mut net, &data(&independent_rows(4, 8)), 0, 0, BASELINE, &fit,
-        ).unwrap();
+            &mut net,
+            &data(&independent_rows(4, 8)),
+            0,
+            0,
+            BASELINE,
+            &fit,
+        )
+        .unwrap();
         assert!(decision.committed);
-        assert_eq!(residual_output_errors(&net, &data(&independent_rows(8, 16)), 0, 0, BASELINE).unwrap(), (0, 8));
+        assert_eq!(
+            residual_output_errors(&net, &data(&independent_rows(8, 16)), 0, 0, BASELINE).unwrap(),
+            (0, 8)
+        );
         assert_eq!(decode(&encode(&net.gates()[0])).unwrap(), net.gates()[0]);
     }
 
