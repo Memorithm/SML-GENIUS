@@ -99,11 +99,7 @@ impl<const BITS: usize> Pvp6Bank<BITS> {
         if gates.is_empty() {
             return Err(Pvp6ExecutionError::EmptyBank);
         }
-        let degree_cost = if BITS == 64 {
-            word_and_cost(&gates)
-        } else {
-            0
-        };
+        let degree_cost = if BITS == 64 { word_and_cost(&gates) } else { 0 };
         Ok(Self { gates, degree_cost })
     }
 
@@ -753,11 +749,9 @@ mod tests {
     fn prepared_hybrid_matches_scan_and_scalar_after_rebuild() {
         for count in [1, 8, 9, 16, 65] {
             for terms in [&[0_u16][..], &[0, 1, 2, 4], &[7, 11, 13, 14]] {
-                let bank = Pvp6Bank::<64>::new(vec![
-                    Pvp6Gate::from_monomials(terms).unwrap();
-                    count
-                ])
-                .unwrap();
+                let bank =
+                    Pvp6Bank::<64>::new(vec![Pvp6Gate::from_monomials(terms).unwrap(); count])
+                        .unwrap();
                 let path = bank.diagnostic_hybrid_path();
                 assert_eq!(path, bank.diagnostic_hybrid_scan_path());
                 assert_eq!(
@@ -790,10 +784,13 @@ mod tests {
                 );
             }
         }
-        let wide = Pvp6Bank::<128>::new(vec![Pvp6Gate::from_monomials(&[127]).unwrap(); 16])
-            .unwrap();
+        let wide =
+            Pvp6Bank::<128>::new(vec![Pvp6Gate::from_monomials(&[127]).unwrap(); 16]).unwrap();
         assert_eq!(wide.diagnostic_hybrid_path(), Pvp6ExecutionPath::Selected);
-        assert_eq!(wide.diagnostic_hybrid_scan_path(), Pvp6ExecutionPath::Selected);
+        assert_eq!(
+            wide.diagnostic_hybrid_scan_path(),
+            Pvp6ExecutionPath::Selected
+        );
     }
 
     #[test]
