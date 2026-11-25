@@ -22,6 +22,14 @@ impl Task {
         }
     }
 
+    fn marker(self) -> &'static str {
+        match self {
+            Self::Toggle => "SML_TUTOR_TOGGLE_V1",
+            Self::Set => "SML_TUTOR_SET_V1",
+            Self::Clear => "SML_TUTOR_CLEAR_V1",
+        }
+    }
+
     fn target(self, a: bool, b: bool, c: bool) -> bool {
         match self {
             Self::Toggle => a ^ (b & c),
@@ -82,10 +90,21 @@ fn read_bounded(path: &str) -> Result<String, Box<dyn Error>> {
     Ok(raw)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<_> = env::args().skip(1).collect();
-    if !(1..=2).contains(&args.len()) {
-        return Err("usage: RECURRENT_GATE [TOGGLE_GATE]".into());
+// Explicit skill tags prevent confusing distinct recurrent checkpoint schemas.
+// The old positional OVERWRITE [TOGGLE] interface is retained for the V6 controller.
+fn retained_gate(raw: &str, task: Task) -> Result<LocalAnfGate, Box<dyn Error>> {
+    let gate = restore(raw, task.marker())?;
+    if error_count(&gate, |a, b, c| task.target(a, b, c)) != 0 {
+        return Err("invalid retained transition behavior".into());
+    }
+    Ok(gate)
+}
+
+fn retained_plan(args: &[String]) -> Result<Vec<LocalAnfGate>, Box<dyn Error>> {
+    if !(1..=6).contains(&args.len()) {
+        return Err(
+            "usage: RECURRENT_GATE [TOGGLE_GATE [--set SET_GATE] [--clear CLEAR_GATE]]".into(),
+        );
     }
     let overwrite = restore(&read_bounded(&args[0])?, "SML_TUTOR_RECURRENT_V1")?;
     if error_count(&overwrite, |a, b, c| if c { b } else { a }) != 0 {
@@ -93,12 +112,34 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut gates = vec![overwrite];
     if let Some(path) = args.get(1) {
-        let toggle = restore(&read_bounded(path)?, "SML_TUTOR_TOGGLE_V1")?;
-        if error_count(&toggle, |a, b, c| Task::Toggle.target(a, b, c)) != 0 {
-            return Err("invalid retained TOGGLE behavior".into());
-        }
-        gates.push(toggle);
+        gates.push(retained_gate(&read_bounded(path)?, Task::Toggle)?);
     }
+    let mut seen_set = false;
+    let mut seen_clear = false;
+    let mut extra = args.get(2..).unwrap_or_default().chunks_exact(2);
+    for pair in &mut extra {
+        let task = match pair[0].as_str() {
+            "--set" if !seen_set => {
+                seen_set = true;
+                Task::Set
+            }
+            "--clear" if !seen_clear => {
+                seen_clear = true;
+                Task::Clear
+            }
+            _ => return Err("unknown or duplicate retained skill".into()),
+        };
+        gates.push(retained_gate(&read_bounded(&pair[1])?, task)?);
+    }
+    if !extra.remainder().is_empty() {
+        return Err("missing retained checkpoint path".into());
+    }
+    Ok(gates)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let args: Vec<_> = env::args().skip(1).collect();
+    let gates = retained_plan(&args)?;
     let (deficits, next) = plan(&gates);
     for (task, errors) in deficits {
         println!(
@@ -149,6 +190,29 @@ mod tests {
             })
             .collect();
         assert_eq!(plan(&gates).1, None);
+    }
+
+    #[test]
+    fn both_acquisition_orders_reselect_then_halt() {
+        let overwrite = restore(
+            "SML_TUTOR_RECURRENT_V1\n0,1,2\n98\n",
+            "SML_TUTOR_RECURRENT_V1",
+        )
+        .unwrap();
+        let toggle = retained_gate("SML_TUTOR_TOGGLE_V1\n0,1,2\n66\n", Task::Toggle).unwrap();
+        let set = retained_gate("SML_TUTOR_SET_V1\n0,1,2\n194\n", Task::Set).unwrap();
+        let clear = retained_gate("SML_TUTOR_CLEAR_V1\n0,1,2\n130\n", Task::Clear).unwrap();
+        for (first, second, remaining) in [
+            (set.clone(), clear.clone(), Task::Clear),
+            (clear, set, Task::Set),
+        ] {
+            let mut gates = vec![overwrite.clone(), toggle.clone(), first];
+            assert_eq!(plan(&gates).1, Some(remaining));
+            gates.push(second);
+            assert_eq!(plan(&gates).1, None);
+        }
+        assert!(retained_gate("SML_TUTOR_SET_V1\n0,1,2\n2\n", Task::Set).is_err());
+        assert!(retained_gate("SML_TUTOR_CLEAR_V1\n0,1,2\n130\n", Task::Set).is_err());
     }
 
     #[test]
