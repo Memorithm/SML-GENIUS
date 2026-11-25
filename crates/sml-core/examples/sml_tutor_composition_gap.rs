@@ -19,7 +19,13 @@ fn bits(address: usize) -> [bool; 3] {
 
 fn oracle(kind: usize, [a, b, c]: [bool; 3]) -> bool {
     match kind {
-        0 => if c { b } else { a },
+        0 => {
+            if c {
+                b
+            } else {
+                a
+            }
+        }
         1 => a ^ (b & c),
         2 => a | (b & c),
         3 => a & !(b & c),
@@ -127,9 +133,7 @@ fn verify(closure: &Closure, gates: &[LocalAnfGate]) -> Result<(), Box<dyn Error
 }
 
 fn full_support(signature: u8) -> bool {
-    (0..3).all(|bit| {
-        (0..8).any(|i| (signature >> i) & 1 != (signature >> (i ^ (1 << bit))) & 1)
-    })
+    (0..3).all(|bit| (0..8).any(|i| (signature >> i) & 1 != (signature >> (i ^ (1 << bit))) & 1))
 }
 
 // Restrict lessons to zero-preserving functions depending on all three inputs.
@@ -171,7 +175,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let closure = discover(&gates, MAX_COST);
     verify(&closure, &gates)?;
     for (cost, level) in closure.levels.iter().enumerate() {
-        println!("SML_TUTOR_COMPOSITION cost={cost} new_signatures={}", level.len());
+        println!(
+            "SML_TUTOR_COMPOSITION cost={cost} new_signatures={}",
+            level.len()
+        );
     }
     let reachable: usize = closure.levels.iter().map(Vec::len).sum();
     println!(
