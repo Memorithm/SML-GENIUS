@@ -272,7 +272,11 @@ impl Expr {
         match self {
             Self::Input(i) => out.push(['a', 'b', 'c'][*i]),
             Self::Xor(a, b) | Self::And(a, b) => {
-                out.push(if matches!(self, Self::Xor(..)) { 'x' } else { 'd' });
+                out.push(if matches!(self, Self::Xor(..)) {
+                    'x'
+                } else {
+                    'd'
+                });
                 a.encode(out);
                 b.encode(out);
             }
@@ -290,7 +294,9 @@ impl Expr {
         if let 'a'..='c' = symbol {
             return Ok(Self::Input((symbol as u8 - b'a') as usize));
         }
-        *budget = budget.checked_sub(1).ok_or("expression exceeds gate budget")?;
+        *budget = budget
+            .checked_sub(1)
+            .ok_or("expression exceeds gate budget")?;
         match symbol {
             'x' => Ok(Self::Xor(
                 Box::new(Self::decode(input, budget)?),
@@ -361,18 +367,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         [mode, bank, parity, checkpoint] if mode == "--verify" => {
             (Some(checkpoint.as_str()), None, vec![bank, parity])
         }
-        [mode, bank, parity, train_path, checkpoint] if mode == "--save" => {
-            (None, Some(checkpoint.as_str()), vec![bank, parity, train_path])
-        }
+        [mode, bank, parity, train_path, checkpoint] if mode == "--save" => (
+            None,
+            Some(checkpoint.as_str()),
+            vec![bank, parity, train_path],
+        ),
         [bank, parity, train_path] => (None, None, vec![bank, parity, train_path]),
         _ => {
             return Err("usage: BANK PARITY TRAIN | --save BANK PARITY TRAIN CHECKPOINT | --verify BANK PARITY CHECKPOINT".into());
         }
     };
-    let skills = restore(
-        &read_bounded(paths[0], 256)?,
-        &read_bounded(paths[1], 128)?,
-    )?;
+    let skills = restore(&read_bounded(paths[0], 256)?, &read_bounded(paths[1], 128)?)?;
     if let Some(path) = reload {
         let exprs = decode_checkpoint(&read_bounded(path, 64)?)?;
         qualify_checkpoint(&skills, &exprs)?;
