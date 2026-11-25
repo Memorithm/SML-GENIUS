@@ -1,0 +1,50 @@
+name: SML TUTOR explicit example tests
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/sml-core/examples/sml_tutor_*.rs'
+      - 'crates/sml-core/src/**'
+      - 'crates/sml-core/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/sml-tutor-example-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/sml-core/examples/sml_tutor_*.rs'
+      - 'crates/sml-core/src/**'
+      - 'crates/sml-core/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/sml-tutor-example-tests.yml'
+permissions:
+  contents: read
+concurrency:
+  group: sml-tutor-example-tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  examples:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTFLAGS: "-D warnings"
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Explicitly execute all SML TUTOR example tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(crates/sml-core/examples/sml_tutor_*.rs)
+          test "${#files[@]}" -ge 4
+          args=()
+          for file in "${files[@]}"; do
+            name="${file##*/}"
+            args+=(--example "${name%.rs}")
+          done
+          cargo test --locked --release -p sml-core "${args[@]}"
