@@ -117,15 +117,23 @@ mod tests {
 
     #[test]
     fn changes_selection_when_new_transition_is_retained() {
-        let overwrite = restore("SML_TUTOR_RECURRENT_V1\n0,1,2\n98\n", "SML_TUTOR_RECURRENT_V1")
-            .unwrap();
-        let toggle =
-            restore("SML_TUTOR_TOGGLE_V1\n0,1,2\n66\n", "SML_TUTOR_TOGGLE_V1").unwrap();
+        let overwrite = restore(
+            "SML_TUTOR_RECURRENT_V1\n0,1,2\n98\n",
+            "SML_TUTOR_RECURRENT_V1",
+        )
+        .unwrap();
+        let toggle = restore("SML_TUTOR_TOGGLE_V1\n0,1,2\n66\n", "SML_TUTOR_TOGGLE_V1").unwrap();
         let (before, next) = plan(&[overwrite.clone()]);
-        assert_eq!(before, vec![(Task::Toggle, 2), (Task::Set, 1), (Task::Clear, 3)]);
+        assert_eq!(
+            before,
+            vec![(Task::Toggle, 2), (Task::Set, 1), (Task::Clear, 3)]
+        );
         assert_eq!(next, Some(Task::Clear));
         let (after, next) = plan(&[overwrite, toggle]);
-        assert_eq!(after, vec![(Task::Toggle, 0), (Task::Set, 1), (Task::Clear, 1)]);
+        assert_eq!(
+            after,
+            vec![(Task::Toggle, 0), (Task::Set, 1), (Task::Clear, 1)]
+        );
         assert_eq!(next, Some(Task::Set));
     }
 
