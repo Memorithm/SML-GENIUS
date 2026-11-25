@@ -168,8 +168,14 @@ mod tests {
 
     #[test]
     fn corrupted_skills_cannot_pass() {
+        let mut cancelled = restore(BANK, PARITY).unwrap();
+        cancelled.and.flip(0);
+        assert!(cancelled.verify_primitives().is_err());
+        assert_eq!(qualify(&cancelled, 4).0, 0);
         let mut skills = restore(BANK, PARITY).unwrap();
-        skills.and.flip(0);
+        // Constant inversions cancel in the two XOR-combined carry terms.
+        // Corrupt the conjunction monomial instead; primitive checks reject both.
+        skills.and.flip(3);
         assert!(skills.verify_primitives().is_err());
         assert!(qualify(&skills, 4).0 > 0);
         let mut skills = restore(BANK, PARITY).unwrap();
