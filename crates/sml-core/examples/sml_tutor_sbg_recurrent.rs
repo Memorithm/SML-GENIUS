@@ -98,11 +98,8 @@ fn rollouts(gate: &LocalAnfGate, steps: u32) -> Result<(u64, u64), String> {
                     if address & 1 != usize::from(prior.get(lane).unwrap()) {
                         return Err("state feedback mismatch".into());
                     }
-                    let local = gate.evaluate(&[
-                        address & 1 != 0,
-                        address & 2 != 0,
-                        address & 4 != 0,
-                    ]);
+                    let local =
+                        gate.evaluate(&[address & 1 != 0, address & 2 != 0, address & 4 != 0]);
                     let output = state.value.get(lane).unwrap();
                     if output != local || trace.outputs[lane] != u64::from(output) {
                         return Err("ANF/SBG execution mismatch".into());
