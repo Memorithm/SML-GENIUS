@@ -134,8 +134,47 @@ fn qualify(table: &[bool]) -> Result<String, Box<dyn Error>> {
     Ok(checkpoint)
 }
 
+// Score unique verified TRAIN addresses using the restored native transition.
+// The old state is an explicit one-step TRAIN input, not a TEST trajectory.
+// Labels are never injected into the predicted state.
+fn feedback(net: &LocalAnfNetwork, train: &[bool]) -> Result<Vec<String>, Box<dyn Error>> {
+    if train.len() != 8 {
+        return Err("incomplete recurrent TRAIN".into());
+    }
+    let mut rows = Vec::with_capacity(8);
+    for (address, &label) in train.iter().enumerate() {
+        let a = address & 1 != 0;
+        let b = address & 2 != 0;
+        let c = address & 4 != 0;
+        if label != if c { b } else { a } {
+            return Err("TRAIN label contradicts independent oracle".into());
+        }
+        let mut source = [u64::from(a), u64::from(b), u64::from(c)];
+        let mut next = [0_u64; 1];
+        let mut scratch = [0_u64; 8];
+        net.step_lanes(&mut source, &mut next, &mut scratch);
+        let prediction = net.readout().evaluate_lanes(&source, &mut scratch) & 1;
+        rows.push(format!(
+            "TRAIN|overwrite|{}|{}|{}|{}|{prediction}",
+            u8::from(a),
+            u8::from(b),
+            u8::from(c),
+            u8::from(label)
+        ));
+    }
+    Ok(rows)
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
+    if args.len() == 3 && args[0] == "--score-train" {
+        let net = restore(&fs::read_to_string(&args[1])?)?;
+        let train = parse_train(&fs::read_to_string(&args[2])?)?;
+        for row in feedback(&net, &train)? {
+            println!("{row}");
+        }
+        return Ok(());
+    }
     if args.len() == 2 && args[0] == "--verify" {
         let net = restore(&fs::read_to_string(&args[1])?)?;
         if rollouts(&net, 6) != (0, 49152) {
@@ -145,7 +184,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
     if args.len() != 2 {
-        return Err("usage: TRAIN NEW_CHECKPOINT | --verify CHECKPOINT".into());
+        return Err(
+            "usage: TRAIN NEW_CHECKPOINT | --verify CHECKPOINT | --score-train CHECKPOINT TRAIN"
+                .into(),
+        );
     }
     let table = parse_train(&fs::read_to_string(&args[0])?)?;
     let checkpoint = qualify(&table)?;
@@ -171,6 +213,25 @@ mod tests {
         assert_eq!(rollouts(&net, 5), (0, 10240));
         assert_eq!(rollouts(&net, 6), (0, 49152));
         assert_eq!(net.gates()[0].nonzero_monomials(), 3);
+    }
+
+    #[test]
+    fn train_feedback_uses_native_predictions_not_oracle_labels() {
+        let train = parse_train(TRAIN).unwrap();
+        let zero = network(LocalAnfGate::zero(vec![0, 1, 2], WIDTH).unwrap()).unwrap();
+        let rows = feedback(&zero, &train).unwrap();
+        assert_eq!(rows.len(), 8);
+        assert_eq!(rows[1], "TRAIN|overwrite|1|0|0|1|0");
+        assert_eq!(rows[6], "TRAIN|overwrite|0|1|1|1|0");
+        let net = restore(&qualify(&train).unwrap()).unwrap();
+        let rows = feedback(&net, &train).unwrap();
+        assert_eq!(rows[1], "TRAIN|overwrite|1|0|0|1|1");
+        assert_eq!(rows[5], "TRAIN|overwrite|1|0|1|0|0");
+        assert_eq!(rows[6], "TRAIN|overwrite|0|1|1|1|1");
+        assert!(feedback(&net, &train[..7]).is_err());
+        let mut invalid = train;
+        invalid[1] = false;
+        assert!(feedback(&net, &invalid).is_err());
     }
 
     #[test]
