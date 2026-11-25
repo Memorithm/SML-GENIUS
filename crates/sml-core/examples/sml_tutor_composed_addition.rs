@@ -18,7 +18,8 @@ fn decode(lines: &[&str], marker: &str, width: usize) -> Result<LocalAnfGate, Bo
         .split(',')
         .map(str::parse::<usize>)
         .collect::<Result<Vec<_>, _>>()?;
-    if inputs.is_empty() || inputs.len() > 4 || inputs.iter().any(|&i| !(1..width - 1).contains(&i)) {
+    if inputs.is_empty() || inputs.len() > 4 || inputs.iter().any(|&i| !(1..width - 1).contains(&i))
+    {
         return Err("invalid skill input domain".into());
     }
     Ok(LocalAnfGate::new(inputs, vec![lines[2].parse()?], width)?)
@@ -64,8 +65,7 @@ impl Skills {
     fn verify_primitives(&self) -> Result<(), Box<dyn Error>> {
         for a in 0..=1 {
             for b in 0..=1 {
-                if apply(&self.xor, a, b, 0) & 1 != a ^ b
-                    || apply(&self.and, a, b, 0) & 1 != a & b
+                if apply(&self.xor, a, b, 0) & 1 != a ^ b || apply(&self.and, a, b, 0) & 1 != a & b
                 {
                     return Err("prior XOR/AND skill failed".into());
                 }
@@ -107,9 +107,8 @@ fn qualify(skills: &Skills, width: usize) -> (usize, usize) {
         words[width] = carry;
         for lane in 0..lanes {
             let address = start + lane;
-            let expected = (address & mask)
-                + ((address >> width) & mask)
-                + (address >> (2 * width));
+            let expected =
+                (address & mask) + ((address >> width) & mask) + (address >> (2 * width));
             let prediction = words[..=width]
                 .iter()
                 .enumerate()
