@@ -33,12 +33,7 @@ fn parse_train(raw: &str) -> Result<Vec<bool>, Box<dyn Error>> {
 
 fn network(gate: LocalAnfGate) -> Result<LocalAnfNetwork, Box<dyn Error>> {
     let readout = LocalAnfGate::from_truth_table(vec![0], &[false, true], WIDTH)?;
-    Ok(LocalAnfNetwork::with_input_bits(
-        1,
-        2,
-        vec![gate],
-        readout,
-    )?)
+    Ok(LocalAnfNetwork::with_input_bits(1, 2, vec![gate], readout)?)
 }
 
 fn fit(table: &[bool]) -> Result<LocalAnfNetwork, Box<dyn Error>> {
@@ -74,9 +69,12 @@ fn rollouts(net: &LocalAnfNetwork, steps: usize) -> (u64, u64) {
                 }
                 net.step_lanes(&mut source, &mut next, &mut scratch);
                 let prediction = net.readout().evaluate_lanes(&source, &mut scratch);
-                let target = expected.iter().enumerate().fold(0_u64, |word, (lane, &state)| {
-                    word | (u64::from(state) << lane)
-                });
+                let target = expected
+                    .iter()
+                    .enumerate()
+                    .fold(0_u64, |word, (lane, &state)| {
+                        word | (u64::from(state) << lane)
+                    });
                 errors += u64::from((prediction ^ target).count_ones());
                 samples += 64;
             }
@@ -164,8 +162,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
 
-    const TRAIN: &str =
-        "0|0|0|0\n1|0|0|1\n0|1|0|0\n1|1|0|1\n0|0|1|0\n1|0|1|0\n0|1|1|1\n1|1|1|1\n";
+    const TRAIN: &str = "0|0|0|0\n1|0|0|1\n0|1|0|0\n1|1|0|1\n0|0|1|0\n1|0|1|0\n0|1|1|1\n1|1|1|1\n";
 
     #[test]
     fn learns_and_reloads_true_recurrence() {
