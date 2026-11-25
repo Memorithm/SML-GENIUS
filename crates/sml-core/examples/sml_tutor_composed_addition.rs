@@ -241,7 +241,10 @@ fn qualify_suite(skills: &Skills, width: usize) -> ArithmeticReport {
         let (quotient, remainder, valid) = skills.divide(&a, &b, width);
         let mut equal = u64::MAX;
         for i in 0..width {
-            equal = skills.and_word(equal, skills.xor_word(skills.xor_word(a[i], b[i]), u64::MAX));
+            equal = skills.and_word(
+                equal,
+                skills.xor_word(skills.xor_word(a[i], b[i]), u64::MAX),
+            );
         }
         for lane in 0..lanes {
             let x = (start + lane) & mask;
@@ -253,9 +256,8 @@ fn qualify_suite(skills: &Skills, width: usize) -> ArithmeticReport {
                     || bit(borrow, lane) != (x < y),
             );
             report.errors[2] += usize::from(unpack(&product, 2 * width, lane) != x * y);
-            report.errors[3] += usize::from(
-                bit(borrow, lane) != (x < y) || bit(equal, lane) != (x == y),
-            );
+            report.errors[3] +=
+                usize::from(bit(borrow, lane) != (x < y) || bit(equal, lane) != (x == y));
             let q = unpack(&quotient, width, lane);
             let r = unpack(&remainder, width + 1, lane);
             if y == 0 {
@@ -315,7 +317,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     if paths.len() != 2 {
         return Err("usage: [--suite] STUDENT_BANK PARITY3_GATE".into());
     }
-    let skills = restore(&read_bounded(&paths[0], 256)?, &read_bounded(&paths[1], 128)?)?;
+    let skills = restore(
+        &read_bounded(&paths[0], 256)?,
+        &read_bounded(&paths[1], 128)?,
+    )?;
     skills.verify_primitives()?;
     if suite {
         return run_suite(&skills);
