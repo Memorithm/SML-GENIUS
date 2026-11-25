@@ -102,7 +102,9 @@ fn retained_gate(raw: &str, task: Task) -> Result<LocalAnfGate, Box<dyn Error>> 
 
 fn retained_plan(args: &[String]) -> Result<Vec<LocalAnfGate>, Box<dyn Error>> {
     if !(1..=6).contains(&args.len()) {
-        return Err("usage: RECURRENT_GATE [TOGGLE_GATE [--set SET_GATE] [--clear CLEAR_GATE]]".into());
+        return Err(
+            "usage: RECURRENT_GATE [TOGGLE_GATE [--set SET_GATE] [--clear CLEAR_GATE]]".into(),
+        );
     }
     let overwrite = restore(&read_bounded(&args[0])?, "SML_TUTOR_RECURRENT_V1")?;
     if error_count(&overwrite, |a, b, c| if c { b } else { a }) != 0 {
