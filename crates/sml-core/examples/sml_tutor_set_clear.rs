@@ -35,7 +35,6 @@ impl Task {
     }
 }
 
-
 fn parse_train(raw: &str) -> Result<Vec<bool>, Box<dyn Error>> {
     if raw.len() > 128 {
         return Err("oversized TRAIN".into());
