@@ -265,21 +265,143 @@ fn qualify(skills: &Skills, exprs: &[Expr; 2], width: usize) -> (usize, usize) {
     (errors, cases)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<_> = env::args().skip(1).collect();
-    if args.len() != 3 {
-        return Err("usage: STUDENT_BANK PARITY3_GATE TRAIN".into());
+// Portable prefix encoding: a/b/c inputs, x= XOR, d= AND, p= PARITY3.
+// The checkpoint stores topology only; native coefficients remain in V4.
+impl Expr {
+    fn encode(&self, out: &mut String) {
+        match self {
+            Self::Input(i) => out.push(['a', 'b', 'c'][*i]),
+            Self::Xor(a, b) | Self::And(a, b) => {
+                out.push(if matches!(self, Self::Xor(..)) {
+                    'x'
+                } else {
+                    'd'
+                });
+                a.encode(out);
+                b.encode(out);
+            }
+            Self::Parity(a, b, c) => {
+                out.push('p');
+                a.encode(out);
+                b.encode(out);
+                c.encode(out);
+            }
+        }
     }
-    let skills = restore(&read_bounded(&args[0], 256)?, &read_bounded(&args[1], 128)?)?;
-    let targets = train(&read_bounded(&args[2], 128)?)?;
-    let (exprs, costs) = discover(&skills, targets)?;
-    println!("SML_TUTOR_DISCOVER_EXPRS={exprs:?} costs={costs:?}");
+
+    fn decode(input: &mut std::str::Chars<'_>, budget: &mut usize) -> Result<Self, Box<dyn Error>> {
+        let symbol = input.next().ok_or("truncated expression")?;
+        if let 'a'..='c' = symbol {
+            return Ok(Self::Input((symbol as u8 - b'a') as usize));
+        }
+        *budget = budget
+            .checked_sub(1)
+            .ok_or("expression exceeds gate budget")?;
+        match symbol {
+            'x' => Ok(Self::Xor(
+                Box::new(Self::decode(input, budget)?),
+                Box::new(Self::decode(input, budget)?),
+            )),
+            'd' => Ok(Self::And(
+                Box::new(Self::decode(input, budget)?),
+                Box::new(Self::decode(input, budget)?),
+            )),
+            'p' => Ok(Self::Parity(
+                Box::new(Self::decode(input, budget)?),
+                Box::new(Self::decode(input, budget)?),
+                Box::new(Self::decode(input, budget)?),
+            )),
+            _ => Err("unknown expression opcode".into()),
+        }
+    }
+}
+
+fn encode_checkpoint(exprs: &[Expr; 2]) -> String {
+    let mut out = String::from("SML_TUTOR_ADDER_V1\n");
+    for expr in exprs {
+        expr.encode(&mut out);
+        out.push('\n');
+    }
+    out
+}
+
+fn decode_checkpoint(raw: &str) -> Result<[Expr; 2], Box<dyn Error>> {
+    if raw.len() > 64 {
+        return Err("oversized expression checkpoint".into());
+    }
+    let lines: Vec<_> = raw.lines().collect();
+    if lines.len() != 3 || lines[0] != "SML_TUTOR_ADDER_V1" {
+        return Err("invalid expression checkpoint schema".into());
+    }
+    let decode = |line: &str| -> Result<Expr, Box<dyn Error>> {
+        let mut input = line.chars();
+        let expr = Expr::decode(&mut input, &mut 4)?;
+        if input.next().is_some() {
+            return Err("trailing expression data".into());
+        }
+        Ok(expr)
+    };
+    let exprs = [decode(lines[1])?, decode(lines[2])?];
+    if encode_checkpoint(&exprs) != raw {
+        return Err("noncanonical checkpoint".into());
+    }
+    Ok(exprs)
+}
+
+fn qualify_checkpoint(skills: &Skills, exprs: &[Expr; 2]) -> Result<(), Box<dyn Error>> {
     for width in [2, 4, 8] {
-        let (errors, cases) = qualify(&skills, &exprs, width);
+        let (errors, cases) = qualify(skills, exprs, width);
         println!("SML_TUTOR_DISCOVER_TEST width={width} errors={errors} cases={cases}");
         if errors != 0 {
             return Err("composition TEST veto".into());
         }
+    }
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    use std::io::Write;
+
+    let args: Vec<_> = env::args().skip(1).collect();
+    let (reload, save, paths) = match args.as_slice() {
+        [mode, bank, parity, checkpoint] if mode == "--verify" => {
+            (Some(checkpoint.as_str()), None, vec![bank, parity])
+        }
+        [mode, bank, parity, train_path, checkpoint] if mode == "--save" => (
+            None,
+            Some(checkpoint.as_str()),
+            vec![bank, parity, train_path],
+        ),
+        [bank, parity, train_path] => (None, None, vec![bank, parity, train_path]),
+        _ => {
+            return Err("usage: BANK PARITY TRAIN | --save BANK PARITY TRAIN CHECKPOINT | --verify BANK PARITY CHECKPOINT".into());
+        }
+    };
+    let skills = restore(&read_bounded(paths[0], 256)?, &read_bounded(paths[1], 128)?)?;
+    if let Some(path) = reload {
+        let exprs = decode_checkpoint(&read_bounded(path, 64)?)?;
+        qualify_checkpoint(&skills, &exprs)?;
+        println!("SML_TUTOR_ADDER_RELOAD=PASS cases=131616 search=none");
+        return Ok(());
+    }
+    let targets = train(&read_bounded(paths[2], 128)?)?;
+    let (exprs, costs) = discover(&skills, targets)?;
+    println!("SML_TUTOR_DISCOVER_EXPRS={exprs:?} costs={costs:?}");
+    qualify_checkpoint(&skills, &exprs)?;
+    if let Some(path) = save {
+        let raw = encode_checkpoint(&exprs);
+        let restored = decode_checkpoint(&raw)?;
+        if exprs != restored {
+            return Err("expression round trip mismatch".into());
+        }
+        // Never replace an existing file. External durable store owns promotion.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(raw.as_bytes())?;
+        file.sync_all()?;
+        println!("SML_TUTOR_ADDER_CHECKPOINT=WRITTEN");
     }
     println!("SML_TUTOR_DISCOVER_ADDER=PASS search=bounded supervised=true");
     Ok(())
@@ -313,6 +435,27 @@ mod tests {
         assert!(costs[1] <= 4);
         for width in [2, 4, 8] {
             assert_eq!(qualify(&skills, &exprs, width), (0, 1 << (2 * width + 1)));
+        }
+    }
+
+    #[test]
+    fn topology_roundtrip_and_corruption_veto() {
+        let skills = restore(BANK, PARITY).unwrap();
+        let (exprs, _) = discover(&skills, train(TRAIN).unwrap()).unwrap();
+        let raw = encode_checkpoint(&exprs);
+        let restored = decode_checkpoint(&raw).unwrap();
+        assert_eq!(restored, exprs);
+        qualify_checkpoint(&skills, &restored).unwrap();
+        let wrong = decode_checkpoint("SML_TUTOR_ADDER_V1\na\nb\n").unwrap();
+        assert!(qualify_checkpoint(&skills, &wrong).is_err());
+        for invalid in [
+            "SML_TUTOR_ADDER_V1\npa\nb\n",
+            "SML_TUTOR_ADDER_V1\naa\nb\n",
+            "SML_TUTOR_ADDER_V1\nq\nb\n",
+            "SML_TUTOR_ADDER_V1\nxxxxxabbbbb\nb\n",
+            "SML_TUTOR_ADDER_V1\na\nb",
+        ] {
+            assert!(decode_checkpoint(invalid).is_err());
         }
     }
 
