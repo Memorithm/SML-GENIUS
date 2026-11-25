@@ -121,6 +121,179 @@ fn qualify(skills: &Skills, width: usize) -> (usize, usize) {
     (errors, cases)
 }
 
+// All result bits below are produced by the restored gates. Integer
+// arithmetic is confined to indexing, input packing and independent checks.
+type Word = [u64; 16];
+
+impl Skills {
+    fn xor_word(&self, a: u64, b: u64) -> u64 {
+        apply(&self.xor, a, b, 0)
+    }
+
+    fn and_word(&self, a: u64, b: u64) -> u64 {
+        apply(&self.and, a, b, 0)
+    }
+
+    fn add_words(&self, a: &Word, b: &Word, width: usize, mut carry: u64) -> (Word, u64) {
+        let mut out = [0; 16];
+        for i in 0..width {
+            (out[i], carry) = self.full_adder(a[i], b[i], carry);
+        }
+        (out, carry)
+    }
+
+    fn subtract(&self, a: &Word, b: &Word, width: usize) -> (Word, u64) {
+        let mut negated = [0; 16];
+        for i in 0..width {
+            negated[i] = self.xor_word(b[i], u64::MAX);
+        }
+        let (difference, carry) = self.add_words(a, &negated, width, u64::MAX);
+        (difference, self.xor_word(carry, u64::MAX))
+    }
+
+    fn multiply(&self, a: &Word, b: &Word, width: usize) -> Word {
+        let mut acc = [0; 16];
+        for (j, &bit) in b.iter().take(width).enumerate() {
+            let mut partial = [0; 16];
+            for i in 0..width {
+                partial[i + j] = self.and_word(a[i], bit);
+            }
+            acc = self.add_words(&acc, &partial, 2 * width, 0).0;
+        }
+        acc
+    }
+
+    fn mux(&self, old: u64, new: u64, select: u64) -> u64 {
+        self.xor_word(old, self.and_word(self.xor_word(old, new), select))
+    }
+
+    // Restoring unsigned division, with one extra remainder bit. No host
+    // comparisons or integer division in this prediction path.
+    fn divide(&self, a: &Word, b: &Word, width: usize) -> (Word, Word, u64) {
+        let mut quotient = [0; 16];
+        let mut remainder = [0; 16];
+        let mut zero = u64::MAX;
+        for &bit in b.iter().take(width) {
+            zero = self.and_word(zero, self.xor_word(bit, u64::MAX));
+        }
+        let valid = self.xor_word(zero, u64::MAX);
+        for i in (0..width).rev() {
+            for j in (1..=width).rev() {
+                remainder[j] = remainder[j - 1];
+            }
+            remainder[0] = a[i];
+            let (candidate, borrow) = self.subtract(&remainder, b, width + 1);
+            let take = self.and_word(self.xor_word(borrow, u64::MAX), valid);
+            quotient[i] = take;
+            for j in 0..=width {
+                remainder[j] = self.mux(remainder[j], candidate[j], take);
+            }
+        }
+        // Division by zero is explicitly invalid, with zero output payload.
+        for bit in &mut remainder {
+            *bit = self.and_word(*bit, valid);
+        }
+        (quotient, remainder, valid)
+    }
+}
+
+fn unpack(words: &Word, width: usize, lane: usize) -> usize {
+    words[..width]
+        .iter()
+        .enumerate()
+        .fold(0, |n, (i, word)| n | ((((word >> lane) & 1) as usize) << i))
+}
+
+fn bit(word: u64, lane: usize) -> bool {
+    (word >> lane) & 1 != 0
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ArithmeticReport {
+    cases: usize,
+    errors: [usize; 5],
+    nonzero_divisors: usize,
+    zero_divisors: usize,
+}
+
+fn qualify_suite(skills: &Skills, width: usize) -> ArithmeticReport {
+    assert!((1..=8).contains(&width));
+    let cases = 1_usize << (2 * width);
+    let mask = (1_usize << width) - 1;
+    let mut report = ArithmeticReport {
+        cases,
+        ..ArithmeticReport::default()
+    };
+    for start in (0..cases).step_by(64) {
+        let lanes = (cases - start).min(64);
+        let mut a = [0; 16];
+        let mut b = [0; 16];
+        for lane in 0..lanes {
+            let address = start + lane;
+            for i in 0..width {
+                a[i] |= (((address >> i) & 1) as u64) << lane;
+                b[i] |= (((address >> (width + i)) & 1) as u64) << lane;
+            }
+        }
+        let (sum, carry) = skills.add_words(&a, &b, width, 0);
+        let (difference, borrow) = skills.subtract(&a, &b, width);
+        let product = skills.multiply(&a, &b, width);
+        let (quotient, remainder, valid) = skills.divide(&a, &b, width);
+        let mut equal = u64::MAX;
+        for i in 0..width {
+            equal = skills.and_word(equal, skills.xor_word(skills.xor_word(a[i], b[i]), u64::MAX));
+        }
+        for lane in 0..lanes {
+            let x = (start + lane) & mask;
+            let y = (start + lane) >> width;
+            let actual_sum = unpack(&sum, width, lane) | (usize::from(bit(carry, lane)) << width);
+            report.errors[0] += usize::from(actual_sum != x + y);
+            report.errors[1] += usize::from(
+                unpack(&difference, width, lane) != x.wrapping_sub(y) & mask
+                    || bit(borrow, lane) != (x < y),
+            );
+            report.errors[2] += usize::from(unpack(&product, 2 * width, lane) != x * y);
+            report.errors[3] += usize::from(
+                bit(borrow, lane) != (x < y) || bit(equal, lane) != (x == y),
+            );
+            let q = unpack(&quotient, width, lane);
+            let r = unpack(&remainder, width + 1, lane);
+            if y == 0 {
+                report.zero_divisors += 1;
+                report.errors[4] += usize::from(bit(valid, lane) || q != 0 || r != 0);
+            } else {
+                report.nonzero_divisors += 1;
+                report.errors[4] += usize::from(!bit(valid, lane) || q != x / y || r != x % y);
+            }
+        }
+    }
+    report
+}
+
+fn run_suite(skills: &Skills) -> Result<(), Box<dyn Error>> {
+    for width in [1, 2, 4, 8] {
+        let report = qualify_suite(skills, width);
+        for (operation, errors) in ["add", "subtract", "multiply", "compare", "divide"]
+            .into_iter()
+            .zip(report.errors)
+        {
+            println!(
+                "SML_TUTOR_ARITHMETIC op={operation} width={width} errors={errors} cases={}",
+                report.cases
+            );
+        }
+        println!(
+            "SML_TUTOR_DIVISION_DOMAIN width={width} valid={} zero={}",
+            report.nonzero_divisors, report.zero_divisors
+        );
+        if report.errors != [0; 5] {
+            return Err("arithmetic suite veto".into());
+        }
+    }
+    println!("SML_TUTOR_ARITHMETIC_SUITE=PASS fitting=none routing=supplied");
+    Ok(())
+}
+
 fn read_bounded(path: &str, limit: usize) -> Result<String, Box<dyn Error>> {
     let mut raw = String::new();
     File::open(path)?
@@ -134,11 +307,19 @@ fn read_bounded(path: &str, limit: usize) -> Result<String, Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().skip(1).collect();
-    if args.len() != 2 {
-        return Err("usage: STUDENT_BANK PARITY3_GATE".into());
+    let (suite, paths) = if args.first().is_some_and(|arg| arg == "--suite") {
+        (true, &args[1..])
+    } else {
+        (false, args.as_slice())
+    };
+    if paths.len() != 2 {
+        return Err("usage: [--suite] STUDENT_BANK PARITY3_GATE".into());
     }
-    let skills = restore(&read_bounded(&args[0], 256)?, &read_bounded(&args[1], 128)?)?;
+    let skills = restore(&read_bounded(&paths[0], 256)?, &read_bounded(&paths[1], 128)?)?;
     skills.verify_primitives()?;
+    if suite {
+        return run_suite(&skills);
+    }
     for width in [1, 2, 4, 8] {
         let (errors, cases) = qualify(&skills, width);
         println!("SML_TUTOR_COMPOSED_ADDITION width={width} errors={errors} cases={cases}");
@@ -164,6 +345,21 @@ mod tests {
         for width in [1, 2, 4, 8] {
             assert_eq!(qualify(&skills, width), (0, 1 << (2 * width + 1)));
         }
+    }
+
+    #[test]
+    fn arithmetic_suite_exhaustive_fixture() {
+        let skills = restore(BANK, PARITY).unwrap();
+        for width in [1, 2, 4, 8] {
+            let report = qualify_suite(&skills, width);
+            assert_eq!(report.errors, [0; 5]);
+            assert_eq!(report.cases, 1 << (2 * width));
+            assert_eq!(report.zero_divisors, 1 << width);
+            assert_eq!(report.nonzero_divisors, report.cases - report.zero_divisors);
+        }
+        let mut broken = restore(BANK, PARITY).unwrap();
+        broken.and.flip(0);
+        assert_ne!(qualify_suite(&broken, 4).errors, [0; 5]);
     }
 
     #[test]
