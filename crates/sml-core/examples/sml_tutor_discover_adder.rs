@@ -52,7 +52,6 @@ fn apply(gate: &LocalAnfGate, a: u64, b: u64, c: u64) -> u64 {
     gate.evaluate_lanes(&source, &mut [0; 16])
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Expr {
     Input(usize),
@@ -65,8 +64,18 @@ impl Expr {
     fn eval(&self, skills: &Skills, inputs: &[u64; 3]) -> u64 {
         match self {
             Self::Input(i) => inputs[*i],
-            Self::Xor(a, b) => apply(&skills.xor, a.eval(skills, inputs), b.eval(skills, inputs), 0),
-            Self::And(a, b) => apply(&skills.and, a.eval(skills, inputs), b.eval(skills, inputs), 0),
+            Self::Xor(a, b) => apply(
+                &skills.xor,
+                a.eval(skills, inputs),
+                b.eval(skills, inputs),
+                0,
+            ),
+            Self::And(a, b) => apply(
+                &skills.and,
+                a.eval(skills, inputs),
+                b.eval(skills, inputs),
+                0,
+            ),
             Self::Parity(a, b, c) => apply(
                 &skills.parity,
                 a.eval(skills, inputs),
@@ -157,12 +166,18 @@ fn discover(skills: &Skills, targets: [u8; 2]) -> Result<([Expr; 2], [usize; 2])
                         }
                         let av = u64::from(a.signature);
                         let bv = u64::from(b.signature);
-                        retain(&mut seen, &mut next, apply(&skills.xor, av, bv, 0) as u8, || {
-                            Expr::Xor(Box::new(a.expr.clone()), Box::new(b.expr.clone()))
-                        });
-                        retain(&mut seen, &mut next, apply(&skills.and, av, bv, 0) as u8, || {
-                            Expr::And(Box::new(a.expr.clone()), Box::new(b.expr.clone()))
-                        });
+                        retain(
+                            &mut seen,
+                            &mut next,
+                            apply(&skills.xor, av, bv, 0) as u8,
+                            || Expr::Xor(Box::new(a.expr.clone()), Box::new(b.expr.clone())),
+                        );
+                        retain(
+                            &mut seen,
+                            &mut next,
+                            apply(&skills.and, av, bv, 0) as u8,
+                            || Expr::And(Box::new(a.expr.clone()), Box::new(b.expr.clone())),
+                        );
                     }
                 }
                 for y in 0..(cost - x) {
@@ -281,14 +296,14 @@ fn read_bounded(path: &str, limit: usize) -> Result<String, Box<dyn Error>> {
     Ok(raw)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const BANK: &str = "SML_TUTOR_BANK_V2\nSML_TUTOR_GATE_V1\n1,2\n6\nSML_TUTOR_GATE_V1\n1,2\n8\n";
     const PARITY: &str = "SML_TUTOR_PARITY3_V1\n1,2,3\n22\n";
-    const TRAIN: &str = "0|0|0|0|0\n1|0|0|1|0\n0|1|0|1|0\n1|1|0|0|1\n0|0|1|1|0\n1|0|1|0|1\n0|1|1|0|1\n1|1|1|1|1\n";
+    const TRAIN: &str =
+        "0|0|0|0|0\n1|0|0|1|0\n0|1|0|1|0\n1|1|0|0|1\n0|0|1|1|0\n1|0|1|0|1\n0|1|1|0|1\n1|1|1|1|1\n";
 
     #[test]
     fn discovers_and_transfers_to_unseen_word_widths() {
