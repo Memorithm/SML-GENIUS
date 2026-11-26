@@ -228,7 +228,9 @@ fn main() -> Result<()> {
             println!("{}", Graph::restore(&read(bank)?)?.predict(a, b).label());
         }
         _ => {
-            return Err("usage: --learn TRAIN BANK | --verify BANK TEST | --predict BANK A B".into())
+            return Err(
+                "usage: --learn TRAIN BANK | --verify BANK TEST | --predict BANK A B".into(),
+            )
         }
     }
     Ok(())
