@@ -294,9 +294,7 @@ fn checked_bank(
                 return Err("learned gate regressed previous capability".into());
             }
         }
-        if costs[usize::from(*signature)] != 1
-            || next.levels.iter().flatten().any(|s| s & 1 != 0)
-        {
+        if costs[usize::from(*signature)] != 1 || next.levels.iter().flatten().any(|s| s & 1 != 0) {
             return Err("learned gate admission invariant".into());
         }
         previous = next;
