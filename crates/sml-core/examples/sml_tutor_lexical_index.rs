@@ -17,7 +17,8 @@ const V2: &str = "SML_TUTOR_DICTIONARY_SHARD_V2";
 fn valid_hex(s: &str) -> bool {
     !s.is_empty()
         && s.len() % 2 == 0
-        && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn hex(s: &str) -> String {
@@ -255,7 +256,10 @@ fn lookup(
     let mut line = Vec::new();
     loop {
         line.clear();
-        let n = r.by_ref().take(MAX_SHARD + 1).read_until(b'\n', &mut line)?;
+        let n = r
+            .by_ref()
+            .take(MAX_SHARD + 1)
+            .read_until(b'\n', &mut line)?;
         if n == 0 {
             break;
         }
@@ -358,21 +362,43 @@ mod tests {
         let dir = t.0.join("shards");
         fs::create_dir(&dir).unwrap();
         let source = "a".repeat(64);
-        shard(&dir.join("shard-000000.bank"), &source, &[(1, "bank", "noun"), (2, "café", "noun")]);
-        shard(&dir.join("shard-000001.bank"), &source, &[(3, "bank", "noun"), (4, "bank", "verb")]);
+        shard(
+            &dir.join("shard-000000.bank"),
+            &source,
+            &[(1, "bank", "noun"), (2, "café", "noun")],
+        );
+        shard(
+            &dir.join("shard-000001.bank"),
+            &source,
+            &[(3, "bank", "noun"), (4, "bank", "verb")],
+        );
         let delta = t.0.join("delta.bank");
         shard(&delta, &source, &[(5, "bank", "noun")]);
         let out = t.0.join("index");
         assert_eq!(build("en", &source, &dir, Some(&delta), &out).unwrap(), 5);
         assert_eq!(verify("en", &source, &dir, Some(&delta), &out).unwrap(), 5);
         let ids = lookup("en", &source, &out, "bank", Some("noun")).unwrap();
-        assert_eq!(ids, vec![(1, "shard-000000.bank".into()), (3, "shard-000001.bank".into()), (5, "delta.bank".into())]);
+        assert_eq!(
+            ids,
+            vec![
+                (1, "shard-000000.bank".into()),
+                (3, "shard-000001.bank".into()),
+                (5, "delta.bank".into())
+            ]
+        );
         assert_eq!(lookup("en", &source, &out, "bank", None).unwrap().len(), 4);
         assert_eq!(lookup("en", &source, &out, "café", None).unwrap().len(), 1);
-        assert!(lookup("en", &source, &out, "Bank", None).unwrap().is_empty());
+        assert!(lookup("en", &source, &out, "Bank", None)
+            .unwrap()
+            .is_empty());
         assert!(lookup("fr", &source, &out, "bank", None).is_err());
         let p = bucket_path(&out, bucket(&hex("bank")));
-        File::options().append(true).open(p).unwrap().write_all(b"extra\n").unwrap();
+        File::options()
+            .append(true)
+            .open(p)
+            .unwrap()
+            .write_all(b"extra\n")
+            .unwrap();
         assert!(verify("en", &source, &dir, Some(&delta), &out).is_err());
         assert!(build("en", &source, &dir, Some(&delta), &out).is_err());
     }
