@@ -144,7 +144,8 @@ fn verify(closure: &Closure, gates: &[LocalAnfGate]) -> Result<(), Box<dyn Error
 
 fn full_support(signature: u16) -> bool {
     (0..4).all(|bit| {
-        (0..16).any(|i| (signature >> i) & 1 != (signature >> (i ^ (1 << bit))) & 1)
+        let mask = 1 << bit;
+        (0..16).any(|i| (signature >> i) & 1 != (signature >> (i ^ mask)) & 1)
     })
 }
 
