@@ -9,7 +9,9 @@
 //!   on; a stale base is rejected with [`StoreError::Conflict`] and the caller
 //!   rebases (no lost update);
 //! * **mutual exclusion** across threads and processes via an exclusive
-//!   `LOCK` file created with `create_new`;
+//!   `LOCK` file (owner record hard-linked into place); a lock left by a
+//!   dead process on the same host is recovered, any other lock fails closed;
+//! * **safe initialisation** — the first `HEAD` is written under the lock;
 //! * **idempotence** — re-publishing an identical entry is a no-op;
 //! * **contradiction detection** — the same knowledge key with different
 //!   content aborts the whole transaction;
@@ -21,7 +23,7 @@
 //!   [`KnowledgeStore::restore`] republishes an earlier version as a new one.
 
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -173,18 +175,56 @@ fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+fn host_id() -> String {
+    fs::read_to_string("/proc/sys/kernel/random/boot_id")
+        .or_else(|_| fs::read_to_string("/etc/hostname"))
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn lock_owner_record() -> String {
+    format!("SML_TUTOR_LOCK_V1 {} {}\n", std::process::id(), host_id())
+}
+
+/// True only when the lock owner is on this host (same boot) and its pid is no
+/// longer alive. Uses `/proc`, so off Linux this always answers false.
+fn owner_is_dead(record: &str) -> bool {
+    let mut parts = record.split_whitespace();
+    if parts.next() != Some("SML_TUTOR_LOCK_V1") {
+        return false;
+    }
+    let Some(pid) = parts.next().and_then(|p| p.parse::<u32>().ok()) else {
+        return false;
+    };
+    let host = parts.next().unwrap_or("");
+    let here = host_id();
+    if here.is_empty() || host != here || !Path::new("/proc/self").exists() {
+        return false;
+    }
+    !Path::new(&format!("/proc/{pid}")).exists()
+}
+
 impl KnowledgeStore {
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let root = root.into();
         fs::create_dir_all(root.join("objects"))?;
         fs::create_dir_all(root.join("manifests"))?;
-        if !root.join("HEAD").exists() {
-            write_atomic(&root, "HEAD", format!("{HEAD_MAGIC}\n0 none\n").as_bytes())?;
-        }
         let store = Self {
             root,
             fail_point: None,
         };
+        if !store.root.join("HEAD").exists() {
+            // Initialise under the writer lock and re-check, so a concurrent
+            // opener can never overwrite a HEAD another writer already advanced.
+            let _guard = store.lock_waiting(10_000)?;
+            if !store.root.join("HEAD").exists() {
+                write_atomic(
+                    &store.root,
+                    "HEAD",
+                    format!("{HEAD_MAGIC}\n0 none\n").as_bytes(),
+                )?;
+            }
+        }
         store.read_head()?;
         Ok(store)
     }
@@ -308,15 +348,85 @@ impl KnowledgeStore {
     }
 
     fn lock(&self) -> Result<LockGuard, StoreError> {
-        let path = self.root.join("LOCK");
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut f) => {
-                let _ = writeln!(f, "{}", std::process::id());
-                Ok(LockGuard(path))
+        match self.try_lock() {
+            Err(StoreError::Busy) if self.recover_stale_lock()? => self.try_lock(),
+            other => other,
+        }
+    }
+
+    fn lock_waiting(&self, attempts: u32) -> Result<LockGuard, StoreError> {
+        for i in 0..attempts.max(1) {
+            match self.lock() {
+                Err(StoreError::Busy) => {
+                    if i % 8 == 7 {
+                        std::thread::sleep(std::time::Duration::from_micros(200));
+                    } else {
+                        std::thread::yield_now();
+                    }
+                }
+                other => return other,
             }
+        }
+        Err(StoreError::Busy)
+    }
+
+    /// Creates `LOCK` exclusively with its owner record already inside (the
+    /// record is written to a private file first and hard-linked into place),
+    /// so a crash can never leave an anonymous lock behind.
+    fn try_lock(&self) -> Result<LockGuard, StoreError> {
+        let path = self.root.join("LOCK");
+        let owner = lock_owner_record();
+        let tmp = self.root.join(format!(
+            ".LOCK.{}.{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        {
+            let mut f = File::create(&tmp)?;
+            f.write_all(owner.as_bytes())?;
+            f.sync_all()?;
+        }
+        let linked = fs::hard_link(&tmp, &path);
+        let _ = fs::remove_file(&tmp);
+        match linked {
+            Ok(()) => Ok(LockGuard(path)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(StoreError::Busy),
             Err(e) => Err(StoreError::Io(e)),
         }
+    }
+
+    /// Removes a `LOCK` whose owner process is provably dead (same host, pid no
+    /// longer running). Returns whether a stale lock was removed. A lock whose
+    /// owner cannot be judged (other host, unknown platform) is left alone and
+    /// stays `Busy`: fail closed rather than risk two writers.
+    pub fn recover_stale_lock(&self) -> Result<bool, StoreError> {
+        let path = self.root.join("LOCK");
+        let Ok(record) = fs::read_to_string(&path) else {
+            return Ok(false);
+        };
+        if !owner_is_dead(&record) {
+            return Ok(false);
+        }
+        // Move the stale lock aside atomically, then confirm it is the record
+        // we judged; if another writer replaced it meanwhile, put it back.
+        let aside = self.root.join(format!(
+            "LOCK.stale.{}.{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        if fs::rename(&path, &aside).is_err() {
+            return Ok(false);
+        }
+        let moved = fs::read_to_string(&aside).unwrap_or_default();
+        if moved != record {
+            let _ = fs::hard_link(&aside, &path);
+            let _ = fs::remove_file(&aside);
+            return Ok(false);
+        }
+        let _ = fs::remove_file(&aside);
+        Ok(true)
     }
 
     fn write_object(&self, payload: &[u8], d: &Digest) -> Result<(), StoreError> {
@@ -651,6 +761,61 @@ mod tests {
         assert_eq!(snap.version, 80);
         assert_eq!(s.audit().unwrap(), 80);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stale_lock_from_dead_process_is_recovered_live_lock_is_kept() {
+        let dir = tmp("stale-lock");
+        let s = KnowledgeStore::open(&dir).unwrap();
+        // A lock left by a process that no longer exists on this host.
+        fs::write(
+            dir.join("LOCK"),
+            format!("SML_TUTOR_LOCK_V1 4294967294 {}\n", host_id()),
+        )
+        .unwrap();
+        if Path::new("/proc/self").exists() && !host_id().is_empty() {
+            s.commit_rebasing(vec![entry(1, b"one")], 4).unwrap();
+            assert!(!dir.join("LOCK").exists());
+        }
+        // A lock owned by a live process (this one) is never stolen.
+        fs::write(dir.join("LOCK"), lock_owner_record()).unwrap();
+        assert!(matches!(
+            s.commit(&Transaction {
+                base_version: s.version().unwrap(),
+                entries: vec![entry(2, b"two")],
+            }),
+            Err(StoreError::Busy)
+        ));
+        assert!(!s.recover_stale_lock().unwrap());
+        // A lock from another host cannot be judged: fail closed.
+        fs::write(
+            dir.join("LOCK"),
+            "SML_TUTOR_LOCK_V1 4294967294 other-host\n",
+        )
+        .unwrap();
+        assert!(!s.recover_stale_lock().unwrap());
+        fs::remove_file(dir.join("LOCK")).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_first_open_never_overwrites_a_committed_head() {
+        for round in 0..20 {
+            let dir = tmp(&format!("first-open-{round}"));
+            std::thread::scope(|scope| {
+                for t in 0..4u64 {
+                    let dir = dir.clone();
+                    scope.spawn(move || {
+                        let s = KnowledgeStore::open(&dir).unwrap();
+                        s.commit_rebasing(vec![entry(t, &t.to_le_bytes())], 100_000)
+                            .unwrap();
+                    });
+                }
+            });
+            let s = KnowledgeStore::open(&dir).unwrap();
+            assert_eq!(s.snapshot().unwrap().entries.len(), 4, "round {round}");
+            let _ = fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]
