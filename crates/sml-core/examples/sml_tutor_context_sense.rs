@@ -17,9 +17,7 @@ const MAX_ROWS: usize = 4096;
 
 fn read(path: &str) -> Result<String> {
     let mut raw = String::new();
-    File::open(path)?
-        .take(LIMIT + 1)
-        .read_to_string(&mut raw)?;
+    File::open(path)?.take(LIMIT + 1).read_to_string(&mut raw)?;
     if raw.len() as u64 > LIMIT {
         return Err("oversized corpus".into());
     }
@@ -201,9 +199,10 @@ fn main() -> Result<()> {
                 None => println!("ABSTAIN"),
             }
         }
-        _ => {
-            return Err("use --learn TRAIN BANK, --verify BANK TEST or --predict BANK LANG LEMMA POS CONTEXT".into())
-        }
+        _ => return Err(
+            "use --learn TRAIN BANK, --verify BANK TEST or --predict BANK LANG LEMMA POS CONTEXT"
+                .into(),
+        ),
     }
     Ok(())
 }
@@ -235,7 +234,8 @@ mod tests {
         let en = lexeme("en", "avocat", "noun").unwrap();
         assert_eq!(bank.predict(&en, "avocat tribunal"), None);
         assert!(
-            Bank::restore(&(bank.checkpoint() + "fr|avocat|noun|avocat tribunal|unknown\n")).is_err()
+            Bank::restore(&(bank.checkpoint() + "fr|avocat|noun|avocat tribunal|unknown\n"))
+                .is_err()
         );
         assert!(rows(
             "fr|avocat|noun|avocat tribunal|1\nfr|avocat|noun|Avocat tribunal!|2\n",
