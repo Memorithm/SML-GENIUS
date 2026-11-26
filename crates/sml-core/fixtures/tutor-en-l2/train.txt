@@ -1,0 +1,24 @@
+ian compares jack|8|8|9|0
+ian does not compare jack|8|8|9|1
+jack is compared by ian|8|8|9|0
+jack draws kevin|9|9|10|0
+jack does not draw kevin|9|9|10|1
+kevin is drawn by jack|9|9|10|0
+kevin photographs liam|10|10|11|0
+kevin does not photograph liam|10|10|11|1
+liam is photographed by kevin|10|10|11|0
+liam meets mark|11|11|12|0
+liam does not meet mark|11|11|12|1
+mark is met by liam|11|11|12|0
+mark thanks noah|12|12|13|0
+mark does not thank noah|12|12|13|1
+noah is thanked by mark|12|12|13|0
+noah contacts oscar|13|13|14|0
+noah does not contact oscar|13|13|14|1
+oscar is contacted by noah|13|13|14|0
+oscar visits paul|14|14|15|0
+oscar does not visit paul|14|14|15|1
+paul is visited by oscar|14|14|15|0
+paul observes ian|15|15|8|0
+paul does not observe ian|15|15|8|1
+ian is observed by paul|15|15|8|0

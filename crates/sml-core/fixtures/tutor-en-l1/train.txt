@@ -1,0 +1,192 @@
+alice sees beth|0|0|1|0
+alice does not see beth|0|0|1|1
+beth is seen by alice|0|0|1|0
+beth is not seen by alice|0|0|1|1
+alice sees beth today|0|0|1|0
+alice does not see beth today|0|0|1|1
+beth is seen by alice today|0|0|1|0
+beth is not seen by alice today|0|0|1|1
+claire sees diana|2|0|3|0
+claire does not see diana|2|0|3|1
+diana is seen by claire|2|0|3|0
+diana is not seen by claire|2|0|3|1
+claire sees diana today|2|0|3|0
+claire does not see diana today|2|0|3|1
+diana is seen by claire today|2|0|3|0
+diana is not seen by claire today|2|0|3|1
+emma sees fiona|4|0|5|0
+emma does not see fiona|4|0|5|1
+fiona is seen by emma|4|0|5|0
+fiona is not seen by emma|4|0|5|1
+emma sees fiona today|4|0|5|0
+emma does not see fiona today|4|0|5|1
+fiona is seen by emma today|4|0|5|0
+fiona is not seen by emma today|4|0|5|1
+grace sees helen|6|0|7|0
+grace does not see helen|6|0|7|1
+helen is seen by grace|6|0|7|0
+helen is not seen by grace|6|0|7|1
+grace sees helen today|6|0|7|0
+grace does not see helen today|6|0|7|1
+helen is seen by grace today|6|0|7|0
+helen is not seen by grace today|6|0|7|1
+alice follows beth|0|1|1|0
+alice does not follow beth|0|1|1|1
+beth is followed by alice|0|1|1|0
+beth is not followed by alice|0|1|1|1
+alice follows beth today|0|1|1|0
+alice does not follow beth today|0|1|1|1
+beth is followed by alice today|0|1|1|0
+beth is not followed by alice today|0|1|1|1
+claire follows diana|2|1|3|0
+claire does not follow diana|2|1|3|1
+diana is followed by claire|2|1|3|0
+diana is not followed by claire|2|1|3|1
+claire follows diana today|2|1|3|0
+claire does not follow diana today|2|1|3|1
+diana is followed by claire today|2|1|3|0
+diana is not followed by claire today|2|1|3|1
+emma follows fiona|4|1|5|0
+emma does not follow fiona|4|1|5|1
+fiona is followed by emma|4|1|5|0
+fiona is not followed by emma|4|1|5|1
+emma follows fiona today|4|1|5|0
+emma does not follow fiona today|4|1|5|1
+fiona is followed by emma today|4|1|5|0
+fiona is not followed by emma today|4|1|5|1
+grace follows helen|6|1|7|0
+grace does not follow helen|6|1|7|1
+helen is followed by grace|6|1|7|0
+helen is not followed by grace|6|1|7|1
+grace follows helen today|6|1|7|0
+grace does not follow helen today|6|1|7|1
+helen is followed by grace today|6|1|7|0
+helen is not followed by grace today|6|1|7|1
+alice finds beth|0|2|1|0
+alice does not find beth|0|2|1|1
+beth is found by alice|0|2|1|0
+beth is not found by alice|0|2|1|1
+alice finds beth today|0|2|1|0
+alice does not find beth today|0|2|1|1
+beth is found by alice today|0|2|1|0
+beth is not found by alice today|0|2|1|1
+claire finds diana|2|2|3|0
+claire does not find diana|2|2|3|1
+diana is found by claire|2|2|3|0
+diana is not found by claire|2|2|3|1
+claire finds diana today|2|2|3|0
+claire does not find diana today|2|2|3|1
+diana is found by claire today|2|2|3|0
+diana is not found by claire today|2|2|3|1
+emma finds fiona|4|2|5|0
+emma does not find fiona|4|2|5|1
+fiona is found by emma|4|2|5|0
+fiona is not found by emma|4|2|5|1
+emma finds fiona today|4|2|5|0
+emma does not find fiona today|4|2|5|1
+fiona is found by emma today|4|2|5|0
+fiona is not found by emma today|4|2|5|1
+grace finds helen|6|2|7|0
+grace does not find helen|6|2|7|1
+helen is found by grace|6|2|7|0
+helen is not found by grace|6|2|7|1
+grace finds helen today|6|2|7|0
+grace does not find helen today|6|2|7|1
+helen is found by grace today|6|2|7|0
+helen is not found by grace today|6|2|7|1
+alice helps beth|0|3|1|0
+alice does not help beth|0|3|1|1
+beth is helped by alice|0|3|1|0
+beth is not helped by alice|0|3|1|1
+alice helps beth today|0|3|1|0
+alice does not help beth today|0|3|1|1
+beth is helped by alice today|0|3|1|0
+beth is not helped by alice today|0|3|1|1
+claire helps diana|2|3|3|0
+claire does not help diana|2|3|3|1
+diana is helped by claire|2|3|3|0
+diana is not helped by claire|2|3|3|1
+claire helps diana today|2|3|3|0
+claire does not help diana today|2|3|3|1
+diana is helped by claire today|2|3|3|0
+diana is not helped by claire today|2|3|3|1
+emma helps fiona|4|3|5|0
+emma does not help fiona|4|3|5|1
+fiona is helped by emma|4|3|5|0
+fiona is not helped by emma|4|3|5|1
+emma helps fiona today|4|3|5|0
+emma does not help fiona today|4|3|5|1
+fiona is helped by emma today|4|3|5|0
+fiona is not helped by emma today|4|3|5|1
+grace helps helen|6|3|7|0
+grace does not help helen|6|3|7|1
+helen is helped by grace|6|3|7|0
+helen is not helped by grace|6|3|7|1
+grace helps helen today|6|3|7|0
+grace does not help helen today|6|3|7|1
+helen is helped by grace today|6|3|7|0
+helen is not helped by grace today|6|3|7|1
+alice greets beth|0|4|1|0
+alice does not greet beth|0|4|1|1
+beth is greeted by alice|0|4|1|0
+beth is not greeted by alice|0|4|1|1
+alice greets beth today|0|4|1|0
+alice does not greet beth today|0|4|1|1
+beth is greeted by alice today|0|4|1|0
+beth is not greeted by alice today|0|4|1|1
+claire greets diana|2|4|3|0
+claire does not greet diana|2|4|3|1
+diana is greeted by claire|2|4|3|0
+diana is not greeted by claire|2|4|3|1
+claire greets diana today|2|4|3|0
+claire does not greet diana today|2|4|3|1
+diana is greeted by claire today|2|4|3|0
+diana is not greeted by claire today|2|4|3|1
+emma greets fiona|4|4|5|0
+emma does not greet fiona|4|4|5|1
+fiona is greeted by emma|4|4|5|0
+fiona is not greeted by emma|4|4|5|1
+emma greets fiona today|4|4|5|0
+emma does not greet fiona today|4|4|5|1
+fiona is greeted by emma today|4|4|5|0
+fiona is not greeted by emma today|4|4|5|1
+grace greets helen|6|4|7|0
+grace does not greet helen|6|4|7|1
+helen is greeted by grace|6|4|7|0
+helen is not greeted by grace|6|4|7|1
+grace greets helen today|6|4|7|0
+grace does not greet helen today|6|4|7|1
+helen is greeted by grace today|6|4|7|0
+helen is not greeted by grace today|6|4|7|1
+alice calls beth|0|5|1|0
+alice does not call beth|0|5|1|1
+beth is called by alice|0|5|1|0
+beth is not called by alice|0|5|1|1
+alice calls beth today|0|5|1|0
+alice does not call beth today|0|5|1|1
+beth is called by alice today|0|5|1|0
+beth is not called by alice today|0|5|1|1
+claire calls diana|2|5|3|0
+claire does not call diana|2|5|3|1
+diana is called by claire|2|5|3|0
+diana is not called by claire|2|5|3|1
+claire calls diana today|2|5|3|0
+claire does not call diana today|2|5|3|1
+diana is called by claire today|2|5|3|0
+diana is not called by claire today|2|5|3|1
+emma calls fiona|4|5|5|0
+emma does not call fiona|4|5|5|1
+fiona is called by emma|4|5|5|0
+fiona is not called by emma|4|5|5|1
+emma calls fiona today|4|5|5|0
+emma does not call fiona today|4|5|5|1
+fiona is called by emma today|4|5|5|0
+fiona is not called by emma today|4|5|5|1
+grace calls helen|6|5|7|0
+grace does not call helen|6|5|7|1
+helen is called by grace|6|5|7|0
+helen is not called by grace|6|5|7|1
+grace calls helen today|6|5|7|0
+grace does not call helen today|6|5|7|1
+helen is called by grace today|6|5|7|0
+helen is not called by grace today|6|5|7|1
