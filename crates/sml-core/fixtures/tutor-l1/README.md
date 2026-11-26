@@ -1,0 +1,3 @@
+# TUTOR-08 L1 controlled French corpus (v1)
+
+Original synthetic corpus generated for this experiment, not a natural-text corpus or LFM3 output. Eight masculine proper names; eight verbs with supplied active/passive lexical forms. Eight constructions: active/passive, affirmed/negated, with/without temporal adjunct. TRAIN: six verbs, four directed pairs each, eight patterns = 192 rows. TEST: two held-out verbs, all 56 directed distinct-name pairs, eight patterns = 896 rows. Lexicon is provided to both partitions, so this measures template transfer to annotated vocabulary, not discovery of word meanings. TEST is never used for fitting. No claim of general language understanding. Seedless deterministic fixture.
