@@ -1,0 +1,3 @@
+# TUTOR-08 L2 synthetic lexical induction fixture
+
+16 aligned TRAIN sentences covering eight previously unseen names and eight previously unseen verbs (active and passive forms), without supplying a new lexicon. Semantic coordinates 8..15 are external annotations, not discovered meanings. TEST: 8 verbs × 8 subject names × 2 object offsets (2 and 3) × 8 learned L1 patterns = 1024 distinct rows. TRAIN uses only object offset 1. Both partitions are deterministic original synthetic fixtures. The existing L1 executable verifies the new bank on TEST and the original 896 L1 held-out cases. No natural-corpus or teacher-performance claim.

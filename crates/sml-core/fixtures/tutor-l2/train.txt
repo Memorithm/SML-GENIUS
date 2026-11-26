@@ -1,0 +1,16 @@
+ivan compare jacques|8|8|9|0
+jacques est comparé par ivan|8|8|9|0
+jacques dessine karim|9|9|10|0
+karim est dessiné par jacques|9|9|10|0
+karim photographie luc|10|10|11|0
+luc est photographié par karim|10|10|11|0
+luc croise marc|11|11|12|0
+marc est croisé par luc|11|11|12|0
+marc remercie nicolas|12|12|13|0
+nicolas est remercié par marc|12|12|13|0
+nicolas contacte oscar|13|13|14|0
+oscar est contacté par nicolas|13|13|14|0
+oscar rencontre paul|14|14|15|0
+paul est rencontré par oscar|14|14|15|0
+paul surveille ivan|15|15|8|0
+ivan est surveillé par paul|15|15|8|0
