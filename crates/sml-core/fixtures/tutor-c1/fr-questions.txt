@@ -1,0 +1,5 @@
+est ce que alain voit bruno|truth
+qui voit bruno|agent
+alain voit qui|object
+et lui voit qui|focus_object
+correction|revise

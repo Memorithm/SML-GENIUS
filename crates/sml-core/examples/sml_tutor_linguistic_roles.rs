@@ -8,6 +8,9 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 
+#[path = "sml_tutor_dialogue/c1.rs"]
+mod dialogue;
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const LIMIT: u64 = 65_536;
 const MARKER: &str = "SML_TUTOR_LINGUISTIC_ROLES_V1";
@@ -270,6 +273,9 @@ fn restore(raw: &str) -> Result<(Lexicon, Templates)> {
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.as_slice() {
+        [mode, rest @ ..] if mode.starts_with("--dialogue-") => {
+            dialogue::dispatch(mode, rest)?;
+        }
         [lex, train_path, test_path, output] if !lex.starts_with("--") => {
             let words = lexicon(&read(lex)?)?;
             let train_raw = read(train_path)?;

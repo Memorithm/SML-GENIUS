@@ -1,0 +1,5 @@
+does alice see beth|truth
+who sees beth|agent
+who does alice see|object
+who does she see|focus_object
+correction|revise

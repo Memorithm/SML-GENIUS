@@ -1,0 +1,175 @@
+does alice watch claire?|i do not know
+claire is watched by alice.|understood
+does alice watch claire?|yes
+who watches claire?|alice
+who does she watch?|claire
+alice does not watch claire.|conflicting information
+does alice watch claire?|yes
+correction: alice does not watch claire.|understood
+does alice watch claire?|no
+does alice watch emma?|i do not know
+
+does beth watch diana?|i do not know
+diana is watched by beth.|understood
+does beth watch diana?|yes
+who watches diana?|beth
+who does she watch?|diana
+beth does not watch diana.|conflicting information
+does beth watch diana?|yes
+correction: beth does not watch diana.|understood
+does beth watch diana?|no
+does beth watch fiona?|i do not know
+
+does claire watch emma?|i do not know
+emma is watched by claire.|understood
+does claire watch emma?|yes
+who watches emma?|claire
+who does she watch?|emma
+claire does not watch emma.|conflicting information
+does claire watch emma?|yes
+correction: claire does not watch emma.|understood
+does claire watch emma?|no
+does claire watch grace?|i do not know
+
+does diana watch fiona?|i do not know
+fiona is watched by diana.|understood
+does diana watch fiona?|yes
+who watches fiona?|diana
+who does she watch?|fiona
+diana does not watch fiona.|conflicting information
+does diana watch fiona?|yes
+correction: diana does not watch fiona.|understood
+does diana watch fiona?|no
+does diana watch helen?|i do not know
+
+does emma watch grace?|i do not know
+grace is watched by emma.|understood
+does emma watch grace?|yes
+who watches grace?|emma
+who does she watch?|grace
+emma does not watch grace.|conflicting information
+does emma watch grace?|yes
+correction: emma does not watch grace.|understood
+does emma watch grace?|no
+does emma watch alice?|i do not know
+
+does fiona watch helen?|i do not know
+helen is watched by fiona.|understood
+does fiona watch helen?|yes
+who watches helen?|fiona
+who does she watch?|helen
+fiona does not watch helen.|conflicting information
+does fiona watch helen?|yes
+correction: fiona does not watch helen.|understood
+does fiona watch helen?|no
+does fiona watch beth?|i do not know
+
+does grace watch alice?|i do not know
+alice is watched by grace.|understood
+does grace watch alice?|yes
+who watches alice?|grace
+who does she watch?|alice
+grace does not watch alice.|conflicting information
+does grace watch alice?|yes
+correction: grace does not watch alice.|understood
+does grace watch alice?|no
+does grace watch claire?|i do not know
+
+does helen watch beth?|i do not know
+beth is watched by helen.|understood
+does helen watch beth?|yes
+who watches beth?|helen
+who does she watch?|beth
+helen does not watch beth.|conflicting information
+does helen watch beth?|yes
+correction: helen does not watch beth.|understood
+does helen watch beth?|no
+does helen watch diana?|i do not know
+
+does alice protect diana?|i do not know
+diana is protected by alice.|understood
+does alice protect diana?|yes
+who protects diana?|alice
+who does she protect?|diana
+alice does not protect diana.|conflicting information
+does alice protect diana?|yes
+correction: alice does not protect diana.|understood
+does alice protect diana?|no
+does alice protect emma?|i do not know
+
+does beth protect emma?|i do not know
+emma is protected by beth.|understood
+does beth protect emma?|yes
+who protects emma?|beth
+who does she protect?|emma
+beth does not protect emma.|conflicting information
+does beth protect emma?|yes
+correction: beth does not protect emma.|understood
+does beth protect emma?|no
+does beth protect fiona?|i do not know
+
+does claire protect fiona?|i do not know
+fiona is protected by claire.|understood
+does claire protect fiona?|yes
+who protects fiona?|claire
+who does she protect?|fiona
+claire does not protect fiona.|conflicting information
+does claire protect fiona?|yes
+correction: claire does not protect fiona.|understood
+does claire protect fiona?|no
+does claire protect grace?|i do not know
+
+does diana protect grace?|i do not know
+grace is protected by diana.|understood
+does diana protect grace?|yes
+who protects grace?|diana
+who does she protect?|grace
+diana does not protect grace.|conflicting information
+does diana protect grace?|yes
+correction: diana does not protect grace.|understood
+does diana protect grace?|no
+does diana protect helen?|i do not know
+
+does emma protect helen?|i do not know
+helen is protected by emma.|understood
+does emma protect helen?|yes
+who protects helen?|emma
+who does she protect?|helen
+emma does not protect helen.|conflicting information
+does emma protect helen?|yes
+correction: emma does not protect helen.|understood
+does emma protect helen?|no
+does emma protect alice?|i do not know
+
+does fiona protect alice?|i do not know
+alice is protected by fiona.|understood
+does fiona protect alice?|yes
+who protects alice?|fiona
+who does she protect?|alice
+fiona does not protect alice.|conflicting information
+does fiona protect alice?|yes
+correction: fiona does not protect alice.|understood
+does fiona protect alice?|no
+does fiona protect beth?|i do not know
+
+does grace protect beth?|i do not know
+beth is protected by grace.|understood
+does grace protect beth?|yes
+who protects beth?|grace
+who does she protect?|beth
+grace does not protect beth.|conflicting information
+does grace protect beth?|yes
+correction: grace does not protect beth.|understood
+does grace protect beth?|no
+does grace protect claire?|i do not know
+
+does helen protect claire?|i do not know
+claire is protected by helen.|understood
+does helen protect claire?|yes
+who protects claire?|helen
+who does she protect?|claire
+helen does not protect claire.|conflicting information
+does helen protect claire?|yes
+correction: helen does not protect claire.|understood
+does helen protect claire?|no
+does helen protect diana?|i do not know
