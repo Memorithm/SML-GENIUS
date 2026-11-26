@@ -304,7 +304,7 @@ fn qualify() -> Result<()> {
             }
         }
     }
-    if correct != total || total.iter().any(|&n| n == 0) || reload != 65_536 * learned.len() {
+    if correct != total || total.contains(&0) || reload != 65_536 * learned.len() {
         return Err("R1 compiled or reload mastery failed".into());
     }
     for i in 0..4 {
