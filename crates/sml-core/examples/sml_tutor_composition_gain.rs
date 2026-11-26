@@ -73,7 +73,7 @@ struct Closure {
     recipes: Vec<Option<Recipe>>,
 }
 
-// Every tree has a root gate and three subtrees. Replacing a subtree
+// Every tree has a root gate and three or four subtrees. Replacing a subtree
 // with its cheapest equivalent truth signature cannot increase tree cost.
 // Thus the first discovered signature has minimum tree cost within this grammar.
 fn discover(gates: &[LocalAnfGate], acquired: Option<&LocalAnfGate>, budget: usize) -> Closure {
@@ -118,10 +118,10 @@ fn discover(gates: &[LocalAnfGate], acquired: Option<&LocalAnfGate>, budget: usi
                                 for &c in &levels[third] {
                                     for &d in &levels[fourth] {
                                         let children = [a, b, c, d];
-                                        let signature = gate.evaluate_lanes(
-                                            &children.map(u64::from),
-                                            &mut [0; 16],
-                                        ) as u16;
+                                        let values = children.map(u64::from);
+                                        let mut scratch = [0; 16];
+                                        let sig = gate.evaluate_lanes(&values, &mut scratch);
+                                        let signature = sig as u16;
                                         let slot = &mut recipes[usize::from(signature)];
                                         if slot.is_none() {
                                             *slot = Some(Recipe::Acquired { children });
@@ -172,7 +172,8 @@ fn verify(
     for (cost, level) in closure.levels.iter().enumerate() {
         for &signature in level {
             for address in 0..16 {
-                let (value, actual_cost) = replay(closure, gates, acquired, signature, &bits(address));
+                let input = bits(address);
+                let (value, actual_cost) = replay(closure, gates, acquired, signature, &input);
                 if value != (signature & (1 << address) != 0) || actual_cost != cost {
                     return Err("composition witness replay mismatch".into());
                 }
