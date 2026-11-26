@@ -519,11 +519,11 @@ impl EngineBackend for L1Backend {
         linguistic_l1_key(id)
     }
 
-    fn teacher_name(&self) -> &str {
+    fn teacher_name(&self, _id: &LessonId) -> &str {
         TEACHER
     }
 
-    fn model_version(&self) -> &str {
+    fn model_version(&self, _id: &LessonId) -> &str {
         "sml-tutor-native-l1-bridge-v1"
     }
 
