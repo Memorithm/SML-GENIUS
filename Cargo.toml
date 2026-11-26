@@ -9,6 +9,7 @@ members = [
     "crates/sml-rsi",
     "crates/sml-elastic-bench",
     "crates/sml-publication",
+    "crates/sml-tutor",
 ]
 resolver = "2"
 
