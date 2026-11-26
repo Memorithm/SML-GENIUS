@@ -1,0 +1,20 @@
+[package]
+name = "sml-tutor"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "SML-TUTOR continual-learning engine: lesson registry, dependency graph, parallel scheduler and transactional consolidation"
+
+[dependencies]
+sml-core = { path = "../sml-core" }
+
+[lints]
+workspace = true
+
+
+[[example]]
+name = "sml_tutor_engine_bench"
+test = true

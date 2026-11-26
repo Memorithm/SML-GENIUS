@@ -9,8 +9,6 @@ use std::io::{Read, Write};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MARKER: &str = "SML_TUTOR_DICTIONARY_SHARD_V1";
-const EXTENDED_MARKER: &str = "SML_TUTOR_DICTIONARY_SHARD_V2";
-const EXTENDED_FIELD_BYTES: usize = 4 * 1024 * 1024;
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_RECORDS: usize = 4096;
 
@@ -23,7 +21,6 @@ struct Entry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Bank {
-    extended: bool,
     lang: String,
     source: String,
     entries: BTreeMap<u64, Entry>,
@@ -44,7 +41,7 @@ fn hex_byte(b: u8) -> bool {
     b.is_ascii_digit() || (b'a'..=b'f').contains(&b)
 }
 
-fn decode(raw: &str, max: usize, extended: bool) -> Result<String> {
+fn decode(raw: &str, max: usize) -> Result<String> {
     if raw.is_empty() || raw.len() > max * 2 || raw.len() % 2 != 0 || !raw.bytes().all(hex_byte) {
         return Err("invalid canonical hex field".into());
     }
@@ -53,7 +50,7 @@ fn decode(raw: &str, max: usize, extended: bool) -> Result<String> {
         .map(|i| u8::from_str_radix(&raw[i..i + 2], 16))
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let text = String::from_utf8(bytes)?;
-    if !extended && (text.trim().is_empty() || text.contains('\0')) {
+    if text.trim().is_empty() || text.contains('\0') {
         return Err("empty or invalid text".into());
     }
     Ok(text)
@@ -83,11 +80,9 @@ impl Bank {
             return Err("invalid shard length or termination".into());
         }
         let mut lines = raw.lines();
-        let extended = match lines.next() {
-            Some(MARKER) => false,
-            Some(EXTENDED_MARKER) => true,
-            _ => return Err("unknown lexical schema".into()),
-        };
+        if lines.next() != Some(MARKER) {
+            return Err("unknown lexical schema".into());
+        }
         let lang = lines
             .next()
             .and_then(|line| line.strip_prefix("lang="))
@@ -108,11 +103,10 @@ impl Bank {
             let [record, lemma, pos, gloss] = fields.as_slice() else {
                 return Err("invalid sense row".into());
             };
-            let limit = |v1| if extended { EXTENDED_FIELD_BYTES } else { v1 };
             let entry = Entry {
-                lemma: decode(lemma, limit(512), extended)?,
-                pos: decode(pos, limit(64), extended)?,
-                gloss: decode(gloss, limit(8192), extended)?,
+                lemma: decode(lemma, 512)?,
+                pos: decode(pos, 64)?,
+                gloss: decode(gloss, 8192)?,
             };
             if entries.insert(id(record)?, entry).is_some() || entries.len() > MAX_RECORDS {
                 return Err("duplicate identity or shard capacity exceeded".into());
@@ -122,7 +116,6 @@ impl Bank {
             return Err("empty shard".into());
         }
         Ok(Self {
-            extended,
             lang: lang.into(),
             source: source.into(),
             entries,
@@ -130,12 +123,7 @@ impl Bank {
     }
 
     fn serialize(&self) -> String {
-        let marker = if self.extended {
-            EXTENDED_MARKER
-        } else {
-            MARKER
-        };
-        let mut out = format!("{marker}\nlang={}\nsource={}\n", self.lang, self.source);
+        let mut out = format!("{MARKER}\nlang={}\nsource={}\n", self.lang, self.source);
         for (&id, entry) in &self.entries {
             out.push_str(&format!(
                 "{id}\t{}\t{}\t{}\n",
@@ -170,8 +158,7 @@ impl Bank {
     }
 
     fn score(&self, oracle: &Self) -> Result<(usize, usize)> {
-        if self.extended != oracle.extended
-            || self.lang != oracle.lang
+        if self.lang != oracle.lang
             || self.source != oracle.source
             || self.entries.len() != oracle.entries.len()
         {
@@ -286,32 +273,14 @@ mod tests {
     }
 
     #[test]
-    fn extended_sense_preserves_large_fields_and_original_v1() {
-        let v1 = Bank::parse(&fixture("fr")).unwrap();
-        let original = v1.serialize();
-        let mut v2 = v1.clone();
-        v2.extended = true;
-        v2.entries.get_mut(&1).unwrap().gloss = "é".repeat(9000);
-        v2.entries.get_mut(&2).unwrap().lemma = "a\0b".into();
-        let raw = v2.serialize();
-        let restored = Bank::restore(&raw).unwrap();
-        assert_eq!(restored.score(&v2).unwrap(), (3, 3));
-        assert!(Bank::parse(&raw.replace(EXTENDED_MARKER, MARKER)).is_err());
-        assert_eq!(Bank::restore(&original).unwrap(), v1);
-        assert!(restored.score(&v1).is_err());
-        assert!(decode("ff", 16, true).is_err());
-        assert!(decode("6162", 1, true).is_err());
-    }
-
-    #[test]
     fn rejects_corruption_duplicate_and_noncanonical_bank() {
         let raw = fixture("fr");
         assert!(Bank::restore(&raw).is_err());
         let row = raw.lines().last().unwrap();
         assert!(Bank::parse(&format!("{raw}{row}\n")).is_err());
         assert!(Bank::parse(&raw.replace("lang=fr", "lang=es")).is_err());
-        assert!(decode("ff", 16, false).is_err());
-        assert!(decode("41AB", 16, false).is_err());
-        assert!(decode("00", 16, false).is_err());
+        assert!(decode("ff", 16).is_err());
+        assert!(decode("41AB", 16).is_err());
+        assert!(decode("00", 16).is_err());
     }
 }

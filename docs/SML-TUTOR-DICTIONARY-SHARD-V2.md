@@ -1,3 +1,0 @@
-# Extended lexical shard V2
-
-V1 remains byte-compatible and is read without modification. V2 widens each UTF-8 field to 4 MiB, within the unchanged 16 MiB shard cap and 4096 records. Hex encoding preserves unusual source text including embedded NUL or whitespace, without interpreting it. Such records are source artifacts, not validated semantic facts. V2 identity is distinct from V1 and must be verified against a frozen source. This extension targets the one English defined sense omitted by the physical V1 run; the exact cause of that exception still requires physical inspection. No claim of completed repair.
