@@ -1,0 +1,896 @@
+alain poursuit bruno|0|6|1|0
+alain ne poursuit pas bruno|0|6|1|1
+bruno est poursuivi par alain|0|6|1|0
+bruno n'est pas poursuivi par alain|0|6|1|1
+alain poursuit bruno aujourd'hui|0|6|1|0
+alain ne poursuit pas bruno aujourd'hui|0|6|1|1
+bruno est poursuivi par alain aujourd'hui|0|6|1|0
+bruno n'est pas poursuivi par alain aujourd'hui|0|6|1|1
+alain poursuit charles|0|6|2|0
+alain ne poursuit pas charles|0|6|2|1
+charles est poursuivi par alain|0|6|2|0
+charles n'est pas poursuivi par alain|0|6|2|1
+alain poursuit charles aujourd'hui|0|6|2|0
+alain ne poursuit pas charles aujourd'hui|0|6|2|1
+charles est poursuivi par alain aujourd'hui|0|6|2|0
+charles n'est pas poursuivi par alain aujourd'hui|0|6|2|1
+alain poursuit daniel|0|6|3|0
+alain ne poursuit pas daniel|0|6|3|1
+daniel est poursuivi par alain|0|6|3|0
+daniel n'est pas poursuivi par alain|0|6|3|1
+alain poursuit daniel aujourd'hui|0|6|3|0
+alain ne poursuit pas daniel aujourd'hui|0|6|3|1
+daniel est poursuivi par alain aujourd'hui|0|6|3|0
+daniel n'est pas poursuivi par alain aujourd'hui|0|6|3|1
+alain poursuit éric|0|6|4|0
+alain ne poursuit pas éric|0|6|4|1
+éric est poursuivi par alain|0|6|4|0
+éric n'est pas poursuivi par alain|0|6|4|1
+alain poursuit éric aujourd'hui|0|6|4|0
+alain ne poursuit pas éric aujourd'hui|0|6|4|1
+éric est poursuivi par alain aujourd'hui|0|6|4|0
+éric n'est pas poursuivi par alain aujourd'hui|0|6|4|1
+alain poursuit françois|0|6|5|0
+alain ne poursuit pas françois|0|6|5|1
+françois est poursuivi par alain|0|6|5|0
+françois n'est pas poursuivi par alain|0|6|5|1
+alain poursuit françois aujourd'hui|0|6|5|0
+alain ne poursuit pas françois aujourd'hui|0|6|5|1
+françois est poursuivi par alain aujourd'hui|0|6|5|0
+françois n'est pas poursuivi par alain aujourd'hui|0|6|5|1
+alain poursuit gabriel|0|6|6|0
+alain ne poursuit pas gabriel|0|6|6|1
+gabriel est poursuivi par alain|0|6|6|0
+gabriel n'est pas poursuivi par alain|0|6|6|1
+alain poursuit gabriel aujourd'hui|0|6|6|0
+alain ne poursuit pas gabriel aujourd'hui|0|6|6|1
+gabriel est poursuivi par alain aujourd'hui|0|6|6|0
+gabriel n'est pas poursuivi par alain aujourd'hui|0|6|6|1
+alain poursuit hugo|0|6|7|0
+alain ne poursuit pas hugo|0|6|7|1
+hugo est poursuivi par alain|0|6|7|0
+hugo n'est pas poursuivi par alain|0|6|7|1
+alain poursuit hugo aujourd'hui|0|6|7|0
+alain ne poursuit pas hugo aujourd'hui|0|6|7|1
+hugo est poursuivi par alain aujourd'hui|0|6|7|0
+hugo n'est pas poursuivi par alain aujourd'hui|0|6|7|1
+bruno poursuit alain|1|6|0|0
+bruno ne poursuit pas alain|1|6|0|1
+alain est poursuivi par bruno|1|6|0|0
+alain n'est pas poursuivi par bruno|1|6|0|1
+bruno poursuit alain aujourd'hui|1|6|0|0
+bruno ne poursuit pas alain aujourd'hui|1|6|0|1
+alain est poursuivi par bruno aujourd'hui|1|6|0|0
+alain n'est pas poursuivi par bruno aujourd'hui|1|6|0|1
+bruno poursuit charles|1|6|2|0
+bruno ne poursuit pas charles|1|6|2|1
+charles est poursuivi par bruno|1|6|2|0
+charles n'est pas poursuivi par bruno|1|6|2|1
+bruno poursuit charles aujourd'hui|1|6|2|0
+bruno ne poursuit pas charles aujourd'hui|1|6|2|1
+charles est poursuivi par bruno aujourd'hui|1|6|2|0
+charles n'est pas poursuivi par bruno aujourd'hui|1|6|2|1
+bruno poursuit daniel|1|6|3|0
+bruno ne poursuit pas daniel|1|6|3|1
+daniel est poursuivi par bruno|1|6|3|0
+daniel n'est pas poursuivi par bruno|1|6|3|1
+bruno poursuit daniel aujourd'hui|1|6|3|0
+bruno ne poursuit pas daniel aujourd'hui|1|6|3|1
+daniel est poursuivi par bruno aujourd'hui|1|6|3|0
+daniel n'est pas poursuivi par bruno aujourd'hui|1|6|3|1
+bruno poursuit éric|1|6|4|0
+bruno ne poursuit pas éric|1|6|4|1
+éric est poursuivi par bruno|1|6|4|0
+éric n'est pas poursuivi par bruno|1|6|4|1
+bruno poursuit éric aujourd'hui|1|6|4|0
+bruno ne poursuit pas éric aujourd'hui|1|6|4|1
+éric est poursuivi par bruno aujourd'hui|1|6|4|0
+éric n'est pas poursuivi par bruno aujourd'hui|1|6|4|1
+bruno poursuit françois|1|6|5|0
+bruno ne poursuit pas françois|1|6|5|1
+françois est poursuivi par bruno|1|6|5|0
+françois n'est pas poursuivi par bruno|1|6|5|1
+bruno poursuit françois aujourd'hui|1|6|5|0
+bruno ne poursuit pas françois aujourd'hui|1|6|5|1
+françois est poursuivi par bruno aujourd'hui|1|6|5|0
+françois n'est pas poursuivi par bruno aujourd'hui|1|6|5|1
+bruno poursuit gabriel|1|6|6|0
+bruno ne poursuit pas gabriel|1|6|6|1
+gabriel est poursuivi par bruno|1|6|6|0
+gabriel n'est pas poursuivi par bruno|1|6|6|1
+bruno poursuit gabriel aujourd'hui|1|6|6|0
+bruno ne poursuit pas gabriel aujourd'hui|1|6|6|1
+gabriel est poursuivi par bruno aujourd'hui|1|6|6|0
+gabriel n'est pas poursuivi par bruno aujourd'hui|1|6|6|1
+bruno poursuit hugo|1|6|7|0
+bruno ne poursuit pas hugo|1|6|7|1
+hugo est poursuivi par bruno|1|6|7|0
+hugo n'est pas poursuivi par bruno|1|6|7|1
+bruno poursuit hugo aujourd'hui|1|6|7|0
+bruno ne poursuit pas hugo aujourd'hui|1|6|7|1
+hugo est poursuivi par bruno aujourd'hui|1|6|7|0
+hugo n'est pas poursuivi par bruno aujourd'hui|1|6|7|1
+charles poursuit alain|2|6|0|0
+charles ne poursuit pas alain|2|6|0|1
+alain est poursuivi par charles|2|6|0|0
+alain n'est pas poursuivi par charles|2|6|0|1
+charles poursuit alain aujourd'hui|2|6|0|0
+charles ne poursuit pas alain aujourd'hui|2|6|0|1
+alain est poursuivi par charles aujourd'hui|2|6|0|0
+alain n'est pas poursuivi par charles aujourd'hui|2|6|0|1
+charles poursuit bruno|2|6|1|0
+charles ne poursuit pas bruno|2|6|1|1
+bruno est poursuivi par charles|2|6|1|0
+bruno n'est pas poursuivi par charles|2|6|1|1
+charles poursuit bruno aujourd'hui|2|6|1|0
+charles ne poursuit pas bruno aujourd'hui|2|6|1|1
+bruno est poursuivi par charles aujourd'hui|2|6|1|0
+bruno n'est pas poursuivi par charles aujourd'hui|2|6|1|1
+charles poursuit daniel|2|6|3|0
+charles ne poursuit pas daniel|2|6|3|1
+daniel est poursuivi par charles|2|6|3|0
+daniel n'est pas poursuivi par charles|2|6|3|1
+charles poursuit daniel aujourd'hui|2|6|3|0
+charles ne poursuit pas daniel aujourd'hui|2|6|3|1
+daniel est poursuivi par charles aujourd'hui|2|6|3|0
+daniel n'est pas poursuivi par charles aujourd'hui|2|6|3|1
+charles poursuit éric|2|6|4|0
+charles ne poursuit pas éric|2|6|4|1
+éric est poursuivi par charles|2|6|4|0
+éric n'est pas poursuivi par charles|2|6|4|1
+charles poursuit éric aujourd'hui|2|6|4|0
+charles ne poursuit pas éric aujourd'hui|2|6|4|1
+éric est poursuivi par charles aujourd'hui|2|6|4|0
+éric n'est pas poursuivi par charles aujourd'hui|2|6|4|1
+charles poursuit françois|2|6|5|0
+charles ne poursuit pas françois|2|6|5|1
+françois est poursuivi par charles|2|6|5|0
+françois n'est pas poursuivi par charles|2|6|5|1
+charles poursuit françois aujourd'hui|2|6|5|0
+charles ne poursuit pas françois aujourd'hui|2|6|5|1
+françois est poursuivi par charles aujourd'hui|2|6|5|0
+françois n'est pas poursuivi par charles aujourd'hui|2|6|5|1
+charles poursuit gabriel|2|6|6|0
+charles ne poursuit pas gabriel|2|6|6|1
+gabriel est poursuivi par charles|2|6|6|0
+gabriel n'est pas poursuivi par charles|2|6|6|1
+charles poursuit gabriel aujourd'hui|2|6|6|0
+charles ne poursuit pas gabriel aujourd'hui|2|6|6|1
+gabriel est poursuivi par charles aujourd'hui|2|6|6|0
+gabriel n'est pas poursuivi par charles aujourd'hui|2|6|6|1
+charles poursuit hugo|2|6|7|0
+charles ne poursuit pas hugo|2|6|7|1
+hugo est poursuivi par charles|2|6|7|0
+hugo n'est pas poursuivi par charles|2|6|7|1
+charles poursuit hugo aujourd'hui|2|6|7|0
+charles ne poursuit pas hugo aujourd'hui|2|6|7|1
+hugo est poursuivi par charles aujourd'hui|2|6|7|0
+hugo n'est pas poursuivi par charles aujourd'hui|2|6|7|1
+daniel poursuit alain|3|6|0|0
+daniel ne poursuit pas alain|3|6|0|1
+alain est poursuivi par daniel|3|6|0|0
+alain n'est pas poursuivi par daniel|3|6|0|1
+daniel poursuit alain aujourd'hui|3|6|0|0
+daniel ne poursuit pas alain aujourd'hui|3|6|0|1
+alain est poursuivi par daniel aujourd'hui|3|6|0|0
+alain n'est pas poursuivi par daniel aujourd'hui|3|6|0|1
+daniel poursuit bruno|3|6|1|0
+daniel ne poursuit pas bruno|3|6|1|1
+bruno est poursuivi par daniel|3|6|1|0
+bruno n'est pas poursuivi par daniel|3|6|1|1
+daniel poursuit bruno aujourd'hui|3|6|1|0
+daniel ne poursuit pas bruno aujourd'hui|3|6|1|1
+bruno est poursuivi par daniel aujourd'hui|3|6|1|0
+bruno n'est pas poursuivi par daniel aujourd'hui|3|6|1|1
+daniel poursuit charles|3|6|2|0
+daniel ne poursuit pas charles|3|6|2|1
+charles est poursuivi par daniel|3|6|2|0
+charles n'est pas poursuivi par daniel|3|6|2|1
+daniel poursuit charles aujourd'hui|3|6|2|0
+daniel ne poursuit pas charles aujourd'hui|3|6|2|1
+charles est poursuivi par daniel aujourd'hui|3|6|2|0
+charles n'est pas poursuivi par daniel aujourd'hui|3|6|2|1
+daniel poursuit éric|3|6|4|0
+daniel ne poursuit pas éric|3|6|4|1
+éric est poursuivi par daniel|3|6|4|0
+éric n'est pas poursuivi par daniel|3|6|4|1
+daniel poursuit éric aujourd'hui|3|6|4|0
+daniel ne poursuit pas éric aujourd'hui|3|6|4|1
+éric est poursuivi par daniel aujourd'hui|3|6|4|0
+éric n'est pas poursuivi par daniel aujourd'hui|3|6|4|1
+daniel poursuit françois|3|6|5|0
+daniel ne poursuit pas françois|3|6|5|1
+françois est poursuivi par daniel|3|6|5|0
+françois n'est pas poursuivi par daniel|3|6|5|1
+daniel poursuit françois aujourd'hui|3|6|5|0
+daniel ne poursuit pas françois aujourd'hui|3|6|5|1
+françois est poursuivi par daniel aujourd'hui|3|6|5|0
+françois n'est pas poursuivi par daniel aujourd'hui|3|6|5|1
+daniel poursuit gabriel|3|6|6|0
+daniel ne poursuit pas gabriel|3|6|6|1
+gabriel est poursuivi par daniel|3|6|6|0
+gabriel n'est pas poursuivi par daniel|3|6|6|1
+daniel poursuit gabriel aujourd'hui|3|6|6|0
+daniel ne poursuit pas gabriel aujourd'hui|3|6|6|1
+gabriel est poursuivi par daniel aujourd'hui|3|6|6|0
+gabriel n'est pas poursuivi par daniel aujourd'hui|3|6|6|1
+daniel poursuit hugo|3|6|7|0
+daniel ne poursuit pas hugo|3|6|7|1
+hugo est poursuivi par daniel|3|6|7|0
+hugo n'est pas poursuivi par daniel|3|6|7|1
+daniel poursuit hugo aujourd'hui|3|6|7|0
+daniel ne poursuit pas hugo aujourd'hui|3|6|7|1
+hugo est poursuivi par daniel aujourd'hui|3|6|7|0
+hugo n'est pas poursuivi par daniel aujourd'hui|3|6|7|1
+éric poursuit alain|4|6|0|0
+éric ne poursuit pas alain|4|6|0|1
+alain est poursuivi par éric|4|6|0|0
+alain n'est pas poursuivi par éric|4|6|0|1
+éric poursuit alain aujourd'hui|4|6|0|0
+éric ne poursuit pas alain aujourd'hui|4|6|0|1
+alain est poursuivi par éric aujourd'hui|4|6|0|0
+alain n'est pas poursuivi par éric aujourd'hui|4|6|0|1
+éric poursuit bruno|4|6|1|0
+éric ne poursuit pas bruno|4|6|1|1
+bruno est poursuivi par éric|4|6|1|0
+bruno n'est pas poursuivi par éric|4|6|1|1
+éric poursuit bruno aujourd'hui|4|6|1|0
+éric ne poursuit pas bruno aujourd'hui|4|6|1|1
+bruno est poursuivi par éric aujourd'hui|4|6|1|0
+bruno n'est pas poursuivi par éric aujourd'hui|4|6|1|1
+éric poursuit charles|4|6|2|0
+éric ne poursuit pas charles|4|6|2|1
+charles est poursuivi par éric|4|6|2|0
+charles n'est pas poursuivi par éric|4|6|2|1
+éric poursuit charles aujourd'hui|4|6|2|0
+éric ne poursuit pas charles aujourd'hui|4|6|2|1
+charles est poursuivi par éric aujourd'hui|4|6|2|0
+charles n'est pas poursuivi par éric aujourd'hui|4|6|2|1
+éric poursuit daniel|4|6|3|0
+éric ne poursuit pas daniel|4|6|3|1
+daniel est poursuivi par éric|4|6|3|0
+daniel n'est pas poursuivi par éric|4|6|3|1
+éric poursuit daniel aujourd'hui|4|6|3|0
+éric ne poursuit pas daniel aujourd'hui|4|6|3|1
+daniel est poursuivi par éric aujourd'hui|4|6|3|0
+daniel n'est pas poursuivi par éric aujourd'hui|4|6|3|1
+éric poursuit françois|4|6|5|0
+éric ne poursuit pas françois|4|6|5|1
+françois est poursuivi par éric|4|6|5|0
+françois n'est pas poursuivi par éric|4|6|5|1
+éric poursuit françois aujourd'hui|4|6|5|0
+éric ne poursuit pas françois aujourd'hui|4|6|5|1
+françois est poursuivi par éric aujourd'hui|4|6|5|0
+françois n'est pas poursuivi par éric aujourd'hui|4|6|5|1
+éric poursuit gabriel|4|6|6|0
+éric ne poursuit pas gabriel|4|6|6|1
+gabriel est poursuivi par éric|4|6|6|0
+gabriel n'est pas poursuivi par éric|4|6|6|1
+éric poursuit gabriel aujourd'hui|4|6|6|0
+éric ne poursuit pas gabriel aujourd'hui|4|6|6|1
+gabriel est poursuivi par éric aujourd'hui|4|6|6|0
+gabriel n'est pas poursuivi par éric aujourd'hui|4|6|6|1
+éric poursuit hugo|4|6|7|0
+éric ne poursuit pas hugo|4|6|7|1
+hugo est poursuivi par éric|4|6|7|0
+hugo n'est pas poursuivi par éric|4|6|7|1
+éric poursuit hugo aujourd'hui|4|6|7|0
+éric ne poursuit pas hugo aujourd'hui|4|6|7|1
+hugo est poursuivi par éric aujourd'hui|4|6|7|0
+hugo n'est pas poursuivi par éric aujourd'hui|4|6|7|1
+françois poursuit alain|5|6|0|0
+françois ne poursuit pas alain|5|6|0|1
+alain est poursuivi par françois|5|6|0|0
+alain n'est pas poursuivi par françois|5|6|0|1
+françois poursuit alain aujourd'hui|5|6|0|0
+françois ne poursuit pas alain aujourd'hui|5|6|0|1
+alain est poursuivi par françois aujourd'hui|5|6|0|0
+alain n'est pas poursuivi par françois aujourd'hui|5|6|0|1
+françois poursuit bruno|5|6|1|0
+françois ne poursuit pas bruno|5|6|1|1
+bruno est poursuivi par françois|5|6|1|0
+bruno n'est pas poursuivi par françois|5|6|1|1
+françois poursuit bruno aujourd'hui|5|6|1|0
+françois ne poursuit pas bruno aujourd'hui|5|6|1|1
+bruno est poursuivi par françois aujourd'hui|5|6|1|0
+bruno n'est pas poursuivi par françois aujourd'hui|5|6|1|1
+françois poursuit charles|5|6|2|0
+françois ne poursuit pas charles|5|6|2|1
+charles est poursuivi par françois|5|6|2|0
+charles n'est pas poursuivi par françois|5|6|2|1
+françois poursuit charles aujourd'hui|5|6|2|0
+françois ne poursuit pas charles aujourd'hui|5|6|2|1
+charles est poursuivi par françois aujourd'hui|5|6|2|0
+charles n'est pas poursuivi par françois aujourd'hui|5|6|2|1
+françois poursuit daniel|5|6|3|0
+françois ne poursuit pas daniel|5|6|3|1
+daniel est poursuivi par françois|5|6|3|0
+daniel n'est pas poursuivi par françois|5|6|3|1
+françois poursuit daniel aujourd'hui|5|6|3|0
+françois ne poursuit pas daniel aujourd'hui|5|6|3|1
+daniel est poursuivi par françois aujourd'hui|5|6|3|0
+daniel n'est pas poursuivi par françois aujourd'hui|5|6|3|1
+françois poursuit éric|5|6|4|0
+françois ne poursuit pas éric|5|6|4|1
+éric est poursuivi par françois|5|6|4|0
+éric n'est pas poursuivi par françois|5|6|4|1
+françois poursuit éric aujourd'hui|5|6|4|0
+françois ne poursuit pas éric aujourd'hui|5|6|4|1
+éric est poursuivi par françois aujourd'hui|5|6|4|0
+éric n'est pas poursuivi par françois aujourd'hui|5|6|4|1
+françois poursuit gabriel|5|6|6|0
+françois ne poursuit pas gabriel|5|6|6|1
+gabriel est poursuivi par françois|5|6|6|0
+gabriel n'est pas poursuivi par françois|5|6|6|1
+françois poursuit gabriel aujourd'hui|5|6|6|0
+françois ne poursuit pas gabriel aujourd'hui|5|6|6|1
+gabriel est poursuivi par françois aujourd'hui|5|6|6|0
+gabriel n'est pas poursuivi par françois aujourd'hui|5|6|6|1
+françois poursuit hugo|5|6|7|0
+françois ne poursuit pas hugo|5|6|7|1
+hugo est poursuivi par françois|5|6|7|0
+hugo n'est pas poursuivi par françois|5|6|7|1
+françois poursuit hugo aujourd'hui|5|6|7|0
+françois ne poursuit pas hugo aujourd'hui|5|6|7|1
+hugo est poursuivi par françois aujourd'hui|5|6|7|0
+hugo n'est pas poursuivi par françois aujourd'hui|5|6|7|1
+gabriel poursuit alain|6|6|0|0
+gabriel ne poursuit pas alain|6|6|0|1
+alain est poursuivi par gabriel|6|6|0|0
+alain n'est pas poursuivi par gabriel|6|6|0|1
+gabriel poursuit alain aujourd'hui|6|6|0|0
+gabriel ne poursuit pas alain aujourd'hui|6|6|0|1
+alain est poursuivi par gabriel aujourd'hui|6|6|0|0
+alain n'est pas poursuivi par gabriel aujourd'hui|6|6|0|1
+gabriel poursuit bruno|6|6|1|0
+gabriel ne poursuit pas bruno|6|6|1|1
+bruno est poursuivi par gabriel|6|6|1|0
+bruno n'est pas poursuivi par gabriel|6|6|1|1
+gabriel poursuit bruno aujourd'hui|6|6|1|0
+gabriel ne poursuit pas bruno aujourd'hui|6|6|1|1
+bruno est poursuivi par gabriel aujourd'hui|6|6|1|0
+bruno n'est pas poursuivi par gabriel aujourd'hui|6|6|1|1
+gabriel poursuit charles|6|6|2|0
+gabriel ne poursuit pas charles|6|6|2|1
+charles est poursuivi par gabriel|6|6|2|0
+charles n'est pas poursuivi par gabriel|6|6|2|1
+gabriel poursuit charles aujourd'hui|6|6|2|0
+gabriel ne poursuit pas charles aujourd'hui|6|6|2|1
+charles est poursuivi par gabriel aujourd'hui|6|6|2|0
+charles n'est pas poursuivi par gabriel aujourd'hui|6|6|2|1
+gabriel poursuit daniel|6|6|3|0
+gabriel ne poursuit pas daniel|6|6|3|1
+daniel est poursuivi par gabriel|6|6|3|0
+daniel n'est pas poursuivi par gabriel|6|6|3|1
+gabriel poursuit daniel aujourd'hui|6|6|3|0
+gabriel ne poursuit pas daniel aujourd'hui|6|6|3|1
+daniel est poursuivi par gabriel aujourd'hui|6|6|3|0
+daniel n'est pas poursuivi par gabriel aujourd'hui|6|6|3|1
+gabriel poursuit éric|6|6|4|0
+gabriel ne poursuit pas éric|6|6|4|1
+éric est poursuivi par gabriel|6|6|4|0
+éric n'est pas poursuivi par gabriel|6|6|4|1
+gabriel poursuit éric aujourd'hui|6|6|4|0
+gabriel ne poursuit pas éric aujourd'hui|6|6|4|1
+éric est poursuivi par gabriel aujourd'hui|6|6|4|0
+éric n'est pas poursuivi par gabriel aujourd'hui|6|6|4|1
+gabriel poursuit françois|6|6|5|0
+gabriel ne poursuit pas françois|6|6|5|1
+françois est poursuivi par gabriel|6|6|5|0
+françois n'est pas poursuivi par gabriel|6|6|5|1
+gabriel poursuit françois aujourd'hui|6|6|5|0
+gabriel ne poursuit pas françois aujourd'hui|6|6|5|1
+françois est poursuivi par gabriel aujourd'hui|6|6|5|0
+françois n'est pas poursuivi par gabriel aujourd'hui|6|6|5|1
+gabriel poursuit hugo|6|6|7|0
+gabriel ne poursuit pas hugo|6|6|7|1
+hugo est poursuivi par gabriel|6|6|7|0
+hugo n'est pas poursuivi par gabriel|6|6|7|1
+gabriel poursuit hugo aujourd'hui|6|6|7|0
+gabriel ne poursuit pas hugo aujourd'hui|6|6|7|1
+hugo est poursuivi par gabriel aujourd'hui|6|6|7|0
+hugo n'est pas poursuivi par gabriel aujourd'hui|6|6|7|1
+hugo poursuit alain|7|6|0|0
+hugo ne poursuit pas alain|7|6|0|1
+alain est poursuivi par hugo|7|6|0|0
+alain n'est pas poursuivi par hugo|7|6|0|1
+hugo poursuit alain aujourd'hui|7|6|0|0
+hugo ne poursuit pas alain aujourd'hui|7|6|0|1
+alain est poursuivi par hugo aujourd'hui|7|6|0|0
+alain n'est pas poursuivi par hugo aujourd'hui|7|6|0|1
+hugo poursuit bruno|7|6|1|0
+hugo ne poursuit pas bruno|7|6|1|1
+bruno est poursuivi par hugo|7|6|1|0
+bruno n'est pas poursuivi par hugo|7|6|1|1
+hugo poursuit bruno aujourd'hui|7|6|1|0
+hugo ne poursuit pas bruno aujourd'hui|7|6|1|1
+bruno est poursuivi par hugo aujourd'hui|7|6|1|0
+bruno n'est pas poursuivi par hugo aujourd'hui|7|6|1|1
+hugo poursuit charles|7|6|2|0
+hugo ne poursuit pas charles|7|6|2|1
+charles est poursuivi par hugo|7|6|2|0
+charles n'est pas poursuivi par hugo|7|6|2|1
+hugo poursuit charles aujourd'hui|7|6|2|0
+hugo ne poursuit pas charles aujourd'hui|7|6|2|1
+charles est poursuivi par hugo aujourd'hui|7|6|2|0
+charles n'est pas poursuivi par hugo aujourd'hui|7|6|2|1
+hugo poursuit daniel|7|6|3|0
+hugo ne poursuit pas daniel|7|6|3|1
+daniel est poursuivi par hugo|7|6|3|0
+daniel n'est pas poursuivi par hugo|7|6|3|1
+hugo poursuit daniel aujourd'hui|7|6|3|0
+hugo ne poursuit pas daniel aujourd'hui|7|6|3|1
+daniel est poursuivi par hugo aujourd'hui|7|6|3|0
+daniel n'est pas poursuivi par hugo aujourd'hui|7|6|3|1
+hugo poursuit éric|7|6|4|0
+hugo ne poursuit pas éric|7|6|4|1
+éric est poursuivi par hugo|7|6|4|0
+éric n'est pas poursuivi par hugo|7|6|4|1
+hugo poursuit éric aujourd'hui|7|6|4|0
+hugo ne poursuit pas éric aujourd'hui|7|6|4|1
+éric est poursuivi par hugo aujourd'hui|7|6|4|0
+éric n'est pas poursuivi par hugo aujourd'hui|7|6|4|1
+hugo poursuit françois|7|6|5|0
+hugo ne poursuit pas françois|7|6|5|1
+françois est poursuivi par hugo|7|6|5|0
+françois n'est pas poursuivi par hugo|7|6|5|1
+hugo poursuit françois aujourd'hui|7|6|5|0
+hugo ne poursuit pas françois aujourd'hui|7|6|5|1
+françois est poursuivi par hugo aujourd'hui|7|6|5|0
+françois n'est pas poursuivi par hugo aujourd'hui|7|6|5|1
+hugo poursuit gabriel|7|6|6|0
+hugo ne poursuit pas gabriel|7|6|6|1
+gabriel est poursuivi par hugo|7|6|6|0
+gabriel n'est pas poursuivi par hugo|7|6|6|1
+hugo poursuit gabriel aujourd'hui|7|6|6|0
+hugo ne poursuit pas gabriel aujourd'hui|7|6|6|1
+gabriel est poursuivi par hugo aujourd'hui|7|6|6|0
+gabriel n'est pas poursuivi par hugo aujourd'hui|7|6|6|1
+alain protège bruno|0|7|1|0
+alain ne protège pas bruno|0|7|1|1
+bruno est protégé par alain|0|7|1|0
+bruno n'est pas protégé par alain|0|7|1|1
+alain protège bruno aujourd'hui|0|7|1|0
+alain ne protège pas bruno aujourd'hui|0|7|1|1
+bruno est protégé par alain aujourd'hui|0|7|1|0
+bruno n'est pas protégé par alain aujourd'hui|0|7|1|1
+alain protège charles|0|7|2|0
+alain ne protège pas charles|0|7|2|1
+charles est protégé par alain|0|7|2|0
+charles n'est pas protégé par alain|0|7|2|1
+alain protège charles aujourd'hui|0|7|2|0
+alain ne protège pas charles aujourd'hui|0|7|2|1
+charles est protégé par alain aujourd'hui|0|7|2|0
+charles n'est pas protégé par alain aujourd'hui|0|7|2|1
+alain protège daniel|0|7|3|0
+alain ne protège pas daniel|0|7|3|1
+daniel est protégé par alain|0|7|3|0
+daniel n'est pas protégé par alain|0|7|3|1
+alain protège daniel aujourd'hui|0|7|3|0
+alain ne protège pas daniel aujourd'hui|0|7|3|1
+daniel est protégé par alain aujourd'hui|0|7|3|0
+daniel n'est pas protégé par alain aujourd'hui|0|7|3|1
+alain protège éric|0|7|4|0
+alain ne protège pas éric|0|7|4|1
+éric est protégé par alain|0|7|4|0
+éric n'est pas protégé par alain|0|7|4|1
+alain protège éric aujourd'hui|0|7|4|0
+alain ne protège pas éric aujourd'hui|0|7|4|1
+éric est protégé par alain aujourd'hui|0|7|4|0
+éric n'est pas protégé par alain aujourd'hui|0|7|4|1
+alain protège françois|0|7|5|0
+alain ne protège pas françois|0|7|5|1
+françois est protégé par alain|0|7|5|0
+françois n'est pas protégé par alain|0|7|5|1
+alain protège françois aujourd'hui|0|7|5|0
+alain ne protège pas françois aujourd'hui|0|7|5|1
+françois est protégé par alain aujourd'hui|0|7|5|0
+françois n'est pas protégé par alain aujourd'hui|0|7|5|1
+alain protège gabriel|0|7|6|0
+alain ne protège pas gabriel|0|7|6|1
+gabriel est protégé par alain|0|7|6|0
+gabriel n'est pas protégé par alain|0|7|6|1
+alain protège gabriel aujourd'hui|0|7|6|0
+alain ne protège pas gabriel aujourd'hui|0|7|6|1
+gabriel est protégé par alain aujourd'hui|0|7|6|0
+gabriel n'est pas protégé par alain aujourd'hui|0|7|6|1
+alain protège hugo|0|7|7|0
+alain ne protège pas hugo|0|7|7|1
+hugo est protégé par alain|0|7|7|0
+hugo n'est pas protégé par alain|0|7|7|1
+alain protège hugo aujourd'hui|0|7|7|0
+alain ne protège pas hugo aujourd'hui|0|7|7|1
+hugo est protégé par alain aujourd'hui|0|7|7|0
+hugo n'est pas protégé par alain aujourd'hui|0|7|7|1
+bruno protège alain|1|7|0|0
+bruno ne protège pas alain|1|7|0|1
+alain est protégé par bruno|1|7|0|0
+alain n'est pas protégé par bruno|1|7|0|1
+bruno protège alain aujourd'hui|1|7|0|0
+bruno ne protège pas alain aujourd'hui|1|7|0|1
+alain est protégé par bruno aujourd'hui|1|7|0|0
+alain n'est pas protégé par bruno aujourd'hui|1|7|0|1
+bruno protège charles|1|7|2|0
+bruno ne protège pas charles|1|7|2|1
+charles est protégé par bruno|1|7|2|0
+charles n'est pas protégé par bruno|1|7|2|1
+bruno protège charles aujourd'hui|1|7|2|0
+bruno ne protège pas charles aujourd'hui|1|7|2|1
+charles est protégé par bruno aujourd'hui|1|7|2|0
+charles n'est pas protégé par bruno aujourd'hui|1|7|2|1
+bruno protège daniel|1|7|3|0
+bruno ne protège pas daniel|1|7|3|1
+daniel est protégé par bruno|1|7|3|0
+daniel n'est pas protégé par bruno|1|7|3|1
+bruno protège daniel aujourd'hui|1|7|3|0
+bruno ne protège pas daniel aujourd'hui|1|7|3|1
+daniel est protégé par bruno aujourd'hui|1|7|3|0
+daniel n'est pas protégé par bruno aujourd'hui|1|7|3|1
+bruno protège éric|1|7|4|0
+bruno ne protège pas éric|1|7|4|1
+éric est protégé par bruno|1|7|4|0
+éric n'est pas protégé par bruno|1|7|4|1
+bruno protège éric aujourd'hui|1|7|4|0
+bruno ne protège pas éric aujourd'hui|1|7|4|1
+éric est protégé par bruno aujourd'hui|1|7|4|0
+éric n'est pas protégé par bruno aujourd'hui|1|7|4|1
+bruno protège françois|1|7|5|0
+bruno ne protège pas françois|1|7|5|1
+françois est protégé par bruno|1|7|5|0
+françois n'est pas protégé par bruno|1|7|5|1
+bruno protège françois aujourd'hui|1|7|5|0
+bruno ne protège pas françois aujourd'hui|1|7|5|1
+françois est protégé par bruno aujourd'hui|1|7|5|0
+françois n'est pas protégé par bruno aujourd'hui|1|7|5|1
+bruno protège gabriel|1|7|6|0
+bruno ne protège pas gabriel|1|7|6|1
+gabriel est protégé par bruno|1|7|6|0
+gabriel n'est pas protégé par bruno|1|7|6|1
+bruno protège gabriel aujourd'hui|1|7|6|0
+bruno ne protège pas gabriel aujourd'hui|1|7|6|1
+gabriel est protégé par bruno aujourd'hui|1|7|6|0
+gabriel n'est pas protégé par bruno aujourd'hui|1|7|6|1
+bruno protège hugo|1|7|7|0
+bruno ne protège pas hugo|1|7|7|1
+hugo est protégé par bruno|1|7|7|0
+hugo n'est pas protégé par bruno|1|7|7|1
+bruno protège hugo aujourd'hui|1|7|7|0
+bruno ne protège pas hugo aujourd'hui|1|7|7|1
+hugo est protégé par bruno aujourd'hui|1|7|7|0
+hugo n'est pas protégé par bruno aujourd'hui|1|7|7|1
+charles protège alain|2|7|0|0
+charles ne protège pas alain|2|7|0|1
+alain est protégé par charles|2|7|0|0
+alain n'est pas protégé par charles|2|7|0|1
+charles protège alain aujourd'hui|2|7|0|0
+charles ne protège pas alain aujourd'hui|2|7|0|1
+alain est protégé par charles aujourd'hui|2|7|0|0
+alain n'est pas protégé par charles aujourd'hui|2|7|0|1
+charles protège bruno|2|7|1|0
+charles ne protège pas bruno|2|7|1|1
+bruno est protégé par charles|2|7|1|0
+bruno n'est pas protégé par charles|2|7|1|1
+charles protège bruno aujourd'hui|2|7|1|0
+charles ne protège pas bruno aujourd'hui|2|7|1|1
+bruno est protégé par charles aujourd'hui|2|7|1|0
+bruno n'est pas protégé par charles aujourd'hui|2|7|1|1
+charles protège daniel|2|7|3|0
+charles ne protège pas daniel|2|7|3|1
+daniel est protégé par charles|2|7|3|0
+daniel n'est pas protégé par charles|2|7|3|1
+charles protège daniel aujourd'hui|2|7|3|0
+charles ne protège pas daniel aujourd'hui|2|7|3|1
+daniel est protégé par charles aujourd'hui|2|7|3|0
+daniel n'est pas protégé par charles aujourd'hui|2|7|3|1
+charles protège éric|2|7|4|0
+charles ne protège pas éric|2|7|4|1
+éric est protégé par charles|2|7|4|0
+éric n'est pas protégé par charles|2|7|4|1
+charles protège éric aujourd'hui|2|7|4|0
+charles ne protège pas éric aujourd'hui|2|7|4|1
+éric est protégé par charles aujourd'hui|2|7|4|0
+éric n'est pas protégé par charles aujourd'hui|2|7|4|1
+charles protège françois|2|7|5|0
+charles ne protège pas françois|2|7|5|1
+françois est protégé par charles|2|7|5|0
+françois n'est pas protégé par charles|2|7|5|1
+charles protège françois aujourd'hui|2|7|5|0
+charles ne protège pas françois aujourd'hui|2|7|5|1
+françois est protégé par charles aujourd'hui|2|7|5|0
+françois n'est pas protégé par charles aujourd'hui|2|7|5|1
+charles protège gabriel|2|7|6|0
+charles ne protège pas gabriel|2|7|6|1
+gabriel est protégé par charles|2|7|6|0
+gabriel n'est pas protégé par charles|2|7|6|1
+charles protège gabriel aujourd'hui|2|7|6|0
+charles ne protège pas gabriel aujourd'hui|2|7|6|1
+gabriel est protégé par charles aujourd'hui|2|7|6|0
+gabriel n'est pas protégé par charles aujourd'hui|2|7|6|1
+charles protège hugo|2|7|7|0
+charles ne protège pas hugo|2|7|7|1
+hugo est protégé par charles|2|7|7|0
+hugo n'est pas protégé par charles|2|7|7|1
+charles protège hugo aujourd'hui|2|7|7|0
+charles ne protège pas hugo aujourd'hui|2|7|7|1
+hugo est protégé par charles aujourd'hui|2|7|7|0
+hugo n'est pas protégé par charles aujourd'hui|2|7|7|1
+daniel protège alain|3|7|0|0
+daniel ne protège pas alain|3|7|0|1
+alain est protégé par daniel|3|7|0|0
+alain n'est pas protégé par daniel|3|7|0|1
+daniel protège alain aujourd'hui|3|7|0|0
+daniel ne protège pas alain aujourd'hui|3|7|0|1
+alain est protégé par daniel aujourd'hui|3|7|0|0
+alain n'est pas protégé par daniel aujourd'hui|3|7|0|1
+daniel protège bruno|3|7|1|0
+daniel ne protège pas bruno|3|7|1|1
+bruno est protégé par daniel|3|7|1|0
+bruno n'est pas protégé par daniel|3|7|1|1
+daniel protège bruno aujourd'hui|3|7|1|0
+daniel ne protège pas bruno aujourd'hui|3|7|1|1
+bruno est protégé par daniel aujourd'hui|3|7|1|0
+bruno n'est pas protégé par daniel aujourd'hui|3|7|1|1
+daniel protège charles|3|7|2|0
+daniel ne protège pas charles|3|7|2|1
+charles est protégé par daniel|3|7|2|0
+charles n'est pas protégé par daniel|3|7|2|1
+daniel protège charles aujourd'hui|3|7|2|0
+daniel ne protège pas charles aujourd'hui|3|7|2|1
+charles est protégé par daniel aujourd'hui|3|7|2|0
+charles n'est pas protégé par daniel aujourd'hui|3|7|2|1
+daniel protège éric|3|7|4|0
+daniel ne protège pas éric|3|7|4|1
+éric est protégé par daniel|3|7|4|0
+éric n'est pas protégé par daniel|3|7|4|1
+daniel protège éric aujourd'hui|3|7|4|0
+daniel ne protège pas éric aujourd'hui|3|7|4|1
+éric est protégé par daniel aujourd'hui|3|7|4|0
+éric n'est pas protégé par daniel aujourd'hui|3|7|4|1
+daniel protège françois|3|7|5|0
+daniel ne protège pas françois|3|7|5|1
+françois est protégé par daniel|3|7|5|0
+françois n'est pas protégé par daniel|3|7|5|1
+daniel protège françois aujourd'hui|3|7|5|0
+daniel ne protège pas françois aujourd'hui|3|7|5|1
+françois est protégé par daniel aujourd'hui|3|7|5|0
+françois n'est pas protégé par daniel aujourd'hui|3|7|5|1
+daniel protège gabriel|3|7|6|0
+daniel ne protège pas gabriel|3|7|6|1
+gabriel est protégé par daniel|3|7|6|0
+gabriel n'est pas protégé par daniel|3|7|6|1
+daniel protège gabriel aujourd'hui|3|7|6|0
+daniel ne protège pas gabriel aujourd'hui|3|7|6|1
+gabriel est protégé par daniel aujourd'hui|3|7|6|0
+gabriel n'est pas protégé par daniel aujourd'hui|3|7|6|1
+daniel protège hugo|3|7|7|0
+daniel ne protège pas hugo|3|7|7|1
+hugo est protégé par daniel|3|7|7|0
+hugo n'est pas protégé par daniel|3|7|7|1
+daniel protège hugo aujourd'hui|3|7|7|0
+daniel ne protège pas hugo aujourd'hui|3|7|7|1
+hugo est protégé par daniel aujourd'hui|3|7|7|0
+hugo n'est pas protégé par daniel aujourd'hui|3|7|7|1
+éric protège alain|4|7|0|0
+éric ne protège pas alain|4|7|0|1
+alain est protégé par éric|4|7|0|0
+alain n'est pas protégé par éric|4|7|0|1
+éric protège alain aujourd'hui|4|7|0|0
+éric ne protège pas alain aujourd'hui|4|7|0|1
+alain est protégé par éric aujourd'hui|4|7|0|0
+alain n'est pas protégé par éric aujourd'hui|4|7|0|1
+éric protège bruno|4|7|1|0
+éric ne protège pas bruno|4|7|1|1
+bruno est protégé par éric|4|7|1|0
+bruno n'est pas protégé par éric|4|7|1|1
+éric protège bruno aujourd'hui|4|7|1|0
+éric ne protège pas bruno aujourd'hui|4|7|1|1
+bruno est protégé par éric aujourd'hui|4|7|1|0
+bruno n'est pas protégé par éric aujourd'hui|4|7|1|1
+éric protège charles|4|7|2|0
+éric ne protège pas charles|4|7|2|1
+charles est protégé par éric|4|7|2|0
+charles n'est pas protégé par éric|4|7|2|1
+éric protège charles aujourd'hui|4|7|2|0
+éric ne protège pas charles aujourd'hui|4|7|2|1
+charles est protégé par éric aujourd'hui|4|7|2|0
+charles n'est pas protégé par éric aujourd'hui|4|7|2|1
+éric protège daniel|4|7|3|0
+éric ne protège pas daniel|4|7|3|1
+daniel est protégé par éric|4|7|3|0
+daniel n'est pas protégé par éric|4|7|3|1
+éric protège daniel aujourd'hui|4|7|3|0
+éric ne protège pas daniel aujourd'hui|4|7|3|1
+daniel est protégé par éric aujourd'hui|4|7|3|0
+daniel n'est pas protégé par éric aujourd'hui|4|7|3|1
+éric protège françois|4|7|5|0
+éric ne protège pas françois|4|7|5|1
+françois est protégé par éric|4|7|5|0
+françois n'est pas protégé par éric|4|7|5|1
+éric protège françois aujourd'hui|4|7|5|0
+éric ne protège pas françois aujourd'hui|4|7|5|1
+françois est protégé par éric aujourd'hui|4|7|5|0
+françois n'est pas protégé par éric aujourd'hui|4|7|5|1
+éric protège gabriel|4|7|6|0
+éric ne protège pas gabriel|4|7|6|1
+gabriel est protégé par éric|4|7|6|0
+gabriel n'est pas protégé par éric|4|7|6|1
+éric protège gabriel aujourd'hui|4|7|6|0
+éric ne protège pas gabriel aujourd'hui|4|7|6|1
+gabriel est protégé par éric aujourd'hui|4|7|6|0
+gabriel n'est pas protégé par éric aujourd'hui|4|7|6|1
+éric protège hugo|4|7|7|0
+éric ne protège pas hugo|4|7|7|1
+hugo est protégé par éric|4|7|7|0
+hugo n'est pas protégé par éric|4|7|7|1
+éric protège hugo aujourd'hui|4|7|7|0
+éric ne protège pas hugo aujourd'hui|4|7|7|1
+hugo est protégé par éric aujourd'hui|4|7|7|0
+hugo n'est pas protégé par éric aujourd'hui|4|7|7|1
+françois protège alain|5|7|0|0
+françois ne protège pas alain|5|7|0|1
+alain est protégé par françois|5|7|0|0
+alain n'est pas protégé par françois|5|7|0|1
+françois protège alain aujourd'hui|5|7|0|0
+françois ne protège pas alain aujourd'hui|5|7|0|1
+alain est protégé par françois aujourd'hui|5|7|0|0
+alain n'est pas protégé par françois aujourd'hui|5|7|0|1
+françois protège bruno|5|7|1|0
+françois ne protège pas bruno|5|7|1|1
+bruno est protégé par françois|5|7|1|0
+bruno n'est pas protégé par françois|5|7|1|1
+françois protège bruno aujourd'hui|5|7|1|0
+françois ne protège pas bruno aujourd'hui|5|7|1|1
+bruno est protégé par françois aujourd'hui|5|7|1|0
+bruno n'est pas protégé par françois aujourd'hui|5|7|1|1
+françois protège charles|5|7|2|0
+françois ne protège pas charles|5|7|2|1
+charles est protégé par françois|5|7|2|0
+charles n'est pas protégé par françois|5|7|2|1
+françois protège charles aujourd'hui|5|7|2|0
+françois ne protège pas charles aujourd'hui|5|7|2|1
+charles est protégé par françois aujourd'hui|5|7|2|0
+charles n'est pas protégé par françois aujourd'hui|5|7|2|1
+françois protège daniel|5|7|3|0
+françois ne protège pas daniel|5|7|3|1
+daniel est protégé par françois|5|7|3|0
+daniel n'est pas protégé par françois|5|7|3|1
+françois protège daniel aujourd'hui|5|7|3|0
+françois ne protège pas daniel aujourd'hui|5|7|3|1
+daniel est protégé par françois aujourd'hui|5|7|3|0
+daniel n'est pas protégé par françois aujourd'hui|5|7|3|1
+françois protège éric|5|7|4|0
+françois ne protège pas éric|5|7|4|1
+éric est protégé par françois|5|7|4|0
+éric n'est pas protégé par françois|5|7|4|1
+françois protège éric aujourd'hui|5|7|4|0
+françois ne protège pas éric aujourd'hui|5|7|4|1
+éric est protégé par françois aujourd'hui|5|7|4|0
+éric n'est pas protégé par françois aujourd'hui|5|7|4|1
+françois protège gabriel|5|7|6|0
+françois ne protège pas gabriel|5|7|6|1
+gabriel est protégé par françois|5|7|6|0
+gabriel n'est pas protégé par françois|5|7|6|1
+françois protège gabriel aujourd'hui|5|7|6|0
+françois ne protège pas gabriel aujourd'hui|5|7|6|1
+gabriel est protégé par françois aujourd'hui|5|7|6|0
+gabriel n'est pas protégé par françois aujourd'hui|5|7|6|1
+françois protège hugo|5|7|7|0
+françois ne protège pas hugo|5|7|7|1
+hugo est protégé par françois|5|7|7|0
+hugo n'est pas protégé par françois|5|7|7|1
+françois protège hugo aujourd'hui|5|7|7|0
+françois ne protège pas hugo aujourd'hui|5|7|7|1
+hugo est protégé par françois aujourd'hui|5|7|7|0
+hugo n'est pas protégé par françois aujourd'hui|5|7|7|1
+gabriel protège alain|6|7|0|0
+gabriel ne protège pas alain|6|7|0|1
+alain est protégé par gabriel|6|7|0|0
+alain n'est pas protégé par gabriel|6|7|0|1
+gabriel protège alain aujourd'hui|6|7|0|0
+gabriel ne protège pas alain aujourd'hui|6|7|0|1
+alain est protégé par gabriel aujourd'hui|6|7|0|0
+alain n'est pas protégé par gabriel aujourd'hui|6|7|0|1
+gabriel protège bruno|6|7|1|0
+gabriel ne protège pas bruno|6|7|1|1
+bruno est protégé par gabriel|6|7|1|0
+bruno n'est pas protégé par gabriel|6|7|1|1
+gabriel protège bruno aujourd'hui|6|7|1|0
+gabriel ne protège pas bruno aujourd'hui|6|7|1|1
+bruno est protégé par gabriel aujourd'hui|6|7|1|0
+bruno n'est pas protégé par gabriel aujourd'hui|6|7|1|1
+gabriel protège charles|6|7|2|0
+gabriel ne protège pas charles|6|7|2|1
+charles est protégé par gabriel|6|7|2|0
+charles n'est pas protégé par gabriel|6|7|2|1
+gabriel protège charles aujourd'hui|6|7|2|0
+gabriel ne protège pas charles aujourd'hui|6|7|2|1
+charles est protégé par gabriel aujourd'hui|6|7|2|0
+charles n'est pas protégé par gabriel aujourd'hui|6|7|2|1
+gabriel protège daniel|6|7|3|0
+gabriel ne protège pas daniel|6|7|3|1
+daniel est protégé par gabriel|6|7|3|0
+daniel n'est pas protégé par gabriel|6|7|3|1
+gabriel protège daniel aujourd'hui|6|7|3|0
+gabriel ne protège pas daniel aujourd'hui|6|7|3|1
+daniel est protégé par gabriel aujourd'hui|6|7|3|0
+daniel n'est pas protégé par gabriel aujourd'hui|6|7|3|1
+gabriel protège éric|6|7|4|0
+gabriel ne protège pas éric|6|7|4|1
+éric est protégé par gabriel|6|7|4|0
+éric n'est pas protégé par gabriel|6|7|4|1
+gabriel protège éric aujourd'hui|6|7|4|0
+gabriel ne protège pas éric aujourd'hui|6|7|4|1
+éric est protégé par gabriel aujourd'hui|6|7|4|0
+éric n'est pas protégé par gabriel aujourd'hui|6|7|4|1
+gabriel protège françois|6|7|5|0
+gabriel ne protège pas françois|6|7|5|1
+françois est protégé par gabriel|6|7|5|0
+françois n'est pas protégé par gabriel|6|7|5|1
+gabriel protège françois aujourd'hui|6|7|5|0
+gabriel ne protège pas françois aujourd'hui|6|7|5|1
+françois est protégé par gabriel aujourd'hui|6|7|5|0
+françois n'est pas protégé par gabriel aujourd'hui|6|7|5|1
+gabriel protège hugo|6|7|7|0
+gabriel ne protège pas hugo|6|7|7|1
+hugo est protégé par gabriel|6|7|7|0
+hugo n'est pas protégé par gabriel|6|7|7|1
+gabriel protège hugo aujourd'hui|6|7|7|0
+gabriel ne protège pas hugo aujourd'hui|6|7|7|1
+hugo est protégé par gabriel aujourd'hui|6|7|7|0
+hugo n'est pas protégé par gabriel aujourd'hui|6|7|7|1
+hugo protège alain|7|7|0|0
+hugo ne protège pas alain|7|7|0|1
+alain est protégé par hugo|7|7|0|0
+alain n'est pas protégé par hugo|7|7|0|1
+hugo protège alain aujourd'hui|7|7|0|0
+hugo ne protège pas alain aujourd'hui|7|7|0|1
+alain est protégé par hugo aujourd'hui|7|7|0|0
+alain n'est pas protégé par hugo aujourd'hui|7|7|0|1
+hugo protège bruno|7|7|1|0
+hugo ne protège pas bruno|7|7|1|1
+bruno est protégé par hugo|7|7|1|0
+bruno n'est pas protégé par hugo|7|7|1|1
+hugo protège bruno aujourd'hui|7|7|1|0
+hugo ne protège pas bruno aujourd'hui|7|7|1|1
+bruno est protégé par hugo aujourd'hui|7|7|1|0
+bruno n'est pas protégé par hugo aujourd'hui|7|7|1|1
+hugo protège charles|7|7|2|0
+hugo ne protège pas charles|7|7|2|1
+charles est protégé par hugo|7|7|2|0
+charles n'est pas protégé par hugo|7|7|2|1
+hugo protège charles aujourd'hui|7|7|2|0
+hugo ne protège pas charles aujourd'hui|7|7|2|1
+charles est protégé par hugo aujourd'hui|7|7|2|0
+charles n'est pas protégé par hugo aujourd'hui|7|7|2|1
+hugo protège daniel|7|7|3|0
+hugo ne protège pas daniel|7|7|3|1
+daniel est protégé par hugo|7|7|3|0
+daniel n'est pas protégé par hugo|7|7|3|1
+hugo protège daniel aujourd'hui|7|7|3|0
+hugo ne protège pas daniel aujourd'hui|7|7|3|1
+daniel est protégé par hugo aujourd'hui|7|7|3|0
+daniel n'est pas protégé par hugo aujourd'hui|7|7|3|1
+hugo protège éric|7|7|4|0
+hugo ne protège pas éric|7|7|4|1
+éric est protégé par hugo|7|7|4|0
+éric n'est pas protégé par hugo|7|7|4|1
+hugo protège éric aujourd'hui|7|7|4|0
+hugo ne protège pas éric aujourd'hui|7|7|4|1
+éric est protégé par hugo aujourd'hui|7|7|4|0
+éric n'est pas protégé par hugo aujourd'hui|7|7|4|1
+hugo protège françois|7|7|5|0
+hugo ne protège pas françois|7|7|5|1
+françois est protégé par hugo|7|7|5|0
+françois n'est pas protégé par hugo|7|7|5|1
+hugo protège françois aujourd'hui|7|7|5|0
+hugo ne protège pas françois aujourd'hui|7|7|5|1
+françois est protégé par hugo aujourd'hui|7|7|5|0
+françois n'est pas protégé par hugo aujourd'hui|7|7|5|1
+hugo protège gabriel|7|7|6|0
+hugo ne protège pas gabriel|7|7|6|1
+gabriel est protégé par hugo|7|7|6|0
+gabriel n'est pas protégé par hugo|7|7|6|1
+hugo protège gabriel aujourd'hui|7|7|6|0
+hugo ne protège pas gabriel aujourd'hui|7|7|6|1
+gabriel est protégé par hugo aujourd'hui|7|7|6|0
+gabriel n'est pas protégé par hugo aujourd'hui|7|7|6|1

@@ -1,0 +1,192 @@
+alain voit bruno|0|0|1|0
+alain ne voit pas bruno|0|0|1|1
+bruno est vu par alain|0|0|1|0
+bruno n'est pas vu par alain|0|0|1|1
+alain voit bruno aujourd'hui|0|0|1|0
+alain ne voit pas bruno aujourd'hui|0|0|1|1
+bruno est vu par alain aujourd'hui|0|0|1|0
+bruno n'est pas vu par alain aujourd'hui|0|0|1|1
+charles voit daniel|2|0|3|0
+charles ne voit pas daniel|2|0|3|1
+daniel est vu par charles|2|0|3|0
+daniel n'est pas vu par charles|2|0|3|1
+charles voit daniel aujourd'hui|2|0|3|0
+charles ne voit pas daniel aujourd'hui|2|0|3|1
+daniel est vu par charles aujourd'hui|2|0|3|0
+daniel n'est pas vu par charles aujourd'hui|2|0|3|1
+éric voit françois|4|0|5|0
+éric ne voit pas françois|4|0|5|1
+françois est vu par éric|4|0|5|0
+françois n'est pas vu par éric|4|0|5|1
+éric voit françois aujourd'hui|4|0|5|0
+éric ne voit pas françois aujourd'hui|4|0|5|1
+françois est vu par éric aujourd'hui|4|0|5|0
+françois n'est pas vu par éric aujourd'hui|4|0|5|1
+gabriel voit hugo|6|0|7|0
+gabriel ne voit pas hugo|6|0|7|1
+hugo est vu par gabriel|6|0|7|0
+hugo n'est pas vu par gabriel|6|0|7|1
+gabriel voit hugo aujourd'hui|6|0|7|0
+gabriel ne voit pas hugo aujourd'hui|6|0|7|1
+hugo est vu par gabriel aujourd'hui|6|0|7|0
+hugo n'est pas vu par gabriel aujourd'hui|6|0|7|1
+alain suit bruno|0|1|1|0
+alain ne suit pas bruno|0|1|1|1
+bruno est suivi par alain|0|1|1|0
+bruno n'est pas suivi par alain|0|1|1|1
+alain suit bruno aujourd'hui|0|1|1|0
+alain ne suit pas bruno aujourd'hui|0|1|1|1
+bruno est suivi par alain aujourd'hui|0|1|1|0
+bruno n'est pas suivi par alain aujourd'hui|0|1|1|1
+charles suit daniel|2|1|3|0
+charles ne suit pas daniel|2|1|3|1
+daniel est suivi par charles|2|1|3|0
+daniel n'est pas suivi par charles|2|1|3|1
+charles suit daniel aujourd'hui|2|1|3|0
+charles ne suit pas daniel aujourd'hui|2|1|3|1
+daniel est suivi par charles aujourd'hui|2|1|3|0
+daniel n'est pas suivi par charles aujourd'hui|2|1|3|1
+éric suit françois|4|1|5|0
+éric ne suit pas françois|4|1|5|1
+françois est suivi par éric|4|1|5|0
+françois n'est pas suivi par éric|4|1|5|1
+éric suit françois aujourd'hui|4|1|5|0
+éric ne suit pas françois aujourd'hui|4|1|5|1
+françois est suivi par éric aujourd'hui|4|1|5|0
+françois n'est pas suivi par éric aujourd'hui|4|1|5|1
+gabriel suit hugo|6|1|7|0
+gabriel ne suit pas hugo|6|1|7|1
+hugo est suivi par gabriel|6|1|7|0
+hugo n'est pas suivi par gabriel|6|1|7|1
+gabriel suit hugo aujourd'hui|6|1|7|0
+gabriel ne suit pas hugo aujourd'hui|6|1|7|1
+hugo est suivi par gabriel aujourd'hui|6|1|7|0
+hugo n'est pas suivi par gabriel aujourd'hui|6|1|7|1
+alain cherche bruno|0|2|1|0
+alain ne cherche pas bruno|0|2|1|1
+bruno est cherché par alain|0|2|1|0
+bruno n'est pas cherché par alain|0|2|1|1
+alain cherche bruno aujourd'hui|0|2|1|0
+alain ne cherche pas bruno aujourd'hui|0|2|1|1
+bruno est cherché par alain aujourd'hui|0|2|1|0
+bruno n'est pas cherché par alain aujourd'hui|0|2|1|1
+charles cherche daniel|2|2|3|0
+charles ne cherche pas daniel|2|2|3|1
+daniel est cherché par charles|2|2|3|0
+daniel n'est pas cherché par charles|2|2|3|1
+charles cherche daniel aujourd'hui|2|2|3|0
+charles ne cherche pas daniel aujourd'hui|2|2|3|1
+daniel est cherché par charles aujourd'hui|2|2|3|0
+daniel n'est pas cherché par charles aujourd'hui|2|2|3|1
+éric cherche françois|4|2|5|0
+éric ne cherche pas françois|4|2|5|1
+françois est cherché par éric|4|2|5|0
+françois n'est pas cherché par éric|4|2|5|1
+éric cherche françois aujourd'hui|4|2|5|0
+éric ne cherche pas françois aujourd'hui|4|2|5|1
+françois est cherché par éric aujourd'hui|4|2|5|0
+françois n'est pas cherché par éric aujourd'hui|4|2|5|1
+gabriel cherche hugo|6|2|7|0
+gabriel ne cherche pas hugo|6|2|7|1
+hugo est cherché par gabriel|6|2|7|0
+hugo n'est pas cherché par gabriel|6|2|7|1
+gabriel cherche hugo aujourd'hui|6|2|7|0
+gabriel ne cherche pas hugo aujourd'hui|6|2|7|1
+hugo est cherché par gabriel aujourd'hui|6|2|7|0
+hugo n'est pas cherché par gabriel aujourd'hui|6|2|7|1
+alain regarde bruno|0|3|1|0
+alain ne regarde pas bruno|0|3|1|1
+bruno est regardé par alain|0|3|1|0
+bruno n'est pas regardé par alain|0|3|1|1
+alain regarde bruno aujourd'hui|0|3|1|0
+alain ne regarde pas bruno aujourd'hui|0|3|1|1
+bruno est regardé par alain aujourd'hui|0|3|1|0
+bruno n'est pas regardé par alain aujourd'hui|0|3|1|1
+charles regarde daniel|2|3|3|0
+charles ne regarde pas daniel|2|3|3|1
+daniel est regardé par charles|2|3|3|0
+daniel n'est pas regardé par charles|2|3|3|1
+charles regarde daniel aujourd'hui|2|3|3|0
+charles ne regarde pas daniel aujourd'hui|2|3|3|1
+daniel est regardé par charles aujourd'hui|2|3|3|0
+daniel n'est pas regardé par charles aujourd'hui|2|3|3|1
+éric regarde françois|4|3|5|0
+éric ne regarde pas françois|4|3|5|1
+françois est regardé par éric|4|3|5|0
+françois n'est pas regardé par éric|4|3|5|1
+éric regarde françois aujourd'hui|4|3|5|0
+éric ne regarde pas françois aujourd'hui|4|3|5|1
+françois est regardé par éric aujourd'hui|4|3|5|0
+françois n'est pas regardé par éric aujourd'hui|4|3|5|1
+gabriel regarde hugo|6|3|7|0
+gabriel ne regarde pas hugo|6|3|7|1
+hugo est regardé par gabriel|6|3|7|0
+hugo n'est pas regardé par gabriel|6|3|7|1
+gabriel regarde hugo aujourd'hui|6|3|7|0
+gabriel ne regarde pas hugo aujourd'hui|6|3|7|1
+hugo est regardé par gabriel aujourd'hui|6|3|7|0
+hugo n'est pas regardé par gabriel aujourd'hui|6|3|7|1
+alain salue bruno|0|4|1|0
+alain ne salue pas bruno|0|4|1|1
+bruno est salué par alain|0|4|1|0
+bruno n'est pas salué par alain|0|4|1|1
+alain salue bruno aujourd'hui|0|4|1|0
+alain ne salue pas bruno aujourd'hui|0|4|1|1
+bruno est salué par alain aujourd'hui|0|4|1|0
+bruno n'est pas salué par alain aujourd'hui|0|4|1|1
+charles salue daniel|2|4|3|0
+charles ne salue pas daniel|2|4|3|1
+daniel est salué par charles|2|4|3|0
+daniel n'est pas salué par charles|2|4|3|1
+charles salue daniel aujourd'hui|2|4|3|0
+charles ne salue pas daniel aujourd'hui|2|4|3|1
+daniel est salué par charles aujourd'hui|2|4|3|0
+daniel n'est pas salué par charles aujourd'hui|2|4|3|1
+éric salue françois|4|4|5|0
+éric ne salue pas françois|4|4|5|1
+françois est salué par éric|4|4|5|0
+françois n'est pas salué par éric|4|4|5|1
+éric salue françois aujourd'hui|4|4|5|0
+éric ne salue pas françois aujourd'hui|4|4|5|1
+françois est salué par éric aujourd'hui|4|4|5|0
+françois n'est pas salué par éric aujourd'hui|4|4|5|1
+gabriel salue hugo|6|4|7|0
+gabriel ne salue pas hugo|6|4|7|1
+hugo est salué par gabriel|6|4|7|0
+hugo n'est pas salué par gabriel|6|4|7|1
+gabriel salue hugo aujourd'hui|6|4|7|0
+gabriel ne salue pas hugo aujourd'hui|6|4|7|1
+hugo est salué par gabriel aujourd'hui|6|4|7|0
+hugo n'est pas salué par gabriel aujourd'hui|6|4|7|1
+alain trouve bruno|0|5|1|0
+alain ne trouve pas bruno|0|5|1|1
+bruno est trouvé par alain|0|5|1|0
+bruno n'est pas trouvé par alain|0|5|1|1
+alain trouve bruno aujourd'hui|0|5|1|0
+alain ne trouve pas bruno aujourd'hui|0|5|1|1
+bruno est trouvé par alain aujourd'hui|0|5|1|0
+bruno n'est pas trouvé par alain aujourd'hui|0|5|1|1
+charles trouve daniel|2|5|3|0
+charles ne trouve pas daniel|2|5|3|1
+daniel est trouvé par charles|2|5|3|0
+daniel n'est pas trouvé par charles|2|5|3|1
+charles trouve daniel aujourd'hui|2|5|3|0
+charles ne trouve pas daniel aujourd'hui|2|5|3|1
+daniel est trouvé par charles aujourd'hui|2|5|3|0
+daniel n'est pas trouvé par charles aujourd'hui|2|5|3|1
+éric trouve françois|4|5|5|0
+éric ne trouve pas françois|4|5|5|1
+françois est trouvé par éric|4|5|5|0
+françois n'est pas trouvé par éric|4|5|5|1
+éric trouve françois aujourd'hui|4|5|5|0
+éric ne trouve pas françois aujourd'hui|4|5|5|1
+françois est trouvé par éric aujourd'hui|4|5|5|0
+françois n'est pas trouvé par éric aujourd'hui|4|5|5|1
+gabriel trouve hugo|6|5|7|0
+gabriel ne trouve pas hugo|6|5|7|1
+hugo est trouvé par gabriel|6|5|7|0
+hugo n'est pas trouvé par gabriel|6|5|7|1
+gabriel trouve hugo aujourd'hui|6|5|7|0
+gabriel ne trouve pas hugo aujourd'hui|6|5|7|1
+hugo est trouvé par gabriel aujourd'hui|6|5|7|0
+hugo n'est pas trouvé par gabriel aujourd'hui|6|5|7|1

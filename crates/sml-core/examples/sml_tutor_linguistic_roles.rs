@@ -160,7 +160,10 @@ fn train(words: &Lexicon, training: &[(&str, Relation)]) -> Result<Templates> {
             return Err("TRAIN roles incompatible with lexicon".into());
         };
         let value = (swap, target.negated);
-        if templates.insert(pattern, value).is_some_and(|old| old != value) {
+        if templates
+            .insert(pattern, value)
+            .is_some_and(|old| old != value)
+        {
             return Err("contradictory TRAIN template".into());
         }
     }
@@ -244,7 +247,9 @@ fn restore(raw: &str) -> Result<(Lexicon, Templates)> {
             if fields.len() > 12
                 || fields.iter().filter(|&&s| s == "@E").count() != 2
                 || fields.iter().filter(|&&s| s == "@V").count() != 1
-                || fields.iter().any(|s| !matches!(*s, "@E" | "@V") && !token(s))
+                || fields
+                    .iter()
+                    .any(|s| !matches!(*s, "@E" | "@V") && !token(s))
                 || templates
                     .insert((*pattern).to_owned(), (flag(swap)?, flag(negated)?))
                     .is_some()
@@ -304,7 +309,11 @@ fn main() -> Result<()> {
                 None => println!("ABSTAIN"),
             }
         }
-        _ => return Err("usage: LEXICON TRAIN TEST NEW_CHECKPOINT | --predict CHECKPOINT TEXT".into()),
+        _ => {
+            return Err(
+                "usage: LEXICON TRAIN TEST NEW_CHECKPOINT | --predict CHECKPOINT TEXT".into(),
+            )
+        }
     }
     Ok(())
 }
@@ -312,9 +321,10 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const LEX: &str = "alice|E|0\nbob|E|1\nclaire|E|2\ndavid|E|3\nvoit|V|0\nvu|V|0\nsuit|V|1\nsuivi|V|1\n";
+    const LEX: &str =
+        "alice|E|0\nbob|E|1\nclaire|E|2\ndavid|E|3\nvoit|V|0\nvu|V|0\nsuit|V|1\nsuivi|V|1\n";
     const TRAIN: &str = "alice voit bob|0|0|1|0\nalice ne voit pas bob|0|0|1|1\nbob est vu par alice|0|0|1|0\nbob n'est pas vu par alice|0|0|1|1\n";
-    const TEST: &str = "claire suit david|2|1|3|0\nclaire ne aide pas david|2|1|3|1\ndavid est suivi par claire|2|1|3|0\ndavid n'est pas suivi par claire|2|1|3|1\ndavid suit claire|3|1|2|0\n";
+    const TEST: &str = "claire suit david|2|1|3|0\nclaire ne suit pas david|2|1|3|1\ndavid est suivi par claire|2|1|3|0\ndavid n'est pas suivi par claire|2|1|3|1\ndavid suit claire|3|1|2|0\n";
 
     #[test]
     fn held_out_role_reversal_and_polarity() {
@@ -332,6 +342,25 @@ mod tests {
         assert!(predict("eve suit david", &words, &templates).is_none());
         assert!(predict("david suit vite claire", &words, &templates).is_none());
         assert!(evaluate(&words, &templates, &training, &training).is_err());
+    }
+
+    #[test]
+    fn expanded_french_transfer_to_held_out_verbs() {
+        let words = lexicon(include_str!("../fixtures/tutor-l1/lexicon.txt")).unwrap();
+        let training = rows(include_str!("../fixtures/tutor-l1/train.txt")).unwrap();
+        let test = rows(include_str!("../fixtures/tutor-l1/test.txt")).unwrap();
+        assert_eq!(training.len(), 192);
+        assert_eq!(test.len(), 896);
+        let train_verbs: BTreeSet<_> = training.iter().map(|(_, r)| r.verb).collect();
+        assert!(test.iter().all(|(_, r)| !train_verbs.contains(&r.verb)));
+        let templates = train(&words, &training).unwrap();
+        assert_eq!(templates.len(), 8);
+        assert_eq!(evaluate(&words, &templates, &training, &test).unwrap(), 0);
+        let (words, templates) = restore(&checkpoint(&words, &templates)).unwrap();
+        assert_eq!(evaluate(&words, &templates, &training, &test).unwrap(), 0);
+        for sentence in ["inconnu voit bruno", "alain voit", "alain voit bruno demain"] {
+            assert!(predict(sentence, &words, &templates).is_none());
+        }
     }
 
     #[test]
