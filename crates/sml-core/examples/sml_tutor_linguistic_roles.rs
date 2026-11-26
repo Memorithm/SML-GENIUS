@@ -373,7 +373,11 @@ mod tests {
         assert_eq!(evaluate(&words, &templates, &training, &test).unwrap(), 0);
         let (words, templates) = restore(&checkpoint(&words, &templates)).unwrap();
         assert_eq!(evaluate(&words, &templates, &training, &test).unwrap(), 0);
-        for sentence in ["inconnu voit bruno", "alain voit", "alain voit bruno demain"] {
+        for sentence in [
+            "inconnu voit bruno",
+            "alain voit",
+            "alain voit bruno demain",
+        ] {
             assert!(predict(sentence, &words, &templates).is_none());
         }
     }
