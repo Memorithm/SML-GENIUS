@@ -1,0 +1,1024 @@
+ivan compare karim|8|8|10|0
+ivan ne compare pas karim|8|8|10|1
+karim est comparé par ivan|8|8|10|0
+karim n'est pas comparé par ivan|8|8|10|1
+ivan compare karim aujourd'hui|8|8|10|0
+ivan ne compare pas karim aujourd'hui|8|8|10|1
+karim est comparé par ivan aujourd'hui|8|8|10|0
+karim n'est pas comparé par ivan aujourd'hui|8|8|10|1
+ivan compare luc|8|8|11|0
+ivan ne compare pas luc|8|8|11|1
+luc est comparé par ivan|8|8|11|0
+luc n'est pas comparé par ivan|8|8|11|1
+ivan compare luc aujourd'hui|8|8|11|0
+ivan ne compare pas luc aujourd'hui|8|8|11|1
+luc est comparé par ivan aujourd'hui|8|8|11|0
+luc n'est pas comparé par ivan aujourd'hui|8|8|11|1
+jacques compare luc|9|8|11|0
+jacques ne compare pas luc|9|8|11|1
+luc est comparé par jacques|9|8|11|0
+luc n'est pas comparé par jacques|9|8|11|1
+jacques compare luc aujourd'hui|9|8|11|0
+jacques ne compare pas luc aujourd'hui|9|8|11|1
+luc est comparé par jacques aujourd'hui|9|8|11|0
+luc n'est pas comparé par jacques aujourd'hui|9|8|11|1
+jacques compare marc|9|8|12|0
+jacques ne compare pas marc|9|8|12|1
+marc est comparé par jacques|9|8|12|0
+marc n'est pas comparé par jacques|9|8|12|1
+jacques compare marc aujourd'hui|9|8|12|0
+jacques ne compare pas marc aujourd'hui|9|8|12|1
+marc est comparé par jacques aujourd'hui|9|8|12|0
+marc n'est pas comparé par jacques aujourd'hui|9|8|12|1
+karim compare marc|10|8|12|0
+karim ne compare pas marc|10|8|12|1
+marc est comparé par karim|10|8|12|0
+marc n'est pas comparé par karim|10|8|12|1
+karim compare marc aujourd'hui|10|8|12|0
+karim ne compare pas marc aujourd'hui|10|8|12|1
+marc est comparé par karim aujourd'hui|10|8|12|0
+marc n'est pas comparé par karim aujourd'hui|10|8|12|1
+karim compare nicolas|10|8|13|0
+karim ne compare pas nicolas|10|8|13|1
+nicolas est comparé par karim|10|8|13|0
+nicolas n'est pas comparé par karim|10|8|13|1
+karim compare nicolas aujourd'hui|10|8|13|0
+karim ne compare pas nicolas aujourd'hui|10|8|13|1
+nicolas est comparé par karim aujourd'hui|10|8|13|0
+nicolas n'est pas comparé par karim aujourd'hui|10|8|13|1
+luc compare nicolas|11|8|13|0
+luc ne compare pas nicolas|11|8|13|1
+nicolas est comparé par luc|11|8|13|0
+nicolas n'est pas comparé par luc|11|8|13|1
+luc compare nicolas aujourd'hui|11|8|13|0
+luc ne compare pas nicolas aujourd'hui|11|8|13|1
+nicolas est comparé par luc aujourd'hui|11|8|13|0
+nicolas n'est pas comparé par luc aujourd'hui|11|8|13|1
+luc compare oscar|11|8|14|0
+luc ne compare pas oscar|11|8|14|1
+oscar est comparé par luc|11|8|14|0
+oscar n'est pas comparé par luc|11|8|14|1
+luc compare oscar aujourd'hui|11|8|14|0
+luc ne compare pas oscar aujourd'hui|11|8|14|1
+oscar est comparé par luc aujourd'hui|11|8|14|0
+oscar n'est pas comparé par luc aujourd'hui|11|8|14|1
+marc compare oscar|12|8|14|0
+marc ne compare pas oscar|12|8|14|1
+oscar est comparé par marc|12|8|14|0
+oscar n'est pas comparé par marc|12|8|14|1
+marc compare oscar aujourd'hui|12|8|14|0
+marc ne compare pas oscar aujourd'hui|12|8|14|1
+oscar est comparé par marc aujourd'hui|12|8|14|0
+oscar n'est pas comparé par marc aujourd'hui|12|8|14|1
+marc compare paul|12|8|15|0
+marc ne compare pas paul|12|8|15|1
+paul est comparé par marc|12|8|15|0
+paul n'est pas comparé par marc|12|8|15|1
+marc compare paul aujourd'hui|12|8|15|0
+marc ne compare pas paul aujourd'hui|12|8|15|1
+paul est comparé par marc aujourd'hui|12|8|15|0
+paul n'est pas comparé par marc aujourd'hui|12|8|15|1
+nicolas compare paul|13|8|15|0
+nicolas ne compare pas paul|13|8|15|1
+paul est comparé par nicolas|13|8|15|0
+paul n'est pas comparé par nicolas|13|8|15|1
+nicolas compare paul aujourd'hui|13|8|15|0
+nicolas ne compare pas paul aujourd'hui|13|8|15|1
+paul est comparé par nicolas aujourd'hui|13|8|15|0
+paul n'est pas comparé par nicolas aujourd'hui|13|8|15|1
+nicolas compare ivan|13|8|8|0
+nicolas ne compare pas ivan|13|8|8|1
+ivan est comparé par nicolas|13|8|8|0
+ivan n'est pas comparé par nicolas|13|8|8|1
+nicolas compare ivan aujourd'hui|13|8|8|0
+nicolas ne compare pas ivan aujourd'hui|13|8|8|1
+ivan est comparé par nicolas aujourd'hui|13|8|8|0
+ivan n'est pas comparé par nicolas aujourd'hui|13|8|8|1
+oscar compare ivan|14|8|8|0
+oscar ne compare pas ivan|14|8|8|1
+ivan est comparé par oscar|14|8|8|0
+ivan n'est pas comparé par oscar|14|8|8|1
+oscar compare ivan aujourd'hui|14|8|8|0
+oscar ne compare pas ivan aujourd'hui|14|8|8|1
+ivan est comparé par oscar aujourd'hui|14|8|8|0
+ivan n'est pas comparé par oscar aujourd'hui|14|8|8|1
+oscar compare jacques|14|8|9|0
+oscar ne compare pas jacques|14|8|9|1
+jacques est comparé par oscar|14|8|9|0
+jacques n'est pas comparé par oscar|14|8|9|1
+oscar compare jacques aujourd'hui|14|8|9|0
+oscar ne compare pas jacques aujourd'hui|14|8|9|1
+jacques est comparé par oscar aujourd'hui|14|8|9|0
+jacques n'est pas comparé par oscar aujourd'hui|14|8|9|1
+paul compare jacques|15|8|9|0
+paul ne compare pas jacques|15|8|9|1
+jacques est comparé par paul|15|8|9|0
+jacques n'est pas comparé par paul|15|8|9|1
+paul compare jacques aujourd'hui|15|8|9|0
+paul ne compare pas jacques aujourd'hui|15|8|9|1
+jacques est comparé par paul aujourd'hui|15|8|9|0
+jacques n'est pas comparé par paul aujourd'hui|15|8|9|1
+paul compare karim|15|8|10|0
+paul ne compare pas karim|15|8|10|1
+karim est comparé par paul|15|8|10|0
+karim n'est pas comparé par paul|15|8|10|1
+paul compare karim aujourd'hui|15|8|10|0
+paul ne compare pas karim aujourd'hui|15|8|10|1
+karim est comparé par paul aujourd'hui|15|8|10|0
+karim n'est pas comparé par paul aujourd'hui|15|8|10|1
+ivan dessine karim|8|9|10|0
+ivan ne dessine pas karim|8|9|10|1
+karim est dessiné par ivan|8|9|10|0
+karim n'est pas dessiné par ivan|8|9|10|1
+ivan dessine karim aujourd'hui|8|9|10|0
+ivan ne dessine pas karim aujourd'hui|8|9|10|1
+karim est dessiné par ivan aujourd'hui|8|9|10|0
+karim n'est pas dessiné par ivan aujourd'hui|8|9|10|1
+ivan dessine luc|8|9|11|0
+ivan ne dessine pas luc|8|9|11|1
+luc est dessiné par ivan|8|9|11|0
+luc n'est pas dessiné par ivan|8|9|11|1
+ivan dessine luc aujourd'hui|8|9|11|0
+ivan ne dessine pas luc aujourd'hui|8|9|11|1
+luc est dessiné par ivan aujourd'hui|8|9|11|0
+luc n'est pas dessiné par ivan aujourd'hui|8|9|11|1
+jacques dessine luc|9|9|11|0
+jacques ne dessine pas luc|9|9|11|1
+luc est dessiné par jacques|9|9|11|0
+luc n'est pas dessiné par jacques|9|9|11|1
+jacques dessine luc aujourd'hui|9|9|11|0
+jacques ne dessine pas luc aujourd'hui|9|9|11|1
+luc est dessiné par jacques aujourd'hui|9|9|11|0
+luc n'est pas dessiné par jacques aujourd'hui|9|9|11|1
+jacques dessine marc|9|9|12|0
+jacques ne dessine pas marc|9|9|12|1
+marc est dessiné par jacques|9|9|12|0
+marc n'est pas dessiné par jacques|9|9|12|1
+jacques dessine marc aujourd'hui|9|9|12|0
+jacques ne dessine pas marc aujourd'hui|9|9|12|1
+marc est dessiné par jacques aujourd'hui|9|9|12|0
+marc n'est pas dessiné par jacques aujourd'hui|9|9|12|1
+karim dessine marc|10|9|12|0
+karim ne dessine pas marc|10|9|12|1
+marc est dessiné par karim|10|9|12|0
+marc n'est pas dessiné par karim|10|9|12|1
+karim dessine marc aujourd'hui|10|9|12|0
+karim ne dessine pas marc aujourd'hui|10|9|12|1
+marc est dessiné par karim aujourd'hui|10|9|12|0
+marc n'est pas dessiné par karim aujourd'hui|10|9|12|1
+karim dessine nicolas|10|9|13|0
+karim ne dessine pas nicolas|10|9|13|1
+nicolas est dessiné par karim|10|9|13|0
+nicolas n'est pas dessiné par karim|10|9|13|1
+karim dessine nicolas aujourd'hui|10|9|13|0
+karim ne dessine pas nicolas aujourd'hui|10|9|13|1
+nicolas est dessiné par karim aujourd'hui|10|9|13|0
+nicolas n'est pas dessiné par karim aujourd'hui|10|9|13|1
+luc dessine nicolas|11|9|13|0
+luc ne dessine pas nicolas|11|9|13|1
+nicolas est dessiné par luc|11|9|13|0
+nicolas n'est pas dessiné par luc|11|9|13|1
+luc dessine nicolas aujourd'hui|11|9|13|0
+luc ne dessine pas nicolas aujourd'hui|11|9|13|1
+nicolas est dessiné par luc aujourd'hui|11|9|13|0
+nicolas n'est pas dessiné par luc aujourd'hui|11|9|13|1
+luc dessine oscar|11|9|14|0
+luc ne dessine pas oscar|11|9|14|1
+oscar est dessiné par luc|11|9|14|0
+oscar n'est pas dessiné par luc|11|9|14|1
+luc dessine oscar aujourd'hui|11|9|14|0
+luc ne dessine pas oscar aujourd'hui|11|9|14|1
+oscar est dessiné par luc aujourd'hui|11|9|14|0
+oscar n'est pas dessiné par luc aujourd'hui|11|9|14|1
+marc dessine oscar|12|9|14|0
+marc ne dessine pas oscar|12|9|14|1
+oscar est dessiné par marc|12|9|14|0
+oscar n'est pas dessiné par marc|12|9|14|1
+marc dessine oscar aujourd'hui|12|9|14|0
+marc ne dessine pas oscar aujourd'hui|12|9|14|1
+oscar est dessiné par marc aujourd'hui|12|9|14|0
+oscar n'est pas dessiné par marc aujourd'hui|12|9|14|1
+marc dessine paul|12|9|15|0
+marc ne dessine pas paul|12|9|15|1
+paul est dessiné par marc|12|9|15|0
+paul n'est pas dessiné par marc|12|9|15|1
+marc dessine paul aujourd'hui|12|9|15|0
+marc ne dessine pas paul aujourd'hui|12|9|15|1
+paul est dessiné par marc aujourd'hui|12|9|15|0
+paul n'est pas dessiné par marc aujourd'hui|12|9|15|1
+nicolas dessine paul|13|9|15|0
+nicolas ne dessine pas paul|13|9|15|1
+paul est dessiné par nicolas|13|9|15|0
+paul n'est pas dessiné par nicolas|13|9|15|1
+nicolas dessine paul aujourd'hui|13|9|15|0
+nicolas ne dessine pas paul aujourd'hui|13|9|15|1
+paul est dessiné par nicolas aujourd'hui|13|9|15|0
+paul n'est pas dessiné par nicolas aujourd'hui|13|9|15|1
+nicolas dessine ivan|13|9|8|0
+nicolas ne dessine pas ivan|13|9|8|1
+ivan est dessiné par nicolas|13|9|8|0
+ivan n'est pas dessiné par nicolas|13|9|8|1
+nicolas dessine ivan aujourd'hui|13|9|8|0
+nicolas ne dessine pas ivan aujourd'hui|13|9|8|1
+ivan est dessiné par nicolas aujourd'hui|13|9|8|0
+ivan n'est pas dessiné par nicolas aujourd'hui|13|9|8|1
+oscar dessine ivan|14|9|8|0
+oscar ne dessine pas ivan|14|9|8|1
+ivan est dessiné par oscar|14|9|8|0
+ivan n'est pas dessiné par oscar|14|9|8|1
+oscar dessine ivan aujourd'hui|14|9|8|0
+oscar ne dessine pas ivan aujourd'hui|14|9|8|1
+ivan est dessiné par oscar aujourd'hui|14|9|8|0
+ivan n'est pas dessiné par oscar aujourd'hui|14|9|8|1
+oscar dessine jacques|14|9|9|0
+oscar ne dessine pas jacques|14|9|9|1
+jacques est dessiné par oscar|14|9|9|0
+jacques n'est pas dessiné par oscar|14|9|9|1
+oscar dessine jacques aujourd'hui|14|9|9|0
+oscar ne dessine pas jacques aujourd'hui|14|9|9|1
+jacques est dessiné par oscar aujourd'hui|14|9|9|0
+jacques n'est pas dessiné par oscar aujourd'hui|14|9|9|1
+paul dessine jacques|15|9|9|0
+paul ne dessine pas jacques|15|9|9|1
+jacques est dessiné par paul|15|9|9|0
+jacques n'est pas dessiné par paul|15|9|9|1
+paul dessine jacques aujourd'hui|15|9|9|0
+paul ne dessine pas jacques aujourd'hui|15|9|9|1
+jacques est dessiné par paul aujourd'hui|15|9|9|0
+jacques n'est pas dessiné par paul aujourd'hui|15|9|9|1
+paul dessine karim|15|9|10|0
+paul ne dessine pas karim|15|9|10|1
+karim est dessiné par paul|15|9|10|0
+karim n'est pas dessiné par paul|15|9|10|1
+paul dessine karim aujourd'hui|15|9|10|0
+paul ne dessine pas karim aujourd'hui|15|9|10|1
+karim est dessiné par paul aujourd'hui|15|9|10|0
+karim n'est pas dessiné par paul aujourd'hui|15|9|10|1
+ivan photographie karim|8|10|10|0
+ivan ne photographie pas karim|8|10|10|1
+karim est photographié par ivan|8|10|10|0
+karim n'est pas photographié par ivan|8|10|10|1
+ivan photographie karim aujourd'hui|8|10|10|0
+ivan ne photographie pas karim aujourd'hui|8|10|10|1
+karim est photographié par ivan aujourd'hui|8|10|10|0
+karim n'est pas photographié par ivan aujourd'hui|8|10|10|1
+ivan photographie luc|8|10|11|0
+ivan ne photographie pas luc|8|10|11|1
+luc est photographié par ivan|8|10|11|0
+luc n'est pas photographié par ivan|8|10|11|1
+ivan photographie luc aujourd'hui|8|10|11|0
+ivan ne photographie pas luc aujourd'hui|8|10|11|1
+luc est photographié par ivan aujourd'hui|8|10|11|0
+luc n'est pas photographié par ivan aujourd'hui|8|10|11|1
+jacques photographie luc|9|10|11|0
+jacques ne photographie pas luc|9|10|11|1
+luc est photographié par jacques|9|10|11|0
+luc n'est pas photographié par jacques|9|10|11|1
+jacques photographie luc aujourd'hui|9|10|11|0
+jacques ne photographie pas luc aujourd'hui|9|10|11|1
+luc est photographié par jacques aujourd'hui|9|10|11|0
+luc n'est pas photographié par jacques aujourd'hui|9|10|11|1
+jacques photographie marc|9|10|12|0
+jacques ne photographie pas marc|9|10|12|1
+marc est photographié par jacques|9|10|12|0
+marc n'est pas photographié par jacques|9|10|12|1
+jacques photographie marc aujourd'hui|9|10|12|0
+jacques ne photographie pas marc aujourd'hui|9|10|12|1
+marc est photographié par jacques aujourd'hui|9|10|12|0
+marc n'est pas photographié par jacques aujourd'hui|9|10|12|1
+karim photographie marc|10|10|12|0
+karim ne photographie pas marc|10|10|12|1
+marc est photographié par karim|10|10|12|0
+marc n'est pas photographié par karim|10|10|12|1
+karim photographie marc aujourd'hui|10|10|12|0
+karim ne photographie pas marc aujourd'hui|10|10|12|1
+marc est photographié par karim aujourd'hui|10|10|12|0
+marc n'est pas photographié par karim aujourd'hui|10|10|12|1
+karim photographie nicolas|10|10|13|0
+karim ne photographie pas nicolas|10|10|13|1
+nicolas est photographié par karim|10|10|13|0
+nicolas n'est pas photographié par karim|10|10|13|1
+karim photographie nicolas aujourd'hui|10|10|13|0
+karim ne photographie pas nicolas aujourd'hui|10|10|13|1
+nicolas est photographié par karim aujourd'hui|10|10|13|0
+nicolas n'est pas photographié par karim aujourd'hui|10|10|13|1
+luc photographie nicolas|11|10|13|0
+luc ne photographie pas nicolas|11|10|13|1
+nicolas est photographié par luc|11|10|13|0
+nicolas n'est pas photographié par luc|11|10|13|1
+luc photographie nicolas aujourd'hui|11|10|13|0
+luc ne photographie pas nicolas aujourd'hui|11|10|13|1
+nicolas est photographié par luc aujourd'hui|11|10|13|0
+nicolas n'est pas photographié par luc aujourd'hui|11|10|13|1
+luc photographie oscar|11|10|14|0
+luc ne photographie pas oscar|11|10|14|1
+oscar est photographié par luc|11|10|14|0
+oscar n'est pas photographié par luc|11|10|14|1
+luc photographie oscar aujourd'hui|11|10|14|0
+luc ne photographie pas oscar aujourd'hui|11|10|14|1
+oscar est photographié par luc aujourd'hui|11|10|14|0
+oscar n'est pas photographié par luc aujourd'hui|11|10|14|1
+marc photographie oscar|12|10|14|0
+marc ne photographie pas oscar|12|10|14|1
+oscar est photographié par marc|12|10|14|0
+oscar n'est pas photographié par marc|12|10|14|1
+marc photographie oscar aujourd'hui|12|10|14|0
+marc ne photographie pas oscar aujourd'hui|12|10|14|1
+oscar est photographié par marc aujourd'hui|12|10|14|0
+oscar n'est pas photographié par marc aujourd'hui|12|10|14|1
+marc photographie paul|12|10|15|0
+marc ne photographie pas paul|12|10|15|1
+paul est photographié par marc|12|10|15|0
+paul n'est pas photographié par marc|12|10|15|1
+marc photographie paul aujourd'hui|12|10|15|0
+marc ne photographie pas paul aujourd'hui|12|10|15|1
+paul est photographié par marc aujourd'hui|12|10|15|0
+paul n'est pas photographié par marc aujourd'hui|12|10|15|1
+nicolas photographie paul|13|10|15|0
+nicolas ne photographie pas paul|13|10|15|1
+paul est photographié par nicolas|13|10|15|0
+paul n'est pas photographié par nicolas|13|10|15|1
+nicolas photographie paul aujourd'hui|13|10|15|0
+nicolas ne photographie pas paul aujourd'hui|13|10|15|1
+paul est photographié par nicolas aujourd'hui|13|10|15|0
+paul n'est pas photographié par nicolas aujourd'hui|13|10|15|1
+nicolas photographie ivan|13|10|8|0
+nicolas ne photographie pas ivan|13|10|8|1
+ivan est photographié par nicolas|13|10|8|0
+ivan n'est pas photographié par nicolas|13|10|8|1
+nicolas photographie ivan aujourd'hui|13|10|8|0
+nicolas ne photographie pas ivan aujourd'hui|13|10|8|1
+ivan est photographié par nicolas aujourd'hui|13|10|8|0
+ivan n'est pas photographié par nicolas aujourd'hui|13|10|8|1
+oscar photographie ivan|14|10|8|0
+oscar ne photographie pas ivan|14|10|8|1
+ivan est photographié par oscar|14|10|8|0
+ivan n'est pas photographié par oscar|14|10|8|1
+oscar photographie ivan aujourd'hui|14|10|8|0
+oscar ne photographie pas ivan aujourd'hui|14|10|8|1
+ivan est photographié par oscar aujourd'hui|14|10|8|0
+ivan n'est pas photographié par oscar aujourd'hui|14|10|8|1
+oscar photographie jacques|14|10|9|0
+oscar ne photographie pas jacques|14|10|9|1
+jacques est photographié par oscar|14|10|9|0
+jacques n'est pas photographié par oscar|14|10|9|1
+oscar photographie jacques aujourd'hui|14|10|9|0
+oscar ne photographie pas jacques aujourd'hui|14|10|9|1
+jacques est photographié par oscar aujourd'hui|14|10|9|0
+jacques n'est pas photographié par oscar aujourd'hui|14|10|9|1
+paul photographie jacques|15|10|9|0
+paul ne photographie pas jacques|15|10|9|1
+jacques est photographié par paul|15|10|9|0
+jacques n'est pas photographié par paul|15|10|9|1
+paul photographie jacques aujourd'hui|15|10|9|0
+paul ne photographie pas jacques aujourd'hui|15|10|9|1
+jacques est photographié par paul aujourd'hui|15|10|9|0
+jacques n'est pas photographié par paul aujourd'hui|15|10|9|1
+paul photographie karim|15|10|10|0
+paul ne photographie pas karim|15|10|10|1
+karim est photographié par paul|15|10|10|0
+karim n'est pas photographié par paul|15|10|10|1
+paul photographie karim aujourd'hui|15|10|10|0
+paul ne photographie pas karim aujourd'hui|15|10|10|1
+karim est photographié par paul aujourd'hui|15|10|10|0
+karim n'est pas photographié par paul aujourd'hui|15|10|10|1
+ivan croise karim|8|11|10|0
+ivan ne croise pas karim|8|11|10|1
+karim est croisé par ivan|8|11|10|0
+karim n'est pas croisé par ivan|8|11|10|1
+ivan croise karim aujourd'hui|8|11|10|0
+ivan ne croise pas karim aujourd'hui|8|11|10|1
+karim est croisé par ivan aujourd'hui|8|11|10|0
+karim n'est pas croisé par ivan aujourd'hui|8|11|10|1
+ivan croise luc|8|11|11|0
+ivan ne croise pas luc|8|11|11|1
+luc est croisé par ivan|8|11|11|0
+luc n'est pas croisé par ivan|8|11|11|1
+ivan croise luc aujourd'hui|8|11|11|0
+ivan ne croise pas luc aujourd'hui|8|11|11|1
+luc est croisé par ivan aujourd'hui|8|11|11|0
+luc n'est pas croisé par ivan aujourd'hui|8|11|11|1
+jacques croise luc|9|11|11|0
+jacques ne croise pas luc|9|11|11|1
+luc est croisé par jacques|9|11|11|0
+luc n'est pas croisé par jacques|9|11|11|1
+jacques croise luc aujourd'hui|9|11|11|0
+jacques ne croise pas luc aujourd'hui|9|11|11|1
+luc est croisé par jacques aujourd'hui|9|11|11|0
+luc n'est pas croisé par jacques aujourd'hui|9|11|11|1
+jacques croise marc|9|11|12|0
+jacques ne croise pas marc|9|11|12|1
+marc est croisé par jacques|9|11|12|0
+marc n'est pas croisé par jacques|9|11|12|1
+jacques croise marc aujourd'hui|9|11|12|0
+jacques ne croise pas marc aujourd'hui|9|11|12|1
+marc est croisé par jacques aujourd'hui|9|11|12|0
+marc n'est pas croisé par jacques aujourd'hui|9|11|12|1
+karim croise marc|10|11|12|0
+karim ne croise pas marc|10|11|12|1
+marc est croisé par karim|10|11|12|0
+marc n'est pas croisé par karim|10|11|12|1
+karim croise marc aujourd'hui|10|11|12|0
+karim ne croise pas marc aujourd'hui|10|11|12|1
+marc est croisé par karim aujourd'hui|10|11|12|0
+marc n'est pas croisé par karim aujourd'hui|10|11|12|1
+karim croise nicolas|10|11|13|0
+karim ne croise pas nicolas|10|11|13|1
+nicolas est croisé par karim|10|11|13|0
+nicolas n'est pas croisé par karim|10|11|13|1
+karim croise nicolas aujourd'hui|10|11|13|0
+karim ne croise pas nicolas aujourd'hui|10|11|13|1
+nicolas est croisé par karim aujourd'hui|10|11|13|0
+nicolas n'est pas croisé par karim aujourd'hui|10|11|13|1
+luc croise nicolas|11|11|13|0
+luc ne croise pas nicolas|11|11|13|1
+nicolas est croisé par luc|11|11|13|0
+nicolas n'est pas croisé par luc|11|11|13|1
+luc croise nicolas aujourd'hui|11|11|13|0
+luc ne croise pas nicolas aujourd'hui|11|11|13|1
+nicolas est croisé par luc aujourd'hui|11|11|13|0
+nicolas n'est pas croisé par luc aujourd'hui|11|11|13|1
+luc croise oscar|11|11|14|0
+luc ne croise pas oscar|11|11|14|1
+oscar est croisé par luc|11|11|14|0
+oscar n'est pas croisé par luc|11|11|14|1
+luc croise oscar aujourd'hui|11|11|14|0
+luc ne croise pas oscar aujourd'hui|11|11|14|1
+oscar est croisé par luc aujourd'hui|11|11|14|0
+oscar n'est pas croisé par luc aujourd'hui|11|11|14|1
+marc croise oscar|12|11|14|0
+marc ne croise pas oscar|12|11|14|1
+oscar est croisé par marc|12|11|14|0
+oscar n'est pas croisé par marc|12|11|14|1
+marc croise oscar aujourd'hui|12|11|14|0
+marc ne croise pas oscar aujourd'hui|12|11|14|1
+oscar est croisé par marc aujourd'hui|12|11|14|0
+oscar n'est pas croisé par marc aujourd'hui|12|11|14|1
+marc croise paul|12|11|15|0
+marc ne croise pas paul|12|11|15|1
+paul est croisé par marc|12|11|15|0
+paul n'est pas croisé par marc|12|11|15|1
+marc croise paul aujourd'hui|12|11|15|0
+marc ne croise pas paul aujourd'hui|12|11|15|1
+paul est croisé par marc aujourd'hui|12|11|15|0
+paul n'est pas croisé par marc aujourd'hui|12|11|15|1
+nicolas croise paul|13|11|15|0
+nicolas ne croise pas paul|13|11|15|1
+paul est croisé par nicolas|13|11|15|0
+paul n'est pas croisé par nicolas|13|11|15|1
+nicolas croise paul aujourd'hui|13|11|15|0
+nicolas ne croise pas paul aujourd'hui|13|11|15|1
+paul est croisé par nicolas aujourd'hui|13|11|15|0
+paul n'est pas croisé par nicolas aujourd'hui|13|11|15|1
+nicolas croise ivan|13|11|8|0
+nicolas ne croise pas ivan|13|11|8|1
+ivan est croisé par nicolas|13|11|8|0
+ivan n'est pas croisé par nicolas|13|11|8|1
+nicolas croise ivan aujourd'hui|13|11|8|0
+nicolas ne croise pas ivan aujourd'hui|13|11|8|1
+ivan est croisé par nicolas aujourd'hui|13|11|8|0
+ivan n'est pas croisé par nicolas aujourd'hui|13|11|8|1
+oscar croise ivan|14|11|8|0
+oscar ne croise pas ivan|14|11|8|1
+ivan est croisé par oscar|14|11|8|0
+ivan n'est pas croisé par oscar|14|11|8|1
+oscar croise ivan aujourd'hui|14|11|8|0
+oscar ne croise pas ivan aujourd'hui|14|11|8|1
+ivan est croisé par oscar aujourd'hui|14|11|8|0
+ivan n'est pas croisé par oscar aujourd'hui|14|11|8|1
+oscar croise jacques|14|11|9|0
+oscar ne croise pas jacques|14|11|9|1
+jacques est croisé par oscar|14|11|9|0
+jacques n'est pas croisé par oscar|14|11|9|1
+oscar croise jacques aujourd'hui|14|11|9|0
+oscar ne croise pas jacques aujourd'hui|14|11|9|1
+jacques est croisé par oscar aujourd'hui|14|11|9|0
+jacques n'est pas croisé par oscar aujourd'hui|14|11|9|1
+paul croise jacques|15|11|9|0
+paul ne croise pas jacques|15|11|9|1
+jacques est croisé par paul|15|11|9|0
+jacques n'est pas croisé par paul|15|11|9|1
+paul croise jacques aujourd'hui|15|11|9|0
+paul ne croise pas jacques aujourd'hui|15|11|9|1
+jacques est croisé par paul aujourd'hui|15|11|9|0
+jacques n'est pas croisé par paul aujourd'hui|15|11|9|1
+paul croise karim|15|11|10|0
+paul ne croise pas karim|15|11|10|1
+karim est croisé par paul|15|11|10|0
+karim n'est pas croisé par paul|15|11|10|1
+paul croise karim aujourd'hui|15|11|10|0
+paul ne croise pas karim aujourd'hui|15|11|10|1
+karim est croisé par paul aujourd'hui|15|11|10|0
+karim n'est pas croisé par paul aujourd'hui|15|11|10|1
+ivan remercie karim|8|12|10|0
+ivan ne remercie pas karim|8|12|10|1
+karim est remercié par ivan|8|12|10|0
+karim n'est pas remercié par ivan|8|12|10|1
+ivan remercie karim aujourd'hui|8|12|10|0
+ivan ne remercie pas karim aujourd'hui|8|12|10|1
+karim est remercié par ivan aujourd'hui|8|12|10|0
+karim n'est pas remercié par ivan aujourd'hui|8|12|10|1
+ivan remercie luc|8|12|11|0
+ivan ne remercie pas luc|8|12|11|1
+luc est remercié par ivan|8|12|11|0
+luc n'est pas remercié par ivan|8|12|11|1
+ivan remercie luc aujourd'hui|8|12|11|0
+ivan ne remercie pas luc aujourd'hui|8|12|11|1
+luc est remercié par ivan aujourd'hui|8|12|11|0
+luc n'est pas remercié par ivan aujourd'hui|8|12|11|1
+jacques remercie luc|9|12|11|0
+jacques ne remercie pas luc|9|12|11|1
+luc est remercié par jacques|9|12|11|0
+luc n'est pas remercié par jacques|9|12|11|1
+jacques remercie luc aujourd'hui|9|12|11|0
+jacques ne remercie pas luc aujourd'hui|9|12|11|1
+luc est remercié par jacques aujourd'hui|9|12|11|0
+luc n'est pas remercié par jacques aujourd'hui|9|12|11|1
+jacques remercie marc|9|12|12|0
+jacques ne remercie pas marc|9|12|12|1
+marc est remercié par jacques|9|12|12|0
+marc n'est pas remercié par jacques|9|12|12|1
+jacques remercie marc aujourd'hui|9|12|12|0
+jacques ne remercie pas marc aujourd'hui|9|12|12|1
+marc est remercié par jacques aujourd'hui|9|12|12|0
+marc n'est pas remercié par jacques aujourd'hui|9|12|12|1
+karim remercie marc|10|12|12|0
+karim ne remercie pas marc|10|12|12|1
+marc est remercié par karim|10|12|12|0
+marc n'est pas remercié par karim|10|12|12|1
+karim remercie marc aujourd'hui|10|12|12|0
+karim ne remercie pas marc aujourd'hui|10|12|12|1
+marc est remercié par karim aujourd'hui|10|12|12|0
+marc n'est pas remercié par karim aujourd'hui|10|12|12|1
+karim remercie nicolas|10|12|13|0
+karim ne remercie pas nicolas|10|12|13|1
+nicolas est remercié par karim|10|12|13|0
+nicolas n'est pas remercié par karim|10|12|13|1
+karim remercie nicolas aujourd'hui|10|12|13|0
+karim ne remercie pas nicolas aujourd'hui|10|12|13|1
+nicolas est remercié par karim aujourd'hui|10|12|13|0
+nicolas n'est pas remercié par karim aujourd'hui|10|12|13|1
+luc remercie nicolas|11|12|13|0
+luc ne remercie pas nicolas|11|12|13|1
+nicolas est remercié par luc|11|12|13|0
+nicolas n'est pas remercié par luc|11|12|13|1
+luc remercie nicolas aujourd'hui|11|12|13|0
+luc ne remercie pas nicolas aujourd'hui|11|12|13|1
+nicolas est remercié par luc aujourd'hui|11|12|13|0
+nicolas n'est pas remercié par luc aujourd'hui|11|12|13|1
+luc remercie oscar|11|12|14|0
+luc ne remercie pas oscar|11|12|14|1
+oscar est remercié par luc|11|12|14|0
+oscar n'est pas remercié par luc|11|12|14|1
+luc remercie oscar aujourd'hui|11|12|14|0
+luc ne remercie pas oscar aujourd'hui|11|12|14|1
+oscar est remercié par luc aujourd'hui|11|12|14|0
+oscar n'est pas remercié par luc aujourd'hui|11|12|14|1
+marc remercie oscar|12|12|14|0
+marc ne remercie pas oscar|12|12|14|1
+oscar est remercié par marc|12|12|14|0
+oscar n'est pas remercié par marc|12|12|14|1
+marc remercie oscar aujourd'hui|12|12|14|0
+marc ne remercie pas oscar aujourd'hui|12|12|14|1
+oscar est remercié par marc aujourd'hui|12|12|14|0
+oscar n'est pas remercié par marc aujourd'hui|12|12|14|1
+marc remercie paul|12|12|15|0
+marc ne remercie pas paul|12|12|15|1
+paul est remercié par marc|12|12|15|0
+paul n'est pas remercié par marc|12|12|15|1
+marc remercie paul aujourd'hui|12|12|15|0
+marc ne remercie pas paul aujourd'hui|12|12|15|1
+paul est remercié par marc aujourd'hui|12|12|15|0
+paul n'est pas remercié par marc aujourd'hui|12|12|15|1
+nicolas remercie paul|13|12|15|0
+nicolas ne remercie pas paul|13|12|15|1
+paul est remercié par nicolas|13|12|15|0
+paul n'est pas remercié par nicolas|13|12|15|1
+nicolas remercie paul aujourd'hui|13|12|15|0
+nicolas ne remercie pas paul aujourd'hui|13|12|15|1
+paul est remercié par nicolas aujourd'hui|13|12|15|0
+paul n'est pas remercié par nicolas aujourd'hui|13|12|15|1
+nicolas remercie ivan|13|12|8|0
+nicolas ne remercie pas ivan|13|12|8|1
+ivan est remercié par nicolas|13|12|8|0
+ivan n'est pas remercié par nicolas|13|12|8|1
+nicolas remercie ivan aujourd'hui|13|12|8|0
+nicolas ne remercie pas ivan aujourd'hui|13|12|8|1
+ivan est remercié par nicolas aujourd'hui|13|12|8|0
+ivan n'est pas remercié par nicolas aujourd'hui|13|12|8|1
+oscar remercie ivan|14|12|8|0
+oscar ne remercie pas ivan|14|12|8|1
+ivan est remercié par oscar|14|12|8|0
+ivan n'est pas remercié par oscar|14|12|8|1
+oscar remercie ivan aujourd'hui|14|12|8|0
+oscar ne remercie pas ivan aujourd'hui|14|12|8|1
+ivan est remercié par oscar aujourd'hui|14|12|8|0
+ivan n'est pas remercié par oscar aujourd'hui|14|12|8|1
+oscar remercie jacques|14|12|9|0
+oscar ne remercie pas jacques|14|12|9|1
+jacques est remercié par oscar|14|12|9|0
+jacques n'est pas remercié par oscar|14|12|9|1
+oscar remercie jacques aujourd'hui|14|12|9|0
+oscar ne remercie pas jacques aujourd'hui|14|12|9|1
+jacques est remercié par oscar aujourd'hui|14|12|9|0
+jacques n'est pas remercié par oscar aujourd'hui|14|12|9|1
+paul remercie jacques|15|12|9|0
+paul ne remercie pas jacques|15|12|9|1
+jacques est remercié par paul|15|12|9|0
+jacques n'est pas remercié par paul|15|12|9|1
+paul remercie jacques aujourd'hui|15|12|9|0
+paul ne remercie pas jacques aujourd'hui|15|12|9|1
+jacques est remercié par paul aujourd'hui|15|12|9|0
+jacques n'est pas remercié par paul aujourd'hui|15|12|9|1
+paul remercie karim|15|12|10|0
+paul ne remercie pas karim|15|12|10|1
+karim est remercié par paul|15|12|10|0
+karim n'est pas remercié par paul|15|12|10|1
+paul remercie karim aujourd'hui|15|12|10|0
+paul ne remercie pas karim aujourd'hui|15|12|10|1
+karim est remercié par paul aujourd'hui|15|12|10|0
+karim n'est pas remercié par paul aujourd'hui|15|12|10|1
+ivan contacte karim|8|13|10|0
+ivan ne contacte pas karim|8|13|10|1
+karim est contacté par ivan|8|13|10|0
+karim n'est pas contacté par ivan|8|13|10|1
+ivan contacte karim aujourd'hui|8|13|10|0
+ivan ne contacte pas karim aujourd'hui|8|13|10|1
+karim est contacté par ivan aujourd'hui|8|13|10|0
+karim n'est pas contacté par ivan aujourd'hui|8|13|10|1
+ivan contacte luc|8|13|11|0
+ivan ne contacte pas luc|8|13|11|1
+luc est contacté par ivan|8|13|11|0
+luc n'est pas contacté par ivan|8|13|11|1
+ivan contacte luc aujourd'hui|8|13|11|0
+ivan ne contacte pas luc aujourd'hui|8|13|11|1
+luc est contacté par ivan aujourd'hui|8|13|11|0
+luc n'est pas contacté par ivan aujourd'hui|8|13|11|1
+jacques contacte luc|9|13|11|0
+jacques ne contacte pas luc|9|13|11|1
+luc est contacté par jacques|9|13|11|0
+luc n'est pas contacté par jacques|9|13|11|1
+jacques contacte luc aujourd'hui|9|13|11|0
+jacques ne contacte pas luc aujourd'hui|9|13|11|1
+luc est contacté par jacques aujourd'hui|9|13|11|0
+luc n'est pas contacté par jacques aujourd'hui|9|13|11|1
+jacques contacte marc|9|13|12|0
+jacques ne contacte pas marc|9|13|12|1
+marc est contacté par jacques|9|13|12|0
+marc n'est pas contacté par jacques|9|13|12|1
+jacques contacte marc aujourd'hui|9|13|12|0
+jacques ne contacte pas marc aujourd'hui|9|13|12|1
+marc est contacté par jacques aujourd'hui|9|13|12|0
+marc n'est pas contacté par jacques aujourd'hui|9|13|12|1
+karim contacte marc|10|13|12|0
+karim ne contacte pas marc|10|13|12|1
+marc est contacté par karim|10|13|12|0
+marc n'est pas contacté par karim|10|13|12|1
+karim contacte marc aujourd'hui|10|13|12|0
+karim ne contacte pas marc aujourd'hui|10|13|12|1
+marc est contacté par karim aujourd'hui|10|13|12|0
+marc n'est pas contacté par karim aujourd'hui|10|13|12|1
+karim contacte nicolas|10|13|13|0
+karim ne contacte pas nicolas|10|13|13|1
+nicolas est contacté par karim|10|13|13|0
+nicolas n'est pas contacté par karim|10|13|13|1
+karim contacte nicolas aujourd'hui|10|13|13|0
+karim ne contacte pas nicolas aujourd'hui|10|13|13|1
+nicolas est contacté par karim aujourd'hui|10|13|13|0
+nicolas n'est pas contacté par karim aujourd'hui|10|13|13|1
+luc contacte nicolas|11|13|13|0
+luc ne contacte pas nicolas|11|13|13|1
+nicolas est contacté par luc|11|13|13|0
+nicolas n'est pas contacté par luc|11|13|13|1
+luc contacte nicolas aujourd'hui|11|13|13|0
+luc ne contacte pas nicolas aujourd'hui|11|13|13|1
+nicolas est contacté par luc aujourd'hui|11|13|13|0
+nicolas n'est pas contacté par luc aujourd'hui|11|13|13|1
+luc contacte oscar|11|13|14|0
+luc ne contacte pas oscar|11|13|14|1
+oscar est contacté par luc|11|13|14|0
+oscar n'est pas contacté par luc|11|13|14|1
+luc contacte oscar aujourd'hui|11|13|14|0
+luc ne contacte pas oscar aujourd'hui|11|13|14|1
+oscar est contacté par luc aujourd'hui|11|13|14|0
+oscar n'est pas contacté par luc aujourd'hui|11|13|14|1
+marc contacte oscar|12|13|14|0
+marc ne contacte pas oscar|12|13|14|1
+oscar est contacté par marc|12|13|14|0
+oscar n'est pas contacté par marc|12|13|14|1
+marc contacte oscar aujourd'hui|12|13|14|0
+marc ne contacte pas oscar aujourd'hui|12|13|14|1
+oscar est contacté par marc aujourd'hui|12|13|14|0
+oscar n'est pas contacté par marc aujourd'hui|12|13|14|1
+marc contacte paul|12|13|15|0
+marc ne contacte pas paul|12|13|15|1
+paul est contacté par marc|12|13|15|0
+paul n'est pas contacté par marc|12|13|15|1
+marc contacte paul aujourd'hui|12|13|15|0
+marc ne contacte pas paul aujourd'hui|12|13|15|1
+paul est contacté par marc aujourd'hui|12|13|15|0
+paul n'est pas contacté par marc aujourd'hui|12|13|15|1
+nicolas contacte paul|13|13|15|0
+nicolas ne contacte pas paul|13|13|15|1
+paul est contacté par nicolas|13|13|15|0
+paul n'est pas contacté par nicolas|13|13|15|1
+nicolas contacte paul aujourd'hui|13|13|15|0
+nicolas ne contacte pas paul aujourd'hui|13|13|15|1
+paul est contacté par nicolas aujourd'hui|13|13|15|0
+paul n'est pas contacté par nicolas aujourd'hui|13|13|15|1
+nicolas contacte ivan|13|13|8|0
+nicolas ne contacte pas ivan|13|13|8|1
+ivan est contacté par nicolas|13|13|8|0
+ivan n'est pas contacté par nicolas|13|13|8|1
+nicolas contacte ivan aujourd'hui|13|13|8|0
+nicolas ne contacte pas ivan aujourd'hui|13|13|8|1
+ivan est contacté par nicolas aujourd'hui|13|13|8|0
+ivan n'est pas contacté par nicolas aujourd'hui|13|13|8|1
+oscar contacte ivan|14|13|8|0
+oscar ne contacte pas ivan|14|13|8|1
+ivan est contacté par oscar|14|13|8|0
+ivan n'est pas contacté par oscar|14|13|8|1
+oscar contacte ivan aujourd'hui|14|13|8|0
+oscar ne contacte pas ivan aujourd'hui|14|13|8|1
+ivan est contacté par oscar aujourd'hui|14|13|8|0
+ivan n'est pas contacté par oscar aujourd'hui|14|13|8|1
+oscar contacte jacques|14|13|9|0
+oscar ne contacte pas jacques|14|13|9|1
+jacques est contacté par oscar|14|13|9|0
+jacques n'est pas contacté par oscar|14|13|9|1
+oscar contacte jacques aujourd'hui|14|13|9|0
+oscar ne contacte pas jacques aujourd'hui|14|13|9|1
+jacques est contacté par oscar aujourd'hui|14|13|9|0
+jacques n'est pas contacté par oscar aujourd'hui|14|13|9|1
+paul contacte jacques|15|13|9|0
+paul ne contacte pas jacques|15|13|9|1
+jacques est contacté par paul|15|13|9|0
+jacques n'est pas contacté par paul|15|13|9|1
+paul contacte jacques aujourd'hui|15|13|9|0
+paul ne contacte pas jacques aujourd'hui|15|13|9|1
+jacques est contacté par paul aujourd'hui|15|13|9|0
+jacques n'est pas contacté par paul aujourd'hui|15|13|9|1
+paul contacte karim|15|13|10|0
+paul ne contacte pas karim|15|13|10|1
+karim est contacté par paul|15|13|10|0
+karim n'est pas contacté par paul|15|13|10|1
+paul contacte karim aujourd'hui|15|13|10|0
+paul ne contacte pas karim aujourd'hui|15|13|10|1
+karim est contacté par paul aujourd'hui|15|13|10|0
+karim n'est pas contacté par paul aujourd'hui|15|13|10|1
+ivan rencontre karim|8|14|10|0
+ivan ne rencontre pas karim|8|14|10|1
+karim est rencontré par ivan|8|14|10|0
+karim n'est pas rencontré par ivan|8|14|10|1
+ivan rencontre karim aujourd'hui|8|14|10|0
+ivan ne rencontre pas karim aujourd'hui|8|14|10|1
+karim est rencontré par ivan aujourd'hui|8|14|10|0
+karim n'est pas rencontré par ivan aujourd'hui|8|14|10|1
+ivan rencontre luc|8|14|11|0
+ivan ne rencontre pas luc|8|14|11|1
+luc est rencontré par ivan|8|14|11|0
+luc n'est pas rencontré par ivan|8|14|11|1
+ivan rencontre luc aujourd'hui|8|14|11|0
+ivan ne rencontre pas luc aujourd'hui|8|14|11|1
+luc est rencontré par ivan aujourd'hui|8|14|11|0
+luc n'est pas rencontré par ivan aujourd'hui|8|14|11|1
+jacques rencontre luc|9|14|11|0
+jacques ne rencontre pas luc|9|14|11|1
+luc est rencontré par jacques|9|14|11|0
+luc n'est pas rencontré par jacques|9|14|11|1
+jacques rencontre luc aujourd'hui|9|14|11|0
+jacques ne rencontre pas luc aujourd'hui|9|14|11|1
+luc est rencontré par jacques aujourd'hui|9|14|11|0
+luc n'est pas rencontré par jacques aujourd'hui|9|14|11|1
+jacques rencontre marc|9|14|12|0
+jacques ne rencontre pas marc|9|14|12|1
+marc est rencontré par jacques|9|14|12|0
+marc n'est pas rencontré par jacques|9|14|12|1
+jacques rencontre marc aujourd'hui|9|14|12|0
+jacques ne rencontre pas marc aujourd'hui|9|14|12|1
+marc est rencontré par jacques aujourd'hui|9|14|12|0
+marc n'est pas rencontré par jacques aujourd'hui|9|14|12|1
+karim rencontre marc|10|14|12|0
+karim ne rencontre pas marc|10|14|12|1
+marc est rencontré par karim|10|14|12|0
+marc n'est pas rencontré par karim|10|14|12|1
+karim rencontre marc aujourd'hui|10|14|12|0
+karim ne rencontre pas marc aujourd'hui|10|14|12|1
+marc est rencontré par karim aujourd'hui|10|14|12|0
+marc n'est pas rencontré par karim aujourd'hui|10|14|12|1
+karim rencontre nicolas|10|14|13|0
+karim ne rencontre pas nicolas|10|14|13|1
+nicolas est rencontré par karim|10|14|13|0
+nicolas n'est pas rencontré par karim|10|14|13|1
+karim rencontre nicolas aujourd'hui|10|14|13|0
+karim ne rencontre pas nicolas aujourd'hui|10|14|13|1
+nicolas est rencontré par karim aujourd'hui|10|14|13|0
+nicolas n'est pas rencontré par karim aujourd'hui|10|14|13|1
+luc rencontre nicolas|11|14|13|0
+luc ne rencontre pas nicolas|11|14|13|1
+nicolas est rencontré par luc|11|14|13|0
+nicolas n'est pas rencontré par luc|11|14|13|1
+luc rencontre nicolas aujourd'hui|11|14|13|0
+luc ne rencontre pas nicolas aujourd'hui|11|14|13|1
+nicolas est rencontré par luc aujourd'hui|11|14|13|0
+nicolas n'est pas rencontré par luc aujourd'hui|11|14|13|1
+luc rencontre oscar|11|14|14|0
+luc ne rencontre pas oscar|11|14|14|1
+oscar est rencontré par luc|11|14|14|0
+oscar n'est pas rencontré par luc|11|14|14|1
+luc rencontre oscar aujourd'hui|11|14|14|0
+luc ne rencontre pas oscar aujourd'hui|11|14|14|1
+oscar est rencontré par luc aujourd'hui|11|14|14|0
+oscar n'est pas rencontré par luc aujourd'hui|11|14|14|1
+marc rencontre oscar|12|14|14|0
+marc ne rencontre pas oscar|12|14|14|1
+oscar est rencontré par marc|12|14|14|0
+oscar n'est pas rencontré par marc|12|14|14|1
+marc rencontre oscar aujourd'hui|12|14|14|0
+marc ne rencontre pas oscar aujourd'hui|12|14|14|1
+oscar est rencontré par marc aujourd'hui|12|14|14|0
+oscar n'est pas rencontré par marc aujourd'hui|12|14|14|1
+marc rencontre paul|12|14|15|0
+marc ne rencontre pas paul|12|14|15|1
+paul est rencontré par marc|12|14|15|0
+paul n'est pas rencontré par marc|12|14|15|1
+marc rencontre paul aujourd'hui|12|14|15|0
+marc ne rencontre pas paul aujourd'hui|12|14|15|1
+paul est rencontré par marc aujourd'hui|12|14|15|0
+paul n'est pas rencontré par marc aujourd'hui|12|14|15|1
+nicolas rencontre paul|13|14|15|0
+nicolas ne rencontre pas paul|13|14|15|1
+paul est rencontré par nicolas|13|14|15|0
+paul n'est pas rencontré par nicolas|13|14|15|1
+nicolas rencontre paul aujourd'hui|13|14|15|0
+nicolas ne rencontre pas paul aujourd'hui|13|14|15|1
+paul est rencontré par nicolas aujourd'hui|13|14|15|0
+paul n'est pas rencontré par nicolas aujourd'hui|13|14|15|1
+nicolas rencontre ivan|13|14|8|0
+nicolas ne rencontre pas ivan|13|14|8|1
+ivan est rencontré par nicolas|13|14|8|0
+ivan n'est pas rencontré par nicolas|13|14|8|1
+nicolas rencontre ivan aujourd'hui|13|14|8|0
+nicolas ne rencontre pas ivan aujourd'hui|13|14|8|1
+ivan est rencontré par nicolas aujourd'hui|13|14|8|0
+ivan n'est pas rencontré par nicolas aujourd'hui|13|14|8|1
+oscar rencontre ivan|14|14|8|0
+oscar ne rencontre pas ivan|14|14|8|1
+ivan est rencontré par oscar|14|14|8|0
+ivan n'est pas rencontré par oscar|14|14|8|1
+oscar rencontre ivan aujourd'hui|14|14|8|0
+oscar ne rencontre pas ivan aujourd'hui|14|14|8|1
+ivan est rencontré par oscar aujourd'hui|14|14|8|0
+ivan n'est pas rencontré par oscar aujourd'hui|14|14|8|1
+oscar rencontre jacques|14|14|9|0
+oscar ne rencontre pas jacques|14|14|9|1
+jacques est rencontré par oscar|14|14|9|0
+jacques n'est pas rencontré par oscar|14|14|9|1
+oscar rencontre jacques aujourd'hui|14|14|9|0
+oscar ne rencontre pas jacques aujourd'hui|14|14|9|1
+jacques est rencontré par oscar aujourd'hui|14|14|9|0
+jacques n'est pas rencontré par oscar aujourd'hui|14|14|9|1
+paul rencontre jacques|15|14|9|0
+paul ne rencontre pas jacques|15|14|9|1
+jacques est rencontré par paul|15|14|9|0
+jacques n'est pas rencontré par paul|15|14|9|1
+paul rencontre jacques aujourd'hui|15|14|9|0
+paul ne rencontre pas jacques aujourd'hui|15|14|9|1
+jacques est rencontré par paul aujourd'hui|15|14|9|0
+jacques n'est pas rencontré par paul aujourd'hui|15|14|9|1
+paul rencontre karim|15|14|10|0
+paul ne rencontre pas karim|15|14|10|1
+karim est rencontré par paul|15|14|10|0
+karim n'est pas rencontré par paul|15|14|10|1
+paul rencontre karim aujourd'hui|15|14|10|0
+paul ne rencontre pas karim aujourd'hui|15|14|10|1
+karim est rencontré par paul aujourd'hui|15|14|10|0
+karim n'est pas rencontré par paul aujourd'hui|15|14|10|1
+ivan surveille karim|8|15|10|0
+ivan ne surveille pas karim|8|15|10|1
+karim est surveillé par ivan|8|15|10|0
+karim n'est pas surveillé par ivan|8|15|10|1
+ivan surveille karim aujourd'hui|8|15|10|0
+ivan ne surveille pas karim aujourd'hui|8|15|10|1
+karim est surveillé par ivan aujourd'hui|8|15|10|0
+karim n'est pas surveillé par ivan aujourd'hui|8|15|10|1
+ivan surveille luc|8|15|11|0
+ivan ne surveille pas luc|8|15|11|1
+luc est surveillé par ivan|8|15|11|0
+luc n'est pas surveillé par ivan|8|15|11|1
+ivan surveille luc aujourd'hui|8|15|11|0
+ivan ne surveille pas luc aujourd'hui|8|15|11|1
+luc est surveillé par ivan aujourd'hui|8|15|11|0
+luc n'est pas surveillé par ivan aujourd'hui|8|15|11|1
+jacques surveille luc|9|15|11|0
+jacques ne surveille pas luc|9|15|11|1
+luc est surveillé par jacques|9|15|11|0
+luc n'est pas surveillé par jacques|9|15|11|1
+jacques surveille luc aujourd'hui|9|15|11|0
+jacques ne surveille pas luc aujourd'hui|9|15|11|1
+luc est surveillé par jacques aujourd'hui|9|15|11|0
+luc n'est pas surveillé par jacques aujourd'hui|9|15|11|1
+jacques surveille marc|9|15|12|0
+jacques ne surveille pas marc|9|15|12|1
+marc est surveillé par jacques|9|15|12|0
+marc n'est pas surveillé par jacques|9|15|12|1
+jacques surveille marc aujourd'hui|9|15|12|0
+jacques ne surveille pas marc aujourd'hui|9|15|12|1
+marc est surveillé par jacques aujourd'hui|9|15|12|0
+marc n'est pas surveillé par jacques aujourd'hui|9|15|12|1
+karim surveille marc|10|15|12|0
+karim ne surveille pas marc|10|15|12|1
+marc est surveillé par karim|10|15|12|0
+marc n'est pas surveillé par karim|10|15|12|1
+karim surveille marc aujourd'hui|10|15|12|0
+karim ne surveille pas marc aujourd'hui|10|15|12|1
+marc est surveillé par karim aujourd'hui|10|15|12|0
+marc n'est pas surveillé par karim aujourd'hui|10|15|12|1
+karim surveille nicolas|10|15|13|0
+karim ne surveille pas nicolas|10|15|13|1
+nicolas est surveillé par karim|10|15|13|0
+nicolas n'est pas surveillé par karim|10|15|13|1
+karim surveille nicolas aujourd'hui|10|15|13|0
+karim ne surveille pas nicolas aujourd'hui|10|15|13|1
+nicolas est surveillé par karim aujourd'hui|10|15|13|0
+nicolas n'est pas surveillé par karim aujourd'hui|10|15|13|1
+luc surveille nicolas|11|15|13|0
+luc ne surveille pas nicolas|11|15|13|1
+nicolas est surveillé par luc|11|15|13|0
+nicolas n'est pas surveillé par luc|11|15|13|1
+luc surveille nicolas aujourd'hui|11|15|13|0
+luc ne surveille pas nicolas aujourd'hui|11|15|13|1
+nicolas est surveillé par luc aujourd'hui|11|15|13|0
+nicolas n'est pas surveillé par luc aujourd'hui|11|15|13|1
+luc surveille oscar|11|15|14|0
+luc ne surveille pas oscar|11|15|14|1
+oscar est surveillé par luc|11|15|14|0
+oscar n'est pas surveillé par luc|11|15|14|1
+luc surveille oscar aujourd'hui|11|15|14|0
+luc ne surveille pas oscar aujourd'hui|11|15|14|1
+oscar est surveillé par luc aujourd'hui|11|15|14|0
+oscar n'est pas surveillé par luc aujourd'hui|11|15|14|1
+marc surveille oscar|12|15|14|0
+marc ne surveille pas oscar|12|15|14|1
+oscar est surveillé par marc|12|15|14|0
+oscar n'est pas surveillé par marc|12|15|14|1
+marc surveille oscar aujourd'hui|12|15|14|0
+marc ne surveille pas oscar aujourd'hui|12|15|14|1
+oscar est surveillé par marc aujourd'hui|12|15|14|0
+oscar n'est pas surveillé par marc aujourd'hui|12|15|14|1
+marc surveille paul|12|15|15|0
+marc ne surveille pas paul|12|15|15|1
+paul est surveillé par marc|12|15|15|0
+paul n'est pas surveillé par marc|12|15|15|1
+marc surveille paul aujourd'hui|12|15|15|0
+marc ne surveille pas paul aujourd'hui|12|15|15|1
+paul est surveillé par marc aujourd'hui|12|15|15|0
+paul n'est pas surveillé par marc aujourd'hui|12|15|15|1
+nicolas surveille paul|13|15|15|0
+nicolas ne surveille pas paul|13|15|15|1
+paul est surveillé par nicolas|13|15|15|0
+paul n'est pas surveillé par nicolas|13|15|15|1
+nicolas surveille paul aujourd'hui|13|15|15|0
+nicolas ne surveille pas paul aujourd'hui|13|15|15|1
+paul est surveillé par nicolas aujourd'hui|13|15|15|0
+paul n'est pas surveillé par nicolas aujourd'hui|13|15|15|1
+nicolas surveille ivan|13|15|8|0
+nicolas ne surveille pas ivan|13|15|8|1
+ivan est surveillé par nicolas|13|15|8|0
+ivan n'est pas surveillé par nicolas|13|15|8|1
+nicolas surveille ivan aujourd'hui|13|15|8|0
+nicolas ne surveille pas ivan aujourd'hui|13|15|8|1
+ivan est surveillé par nicolas aujourd'hui|13|15|8|0
+ivan n'est pas surveillé par nicolas aujourd'hui|13|15|8|1
+oscar surveille ivan|14|15|8|0
+oscar ne surveille pas ivan|14|15|8|1
+ivan est surveillé par oscar|14|15|8|0
+ivan n'est pas surveillé par oscar|14|15|8|1
+oscar surveille ivan aujourd'hui|14|15|8|0
+oscar ne surveille pas ivan aujourd'hui|14|15|8|1
+ivan est surveillé par oscar aujourd'hui|14|15|8|0
+ivan n'est pas surveillé par oscar aujourd'hui|14|15|8|1
+oscar surveille jacques|14|15|9|0
+oscar ne surveille pas jacques|14|15|9|1
+jacques est surveillé par oscar|14|15|9|0
+jacques n'est pas surveillé par oscar|14|15|9|1
+oscar surveille jacques aujourd'hui|14|15|9|0
+oscar ne surveille pas jacques aujourd'hui|14|15|9|1
+jacques est surveillé par oscar aujourd'hui|14|15|9|0
+jacques n'est pas surveillé par oscar aujourd'hui|14|15|9|1
+paul surveille jacques|15|15|9|0
+paul ne surveille pas jacques|15|15|9|1
+jacques est surveillé par paul|15|15|9|0
+jacques n'est pas surveillé par paul|15|15|9|1
+paul surveille jacques aujourd'hui|15|15|9|0
+paul ne surveille pas jacques aujourd'hui|15|15|9|1
+jacques est surveillé par paul aujourd'hui|15|15|9|0
+jacques n'est pas surveillé par paul aujourd'hui|15|15|9|1
+paul surveille karim|15|15|10|0
+paul ne surveille pas karim|15|15|10|1
+karim est surveillé par paul|15|15|10|0
+karim n'est pas surveillé par paul|15|15|10|1
+paul surveille karim aujourd'hui|15|15|10|0
+paul ne surveille pas karim aujourd'hui|15|15|10|1
+karim est surveillé par paul aujourd'hui|15|15|10|0
+karim n'est pas surveillé par paul aujourd'hui|15|15|10|1

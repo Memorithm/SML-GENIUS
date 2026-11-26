@@ -48,3 +48,20 @@ jobs:
             args+=(--example "${name%.rs}")
           done
           cargo test --locked --release -p sml-core "${args[@]}"
+      - name: Validate L2 induction through unchanged L1 executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          trap 'rm -rf -- "$stage"' EXIT
+          l1=crates/sml-core/fixtures/tutor-l1
+          l2=crates/sml-core/fixtures/tutor-l2
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- "$l1/lexicon.txt" "$l1/train.txt" "$l1/test.txt" "$stage/l1.bank"
+          cargo run --locked --release -p sml-core --example sml_tutor_lexicon_induction -- "$stage/l1.bank" "$l2/train.txt" "$stage/l2.bank" | tee "$stage/induction.txt"
+          grep -Fx 'SML_TUTOR_LEXICON=PASS old=24 new=48 acquired=24 templates=8' "$stage/induction.txt"
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --verify "$stage/l2.bank" "$l2/train.txt" "$l2/test.txt" | tee "$stage/novel.txt"
+          grep -Fx 'SML_TUTOR_LINGUISTIC_RELOAD=PASS test=1024 errors=0' "$stage/novel.txt"
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --verify "$stage/l2.bank" "$l1/train.txt" "$l1/test.txt" | tee "$stage/retained.txt"
+          grep -Fx 'SML_TUTOR_LINGUISTIC_RELOAD=PASS test=896 errors=0' "$stage/retained.txt"
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/l1.bank" 'ivan compare karim' | grep -Fx ABSTAIN
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/l2.bank" 'ivan compare karim' | grep -Fx '8|8|10|0'
