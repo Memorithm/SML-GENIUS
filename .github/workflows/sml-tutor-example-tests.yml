@@ -65,3 +65,19 @@ jobs:
           grep -Fx 'SML_TUTOR_LINGUISTIC_RELOAD=PASS test=896 errors=0' "$stage/retained.txt"
           cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/l1.bank" 'ivan compare karim' | grep -Fx ABSTAIN
           cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/l2.bank" 'ivan compare karim' | grep -Fx '8|8|10|0'
+      - name: Independent English L1 and L2 mastery and retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          trap 'rm -rf -- "$stage"' EXIT
+          l1=crates/sml-core/fixtures/tutor-en-l1
+          l2=crates/sml-core/fixtures/tutor-en-l2
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- "$l1/lexicon.txt" "$l1/train.txt" "$l1/test.txt" "$stage/en-l1.bank" | tee "$stage/l1.txt"
+          grep -Fx 'SML_TUTOR_LINGUISTIC train=192 test=896 templates=8 errors=0' "$stage/l1.txt"
+          cargo run --locked --release -p sml-core --example sml_tutor_lexicon_induction -- "$stage/en-l1.bank" "$l2/train.txt" "$stage/en-l2.bank" | tee "$stage/l2.txt"
+          grep -Fx 'SML_TUTOR_LEXICON=PASS old=32 new=64 acquired=32 templates=8' "$stage/l2.txt"
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --verify "$stage/en-l2.bank" "$l2/train.txt" "$l2/test.txt" | grep -Fx 'SML_TUTOR_LINGUISTIC_RELOAD=PASS test=1024 errors=0'
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --verify "$stage/en-l2.bank" "$l1/train.txt" "$l1/test.txt" | grep -Fx 'SML_TUTOR_LINGUISTIC_RELOAD=PASS test=896 errors=0'
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/en-l1.bank" 'ian compares kevin' | grep -Fx ABSTAIN
+          cargo run --locked --release -p sml-core --example sml_tutor_linguistic_roles -- --predict "$stage/en-l2.bank" 'ian compares kevin' | grep -Fx '8|8|10|0'

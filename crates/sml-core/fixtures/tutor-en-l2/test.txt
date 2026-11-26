@@ -1,0 +1,1024 @@
+ian compares kevin|8|8|10|0
+ian does not compare kevin|8|8|10|1
+kevin is compared by ian|8|8|10|0
+kevin is not compared by ian|8|8|10|1
+ian compares kevin today|8|8|10|0
+ian does not compare kevin today|8|8|10|1
+kevin is compared by ian today|8|8|10|0
+kevin is not compared by ian today|8|8|10|1
+ian compares liam|8|8|11|0
+ian does not compare liam|8|8|11|1
+liam is compared by ian|8|8|11|0
+liam is not compared by ian|8|8|11|1
+ian compares liam today|8|8|11|0
+ian does not compare liam today|8|8|11|1
+liam is compared by ian today|8|8|11|0
+liam is not compared by ian today|8|8|11|1
+jack compares liam|9|8|11|0
+jack does not compare liam|9|8|11|1
+liam is compared by jack|9|8|11|0
+liam is not compared by jack|9|8|11|1
+jack compares liam today|9|8|11|0
+jack does not compare liam today|9|8|11|1
+liam is compared by jack today|9|8|11|0
+liam is not compared by jack today|9|8|11|1
+jack compares mark|9|8|12|0
+jack does not compare mark|9|8|12|1
+mark is compared by jack|9|8|12|0
+mark is not compared by jack|9|8|12|1
+jack compares mark today|9|8|12|0
+jack does not compare mark today|9|8|12|1
+mark is compared by jack today|9|8|12|0
+mark is not compared by jack today|9|8|12|1
+kevin compares mark|10|8|12|0
+kevin does not compare mark|10|8|12|1
+mark is compared by kevin|10|8|12|0
+mark is not compared by kevin|10|8|12|1
+kevin compares mark today|10|8|12|0
+kevin does not compare mark today|10|8|12|1
+mark is compared by kevin today|10|8|12|0
+mark is not compared by kevin today|10|8|12|1
+kevin compares noah|10|8|13|0
+kevin does not compare noah|10|8|13|1
+noah is compared by kevin|10|8|13|0
+noah is not compared by kevin|10|8|13|1
+kevin compares noah today|10|8|13|0
+kevin does not compare noah today|10|8|13|1
+noah is compared by kevin today|10|8|13|0
+noah is not compared by kevin today|10|8|13|1
+liam compares noah|11|8|13|0
+liam does not compare noah|11|8|13|1
+noah is compared by liam|11|8|13|0
+noah is not compared by liam|11|8|13|1
+liam compares noah today|11|8|13|0
+liam does not compare noah today|11|8|13|1
+noah is compared by liam today|11|8|13|0
+noah is not compared by liam today|11|8|13|1
+liam compares oscar|11|8|14|0
+liam does not compare oscar|11|8|14|1
+oscar is compared by liam|11|8|14|0
+oscar is not compared by liam|11|8|14|1
+liam compares oscar today|11|8|14|0
+liam does not compare oscar today|11|8|14|1
+oscar is compared by liam today|11|8|14|0
+oscar is not compared by liam today|11|8|14|1
+mark compares oscar|12|8|14|0
+mark does not compare oscar|12|8|14|1
+oscar is compared by mark|12|8|14|0
+oscar is not compared by mark|12|8|14|1
+mark compares oscar today|12|8|14|0
+mark does not compare oscar today|12|8|14|1
+oscar is compared by mark today|12|8|14|0
+oscar is not compared by mark today|12|8|14|1
+mark compares paul|12|8|15|0
+mark does not compare paul|12|8|15|1
+paul is compared by mark|12|8|15|0
+paul is not compared by mark|12|8|15|1
+mark compares paul today|12|8|15|0
+mark does not compare paul today|12|8|15|1
+paul is compared by mark today|12|8|15|0
+paul is not compared by mark today|12|8|15|1
+noah compares paul|13|8|15|0
+noah does not compare paul|13|8|15|1
+paul is compared by noah|13|8|15|0
+paul is not compared by noah|13|8|15|1
+noah compares paul today|13|8|15|0
+noah does not compare paul today|13|8|15|1
+paul is compared by noah today|13|8|15|0
+paul is not compared by noah today|13|8|15|1
+noah compares ian|13|8|8|0
+noah does not compare ian|13|8|8|1
+ian is compared by noah|13|8|8|0
+ian is not compared by noah|13|8|8|1
+noah compares ian today|13|8|8|0
+noah does not compare ian today|13|8|8|1
+ian is compared by noah today|13|8|8|0
+ian is not compared by noah today|13|8|8|1
+oscar compares ian|14|8|8|0
+oscar does not compare ian|14|8|8|1
+ian is compared by oscar|14|8|8|0
+ian is not compared by oscar|14|8|8|1
+oscar compares ian today|14|8|8|0
+oscar does not compare ian today|14|8|8|1
+ian is compared by oscar today|14|8|8|0
+ian is not compared by oscar today|14|8|8|1
+oscar compares jack|14|8|9|0
+oscar does not compare jack|14|8|9|1
+jack is compared by oscar|14|8|9|0
+jack is not compared by oscar|14|8|9|1
+oscar compares jack today|14|8|9|0
+oscar does not compare jack today|14|8|9|1
+jack is compared by oscar today|14|8|9|0
+jack is not compared by oscar today|14|8|9|1
+paul compares jack|15|8|9|0
+paul does not compare jack|15|8|9|1
+jack is compared by paul|15|8|9|0
+jack is not compared by paul|15|8|9|1
+paul compares jack today|15|8|9|0
+paul does not compare jack today|15|8|9|1
+jack is compared by paul today|15|8|9|0
+jack is not compared by paul today|15|8|9|1
+paul compares kevin|15|8|10|0
+paul does not compare kevin|15|8|10|1
+kevin is compared by paul|15|8|10|0
+kevin is not compared by paul|15|8|10|1
+paul compares kevin today|15|8|10|0
+paul does not compare kevin today|15|8|10|1
+kevin is compared by paul today|15|8|10|0
+kevin is not compared by paul today|15|8|10|1
+ian draws kevin|8|9|10|0
+ian does not draw kevin|8|9|10|1
+kevin is drawn by ian|8|9|10|0
+kevin is not drawn by ian|8|9|10|1
+ian draws kevin today|8|9|10|0
+ian does not draw kevin today|8|9|10|1
+kevin is drawn by ian today|8|9|10|0
+kevin is not drawn by ian today|8|9|10|1
+ian draws liam|8|9|11|0
+ian does not draw liam|8|9|11|1
+liam is drawn by ian|8|9|11|0
+liam is not drawn by ian|8|9|11|1
+ian draws liam today|8|9|11|0
+ian does not draw liam today|8|9|11|1
+liam is drawn by ian today|8|9|11|0
+liam is not drawn by ian today|8|9|11|1
+jack draws liam|9|9|11|0
+jack does not draw liam|9|9|11|1
+liam is drawn by jack|9|9|11|0
+liam is not drawn by jack|9|9|11|1
+jack draws liam today|9|9|11|0
+jack does not draw liam today|9|9|11|1
+liam is drawn by jack today|9|9|11|0
+liam is not drawn by jack today|9|9|11|1
+jack draws mark|9|9|12|0
+jack does not draw mark|9|9|12|1
+mark is drawn by jack|9|9|12|0
+mark is not drawn by jack|9|9|12|1
+jack draws mark today|9|9|12|0
+jack does not draw mark today|9|9|12|1
+mark is drawn by jack today|9|9|12|0
+mark is not drawn by jack today|9|9|12|1
+kevin draws mark|10|9|12|0
+kevin does not draw mark|10|9|12|1
+mark is drawn by kevin|10|9|12|0
+mark is not drawn by kevin|10|9|12|1
+kevin draws mark today|10|9|12|0
+kevin does not draw mark today|10|9|12|1
+mark is drawn by kevin today|10|9|12|0
+mark is not drawn by kevin today|10|9|12|1
+kevin draws noah|10|9|13|0
+kevin does not draw noah|10|9|13|1
+noah is drawn by kevin|10|9|13|0
+noah is not drawn by kevin|10|9|13|1
+kevin draws noah today|10|9|13|0
+kevin does not draw noah today|10|9|13|1
+noah is drawn by kevin today|10|9|13|0
+noah is not drawn by kevin today|10|9|13|1
+liam draws noah|11|9|13|0
+liam does not draw noah|11|9|13|1
+noah is drawn by liam|11|9|13|0
+noah is not drawn by liam|11|9|13|1
+liam draws noah today|11|9|13|0
+liam does not draw noah today|11|9|13|1
+noah is drawn by liam today|11|9|13|0
+noah is not drawn by liam today|11|9|13|1
+liam draws oscar|11|9|14|0
+liam does not draw oscar|11|9|14|1
+oscar is drawn by liam|11|9|14|0
+oscar is not drawn by liam|11|9|14|1
+liam draws oscar today|11|9|14|0
+liam does not draw oscar today|11|9|14|1
+oscar is drawn by liam today|11|9|14|0
+oscar is not drawn by liam today|11|9|14|1
+mark draws oscar|12|9|14|0
+mark does not draw oscar|12|9|14|1
+oscar is drawn by mark|12|9|14|0
+oscar is not drawn by mark|12|9|14|1
+mark draws oscar today|12|9|14|0
+mark does not draw oscar today|12|9|14|1
+oscar is drawn by mark today|12|9|14|0
+oscar is not drawn by mark today|12|9|14|1
+mark draws paul|12|9|15|0
+mark does not draw paul|12|9|15|1
+paul is drawn by mark|12|9|15|0
+paul is not drawn by mark|12|9|15|1
+mark draws paul today|12|9|15|0
+mark does not draw paul today|12|9|15|1
+paul is drawn by mark today|12|9|15|0
+paul is not drawn by mark today|12|9|15|1
+noah draws paul|13|9|15|0
+noah does not draw paul|13|9|15|1
+paul is drawn by noah|13|9|15|0
+paul is not drawn by noah|13|9|15|1
+noah draws paul today|13|9|15|0
+noah does not draw paul today|13|9|15|1
+paul is drawn by noah today|13|9|15|0
+paul is not drawn by noah today|13|9|15|1
+noah draws ian|13|9|8|0
+noah does not draw ian|13|9|8|1
+ian is drawn by noah|13|9|8|0
+ian is not drawn by noah|13|9|8|1
+noah draws ian today|13|9|8|0
+noah does not draw ian today|13|9|8|1
+ian is drawn by noah today|13|9|8|0
+ian is not drawn by noah today|13|9|8|1
+oscar draws ian|14|9|8|0
+oscar does not draw ian|14|9|8|1
+ian is drawn by oscar|14|9|8|0
+ian is not drawn by oscar|14|9|8|1
+oscar draws ian today|14|9|8|0
+oscar does not draw ian today|14|9|8|1
+ian is drawn by oscar today|14|9|8|0
+ian is not drawn by oscar today|14|9|8|1
+oscar draws jack|14|9|9|0
+oscar does not draw jack|14|9|9|1
+jack is drawn by oscar|14|9|9|0
+jack is not drawn by oscar|14|9|9|1
+oscar draws jack today|14|9|9|0
+oscar does not draw jack today|14|9|9|1
+jack is drawn by oscar today|14|9|9|0
+jack is not drawn by oscar today|14|9|9|1
+paul draws jack|15|9|9|0
+paul does not draw jack|15|9|9|1
+jack is drawn by paul|15|9|9|0
+jack is not drawn by paul|15|9|9|1
+paul draws jack today|15|9|9|0
+paul does not draw jack today|15|9|9|1
+jack is drawn by paul today|15|9|9|0
+jack is not drawn by paul today|15|9|9|1
+paul draws kevin|15|9|10|0
+paul does not draw kevin|15|9|10|1
+kevin is drawn by paul|15|9|10|0
+kevin is not drawn by paul|15|9|10|1
+paul draws kevin today|15|9|10|0
+paul does not draw kevin today|15|9|10|1
+kevin is drawn by paul today|15|9|10|0
+kevin is not drawn by paul today|15|9|10|1
+ian photographs kevin|8|10|10|0
+ian does not photograph kevin|8|10|10|1
+kevin is photographed by ian|8|10|10|0
+kevin is not photographed by ian|8|10|10|1
+ian photographs kevin today|8|10|10|0
+ian does not photograph kevin today|8|10|10|1
+kevin is photographed by ian today|8|10|10|0
+kevin is not photographed by ian today|8|10|10|1
+ian photographs liam|8|10|11|0
+ian does not photograph liam|8|10|11|1
+liam is photographed by ian|8|10|11|0
+liam is not photographed by ian|8|10|11|1
+ian photographs liam today|8|10|11|0
+ian does not photograph liam today|8|10|11|1
+liam is photographed by ian today|8|10|11|0
+liam is not photographed by ian today|8|10|11|1
+jack photographs liam|9|10|11|0
+jack does not photograph liam|9|10|11|1
+liam is photographed by jack|9|10|11|0
+liam is not photographed by jack|9|10|11|1
+jack photographs liam today|9|10|11|0
+jack does not photograph liam today|9|10|11|1
+liam is photographed by jack today|9|10|11|0
+liam is not photographed by jack today|9|10|11|1
+jack photographs mark|9|10|12|0
+jack does not photograph mark|9|10|12|1
+mark is photographed by jack|9|10|12|0
+mark is not photographed by jack|9|10|12|1
+jack photographs mark today|9|10|12|0
+jack does not photograph mark today|9|10|12|1
+mark is photographed by jack today|9|10|12|0
+mark is not photographed by jack today|9|10|12|1
+kevin photographs mark|10|10|12|0
+kevin does not photograph mark|10|10|12|1
+mark is photographed by kevin|10|10|12|0
+mark is not photographed by kevin|10|10|12|1
+kevin photographs mark today|10|10|12|0
+kevin does not photograph mark today|10|10|12|1
+mark is photographed by kevin today|10|10|12|0
+mark is not photographed by kevin today|10|10|12|1
+kevin photographs noah|10|10|13|0
+kevin does not photograph noah|10|10|13|1
+noah is photographed by kevin|10|10|13|0
+noah is not photographed by kevin|10|10|13|1
+kevin photographs noah today|10|10|13|0
+kevin does not photograph noah today|10|10|13|1
+noah is photographed by kevin today|10|10|13|0
+noah is not photographed by kevin today|10|10|13|1
+liam photographs noah|11|10|13|0
+liam does not photograph noah|11|10|13|1
+noah is photographed by liam|11|10|13|0
+noah is not photographed by liam|11|10|13|1
+liam photographs noah today|11|10|13|0
+liam does not photograph noah today|11|10|13|1
+noah is photographed by liam today|11|10|13|0
+noah is not photographed by liam today|11|10|13|1
+liam photographs oscar|11|10|14|0
+liam does not photograph oscar|11|10|14|1
+oscar is photographed by liam|11|10|14|0
+oscar is not photographed by liam|11|10|14|1
+liam photographs oscar today|11|10|14|0
+liam does not photograph oscar today|11|10|14|1
+oscar is photographed by liam today|11|10|14|0
+oscar is not photographed by liam today|11|10|14|1
+mark photographs oscar|12|10|14|0
+mark does not photograph oscar|12|10|14|1
+oscar is photographed by mark|12|10|14|0
+oscar is not photographed by mark|12|10|14|1
+mark photographs oscar today|12|10|14|0
+mark does not photograph oscar today|12|10|14|1
+oscar is photographed by mark today|12|10|14|0
+oscar is not photographed by mark today|12|10|14|1
+mark photographs paul|12|10|15|0
+mark does not photograph paul|12|10|15|1
+paul is photographed by mark|12|10|15|0
+paul is not photographed by mark|12|10|15|1
+mark photographs paul today|12|10|15|0
+mark does not photograph paul today|12|10|15|1
+paul is photographed by mark today|12|10|15|0
+paul is not photographed by mark today|12|10|15|1
+noah photographs paul|13|10|15|0
+noah does not photograph paul|13|10|15|1
+paul is photographed by noah|13|10|15|0
+paul is not photographed by noah|13|10|15|1
+noah photographs paul today|13|10|15|0
+noah does not photograph paul today|13|10|15|1
+paul is photographed by noah today|13|10|15|0
+paul is not photographed by noah today|13|10|15|1
+noah photographs ian|13|10|8|0
+noah does not photograph ian|13|10|8|1
+ian is photographed by noah|13|10|8|0
+ian is not photographed by noah|13|10|8|1
+noah photographs ian today|13|10|8|0
+noah does not photograph ian today|13|10|8|1
+ian is photographed by noah today|13|10|8|0
+ian is not photographed by noah today|13|10|8|1
+oscar photographs ian|14|10|8|0
+oscar does not photograph ian|14|10|8|1
+ian is photographed by oscar|14|10|8|0
+ian is not photographed by oscar|14|10|8|1
+oscar photographs ian today|14|10|8|0
+oscar does not photograph ian today|14|10|8|1
+ian is photographed by oscar today|14|10|8|0
+ian is not photographed by oscar today|14|10|8|1
+oscar photographs jack|14|10|9|0
+oscar does not photograph jack|14|10|9|1
+jack is photographed by oscar|14|10|9|0
+jack is not photographed by oscar|14|10|9|1
+oscar photographs jack today|14|10|9|0
+oscar does not photograph jack today|14|10|9|1
+jack is photographed by oscar today|14|10|9|0
+jack is not photographed by oscar today|14|10|9|1
+paul photographs jack|15|10|9|0
+paul does not photograph jack|15|10|9|1
+jack is photographed by paul|15|10|9|0
+jack is not photographed by paul|15|10|9|1
+paul photographs jack today|15|10|9|0
+paul does not photograph jack today|15|10|9|1
+jack is photographed by paul today|15|10|9|0
+jack is not photographed by paul today|15|10|9|1
+paul photographs kevin|15|10|10|0
+paul does not photograph kevin|15|10|10|1
+kevin is photographed by paul|15|10|10|0
+kevin is not photographed by paul|15|10|10|1
+paul photographs kevin today|15|10|10|0
+paul does not photograph kevin today|15|10|10|1
+kevin is photographed by paul today|15|10|10|0
+kevin is not photographed by paul today|15|10|10|1
+ian meets kevin|8|11|10|0
+ian does not meet kevin|8|11|10|1
+kevin is met by ian|8|11|10|0
+kevin is not met by ian|8|11|10|1
+ian meets kevin today|8|11|10|0
+ian does not meet kevin today|8|11|10|1
+kevin is met by ian today|8|11|10|0
+kevin is not met by ian today|8|11|10|1
+ian meets liam|8|11|11|0
+ian does not meet liam|8|11|11|1
+liam is met by ian|8|11|11|0
+liam is not met by ian|8|11|11|1
+ian meets liam today|8|11|11|0
+ian does not meet liam today|8|11|11|1
+liam is met by ian today|8|11|11|0
+liam is not met by ian today|8|11|11|1
+jack meets liam|9|11|11|0
+jack does not meet liam|9|11|11|1
+liam is met by jack|9|11|11|0
+liam is not met by jack|9|11|11|1
+jack meets liam today|9|11|11|0
+jack does not meet liam today|9|11|11|1
+liam is met by jack today|9|11|11|0
+liam is not met by jack today|9|11|11|1
+jack meets mark|9|11|12|0
+jack does not meet mark|9|11|12|1
+mark is met by jack|9|11|12|0
+mark is not met by jack|9|11|12|1
+jack meets mark today|9|11|12|0
+jack does not meet mark today|9|11|12|1
+mark is met by jack today|9|11|12|0
+mark is not met by jack today|9|11|12|1
+kevin meets mark|10|11|12|0
+kevin does not meet mark|10|11|12|1
+mark is met by kevin|10|11|12|0
+mark is not met by kevin|10|11|12|1
+kevin meets mark today|10|11|12|0
+kevin does not meet mark today|10|11|12|1
+mark is met by kevin today|10|11|12|0
+mark is not met by kevin today|10|11|12|1
+kevin meets noah|10|11|13|0
+kevin does not meet noah|10|11|13|1
+noah is met by kevin|10|11|13|0
+noah is not met by kevin|10|11|13|1
+kevin meets noah today|10|11|13|0
+kevin does not meet noah today|10|11|13|1
+noah is met by kevin today|10|11|13|0
+noah is not met by kevin today|10|11|13|1
+liam meets noah|11|11|13|0
+liam does not meet noah|11|11|13|1
+noah is met by liam|11|11|13|0
+noah is not met by liam|11|11|13|1
+liam meets noah today|11|11|13|0
+liam does not meet noah today|11|11|13|1
+noah is met by liam today|11|11|13|0
+noah is not met by liam today|11|11|13|1
+liam meets oscar|11|11|14|0
+liam does not meet oscar|11|11|14|1
+oscar is met by liam|11|11|14|0
+oscar is not met by liam|11|11|14|1
+liam meets oscar today|11|11|14|0
+liam does not meet oscar today|11|11|14|1
+oscar is met by liam today|11|11|14|0
+oscar is not met by liam today|11|11|14|1
+mark meets oscar|12|11|14|0
+mark does not meet oscar|12|11|14|1
+oscar is met by mark|12|11|14|0
+oscar is not met by mark|12|11|14|1
+mark meets oscar today|12|11|14|0
+mark does not meet oscar today|12|11|14|1
+oscar is met by mark today|12|11|14|0
+oscar is not met by mark today|12|11|14|1
+mark meets paul|12|11|15|0
+mark does not meet paul|12|11|15|1
+paul is met by mark|12|11|15|0
+paul is not met by mark|12|11|15|1
+mark meets paul today|12|11|15|0
+mark does not meet paul today|12|11|15|1
+paul is met by mark today|12|11|15|0
+paul is not met by mark today|12|11|15|1
+noah meets paul|13|11|15|0
+noah does not meet paul|13|11|15|1
+paul is met by noah|13|11|15|0
+paul is not met by noah|13|11|15|1
+noah meets paul today|13|11|15|0
+noah does not meet paul today|13|11|15|1
+paul is met by noah today|13|11|15|0
+paul is not met by noah today|13|11|15|1
+noah meets ian|13|11|8|0
+noah does not meet ian|13|11|8|1
+ian is met by noah|13|11|8|0
+ian is not met by noah|13|11|8|1
+noah meets ian today|13|11|8|0
+noah does not meet ian today|13|11|8|1
+ian is met by noah today|13|11|8|0
+ian is not met by noah today|13|11|8|1
+oscar meets ian|14|11|8|0
+oscar does not meet ian|14|11|8|1
+ian is met by oscar|14|11|8|0
+ian is not met by oscar|14|11|8|1
+oscar meets ian today|14|11|8|0
+oscar does not meet ian today|14|11|8|1
+ian is met by oscar today|14|11|8|0
+ian is not met by oscar today|14|11|8|1
+oscar meets jack|14|11|9|0
+oscar does not meet jack|14|11|9|1
+jack is met by oscar|14|11|9|0
+jack is not met by oscar|14|11|9|1
+oscar meets jack today|14|11|9|0
+oscar does not meet jack today|14|11|9|1
+jack is met by oscar today|14|11|9|0
+jack is not met by oscar today|14|11|9|1
+paul meets jack|15|11|9|0
+paul does not meet jack|15|11|9|1
+jack is met by paul|15|11|9|0
+jack is not met by paul|15|11|9|1
+paul meets jack today|15|11|9|0
+paul does not meet jack today|15|11|9|1
+jack is met by paul today|15|11|9|0
+jack is not met by paul today|15|11|9|1
+paul meets kevin|15|11|10|0
+paul does not meet kevin|15|11|10|1
+kevin is met by paul|15|11|10|0
+kevin is not met by paul|15|11|10|1
+paul meets kevin today|15|11|10|0
+paul does not meet kevin today|15|11|10|1
+kevin is met by paul today|15|11|10|0
+kevin is not met by paul today|15|11|10|1
+ian thanks kevin|8|12|10|0
+ian does not thank kevin|8|12|10|1
+kevin is thanked by ian|8|12|10|0
+kevin is not thanked by ian|8|12|10|1
+ian thanks kevin today|8|12|10|0
+ian does not thank kevin today|8|12|10|1
+kevin is thanked by ian today|8|12|10|0
+kevin is not thanked by ian today|8|12|10|1
+ian thanks liam|8|12|11|0
+ian does not thank liam|8|12|11|1
+liam is thanked by ian|8|12|11|0
+liam is not thanked by ian|8|12|11|1
+ian thanks liam today|8|12|11|0
+ian does not thank liam today|8|12|11|1
+liam is thanked by ian today|8|12|11|0
+liam is not thanked by ian today|8|12|11|1
+jack thanks liam|9|12|11|0
+jack does not thank liam|9|12|11|1
+liam is thanked by jack|9|12|11|0
+liam is not thanked by jack|9|12|11|1
+jack thanks liam today|9|12|11|0
+jack does not thank liam today|9|12|11|1
+liam is thanked by jack today|9|12|11|0
+liam is not thanked by jack today|9|12|11|1
+jack thanks mark|9|12|12|0
+jack does not thank mark|9|12|12|1
+mark is thanked by jack|9|12|12|0
+mark is not thanked by jack|9|12|12|1
+jack thanks mark today|9|12|12|0
+jack does not thank mark today|9|12|12|1
+mark is thanked by jack today|9|12|12|0
+mark is not thanked by jack today|9|12|12|1
+kevin thanks mark|10|12|12|0
+kevin does not thank mark|10|12|12|1
+mark is thanked by kevin|10|12|12|0
+mark is not thanked by kevin|10|12|12|1
+kevin thanks mark today|10|12|12|0
+kevin does not thank mark today|10|12|12|1
+mark is thanked by kevin today|10|12|12|0
+mark is not thanked by kevin today|10|12|12|1
+kevin thanks noah|10|12|13|0
+kevin does not thank noah|10|12|13|1
+noah is thanked by kevin|10|12|13|0
+noah is not thanked by kevin|10|12|13|1
+kevin thanks noah today|10|12|13|0
+kevin does not thank noah today|10|12|13|1
+noah is thanked by kevin today|10|12|13|0
+noah is not thanked by kevin today|10|12|13|1
+liam thanks noah|11|12|13|0
+liam does not thank noah|11|12|13|1
+noah is thanked by liam|11|12|13|0
+noah is not thanked by liam|11|12|13|1
+liam thanks noah today|11|12|13|0
+liam does not thank noah today|11|12|13|1
+noah is thanked by liam today|11|12|13|0
+noah is not thanked by liam today|11|12|13|1
+liam thanks oscar|11|12|14|0
+liam does not thank oscar|11|12|14|1
+oscar is thanked by liam|11|12|14|0
+oscar is not thanked by liam|11|12|14|1
+liam thanks oscar today|11|12|14|0
+liam does not thank oscar today|11|12|14|1
+oscar is thanked by liam today|11|12|14|0
+oscar is not thanked by liam today|11|12|14|1
+mark thanks oscar|12|12|14|0
+mark does not thank oscar|12|12|14|1
+oscar is thanked by mark|12|12|14|0
+oscar is not thanked by mark|12|12|14|1
+mark thanks oscar today|12|12|14|0
+mark does not thank oscar today|12|12|14|1
+oscar is thanked by mark today|12|12|14|0
+oscar is not thanked by mark today|12|12|14|1
+mark thanks paul|12|12|15|0
+mark does not thank paul|12|12|15|1
+paul is thanked by mark|12|12|15|0
+paul is not thanked by mark|12|12|15|1
+mark thanks paul today|12|12|15|0
+mark does not thank paul today|12|12|15|1
+paul is thanked by mark today|12|12|15|0
+paul is not thanked by mark today|12|12|15|1
+noah thanks paul|13|12|15|0
+noah does not thank paul|13|12|15|1
+paul is thanked by noah|13|12|15|0
+paul is not thanked by noah|13|12|15|1
+noah thanks paul today|13|12|15|0
+noah does not thank paul today|13|12|15|1
+paul is thanked by noah today|13|12|15|0
+paul is not thanked by noah today|13|12|15|1
+noah thanks ian|13|12|8|0
+noah does not thank ian|13|12|8|1
+ian is thanked by noah|13|12|8|0
+ian is not thanked by noah|13|12|8|1
+noah thanks ian today|13|12|8|0
+noah does not thank ian today|13|12|8|1
+ian is thanked by noah today|13|12|8|0
+ian is not thanked by noah today|13|12|8|1
+oscar thanks ian|14|12|8|0
+oscar does not thank ian|14|12|8|1
+ian is thanked by oscar|14|12|8|0
+ian is not thanked by oscar|14|12|8|1
+oscar thanks ian today|14|12|8|0
+oscar does not thank ian today|14|12|8|1
+ian is thanked by oscar today|14|12|8|0
+ian is not thanked by oscar today|14|12|8|1
+oscar thanks jack|14|12|9|0
+oscar does not thank jack|14|12|9|1
+jack is thanked by oscar|14|12|9|0
+jack is not thanked by oscar|14|12|9|1
+oscar thanks jack today|14|12|9|0
+oscar does not thank jack today|14|12|9|1
+jack is thanked by oscar today|14|12|9|0
+jack is not thanked by oscar today|14|12|9|1
+paul thanks jack|15|12|9|0
+paul does not thank jack|15|12|9|1
+jack is thanked by paul|15|12|9|0
+jack is not thanked by paul|15|12|9|1
+paul thanks jack today|15|12|9|0
+paul does not thank jack today|15|12|9|1
+jack is thanked by paul today|15|12|9|0
+jack is not thanked by paul today|15|12|9|1
+paul thanks kevin|15|12|10|0
+paul does not thank kevin|15|12|10|1
+kevin is thanked by paul|15|12|10|0
+kevin is not thanked by paul|15|12|10|1
+paul thanks kevin today|15|12|10|0
+paul does not thank kevin today|15|12|10|1
+kevin is thanked by paul today|15|12|10|0
+kevin is not thanked by paul today|15|12|10|1
+ian contacts kevin|8|13|10|0
+ian does not contact kevin|8|13|10|1
+kevin is contacted by ian|8|13|10|0
+kevin is not contacted by ian|8|13|10|1
+ian contacts kevin today|8|13|10|0
+ian does not contact kevin today|8|13|10|1
+kevin is contacted by ian today|8|13|10|0
+kevin is not contacted by ian today|8|13|10|1
+ian contacts liam|8|13|11|0
+ian does not contact liam|8|13|11|1
+liam is contacted by ian|8|13|11|0
+liam is not contacted by ian|8|13|11|1
+ian contacts liam today|8|13|11|0
+ian does not contact liam today|8|13|11|1
+liam is contacted by ian today|8|13|11|0
+liam is not contacted by ian today|8|13|11|1
+jack contacts liam|9|13|11|0
+jack does not contact liam|9|13|11|1
+liam is contacted by jack|9|13|11|0
+liam is not contacted by jack|9|13|11|1
+jack contacts liam today|9|13|11|0
+jack does not contact liam today|9|13|11|1
+liam is contacted by jack today|9|13|11|0
+liam is not contacted by jack today|9|13|11|1
+jack contacts mark|9|13|12|0
+jack does not contact mark|9|13|12|1
+mark is contacted by jack|9|13|12|0
+mark is not contacted by jack|9|13|12|1
+jack contacts mark today|9|13|12|0
+jack does not contact mark today|9|13|12|1
+mark is contacted by jack today|9|13|12|0
+mark is not contacted by jack today|9|13|12|1
+kevin contacts mark|10|13|12|0
+kevin does not contact mark|10|13|12|1
+mark is contacted by kevin|10|13|12|0
+mark is not contacted by kevin|10|13|12|1
+kevin contacts mark today|10|13|12|0
+kevin does not contact mark today|10|13|12|1
+mark is contacted by kevin today|10|13|12|0
+mark is not contacted by kevin today|10|13|12|1
+kevin contacts noah|10|13|13|0
+kevin does not contact noah|10|13|13|1
+noah is contacted by kevin|10|13|13|0
+noah is not contacted by kevin|10|13|13|1
+kevin contacts noah today|10|13|13|0
+kevin does not contact noah today|10|13|13|1
+noah is contacted by kevin today|10|13|13|0
+noah is not contacted by kevin today|10|13|13|1
+liam contacts noah|11|13|13|0
+liam does not contact noah|11|13|13|1
+noah is contacted by liam|11|13|13|0
+noah is not contacted by liam|11|13|13|1
+liam contacts noah today|11|13|13|0
+liam does not contact noah today|11|13|13|1
+noah is contacted by liam today|11|13|13|0
+noah is not contacted by liam today|11|13|13|1
+liam contacts oscar|11|13|14|0
+liam does not contact oscar|11|13|14|1
+oscar is contacted by liam|11|13|14|0
+oscar is not contacted by liam|11|13|14|1
+liam contacts oscar today|11|13|14|0
+liam does not contact oscar today|11|13|14|1
+oscar is contacted by liam today|11|13|14|0
+oscar is not contacted by liam today|11|13|14|1
+mark contacts oscar|12|13|14|0
+mark does not contact oscar|12|13|14|1
+oscar is contacted by mark|12|13|14|0
+oscar is not contacted by mark|12|13|14|1
+mark contacts oscar today|12|13|14|0
+mark does not contact oscar today|12|13|14|1
+oscar is contacted by mark today|12|13|14|0
+oscar is not contacted by mark today|12|13|14|1
+mark contacts paul|12|13|15|0
+mark does not contact paul|12|13|15|1
+paul is contacted by mark|12|13|15|0
+paul is not contacted by mark|12|13|15|1
+mark contacts paul today|12|13|15|0
+mark does not contact paul today|12|13|15|1
+paul is contacted by mark today|12|13|15|0
+paul is not contacted by mark today|12|13|15|1
+noah contacts paul|13|13|15|0
+noah does not contact paul|13|13|15|1
+paul is contacted by noah|13|13|15|0
+paul is not contacted by noah|13|13|15|1
+noah contacts paul today|13|13|15|0
+noah does not contact paul today|13|13|15|1
+paul is contacted by noah today|13|13|15|0
+paul is not contacted by noah today|13|13|15|1
+noah contacts ian|13|13|8|0
+noah does not contact ian|13|13|8|1
+ian is contacted by noah|13|13|8|0
+ian is not contacted by noah|13|13|8|1
+noah contacts ian today|13|13|8|0
+noah does not contact ian today|13|13|8|1
+ian is contacted by noah today|13|13|8|0
+ian is not contacted by noah today|13|13|8|1
+oscar contacts ian|14|13|8|0
+oscar does not contact ian|14|13|8|1
+ian is contacted by oscar|14|13|8|0
+ian is not contacted by oscar|14|13|8|1
+oscar contacts ian today|14|13|8|0
+oscar does not contact ian today|14|13|8|1
+ian is contacted by oscar today|14|13|8|0
+ian is not contacted by oscar today|14|13|8|1
+oscar contacts jack|14|13|9|0
+oscar does not contact jack|14|13|9|1
+jack is contacted by oscar|14|13|9|0
+jack is not contacted by oscar|14|13|9|1
+oscar contacts jack today|14|13|9|0
+oscar does not contact jack today|14|13|9|1
+jack is contacted by oscar today|14|13|9|0
+jack is not contacted by oscar today|14|13|9|1
+paul contacts jack|15|13|9|0
+paul does not contact jack|15|13|9|1
+jack is contacted by paul|15|13|9|0
+jack is not contacted by paul|15|13|9|1
+paul contacts jack today|15|13|9|0
+paul does not contact jack today|15|13|9|1
+jack is contacted by paul today|15|13|9|0
+jack is not contacted by paul today|15|13|9|1
+paul contacts kevin|15|13|10|0
+paul does not contact kevin|15|13|10|1
+kevin is contacted by paul|15|13|10|0
+kevin is not contacted by paul|15|13|10|1
+paul contacts kevin today|15|13|10|0
+paul does not contact kevin today|15|13|10|1
+kevin is contacted by paul today|15|13|10|0
+kevin is not contacted by paul today|15|13|10|1
+ian visits kevin|8|14|10|0
+ian does not visit kevin|8|14|10|1
+kevin is visited by ian|8|14|10|0
+kevin is not visited by ian|8|14|10|1
+ian visits kevin today|8|14|10|0
+ian does not visit kevin today|8|14|10|1
+kevin is visited by ian today|8|14|10|0
+kevin is not visited by ian today|8|14|10|1
+ian visits liam|8|14|11|0
+ian does not visit liam|8|14|11|1
+liam is visited by ian|8|14|11|0
+liam is not visited by ian|8|14|11|1
+ian visits liam today|8|14|11|0
+ian does not visit liam today|8|14|11|1
+liam is visited by ian today|8|14|11|0
+liam is not visited by ian today|8|14|11|1
+jack visits liam|9|14|11|0
+jack does not visit liam|9|14|11|1
+liam is visited by jack|9|14|11|0
+liam is not visited by jack|9|14|11|1
+jack visits liam today|9|14|11|0
+jack does not visit liam today|9|14|11|1
+liam is visited by jack today|9|14|11|0
+liam is not visited by jack today|9|14|11|1
+jack visits mark|9|14|12|0
+jack does not visit mark|9|14|12|1
+mark is visited by jack|9|14|12|0
+mark is not visited by jack|9|14|12|1
+jack visits mark today|9|14|12|0
+jack does not visit mark today|9|14|12|1
+mark is visited by jack today|9|14|12|0
+mark is not visited by jack today|9|14|12|1
+kevin visits mark|10|14|12|0
+kevin does not visit mark|10|14|12|1
+mark is visited by kevin|10|14|12|0
+mark is not visited by kevin|10|14|12|1
+kevin visits mark today|10|14|12|0
+kevin does not visit mark today|10|14|12|1
+mark is visited by kevin today|10|14|12|0
+mark is not visited by kevin today|10|14|12|1
+kevin visits noah|10|14|13|0
+kevin does not visit noah|10|14|13|1
+noah is visited by kevin|10|14|13|0
+noah is not visited by kevin|10|14|13|1
+kevin visits noah today|10|14|13|0
+kevin does not visit noah today|10|14|13|1
+noah is visited by kevin today|10|14|13|0
+noah is not visited by kevin today|10|14|13|1
+liam visits noah|11|14|13|0
+liam does not visit noah|11|14|13|1
+noah is visited by liam|11|14|13|0
+noah is not visited by liam|11|14|13|1
+liam visits noah today|11|14|13|0
+liam does not visit noah today|11|14|13|1
+noah is visited by liam today|11|14|13|0
+noah is not visited by liam today|11|14|13|1
+liam visits oscar|11|14|14|0
+liam does not visit oscar|11|14|14|1
+oscar is visited by liam|11|14|14|0
+oscar is not visited by liam|11|14|14|1
+liam visits oscar today|11|14|14|0
+liam does not visit oscar today|11|14|14|1
+oscar is visited by liam today|11|14|14|0
+oscar is not visited by liam today|11|14|14|1
+mark visits oscar|12|14|14|0
+mark does not visit oscar|12|14|14|1
+oscar is visited by mark|12|14|14|0
+oscar is not visited by mark|12|14|14|1
+mark visits oscar today|12|14|14|0
+mark does not visit oscar today|12|14|14|1
+oscar is visited by mark today|12|14|14|0
+oscar is not visited by mark today|12|14|14|1
+mark visits paul|12|14|15|0
+mark does not visit paul|12|14|15|1
+paul is visited by mark|12|14|15|0
+paul is not visited by mark|12|14|15|1
+mark visits paul today|12|14|15|0
+mark does not visit paul today|12|14|15|1
+paul is visited by mark today|12|14|15|0
+paul is not visited by mark today|12|14|15|1
+noah visits paul|13|14|15|0
+noah does not visit paul|13|14|15|1
+paul is visited by noah|13|14|15|0
+paul is not visited by noah|13|14|15|1
+noah visits paul today|13|14|15|0
+noah does not visit paul today|13|14|15|1
+paul is visited by noah today|13|14|15|0
+paul is not visited by noah today|13|14|15|1
+noah visits ian|13|14|8|0
+noah does not visit ian|13|14|8|1
+ian is visited by noah|13|14|8|0
+ian is not visited by noah|13|14|8|1
+noah visits ian today|13|14|8|0
+noah does not visit ian today|13|14|8|1
+ian is visited by noah today|13|14|8|0
+ian is not visited by noah today|13|14|8|1
+oscar visits ian|14|14|8|0
+oscar does not visit ian|14|14|8|1
+ian is visited by oscar|14|14|8|0
+ian is not visited by oscar|14|14|8|1
+oscar visits ian today|14|14|8|0
+oscar does not visit ian today|14|14|8|1
+ian is visited by oscar today|14|14|8|0
+ian is not visited by oscar today|14|14|8|1
+oscar visits jack|14|14|9|0
+oscar does not visit jack|14|14|9|1
+jack is visited by oscar|14|14|9|0
+jack is not visited by oscar|14|14|9|1
+oscar visits jack today|14|14|9|0
+oscar does not visit jack today|14|14|9|1
+jack is visited by oscar today|14|14|9|0
+jack is not visited by oscar today|14|14|9|1
+paul visits jack|15|14|9|0
+paul does not visit jack|15|14|9|1
+jack is visited by paul|15|14|9|0
+jack is not visited by paul|15|14|9|1
+paul visits jack today|15|14|9|0
+paul does not visit jack today|15|14|9|1
+jack is visited by paul today|15|14|9|0
+jack is not visited by paul today|15|14|9|1
+paul visits kevin|15|14|10|0
+paul does not visit kevin|15|14|10|1
+kevin is visited by paul|15|14|10|0
+kevin is not visited by paul|15|14|10|1
+paul visits kevin today|15|14|10|0
+paul does not visit kevin today|15|14|10|1
+kevin is visited by paul today|15|14|10|0
+kevin is not visited by paul today|15|14|10|1
+ian observes kevin|8|15|10|0
+ian does not observe kevin|8|15|10|1
+kevin is observed by ian|8|15|10|0
+kevin is not observed by ian|8|15|10|1
+ian observes kevin today|8|15|10|0
+ian does not observe kevin today|8|15|10|1
+kevin is observed by ian today|8|15|10|0
+kevin is not observed by ian today|8|15|10|1
+ian observes liam|8|15|11|0
+ian does not observe liam|8|15|11|1
+liam is observed by ian|8|15|11|0
+liam is not observed by ian|8|15|11|1
+ian observes liam today|8|15|11|0
+ian does not observe liam today|8|15|11|1
+liam is observed by ian today|8|15|11|0
+liam is not observed by ian today|8|15|11|1
+jack observes liam|9|15|11|0
+jack does not observe liam|9|15|11|1
+liam is observed by jack|9|15|11|0
+liam is not observed by jack|9|15|11|1
+jack observes liam today|9|15|11|0
+jack does not observe liam today|9|15|11|1
+liam is observed by jack today|9|15|11|0
+liam is not observed by jack today|9|15|11|1
+jack observes mark|9|15|12|0
+jack does not observe mark|9|15|12|1
+mark is observed by jack|9|15|12|0
+mark is not observed by jack|9|15|12|1
+jack observes mark today|9|15|12|0
+jack does not observe mark today|9|15|12|1
+mark is observed by jack today|9|15|12|0
+mark is not observed by jack today|9|15|12|1
+kevin observes mark|10|15|12|0
+kevin does not observe mark|10|15|12|1
+mark is observed by kevin|10|15|12|0
+mark is not observed by kevin|10|15|12|1
+kevin observes mark today|10|15|12|0
+kevin does not observe mark today|10|15|12|1
+mark is observed by kevin today|10|15|12|0
+mark is not observed by kevin today|10|15|12|1
+kevin observes noah|10|15|13|0
+kevin does not observe noah|10|15|13|1
+noah is observed by kevin|10|15|13|0
+noah is not observed by kevin|10|15|13|1
+kevin observes noah today|10|15|13|0
+kevin does not observe noah today|10|15|13|1
+noah is observed by kevin today|10|15|13|0
+noah is not observed by kevin today|10|15|13|1
+liam observes noah|11|15|13|0
+liam does not observe noah|11|15|13|1
+noah is observed by liam|11|15|13|0
+noah is not observed by liam|11|15|13|1
+liam observes noah today|11|15|13|0
+liam does not observe noah today|11|15|13|1
+noah is observed by liam today|11|15|13|0
+noah is not observed by liam today|11|15|13|1
+liam observes oscar|11|15|14|0
+liam does not observe oscar|11|15|14|1
+oscar is observed by liam|11|15|14|0
+oscar is not observed by liam|11|15|14|1
+liam observes oscar today|11|15|14|0
+liam does not observe oscar today|11|15|14|1
+oscar is observed by liam today|11|15|14|0
+oscar is not observed by liam today|11|15|14|1
+mark observes oscar|12|15|14|0
+mark does not observe oscar|12|15|14|1
+oscar is observed by mark|12|15|14|0
+oscar is not observed by mark|12|15|14|1
+mark observes oscar today|12|15|14|0
+mark does not observe oscar today|12|15|14|1
+oscar is observed by mark today|12|15|14|0
+oscar is not observed by mark today|12|15|14|1
+mark observes paul|12|15|15|0
+mark does not observe paul|12|15|15|1
+paul is observed by mark|12|15|15|0
+paul is not observed by mark|12|15|15|1
+mark observes paul today|12|15|15|0
+mark does not observe paul today|12|15|15|1
+paul is observed by mark today|12|15|15|0
+paul is not observed by mark today|12|15|15|1
+noah observes paul|13|15|15|0
+noah does not observe paul|13|15|15|1
+paul is observed by noah|13|15|15|0
+paul is not observed by noah|13|15|15|1
+noah observes paul today|13|15|15|0
+noah does not observe paul today|13|15|15|1
+paul is observed by noah today|13|15|15|0
+paul is not observed by noah today|13|15|15|1
+noah observes ian|13|15|8|0
+noah does not observe ian|13|15|8|1
+ian is observed by noah|13|15|8|0
+ian is not observed by noah|13|15|8|1
+noah observes ian today|13|15|8|0
+noah does not observe ian today|13|15|8|1
+ian is observed by noah today|13|15|8|0
+ian is not observed by noah today|13|15|8|1
+oscar observes ian|14|15|8|0
+oscar does not observe ian|14|15|8|1
+ian is observed by oscar|14|15|8|0
+ian is not observed by oscar|14|15|8|1
+oscar observes ian today|14|15|8|0
+oscar does not observe ian today|14|15|8|1
+ian is observed by oscar today|14|15|8|0
+ian is not observed by oscar today|14|15|8|1
+oscar observes jack|14|15|9|0
+oscar does not observe jack|14|15|9|1
+jack is observed by oscar|14|15|9|0
+jack is not observed by oscar|14|15|9|1
+oscar observes jack today|14|15|9|0
+oscar does not observe jack today|14|15|9|1
+jack is observed by oscar today|14|15|9|0
+jack is not observed by oscar today|14|15|9|1
+paul observes jack|15|15|9|0
+paul does not observe jack|15|15|9|1
+jack is observed by paul|15|15|9|0
+jack is not observed by paul|15|15|9|1
+paul observes jack today|15|15|9|0
+paul does not observe jack today|15|15|9|1
+jack is observed by paul today|15|15|9|0
+jack is not observed by paul today|15|15|9|1
+paul observes kevin|15|15|10|0
+paul does not observe kevin|15|15|10|1
+kevin is observed by paul|15|15|10|0
+kevin is not observed by paul|15|15|10|1
+paul observes kevin today|15|15|10|0
+paul does not observe kevin today|15|15|10|1
+kevin is observed by paul today|15|15|10|0
+kevin is not observed by paul today|15|15|10|1

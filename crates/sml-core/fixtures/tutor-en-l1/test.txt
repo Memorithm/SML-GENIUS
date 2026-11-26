@@ -1,0 +1,896 @@
+alice watches beth|0|6|1|0
+alice does not watch beth|0|6|1|1
+beth is watched by alice|0|6|1|0
+beth is not watched by alice|0|6|1|1
+alice watches beth today|0|6|1|0
+alice does not watch beth today|0|6|1|1
+beth is watched by alice today|0|6|1|0
+beth is not watched by alice today|0|6|1|1
+alice watches claire|0|6|2|0
+alice does not watch claire|0|6|2|1
+claire is watched by alice|0|6|2|0
+claire is not watched by alice|0|6|2|1
+alice watches claire today|0|6|2|0
+alice does not watch claire today|0|6|2|1
+claire is watched by alice today|0|6|2|0
+claire is not watched by alice today|0|6|2|1
+alice watches diana|0|6|3|0
+alice does not watch diana|0|6|3|1
+diana is watched by alice|0|6|3|0
+diana is not watched by alice|0|6|3|1
+alice watches diana today|0|6|3|0
+alice does not watch diana today|0|6|3|1
+diana is watched by alice today|0|6|3|0
+diana is not watched by alice today|0|6|3|1
+alice watches emma|0|6|4|0
+alice does not watch emma|0|6|4|1
+emma is watched by alice|0|6|4|0
+emma is not watched by alice|0|6|4|1
+alice watches emma today|0|6|4|0
+alice does not watch emma today|0|6|4|1
+emma is watched by alice today|0|6|4|0
+emma is not watched by alice today|0|6|4|1
+alice watches fiona|0|6|5|0
+alice does not watch fiona|0|6|5|1
+fiona is watched by alice|0|6|5|0
+fiona is not watched by alice|0|6|5|1
+alice watches fiona today|0|6|5|0
+alice does not watch fiona today|0|6|5|1
+fiona is watched by alice today|0|6|5|0
+fiona is not watched by alice today|0|6|5|1
+alice watches grace|0|6|6|0
+alice does not watch grace|0|6|6|1
+grace is watched by alice|0|6|6|0
+grace is not watched by alice|0|6|6|1
+alice watches grace today|0|6|6|0
+alice does not watch grace today|0|6|6|1
+grace is watched by alice today|0|6|6|0
+grace is not watched by alice today|0|6|6|1
+alice watches helen|0|6|7|0
+alice does not watch helen|0|6|7|1
+helen is watched by alice|0|6|7|0
+helen is not watched by alice|0|6|7|1
+alice watches helen today|0|6|7|0
+alice does not watch helen today|0|6|7|1
+helen is watched by alice today|0|6|7|0
+helen is not watched by alice today|0|6|7|1
+beth watches alice|1|6|0|0
+beth does not watch alice|1|6|0|1
+alice is watched by beth|1|6|0|0
+alice is not watched by beth|1|6|0|1
+beth watches alice today|1|6|0|0
+beth does not watch alice today|1|6|0|1
+alice is watched by beth today|1|6|0|0
+alice is not watched by beth today|1|6|0|1
+beth watches claire|1|6|2|0
+beth does not watch claire|1|6|2|1
+claire is watched by beth|1|6|2|0
+claire is not watched by beth|1|6|2|1
+beth watches claire today|1|6|2|0
+beth does not watch claire today|1|6|2|1
+claire is watched by beth today|1|6|2|0
+claire is not watched by beth today|1|6|2|1
+beth watches diana|1|6|3|0
+beth does not watch diana|1|6|3|1
+diana is watched by beth|1|6|3|0
+diana is not watched by beth|1|6|3|1
+beth watches diana today|1|6|3|0
+beth does not watch diana today|1|6|3|1
+diana is watched by beth today|1|6|3|0
+diana is not watched by beth today|1|6|3|1
+beth watches emma|1|6|4|0
+beth does not watch emma|1|6|4|1
+emma is watched by beth|1|6|4|0
+emma is not watched by beth|1|6|4|1
+beth watches emma today|1|6|4|0
+beth does not watch emma today|1|6|4|1
+emma is watched by beth today|1|6|4|0
+emma is not watched by beth today|1|6|4|1
+beth watches fiona|1|6|5|0
+beth does not watch fiona|1|6|5|1
+fiona is watched by beth|1|6|5|0
+fiona is not watched by beth|1|6|5|1
+beth watches fiona today|1|6|5|0
+beth does not watch fiona today|1|6|5|1
+fiona is watched by beth today|1|6|5|0
+fiona is not watched by beth today|1|6|5|1
+beth watches grace|1|6|6|0
+beth does not watch grace|1|6|6|1
+grace is watched by beth|1|6|6|0
+grace is not watched by beth|1|6|6|1
+beth watches grace today|1|6|6|0
+beth does not watch grace today|1|6|6|1
+grace is watched by beth today|1|6|6|0
+grace is not watched by beth today|1|6|6|1
+beth watches helen|1|6|7|0
+beth does not watch helen|1|6|7|1
+helen is watched by beth|1|6|7|0
+helen is not watched by beth|1|6|7|1
+beth watches helen today|1|6|7|0
+beth does not watch helen today|1|6|7|1
+helen is watched by beth today|1|6|7|0
+helen is not watched by beth today|1|6|7|1
+claire watches alice|2|6|0|0
+claire does not watch alice|2|6|0|1
+alice is watched by claire|2|6|0|0
+alice is not watched by claire|2|6|0|1
+claire watches alice today|2|6|0|0
+claire does not watch alice today|2|6|0|1
+alice is watched by claire today|2|6|0|0
+alice is not watched by claire today|2|6|0|1
+claire watches beth|2|6|1|0
+claire does not watch beth|2|6|1|1
+beth is watched by claire|2|6|1|0
+beth is not watched by claire|2|6|1|1
+claire watches beth today|2|6|1|0
+claire does not watch beth today|2|6|1|1
+beth is watched by claire today|2|6|1|0
+beth is not watched by claire today|2|6|1|1
+claire watches diana|2|6|3|0
+claire does not watch diana|2|6|3|1
+diana is watched by claire|2|6|3|0
+diana is not watched by claire|2|6|3|1
+claire watches diana today|2|6|3|0
+claire does not watch diana today|2|6|3|1
+diana is watched by claire today|2|6|3|0
+diana is not watched by claire today|2|6|3|1
+claire watches emma|2|6|4|0
+claire does not watch emma|2|6|4|1
+emma is watched by claire|2|6|4|0
+emma is not watched by claire|2|6|4|1
+claire watches emma today|2|6|4|0
+claire does not watch emma today|2|6|4|1
+emma is watched by claire today|2|6|4|0
+emma is not watched by claire today|2|6|4|1
+claire watches fiona|2|6|5|0
+claire does not watch fiona|2|6|5|1
+fiona is watched by claire|2|6|5|0
+fiona is not watched by claire|2|6|5|1
+claire watches fiona today|2|6|5|0
+claire does not watch fiona today|2|6|5|1
+fiona is watched by claire today|2|6|5|0
+fiona is not watched by claire today|2|6|5|1
+claire watches grace|2|6|6|0
+claire does not watch grace|2|6|6|1
+grace is watched by claire|2|6|6|0
+grace is not watched by claire|2|6|6|1
+claire watches grace today|2|6|6|0
+claire does not watch grace today|2|6|6|1
+grace is watched by claire today|2|6|6|0
+grace is not watched by claire today|2|6|6|1
+claire watches helen|2|6|7|0
+claire does not watch helen|2|6|7|1
+helen is watched by claire|2|6|7|0
+helen is not watched by claire|2|6|7|1
+claire watches helen today|2|6|7|0
+claire does not watch helen today|2|6|7|1
+helen is watched by claire today|2|6|7|0
+helen is not watched by claire today|2|6|7|1
+diana watches alice|3|6|0|0
+diana does not watch alice|3|6|0|1
+alice is watched by diana|3|6|0|0
+alice is not watched by diana|3|6|0|1
+diana watches alice today|3|6|0|0
+diana does not watch alice today|3|6|0|1
+alice is watched by diana today|3|6|0|0
+alice is not watched by diana today|3|6|0|1
+diana watches beth|3|6|1|0
+diana does not watch beth|3|6|1|1
+beth is watched by diana|3|6|1|0
+beth is not watched by diana|3|6|1|1
+diana watches beth today|3|6|1|0
+diana does not watch beth today|3|6|1|1
+beth is watched by diana today|3|6|1|0
+beth is not watched by diana today|3|6|1|1
+diana watches claire|3|6|2|0
+diana does not watch claire|3|6|2|1
+claire is watched by diana|3|6|2|0
+claire is not watched by diana|3|6|2|1
+diana watches claire today|3|6|2|0
+diana does not watch claire today|3|6|2|1
+claire is watched by diana today|3|6|2|0
+claire is not watched by diana today|3|6|2|1
+diana watches emma|3|6|4|0
+diana does not watch emma|3|6|4|1
+emma is watched by diana|3|6|4|0
+emma is not watched by diana|3|6|4|1
+diana watches emma today|3|6|4|0
+diana does not watch emma today|3|6|4|1
+emma is watched by diana today|3|6|4|0
+emma is not watched by diana today|3|6|4|1
+diana watches fiona|3|6|5|0
+diana does not watch fiona|3|6|5|1
+fiona is watched by diana|3|6|5|0
+fiona is not watched by diana|3|6|5|1
+diana watches fiona today|3|6|5|0
+diana does not watch fiona today|3|6|5|1
+fiona is watched by diana today|3|6|5|0
+fiona is not watched by diana today|3|6|5|1
+diana watches grace|3|6|6|0
+diana does not watch grace|3|6|6|1
+grace is watched by diana|3|6|6|0
+grace is not watched by diana|3|6|6|1
+diana watches grace today|3|6|6|0
+diana does not watch grace today|3|6|6|1
+grace is watched by diana today|3|6|6|0
+grace is not watched by diana today|3|6|6|1
+diana watches helen|3|6|7|0
+diana does not watch helen|3|6|7|1
+helen is watched by diana|3|6|7|0
+helen is not watched by diana|3|6|7|1
+diana watches helen today|3|6|7|0
+diana does not watch helen today|3|6|7|1
+helen is watched by diana today|3|6|7|0
+helen is not watched by diana today|3|6|7|1
+emma watches alice|4|6|0|0
+emma does not watch alice|4|6|0|1
+alice is watched by emma|4|6|0|0
+alice is not watched by emma|4|6|0|1
+emma watches alice today|4|6|0|0
+emma does not watch alice today|4|6|0|1
+alice is watched by emma today|4|6|0|0
+alice is not watched by emma today|4|6|0|1
+emma watches beth|4|6|1|0
+emma does not watch beth|4|6|1|1
+beth is watched by emma|4|6|1|0
+beth is not watched by emma|4|6|1|1
+emma watches beth today|4|6|1|0
+emma does not watch beth today|4|6|1|1
+beth is watched by emma today|4|6|1|0
+beth is not watched by emma today|4|6|1|1
+emma watches claire|4|6|2|0
+emma does not watch claire|4|6|2|1
+claire is watched by emma|4|6|2|0
+claire is not watched by emma|4|6|2|1
+emma watches claire today|4|6|2|0
+emma does not watch claire today|4|6|2|1
+claire is watched by emma today|4|6|2|0
+claire is not watched by emma today|4|6|2|1
+emma watches diana|4|6|3|0
+emma does not watch diana|4|6|3|1
+diana is watched by emma|4|6|3|0
+diana is not watched by emma|4|6|3|1
+emma watches diana today|4|6|3|0
+emma does not watch diana today|4|6|3|1
+diana is watched by emma today|4|6|3|0
+diana is not watched by emma today|4|6|3|1
+emma watches fiona|4|6|5|0
+emma does not watch fiona|4|6|5|1
+fiona is watched by emma|4|6|5|0
+fiona is not watched by emma|4|6|5|1
+emma watches fiona today|4|6|5|0
+emma does not watch fiona today|4|6|5|1
+fiona is watched by emma today|4|6|5|0
+fiona is not watched by emma today|4|6|5|1
+emma watches grace|4|6|6|0
+emma does not watch grace|4|6|6|1
+grace is watched by emma|4|6|6|0
+grace is not watched by emma|4|6|6|1
+emma watches grace today|4|6|6|0
+emma does not watch grace today|4|6|6|1
+grace is watched by emma today|4|6|6|0
+grace is not watched by emma today|4|6|6|1
+emma watches helen|4|6|7|0
+emma does not watch helen|4|6|7|1
+helen is watched by emma|4|6|7|0
+helen is not watched by emma|4|6|7|1
+emma watches helen today|4|6|7|0
+emma does not watch helen today|4|6|7|1
+helen is watched by emma today|4|6|7|0
+helen is not watched by emma today|4|6|7|1
+fiona watches alice|5|6|0|0
+fiona does not watch alice|5|6|0|1
+alice is watched by fiona|5|6|0|0
+alice is not watched by fiona|5|6|0|1
+fiona watches alice today|5|6|0|0
+fiona does not watch alice today|5|6|0|1
+alice is watched by fiona today|5|6|0|0
+alice is not watched by fiona today|5|6|0|1
+fiona watches beth|5|6|1|0
+fiona does not watch beth|5|6|1|1
+beth is watched by fiona|5|6|1|0
+beth is not watched by fiona|5|6|1|1
+fiona watches beth today|5|6|1|0
+fiona does not watch beth today|5|6|1|1
+beth is watched by fiona today|5|6|1|0
+beth is not watched by fiona today|5|6|1|1
+fiona watches claire|5|6|2|0
+fiona does not watch claire|5|6|2|1
+claire is watched by fiona|5|6|2|0
+claire is not watched by fiona|5|6|2|1
+fiona watches claire today|5|6|2|0
+fiona does not watch claire today|5|6|2|1
+claire is watched by fiona today|5|6|2|0
+claire is not watched by fiona today|5|6|2|1
+fiona watches diana|5|6|3|0
+fiona does not watch diana|5|6|3|1
+diana is watched by fiona|5|6|3|0
+diana is not watched by fiona|5|6|3|1
+fiona watches diana today|5|6|3|0
+fiona does not watch diana today|5|6|3|1
+diana is watched by fiona today|5|6|3|0
+diana is not watched by fiona today|5|6|3|1
+fiona watches emma|5|6|4|0
+fiona does not watch emma|5|6|4|1
+emma is watched by fiona|5|6|4|0
+emma is not watched by fiona|5|6|4|1
+fiona watches emma today|5|6|4|0
+fiona does not watch emma today|5|6|4|1
+emma is watched by fiona today|5|6|4|0
+emma is not watched by fiona today|5|6|4|1
+fiona watches grace|5|6|6|0
+fiona does not watch grace|5|6|6|1
+grace is watched by fiona|5|6|6|0
+grace is not watched by fiona|5|6|6|1
+fiona watches grace today|5|6|6|0
+fiona does not watch grace today|5|6|6|1
+grace is watched by fiona today|5|6|6|0
+grace is not watched by fiona today|5|6|6|1
+fiona watches helen|5|6|7|0
+fiona does not watch helen|5|6|7|1
+helen is watched by fiona|5|6|7|0
+helen is not watched by fiona|5|6|7|1
+fiona watches helen today|5|6|7|0
+fiona does not watch helen today|5|6|7|1
+helen is watched by fiona today|5|6|7|0
+helen is not watched by fiona today|5|6|7|1
+grace watches alice|6|6|0|0
+grace does not watch alice|6|6|0|1
+alice is watched by grace|6|6|0|0
+alice is not watched by grace|6|6|0|1
+grace watches alice today|6|6|0|0
+grace does not watch alice today|6|6|0|1
+alice is watched by grace today|6|6|0|0
+alice is not watched by grace today|6|6|0|1
+grace watches beth|6|6|1|0
+grace does not watch beth|6|6|1|1
+beth is watched by grace|6|6|1|0
+beth is not watched by grace|6|6|1|1
+grace watches beth today|6|6|1|0
+grace does not watch beth today|6|6|1|1
+beth is watched by grace today|6|6|1|0
+beth is not watched by grace today|6|6|1|1
+grace watches claire|6|6|2|0
+grace does not watch claire|6|6|2|1
+claire is watched by grace|6|6|2|0
+claire is not watched by grace|6|6|2|1
+grace watches claire today|6|6|2|0
+grace does not watch claire today|6|6|2|1
+claire is watched by grace today|6|6|2|0
+claire is not watched by grace today|6|6|2|1
+grace watches diana|6|6|3|0
+grace does not watch diana|6|6|3|1
+diana is watched by grace|6|6|3|0
+diana is not watched by grace|6|6|3|1
+grace watches diana today|6|6|3|0
+grace does not watch diana today|6|6|3|1
+diana is watched by grace today|6|6|3|0
+diana is not watched by grace today|6|6|3|1
+grace watches emma|6|6|4|0
+grace does not watch emma|6|6|4|1
+emma is watched by grace|6|6|4|0
+emma is not watched by grace|6|6|4|1
+grace watches emma today|6|6|4|0
+grace does not watch emma today|6|6|4|1
+emma is watched by grace today|6|6|4|0
+emma is not watched by grace today|6|6|4|1
+grace watches fiona|6|6|5|0
+grace does not watch fiona|6|6|5|1
+fiona is watched by grace|6|6|5|0
+fiona is not watched by grace|6|6|5|1
+grace watches fiona today|6|6|5|0
+grace does not watch fiona today|6|6|5|1
+fiona is watched by grace today|6|6|5|0
+fiona is not watched by grace today|6|6|5|1
+grace watches helen|6|6|7|0
+grace does not watch helen|6|6|7|1
+helen is watched by grace|6|6|7|0
+helen is not watched by grace|6|6|7|1
+grace watches helen today|6|6|7|0
+grace does not watch helen today|6|6|7|1
+helen is watched by grace today|6|6|7|0
+helen is not watched by grace today|6|6|7|1
+helen watches alice|7|6|0|0
+helen does not watch alice|7|6|0|1
+alice is watched by helen|7|6|0|0
+alice is not watched by helen|7|6|0|1
+helen watches alice today|7|6|0|0
+helen does not watch alice today|7|6|0|1
+alice is watched by helen today|7|6|0|0
+alice is not watched by helen today|7|6|0|1
+helen watches beth|7|6|1|0
+helen does not watch beth|7|6|1|1
+beth is watched by helen|7|6|1|0
+beth is not watched by helen|7|6|1|1
+helen watches beth today|7|6|1|0
+helen does not watch beth today|7|6|1|1
+beth is watched by helen today|7|6|1|0
+beth is not watched by helen today|7|6|1|1
+helen watches claire|7|6|2|0
+helen does not watch claire|7|6|2|1
+claire is watched by helen|7|6|2|0
+claire is not watched by helen|7|6|2|1
+helen watches claire today|7|6|2|0
+helen does not watch claire today|7|6|2|1
+claire is watched by helen today|7|6|2|0
+claire is not watched by helen today|7|6|2|1
+helen watches diana|7|6|3|0
+helen does not watch diana|7|6|3|1
+diana is watched by helen|7|6|3|0
+diana is not watched by helen|7|6|3|1
+helen watches diana today|7|6|3|0
+helen does not watch diana today|7|6|3|1
+diana is watched by helen today|7|6|3|0
+diana is not watched by helen today|7|6|3|1
+helen watches emma|7|6|4|0
+helen does not watch emma|7|6|4|1
+emma is watched by helen|7|6|4|0
+emma is not watched by helen|7|6|4|1
+helen watches emma today|7|6|4|0
+helen does not watch emma today|7|6|4|1
+emma is watched by helen today|7|6|4|0
+emma is not watched by helen today|7|6|4|1
+helen watches fiona|7|6|5|0
+helen does not watch fiona|7|6|5|1
+fiona is watched by helen|7|6|5|0
+fiona is not watched by helen|7|6|5|1
+helen watches fiona today|7|6|5|0
+helen does not watch fiona today|7|6|5|1
+fiona is watched by helen today|7|6|5|0
+fiona is not watched by helen today|7|6|5|1
+helen watches grace|7|6|6|0
+helen does not watch grace|7|6|6|1
+grace is watched by helen|7|6|6|0
+grace is not watched by helen|7|6|6|1
+helen watches grace today|7|6|6|0
+helen does not watch grace today|7|6|6|1
+grace is watched by helen today|7|6|6|0
+grace is not watched by helen today|7|6|6|1
+alice protects beth|0|7|1|0
+alice does not protect beth|0|7|1|1
+beth is protected by alice|0|7|1|0
+beth is not protected by alice|0|7|1|1
+alice protects beth today|0|7|1|0
+alice does not protect beth today|0|7|1|1
+beth is protected by alice today|0|7|1|0
+beth is not protected by alice today|0|7|1|1
+alice protects claire|0|7|2|0
+alice does not protect claire|0|7|2|1
+claire is protected by alice|0|7|2|0
+claire is not protected by alice|0|7|2|1
+alice protects claire today|0|7|2|0
+alice does not protect claire today|0|7|2|1
+claire is protected by alice today|0|7|2|0
+claire is not protected by alice today|0|7|2|1
+alice protects diana|0|7|3|0
+alice does not protect diana|0|7|3|1
+diana is protected by alice|0|7|3|0
+diana is not protected by alice|0|7|3|1
+alice protects diana today|0|7|3|0
+alice does not protect diana today|0|7|3|1
+diana is protected by alice today|0|7|3|0
+diana is not protected by alice today|0|7|3|1
+alice protects emma|0|7|4|0
+alice does not protect emma|0|7|4|1
+emma is protected by alice|0|7|4|0
+emma is not protected by alice|0|7|4|1
+alice protects emma today|0|7|4|0
+alice does not protect emma today|0|7|4|1
+emma is protected by alice today|0|7|4|0
+emma is not protected by alice today|0|7|4|1
+alice protects fiona|0|7|5|0
+alice does not protect fiona|0|7|5|1
+fiona is protected by alice|0|7|5|0
+fiona is not protected by alice|0|7|5|1
+alice protects fiona today|0|7|5|0
+alice does not protect fiona today|0|7|5|1
+fiona is protected by alice today|0|7|5|0
+fiona is not protected by alice today|0|7|5|1
+alice protects grace|0|7|6|0
+alice does not protect grace|0|7|6|1
+grace is protected by alice|0|7|6|0
+grace is not protected by alice|0|7|6|1
+alice protects grace today|0|7|6|0
+alice does not protect grace today|0|7|6|1
+grace is protected by alice today|0|7|6|0
+grace is not protected by alice today|0|7|6|1
+alice protects helen|0|7|7|0
+alice does not protect helen|0|7|7|1
+helen is protected by alice|0|7|7|0
+helen is not protected by alice|0|7|7|1
+alice protects helen today|0|7|7|0
+alice does not protect helen today|0|7|7|1
+helen is protected by alice today|0|7|7|0
+helen is not protected by alice today|0|7|7|1
+beth protects alice|1|7|0|0
+beth does not protect alice|1|7|0|1
+alice is protected by beth|1|7|0|0
+alice is not protected by beth|1|7|0|1
+beth protects alice today|1|7|0|0
+beth does not protect alice today|1|7|0|1
+alice is protected by beth today|1|7|0|0
+alice is not protected by beth today|1|7|0|1
+beth protects claire|1|7|2|0
+beth does not protect claire|1|7|2|1
+claire is protected by beth|1|7|2|0
+claire is not protected by beth|1|7|2|1
+beth protects claire today|1|7|2|0
+beth does not protect claire today|1|7|2|1
+claire is protected by beth today|1|7|2|0
+claire is not protected by beth today|1|7|2|1
+beth protects diana|1|7|3|0
+beth does not protect diana|1|7|3|1
+diana is protected by beth|1|7|3|0
+diana is not protected by beth|1|7|3|1
+beth protects diana today|1|7|3|0
+beth does not protect diana today|1|7|3|1
+diana is protected by beth today|1|7|3|0
+diana is not protected by beth today|1|7|3|1
+beth protects emma|1|7|4|0
+beth does not protect emma|1|7|4|1
+emma is protected by beth|1|7|4|0
+emma is not protected by beth|1|7|4|1
+beth protects emma today|1|7|4|0
+beth does not protect emma today|1|7|4|1
+emma is protected by beth today|1|7|4|0
+emma is not protected by beth today|1|7|4|1
+beth protects fiona|1|7|5|0
+beth does not protect fiona|1|7|5|1
+fiona is protected by beth|1|7|5|0
+fiona is not protected by beth|1|7|5|1
+beth protects fiona today|1|7|5|0
+beth does not protect fiona today|1|7|5|1
+fiona is protected by beth today|1|7|5|0
+fiona is not protected by beth today|1|7|5|1
+beth protects grace|1|7|6|0
+beth does not protect grace|1|7|6|1
+grace is protected by beth|1|7|6|0
+grace is not protected by beth|1|7|6|1
+beth protects grace today|1|7|6|0
+beth does not protect grace today|1|7|6|1
+grace is protected by beth today|1|7|6|0
+grace is not protected by beth today|1|7|6|1
+beth protects helen|1|7|7|0
+beth does not protect helen|1|7|7|1
+helen is protected by beth|1|7|7|0
+helen is not protected by beth|1|7|7|1
+beth protects helen today|1|7|7|0
+beth does not protect helen today|1|7|7|1
+helen is protected by beth today|1|7|7|0
+helen is not protected by beth today|1|7|7|1
+claire protects alice|2|7|0|0
+claire does not protect alice|2|7|0|1
+alice is protected by claire|2|7|0|0
+alice is not protected by claire|2|7|0|1
+claire protects alice today|2|7|0|0
+claire does not protect alice today|2|7|0|1
+alice is protected by claire today|2|7|0|0
+alice is not protected by claire today|2|7|0|1
+claire protects beth|2|7|1|0
+claire does not protect beth|2|7|1|1
+beth is protected by claire|2|7|1|0
+beth is not protected by claire|2|7|1|1
+claire protects beth today|2|7|1|0
+claire does not protect beth today|2|7|1|1
+beth is protected by claire today|2|7|1|0
+beth is not protected by claire today|2|7|1|1
+claire protects diana|2|7|3|0
+claire does not protect diana|2|7|3|1
+diana is protected by claire|2|7|3|0
+diana is not protected by claire|2|7|3|1
+claire protects diana today|2|7|3|0
+claire does not protect diana today|2|7|3|1
+diana is protected by claire today|2|7|3|0
+diana is not protected by claire today|2|7|3|1
+claire protects emma|2|7|4|0
+claire does not protect emma|2|7|4|1
+emma is protected by claire|2|7|4|0
+emma is not protected by claire|2|7|4|1
+claire protects emma today|2|7|4|0
+claire does not protect emma today|2|7|4|1
+emma is protected by claire today|2|7|4|0
+emma is not protected by claire today|2|7|4|1
+claire protects fiona|2|7|5|0
+claire does not protect fiona|2|7|5|1
+fiona is protected by claire|2|7|5|0
+fiona is not protected by claire|2|7|5|1
+claire protects fiona today|2|7|5|0
+claire does not protect fiona today|2|7|5|1
+fiona is protected by claire today|2|7|5|0
+fiona is not protected by claire today|2|7|5|1
+claire protects grace|2|7|6|0
+claire does not protect grace|2|7|6|1
+grace is protected by claire|2|7|6|0
+grace is not protected by claire|2|7|6|1
+claire protects grace today|2|7|6|0
+claire does not protect grace today|2|7|6|1
+grace is protected by claire today|2|7|6|0
+grace is not protected by claire today|2|7|6|1
+claire protects helen|2|7|7|0
+claire does not protect helen|2|7|7|1
+helen is protected by claire|2|7|7|0
+helen is not protected by claire|2|7|7|1
+claire protects helen today|2|7|7|0
+claire does not protect helen today|2|7|7|1
+helen is protected by claire today|2|7|7|0
+helen is not protected by claire today|2|7|7|1
+diana protects alice|3|7|0|0
+diana does not protect alice|3|7|0|1
+alice is protected by diana|3|7|0|0
+alice is not protected by diana|3|7|0|1
+diana protects alice today|3|7|0|0
+diana does not protect alice today|3|7|0|1
+alice is protected by diana today|3|7|0|0
+alice is not protected by diana today|3|7|0|1
+diana protects beth|3|7|1|0
+diana does not protect beth|3|7|1|1
+beth is protected by diana|3|7|1|0
+beth is not protected by diana|3|7|1|1
+diana protects beth today|3|7|1|0
+diana does not protect beth today|3|7|1|1
+beth is protected by diana today|3|7|1|0
+beth is not protected by diana today|3|7|1|1
+diana protects claire|3|7|2|0
+diana does not protect claire|3|7|2|1
+claire is protected by diana|3|7|2|0
+claire is not protected by diana|3|7|2|1
+diana protects claire today|3|7|2|0
+diana does not protect claire today|3|7|2|1
+claire is protected by diana today|3|7|2|0
+claire is not protected by diana today|3|7|2|1
+diana protects emma|3|7|4|0
+diana does not protect emma|3|7|4|1
+emma is protected by diana|3|7|4|0
+emma is not protected by diana|3|7|4|1
+diana protects emma today|3|7|4|0
+diana does not protect emma today|3|7|4|1
+emma is protected by diana today|3|7|4|0
+emma is not protected by diana today|3|7|4|1
+diana protects fiona|3|7|5|0
+diana does not protect fiona|3|7|5|1
+fiona is protected by diana|3|7|5|0
+fiona is not protected by diana|3|7|5|1
+diana protects fiona today|3|7|5|0
+diana does not protect fiona today|3|7|5|1
+fiona is protected by diana today|3|7|5|0
+fiona is not protected by diana today|3|7|5|1
+diana protects grace|3|7|6|0
+diana does not protect grace|3|7|6|1
+grace is protected by diana|3|7|6|0
+grace is not protected by diana|3|7|6|1
+diana protects grace today|3|7|6|0
+diana does not protect grace today|3|7|6|1
+grace is protected by diana today|3|7|6|0
+grace is not protected by diana today|3|7|6|1
+diana protects helen|3|7|7|0
+diana does not protect helen|3|7|7|1
+helen is protected by diana|3|7|7|0
+helen is not protected by diana|3|7|7|1
+diana protects helen today|3|7|7|0
+diana does not protect helen today|3|7|7|1
+helen is protected by diana today|3|7|7|0
+helen is not protected by diana today|3|7|7|1
+emma protects alice|4|7|0|0
+emma does not protect alice|4|7|0|1
+alice is protected by emma|4|7|0|0
+alice is not protected by emma|4|7|0|1
+emma protects alice today|4|7|0|0
+emma does not protect alice today|4|7|0|1
+alice is protected by emma today|4|7|0|0
+alice is not protected by emma today|4|7|0|1
+emma protects beth|4|7|1|0
+emma does not protect beth|4|7|1|1
+beth is protected by emma|4|7|1|0
+beth is not protected by emma|4|7|1|1
+emma protects beth today|4|7|1|0
+emma does not protect beth today|4|7|1|1
+beth is protected by emma today|4|7|1|0
+beth is not protected by emma today|4|7|1|1
+emma protects claire|4|7|2|0
+emma does not protect claire|4|7|2|1
+claire is protected by emma|4|7|2|0
+claire is not protected by emma|4|7|2|1
+emma protects claire today|4|7|2|0
+emma does not protect claire today|4|7|2|1
+claire is protected by emma today|4|7|2|0
+claire is not protected by emma today|4|7|2|1
+emma protects diana|4|7|3|0
+emma does not protect diana|4|7|3|1
+diana is protected by emma|4|7|3|0
+diana is not protected by emma|4|7|3|1
+emma protects diana today|4|7|3|0
+emma does not protect diana today|4|7|3|1
+diana is protected by emma today|4|7|3|0
+diana is not protected by emma today|4|7|3|1
+emma protects fiona|4|7|5|0
+emma does not protect fiona|4|7|5|1
+fiona is protected by emma|4|7|5|0
+fiona is not protected by emma|4|7|5|1
+emma protects fiona today|4|7|5|0
+emma does not protect fiona today|4|7|5|1
+fiona is protected by emma today|4|7|5|0
+fiona is not protected by emma today|4|7|5|1
+emma protects grace|4|7|6|0
+emma does not protect grace|4|7|6|1
+grace is protected by emma|4|7|6|0
+grace is not protected by emma|4|7|6|1
+emma protects grace today|4|7|6|0
+emma does not protect grace today|4|7|6|1
+grace is protected by emma today|4|7|6|0
+grace is not protected by emma today|4|7|6|1
+emma protects helen|4|7|7|0
+emma does not protect helen|4|7|7|1
+helen is protected by emma|4|7|7|0
+helen is not protected by emma|4|7|7|1
+emma protects helen today|4|7|7|0
+emma does not protect helen today|4|7|7|1
+helen is protected by emma today|4|7|7|0
+helen is not protected by emma today|4|7|7|1
+fiona protects alice|5|7|0|0
+fiona does not protect alice|5|7|0|1
+alice is protected by fiona|5|7|0|0
+alice is not protected by fiona|5|7|0|1
+fiona protects alice today|5|7|0|0
+fiona does not protect alice today|5|7|0|1
+alice is protected by fiona today|5|7|0|0
+alice is not protected by fiona today|5|7|0|1
+fiona protects beth|5|7|1|0
+fiona does not protect beth|5|7|1|1
+beth is protected by fiona|5|7|1|0
+beth is not protected by fiona|5|7|1|1
+fiona protects beth today|5|7|1|0
+fiona does not protect beth today|5|7|1|1
+beth is protected by fiona today|5|7|1|0
+beth is not protected by fiona today|5|7|1|1
+fiona protects claire|5|7|2|0
+fiona does not protect claire|5|7|2|1
+claire is protected by fiona|5|7|2|0
+claire is not protected by fiona|5|7|2|1
+fiona protects claire today|5|7|2|0
+fiona does not protect claire today|5|7|2|1
+claire is protected by fiona today|5|7|2|0
+claire is not protected by fiona today|5|7|2|1
+fiona protects diana|5|7|3|0
+fiona does not protect diana|5|7|3|1
+diana is protected by fiona|5|7|3|0
+diana is not protected by fiona|5|7|3|1
+fiona protects diana today|5|7|3|0
+fiona does not protect diana today|5|7|3|1
+diana is protected by fiona today|5|7|3|0
+diana is not protected by fiona today|5|7|3|1
+fiona protects emma|5|7|4|0
+fiona does not protect emma|5|7|4|1
+emma is protected by fiona|5|7|4|0
+emma is not protected by fiona|5|7|4|1
+fiona protects emma today|5|7|4|0
+fiona does not protect emma today|5|7|4|1
+emma is protected by fiona today|5|7|4|0
+emma is not protected by fiona today|5|7|4|1
+fiona protects grace|5|7|6|0
+fiona does not protect grace|5|7|6|1
+grace is protected by fiona|5|7|6|0
+grace is not protected by fiona|5|7|6|1
+fiona protects grace today|5|7|6|0
+fiona does not protect grace today|5|7|6|1
+grace is protected by fiona today|5|7|6|0
+grace is not protected by fiona today|5|7|6|1
+fiona protects helen|5|7|7|0
+fiona does not protect helen|5|7|7|1
+helen is protected by fiona|5|7|7|0
+helen is not protected by fiona|5|7|7|1
+fiona protects helen today|5|7|7|0
+fiona does not protect helen today|5|7|7|1
+helen is protected by fiona today|5|7|7|0
+helen is not protected by fiona today|5|7|7|1
+grace protects alice|6|7|0|0
+grace does not protect alice|6|7|0|1
+alice is protected by grace|6|7|0|0
+alice is not protected by grace|6|7|0|1
+grace protects alice today|6|7|0|0
+grace does not protect alice today|6|7|0|1
+alice is protected by grace today|6|7|0|0
+alice is not protected by grace today|6|7|0|1
+grace protects beth|6|7|1|0
+grace does not protect beth|6|7|1|1
+beth is protected by grace|6|7|1|0
+beth is not protected by grace|6|7|1|1
+grace protects beth today|6|7|1|0
+grace does not protect beth today|6|7|1|1
+beth is protected by grace today|6|7|1|0
+beth is not protected by grace today|6|7|1|1
+grace protects claire|6|7|2|0
+grace does not protect claire|6|7|2|1
+claire is protected by grace|6|7|2|0
+claire is not protected by grace|6|7|2|1
+grace protects claire today|6|7|2|0
+grace does not protect claire today|6|7|2|1
+claire is protected by grace today|6|7|2|0
+claire is not protected by grace today|6|7|2|1
+grace protects diana|6|7|3|0
+grace does not protect diana|6|7|3|1
+diana is protected by grace|6|7|3|0
+diana is not protected by grace|6|7|3|1
+grace protects diana today|6|7|3|0
+grace does not protect diana today|6|7|3|1
+diana is protected by grace today|6|7|3|0
+diana is not protected by grace today|6|7|3|1
+grace protects emma|6|7|4|0
+grace does not protect emma|6|7|4|1
+emma is protected by grace|6|7|4|0
+emma is not protected by grace|6|7|4|1
+grace protects emma today|6|7|4|0
+grace does not protect emma today|6|7|4|1
+emma is protected by grace today|6|7|4|0
+emma is not protected by grace today|6|7|4|1
+grace protects fiona|6|7|5|0
+grace does not protect fiona|6|7|5|1
+fiona is protected by grace|6|7|5|0
+fiona is not protected by grace|6|7|5|1
+grace protects fiona today|6|7|5|0
+grace does not protect fiona today|6|7|5|1
+fiona is protected by grace today|6|7|5|0
+fiona is not protected by grace today|6|7|5|1
+grace protects helen|6|7|7|0
+grace does not protect helen|6|7|7|1
+helen is protected by grace|6|7|7|0
+helen is not protected by grace|6|7|7|1
+grace protects helen today|6|7|7|0
+grace does not protect helen today|6|7|7|1
+helen is protected by grace today|6|7|7|0
+helen is not protected by grace today|6|7|7|1
+helen protects alice|7|7|0|0
+helen does not protect alice|7|7|0|1
+alice is protected by helen|7|7|0|0
+alice is not protected by helen|7|7|0|1
+helen protects alice today|7|7|0|0
+helen does not protect alice today|7|7|0|1
+alice is protected by helen today|7|7|0|0
+alice is not protected by helen today|7|7|0|1
+helen protects beth|7|7|1|0
+helen does not protect beth|7|7|1|1
+beth is protected by helen|7|7|1|0
+beth is not protected by helen|7|7|1|1
+helen protects beth today|7|7|1|0
+helen does not protect beth today|7|7|1|1
+beth is protected by helen today|7|7|1|0
+beth is not protected by helen today|7|7|1|1
+helen protects claire|7|7|2|0
+helen does not protect claire|7|7|2|1
+claire is protected by helen|7|7|2|0
+claire is not protected by helen|7|7|2|1
+helen protects claire today|7|7|2|0
+helen does not protect claire today|7|7|2|1
+claire is protected by helen today|7|7|2|0
+claire is not protected by helen today|7|7|2|1
+helen protects diana|7|7|3|0
+helen does not protect diana|7|7|3|1
+diana is protected by helen|7|7|3|0
+diana is not protected by helen|7|7|3|1
+helen protects diana today|7|7|3|0
+helen does not protect diana today|7|7|3|1
+diana is protected by helen today|7|7|3|0
+diana is not protected by helen today|7|7|3|1
+helen protects emma|7|7|4|0
+helen does not protect emma|7|7|4|1
+emma is protected by helen|7|7|4|0
+emma is not protected by helen|7|7|4|1
+helen protects emma today|7|7|4|0
+helen does not protect emma today|7|7|4|1
+emma is protected by helen today|7|7|4|0
+emma is not protected by helen today|7|7|4|1
+helen protects fiona|7|7|5|0
+helen does not protect fiona|7|7|5|1
+fiona is protected by helen|7|7|5|0
+fiona is not protected by helen|7|7|5|1
+helen protects fiona today|7|7|5|0
+helen does not protect fiona today|7|7|5|1
+fiona is protected by helen today|7|7|5|0
+fiona is not protected by helen today|7|7|5|1
+helen protects grace|7|7|6|0
+helen does not protect grace|7|7|6|1
+grace is protected by helen|7|7|6|0
+grace is not protected by helen|7|7|6|1
+helen protects grace today|7|7|6|0
+helen does not protect grace today|7|7|6|1
+grace is protected by helen today|7|7|6|0
+grace is not protected by helen today|7|7|6|1
