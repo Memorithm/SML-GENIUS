@@ -1,0 +1,77 @@
+name: SML TUTOR bilingual engine integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/sml-tutor/**'
+      - 'crates/sml-core/examples/sml_tutor_linguistic_roles.rs'
+      - 'crates/sml-core/examples/sml_tutor_dialogue/**'
+      - 'crates/sml-core/fixtures/tutor-l1/**'
+      - 'crates/sml-core/fixtures/tutor-en-l1/**'
+      - '.github/workflows/sml-tutor-bilingual-engine.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/sml-tutor/**'
+      - 'crates/sml-core/examples/sml_tutor_linguistic_roles.rs'
+      - 'crates/sml-core/examples/sml_tutor_dialogue/**'
+      - 'crates/sml-core/fixtures/tutor-l1/**'
+      - 'crates/sml-core/fixtures/tutor-en-l1/**'
+      - '.github/workflows/sml-tutor-bilingual-engine.yml'
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTFLAGS: "-D warnings"
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Native engine and frozen L1 learner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --release -p sml-tutor
+          cargo build --locked --release -p sml-core --example sml_tutor_linguistic_roles
+          cargo build --locked --release -p sml-tutor --example sml_tutor_bilingual_l1
+          stage="$(mktemp -d)"
+          trap 'rm -rf -- "$stage"' EXIT
+          native="$PWD/target/release/examples/sml_tutor_linguistic_roles"
+          bridge="$PWD/target/release/examples/sml_tutor_bilingual_l1"
+          for lang in fr en; do
+            if [[ "$lang" = fr ]]; then src=crates/sml-core/fixtures/tutor-l1; else src=crates/sml-core/fixtures/tutor-en-l1; fi
+            mkdir "$stage/$lang"
+            cp "$src/lexicon.txt" "$src/test.txt" "$stage/$lang/"
+            cp "$src/train.txt" "$stage/$lang/oracle-train.txt"
+            python3 - "$src/train.txt" "$stage/$lang/train.txt" <<'PY'
+          import sys
+          from pathlib import Path
+          rows = Path(sys.argv[1]).read_text().splitlines()
+          assert len(rows) == 192
+          selected = [rows[v * 32 + (v % 4) * 8 + p] for v in range(6) for p in range(8)]
+          assert len(set(selected)) == 48
+          Path(sys.argv[2]).write_text("\n".join(selected) + "\n")
+          PY
+            "$native" "$stage/$lang/lexicon.txt" "$stage/$lang/train.txt" "$stage/$lang/test.txt" "$stage/$lang/linguistic.bank"
+          done
+          fr_sha="$(sha256sum "$stage/fr/linguistic.bank" | cut -d' ' -f1)"
+          en_sha="$(sha256sum "$stage/en/linguistic.bank" | cut -d' ' -f1)"
+          for workers in 1 2; do
+            "$bridge" "$native" "$stage/store-$workers" "$stage/fr" "$stage/en" "$fr_sha" "$en_sha" "$workers" | tee "$stage/result-$workers.txt"
+            grep -Fx "SML_TUTOR_L1_ENGINE=PASS languages=2 workers=$workers learned_annotations=96 held_out=1792 store_entries=2 reopen_unchanged=true" "$stage/result-$workers.txt"
+          done
+          cmp "$stage/store-1/store/HEAD" "$stage/store-2/store/HEAD"
+          # The annotation teacher is not authoritative. A validly formatted
+          # incorrect role label must not enter the store as a certified bank.
+          sed -i '1s/|0$/|1/' "$stage/fr/train.txt"
+          if "$bridge" "$native" "$stage/rejected" "$stage/fr" "$stage/en" "$fr_sha" "$en_sha" 2; then
+            echo "incorrect annotation was admitted" >&2
+            exit 1
+          fi
