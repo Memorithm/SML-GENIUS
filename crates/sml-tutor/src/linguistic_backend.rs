@@ -132,7 +132,9 @@ impl Prepared {
         let reference_triples: BTreeSet<_> = reference.iter().map(|r| r.triple).collect();
         if held.iter().any(|r| {
             reference_sentences.contains(&r.sentence) || reference_triples.contains(&r.triple)
-        }) || held.iter().any(|r| proposed.iter().any(|p| p.sentence == r.sentence))
+        }) || held
+            .iter()
+            .any(|r| proposed.iter().any(|p| p.sentence == r.sentence))
         {
             return Err("L1 oracle/held-out leakage".into());
         }
@@ -315,10 +317,7 @@ pub(super) struct L1Backend {
 }
 
 impl L1Backend {
-    pub(super) fn new(
-        binary: &Path,
-        inputs: [L1Input; 2],
-    ) -> Result<(Vec<LessonSpec>, Self)> {
+    pub(super) fn new(binary: &Path, inputs: [L1Input; 2]) -> Result<(Vec<LessonSpec>, Self)> {
         let binary = binary.canonicalize().map_err(|e| e.to_string())?;
         let digest = binary_digest(&binary)?;
         let mut specs = Vec::new();
@@ -449,8 +448,7 @@ impl L1Backend {
         let mut admitted_text = String::new();
         for proposal in &admitted {
             let sentence = std::str::from_utf8(&proposal.payload).map_err(|e| e.to_string())?;
-            let label =
-                std::str::from_utf8(&proposal.claimed_answer).map_err(|e| e.to_string())?;
+            let label = std::str::from_utf8(&proposal.claimed_answer).map_err(|e| e.to_string())?;
             admitted_text.push_str(&format!("{sentence}|{label}\n"));
         }
         let stage = Temp::new()?;
@@ -499,13 +497,9 @@ impl L1Backend {
                 .cohorts
                 .push(self.assess(&stage.0, &bank, cases, cohort)?);
         }
-        out.report.cohorts.push(self.replay(
-            &stage.0,
-            &bank,
-            &train,
-            &held,
-            Cohort::Reload,
-        )?);
+        out.report
+            .cohorts
+            .push(self.replay(&stage.0, &bank, &train, &held, Cohort::Reload)?);
         out.report.cohorts.push(self.replay(
             &stage.0,
             &parent,

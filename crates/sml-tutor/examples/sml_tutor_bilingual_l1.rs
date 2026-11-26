@@ -52,14 +52,15 @@ fn main() -> Result<()> {
         max_attempts: 1,
         ..EngineConfig::default()
     };
-    let (mut engine, _) =
-        Engine::open_bilingual_l1(root, Path::new(native), inputs.clone(), cfg)?;
+    let (mut engine, _) = Engine::open_bilingual_l1(root, Path::new(native), inputs.clone(), cfg)?;
     let result = engine.run(&CancellationToken::new())?;
-    if result.states.get(&KnowledgeState::Consolidated) != Some(&2)
-        || engine.store().audit()? != 2
+    if result.states.get(&KnowledgeState::Consolidated) != Some(&2) || engine.store().audit()? != 2
     {
         for lesson in engine.registry().iter() {
-            eprintln!("{}: {:?} {:?}", lesson.spec.domain, lesson.state, lesson.errors);
+            eprintln!(
+                "{}: {:?} {:?}",
+                lesson.spec.domain, lesson.state, lesson.errors
+            );
         }
         return Err("bilingual engine admission failed".into());
     }
