@@ -42,11 +42,7 @@ fn hex_byte(b: u8) -> bool {
 }
 
 fn decode(raw: &str, max: usize) -> Result<String> {
-    if raw.is_empty()
-        || raw.len() > max * 2
-        || raw.len() % 2 != 0
-        || !raw.bytes().all(hex_byte)
-    {
+    if raw.is_empty() || raw.len() > max * 2 || raw.len() % 2 != 0 || !raw.bytes().all(hex_byte) {
         return Err("invalid canonical hex field".into());
     }
     let bytes = (0..raw.len())
