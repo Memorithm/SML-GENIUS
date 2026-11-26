@@ -10,10 +10,24 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const TRAIN: [(u8, u8); 8] = [
-    (0, 0), (1, 1), (255, 1), (1, 255), (3, 5), (128, 128), (17, 0), (0, 17),
+    (0, 0),
+    (1, 1),
+    (255, 1),
+    (1, 255),
+    (3, 5),
+    (128, 128),
+    (17, 0),
+    (0, 17),
 ];
 const DEV: [(u8, u8); 8] = [
-    (2, 7), (7, 2), (15, 16), (16, 15), (127, 129), (129, 127), (254, 2), (2, 254),
+    (2, 7),
+    (7, 2),
+    (15, 16),
+    (16, 15),
+    (127, 129),
+    (129, 127),
+    (254, 2),
+    (2, 254),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,8 +45,15 @@ enum Op {
 
 impl Op {
     const ALL: [Self; 9] = [
-        Self::Add, Self::Sub, Self::ReverseSub, Self::Mul, Self::Xor,
-        Self::And, Self::Or, Self::Min, Self::Max,
+        Self::Add,
+        Self::Sub,
+        Self::ReverseSub,
+        Self::Mul,
+        Self::Xor,
+        Self::And,
+        Self::Or,
+        Self::Min,
+        Self::Max,
     ];
 
     fn expression(self) -> &'static str {
@@ -64,7 +85,9 @@ impl Op {
     }
 
     fn parse(expression: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|op| op.expression() == expression)
+        Self::ALL
+            .into_iter()
+            .find(|op| op.expression() == expression)
     }
 }
 
@@ -77,9 +100,9 @@ enum Learning {
 
 // The learner sees the examples only, never the task identifier or oracle.
 fn learn(examples: &[(u8, u8, u8)]) -> Learning {
-    let mut candidates = Op::ALL.into_iter().filter(|op| {
-        examples.iter().all(|&(a, b, y)| op.evaluate(a, b) == y)
-    });
+    let mut candidates = Op::ALL
+        .into_iter()
+        .filter(|op| examples.iter().all(|&(a, b, y)| op.evaluate(a, b) == y));
     match (candidates.next(), candidates.next()) {
         (None, _) => Learning::Inconsistent,
         (Some(op), None) => Learning::Unique(op),
@@ -114,10 +137,18 @@ fn oracle(task: usize, a: u8, b: u8) -> u8 {
             out
         }
         7 => {
-            if x <= y { x } else { y }
+            if x <= y {
+                x
+            } else {
+                y
+            }
         }
         8 => {
-            if x >= y { x } else { y }
+            if x >= y {
+                x
+            } else {
+                y
+            }
         }
         _ => unreachable!("fixed curriculum task"),
     };
@@ -198,7 +229,10 @@ fn qualify() -> Result<()> {
     }
     let mut learned = Vec::new();
     for task in 0..Op::ALL.len() {
-        let examples: Vec<_> = TRAIN.iter().map(|&(a,b)| (a,b,oracle(task,a,b))).collect();
+        let examples: Vec<_> = TRAIN
+            .iter()
+            .map(|&(a, b)| (a, b, oracle(task, a, b)))
+            .collect();
         match learn(&examples) {
             Learning::Unique(op) => learned.push(op),
             _ => return Err("R1 synthesis did not uniquely identify a program".into()),
@@ -229,14 +263,21 @@ fn qualify() -> Result<()> {
         .stdin(Stdio::null())
         .output()?;
     if !compile.status.success() {
-        return Err(format!("compiler rejected synthesized program: {}", String::from_utf8_lossy(&compile.stderr)).into());
+        return Err(format!(
+            "compiler rejected synthesized program: {}",
+            String::from_utf8_lossy(&compile.stderr)
+        )
+        .into());
     }
     let output = Command::new(&executable)
         .current_dir(&temp.0)
         .env_clear()
         .stdin(Stdio::null())
         .output()?;
-    if !output.status.success() || !output.stderr.is_empty() || output.stdout.len() != 65_536 * learned.len() {
+    if !output.status.success()
+        || !output.stderr.is_empty()
+        || output.stdout.len() != 65_536 * learned.len()
+    {
         return Err("compiled execution failed or incomplete".into());
     }
 
@@ -247,9 +288,9 @@ fn qualify() -> Result<()> {
     for a in 0u8..=255 {
         for b in 0u8..=255 {
             let i = usize::from(a) * 256 + usize::from(b);
-            let cohort = if train.contains(&(a,b)) {
+            let cohort = if train.contains(&(a, b)) {
                 0
-            } else if dev.contains(&(a,b)) {
+            } else if dev.contains(&(a, b)) {
                 1
             } else {
                 2 + i % 2
@@ -267,7 +308,10 @@ fn qualify() -> Result<()> {
         return Err("R1 compiled or reload mastery failed".into());
     }
     for i in 0..4 {
-        println!("SML_TUTOR_R1_COHORT cohort={} correct={} total={}", names[i], correct[i], total[i]);
+        println!(
+            "SML_TUTOR_R1_COHORT cohort={} correct={} total={}",
+            names[i], correct[i], total[i]
+        );
     }
     println!("SML_TUTOR_R1=PASS programs={} compiler=rustc exact_cases={} reload={} teacher_inference=none", learned.len(), total.iter().sum::<usize>(), reload);
     Ok(())
@@ -286,10 +330,7 @@ mod tests {
         assert_eq!(learn(&[]), Learning::Ambiguous);
         assert_eq!(learn(&[(0, 0, 0)]), Learning::Ambiguous);
         assert_eq!(learn(&[(0, 0, 1)]), Learning::Inconsistent);
-        assert_eq!(
-            learn(&[(3, 5, 8), (3, 5, 9)]),
-            Learning::Inconsistent
-        );
+        assert_eq!(learn(&[(3, 5, 8), (3, 5, 9)]), Learning::Inconsistent);
     }
 
     #[test]
