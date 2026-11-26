@@ -157,7 +157,9 @@ fn replay(
         Recipe::Acquired { children } => {
             let [a, b, c, d] = children.map(|child| replay(closure, gates, acquired, child, input));
             (
-                acquired.expect("acquired gate").evaluate(&[a.0, b.0, c.0, d.0]),
+                acquired
+                    .expect("acquired gate")
+                    .evaluate(&[a.0, b.0, c.0, d.0]),
                 1 + a.1 + b.1 + c.1 + d.1,
             )
         }
