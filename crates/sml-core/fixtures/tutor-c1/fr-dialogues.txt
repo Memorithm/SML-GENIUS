@@ -1,0 +1,175 @@
+est ce que alain poursuit charles ?|je ne sais pas
+charles est poursuivi par alain.|compris
+est ce que alain poursuit charles ?|oui
+qui poursuit charles ?|alain
+et lui poursuit qui ?|charles
+alain ne poursuit pas charles.|information contradictoire
+est ce que alain poursuit charles ?|oui
+correction: alain ne poursuit pas charles.|compris
+est ce que alain poursuit charles ?|non
+est ce que alain poursuit éric ?|je ne sais pas
+
+est ce que bruno poursuit daniel ?|je ne sais pas
+daniel est poursuivi par bruno.|compris
+est ce que bruno poursuit daniel ?|oui
+qui poursuit daniel ?|bruno
+et lui poursuit qui ?|daniel
+bruno ne poursuit pas daniel.|information contradictoire
+est ce que bruno poursuit daniel ?|oui
+correction: bruno ne poursuit pas daniel.|compris
+est ce que bruno poursuit daniel ?|non
+est ce que bruno poursuit françois ?|je ne sais pas
+
+est ce que charles poursuit éric ?|je ne sais pas
+éric est poursuivi par charles.|compris
+est ce que charles poursuit éric ?|oui
+qui poursuit éric ?|charles
+et lui poursuit qui ?|éric
+charles ne poursuit pas éric.|information contradictoire
+est ce que charles poursuit éric ?|oui
+correction: charles ne poursuit pas éric.|compris
+est ce que charles poursuit éric ?|non
+est ce que charles poursuit gabriel ?|je ne sais pas
+
+est ce que daniel poursuit françois ?|je ne sais pas
+françois est poursuivi par daniel.|compris
+est ce que daniel poursuit françois ?|oui
+qui poursuit françois ?|daniel
+et lui poursuit qui ?|françois
+daniel ne poursuit pas françois.|information contradictoire
+est ce que daniel poursuit françois ?|oui
+correction: daniel ne poursuit pas françois.|compris
+est ce que daniel poursuit françois ?|non
+est ce que daniel poursuit hugo ?|je ne sais pas
+
+est ce que éric poursuit gabriel ?|je ne sais pas
+gabriel est poursuivi par éric.|compris
+est ce que éric poursuit gabriel ?|oui
+qui poursuit gabriel ?|éric
+et lui poursuit qui ?|gabriel
+éric ne poursuit pas gabriel.|information contradictoire
+est ce que éric poursuit gabriel ?|oui
+correction: éric ne poursuit pas gabriel.|compris
+est ce que éric poursuit gabriel ?|non
+est ce que éric poursuit alain ?|je ne sais pas
+
+est ce que françois poursuit hugo ?|je ne sais pas
+hugo est poursuivi par françois.|compris
+est ce que françois poursuit hugo ?|oui
+qui poursuit hugo ?|françois
+et lui poursuit qui ?|hugo
+françois ne poursuit pas hugo.|information contradictoire
+est ce que françois poursuit hugo ?|oui
+correction: françois ne poursuit pas hugo.|compris
+est ce que françois poursuit hugo ?|non
+est ce que françois poursuit bruno ?|je ne sais pas
+
+est ce que gabriel poursuit alain ?|je ne sais pas
+alain est poursuivi par gabriel.|compris
+est ce que gabriel poursuit alain ?|oui
+qui poursuit alain ?|gabriel
+et lui poursuit qui ?|alain
+gabriel ne poursuit pas alain.|information contradictoire
+est ce que gabriel poursuit alain ?|oui
+correction: gabriel ne poursuit pas alain.|compris
+est ce que gabriel poursuit alain ?|non
+est ce que gabriel poursuit charles ?|je ne sais pas
+
+est ce que hugo poursuit bruno ?|je ne sais pas
+bruno est poursuivi par hugo.|compris
+est ce que hugo poursuit bruno ?|oui
+qui poursuit bruno ?|hugo
+et lui poursuit qui ?|bruno
+hugo ne poursuit pas bruno.|information contradictoire
+est ce que hugo poursuit bruno ?|oui
+correction: hugo ne poursuit pas bruno.|compris
+est ce que hugo poursuit bruno ?|non
+est ce que hugo poursuit daniel ?|je ne sais pas
+
+est ce que alain protège daniel ?|je ne sais pas
+daniel est protégé par alain.|compris
+est ce que alain protège daniel ?|oui
+qui protège daniel ?|alain
+et lui protège qui ?|daniel
+alain ne protège pas daniel.|information contradictoire
+est ce que alain protège daniel ?|oui
+correction: alain ne protège pas daniel.|compris
+est ce que alain protège daniel ?|non
+est ce que alain protège éric ?|je ne sais pas
+
+est ce que bruno protège éric ?|je ne sais pas
+éric est protégé par bruno.|compris
+est ce que bruno protège éric ?|oui
+qui protège éric ?|bruno
+et lui protège qui ?|éric
+bruno ne protège pas éric.|information contradictoire
+est ce que bruno protège éric ?|oui
+correction: bruno ne protège pas éric.|compris
+est ce que bruno protège éric ?|non
+est ce que bruno protège françois ?|je ne sais pas
+
+est ce que charles protège françois ?|je ne sais pas
+françois est protégé par charles.|compris
+est ce que charles protège françois ?|oui
+qui protège françois ?|charles
+et lui protège qui ?|françois
+charles ne protège pas françois.|information contradictoire
+est ce que charles protège françois ?|oui
+correction: charles ne protège pas françois.|compris
+est ce que charles protège françois ?|non
+est ce que charles protège gabriel ?|je ne sais pas
+
+est ce que daniel protège gabriel ?|je ne sais pas
+gabriel est protégé par daniel.|compris
+est ce que daniel protège gabriel ?|oui
+qui protège gabriel ?|daniel
+et lui protège qui ?|gabriel
+daniel ne protège pas gabriel.|information contradictoire
+est ce que daniel protège gabriel ?|oui
+correction: daniel ne protège pas gabriel.|compris
+est ce que daniel protège gabriel ?|non
+est ce que daniel protège hugo ?|je ne sais pas
+
+est ce que éric protège hugo ?|je ne sais pas
+hugo est protégé par éric.|compris
+est ce que éric protège hugo ?|oui
+qui protège hugo ?|éric
+et lui protège qui ?|hugo
+éric ne protège pas hugo.|information contradictoire
+est ce que éric protège hugo ?|oui
+correction: éric ne protège pas hugo.|compris
+est ce que éric protège hugo ?|non
+est ce que éric protège alain ?|je ne sais pas
+
+est ce que françois protège alain ?|je ne sais pas
+alain est protégé par françois.|compris
+est ce que françois protège alain ?|oui
+qui protège alain ?|françois
+et lui protège qui ?|alain
+françois ne protège pas alain.|information contradictoire
+est ce que françois protège alain ?|oui
+correction: françois ne protège pas alain.|compris
+est ce que françois protège alain ?|non
+est ce que françois protège bruno ?|je ne sais pas
+
+est ce que gabriel protège bruno ?|je ne sais pas
+bruno est protégé par gabriel.|compris
+est ce que gabriel protège bruno ?|oui
+qui protège bruno ?|gabriel
+et lui protège qui ?|bruno
+gabriel ne protège pas bruno.|information contradictoire
+est ce que gabriel protège bruno ?|oui
+correction: gabriel ne protège pas bruno.|compris
+est ce que gabriel protège bruno ?|non
+est ce que gabriel protège charles ?|je ne sais pas
+
+est ce que hugo protège charles ?|je ne sais pas
+charles est protégé par hugo.|compris
+est ce que hugo protège charles ?|oui
+qui protège charles ?|hugo
+et lui protège qui ?|charles
+hugo ne protège pas charles.|information contradictoire
+est ce que hugo protège charles ?|oui
+correction: hugo ne protège pas charles.|compris
+est ce que hugo protège charles ?|non
+est ce que hugo protège daniel ?|je ne sais pas
