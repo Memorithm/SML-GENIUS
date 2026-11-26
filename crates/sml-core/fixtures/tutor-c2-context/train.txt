@@ -1,0 +1,16 @@
+fr|avocat|noun|avocat tribunal plaidoirie|1
+fr|avocat|noun|avocat justice procès|1
+fr|avocat|noun|avocat fruit noyau|2
+fr|avocat|noun|avocat salade cuisine|2
+fr|souris|noun|souris animal rongeur|1
+fr|souris|noun|souris queue fromage|1
+fr|souris|noun|souris ordinateur clic|2
+fr|souris|noun|souris curseur écran|2
+en|bank|noun|bank money loan|1
+en|bank|noun|bank finance deposit|1
+en|bank|noun|bank river shore|2
+en|bank|noun|bank water erosion|2
+en|bat|noun|bat animal wings|1
+en|bat|noun|bat mammal cave|1
+en|bat|noun|bat baseball swing|2
+en|bat|noun|bat wooden hitter|2

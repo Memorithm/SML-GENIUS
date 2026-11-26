@@ -1,0 +1,48 @@
+fr|avocat|noun|au tribunal cet avocat intervient|1
+fr|avocat|noun|la justice écoute cet avocat|1
+fr|avocat|noun|cet avocat prépare une plaidoirie au tribunal|1
+fr|avocat|noun|le procès mobilise un avocat|1
+fr|avocat|noun|le fruit nommé avocat mûrit|2
+fr|avocat|noun|un avocat dans la salade|2
+fr|avocat|noun|le noyau de cet avocat est retiré|2
+fr|avocat|noun|en cuisine cet avocat accompagne un plat|2
+fr|avocat|noun|avocat tribunal fruit|unknown
+fr|avocat|noun|avocat justice salade|unknown
+fr|avocat|noun|cet avocat existe|unknown
+fr|avocat|noun|un avocat particulier|unknown
+fr|souris|noun|la souris est un rongeur|1
+fr|souris|noun|un animal nommé souris|1
+fr|souris|noun|la souris mange du fromage|1
+fr|souris|noun|la queue de cette souris est longue|1
+fr|souris|noun|la souris commande le curseur|2
+fr|souris|noun|une souris pour ordinateur|2
+fr|souris|noun|un clic de souris|2
+fr|souris|noun|la souris déplace le curseur sur écran|2
+fr|souris|noun|souris animal ordinateur|unknown
+fr|souris|noun|souris fromage écran|unknown
+fr|souris|noun|cette souris existe|unknown
+fr|souris|noun|une souris particulière|unknown
+en|bank|noun|the bank issues a loan|1
+en|bank|noun|money at the bank|1
+en|bank|noun|finance experts discuss the bank|1
+en|bank|noun|a deposit at the bank|1
+en|bank|noun|the river reaches the bank|2
+en|bank|noun|water touches the bank|2
+en|bank|noun|erosion shapes the bank|2
+en|bank|noun|a bank near the shore|2
+en|bank|noun|bank money river|unknown
+en|bank|noun|bank loan water|unknown
+en|bank|noun|the bank exists|unknown
+en|bank|noun|a particular bank|unknown
+en|bat|noun|the bat has wings|1
+en|bat|noun|a bat is a mammal|1
+en|bat|noun|the animal called bat flies|1
+en|bat|noun|a bat leaves the cave|1
+en|bat|noun|a bat in baseball|2
+en|bat|noun|the hitter holds a bat|2
+en|bat|noun|a wooden bat is used|2
+en|bat|noun|swing the bat|2
+en|bat|noun|bat wings baseball|unknown
+en|bat|noun|bat cave hitter|unknown
+en|bat|noun|the bat exists|unknown
+en|bat|noun|a particular bat|unknown
