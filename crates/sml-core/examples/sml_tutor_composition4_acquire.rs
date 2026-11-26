@@ -152,7 +152,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 gate.nonzero_monomials()
             );
         }
-        _ => return Err("usage: SIGNATURE TRAIN NEW_CHECKPOINT | --verify SIGNATURE CHECKPOINT".into()),
+        _ => {
+            return Err(
+                "usage: SIGNATURE TRAIN NEW_CHECKPOINT | --verify SIGNATURE CHECKPOINT".into(),
+            )
+        }
     }
     Ok(())
 }
