@@ -270,7 +270,7 @@ fn restore(raw: &str) -> Result<(Lexicon, Templates)> {
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.as_slice() {
-        [lex, train_path, test_path, output] => {
+        [lex, train_path, test_path, output] if !lex.starts_with("--") => {
             let words = lexicon(&read(lex)?)?;
             let train_raw = read(train_path)?;
             let test_raw = read(test_path)?;
@@ -295,6 +295,21 @@ fn main() -> Result<()> {
             let mut file = File::options().write(true).create_new(true).open(output)?;
             file.write_all(raw.as_bytes())?;
             file.sync_all()?;
+        }
+        [mode, input, train_path, test_path] if mode == "--verify" => {
+            let (words, templates) = restore(&read(input)?)?;
+            let train_raw = read(train_path)?;
+            let test_raw = read(test_path)?;
+            let training = rows(&train_raw)?;
+            let test = rows(&test_raw)?;
+            let errors = evaluate(&words, &templates, &training, &test)?;
+            if errors != 0 {
+                return Err("held-out checkpoint replay failed".into());
+            }
+            println!(
+                "SML_TUTOR_LINGUISTIC_RELOAD=PASS test={} errors=0",
+                test.len()
+            );
         }
         [mode, input, text] if mode == "--predict" => {
             let (words, templates) = restore(&read(input)?)?;
