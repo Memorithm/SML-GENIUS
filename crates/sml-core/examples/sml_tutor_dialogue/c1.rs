@@ -395,10 +395,7 @@ pub(super) fn dispatch(mode: &str, args: &[String]) -> Result<()> {
             // Bound input memory even for malformed or untrusted long lines.
             for _ in 0..MAX_TURNS {
                 let mut line = Vec::new();
-                let n = input
-                    .by_ref()
-                    .take(514)
-                    .read_until(b'\n', &mut line)?;
+                let n = input.by_ref().take(514).read_until(b'\n', &mut line)?;
                 if n == 0 {
                     break;
                 }
@@ -464,7 +461,10 @@ mod tests {
         let mut fresh = Session::new(&lex, &roles, &q);
         assert_eq!(fresh.respond("does alice see beth?"), Answer::Unknown);
         assert_eq!(fresh.respond("who does she see?"), Answer::Unknown);
-        assert_eq!(fresh.respond("correction: alice sees beth"), Answer::Unknown);
+        assert_eq!(
+            fresh.respond("correction: alice sees beth"),
+            Answer::Unknown
+        );
         assert_eq!(fresh.respond("alice sees beth?"), Answer::Unknown);
         assert!(Questions::restore(&(q.checkpoint() + "who|truth\n")).is_err());
     }
