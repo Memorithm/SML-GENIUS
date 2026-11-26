@@ -2,7 +2,7 @@
 //! OBSERVE → IDENTIFY GAP → TEACH → LEARN → EXAMINE → VALIDATE → CONSOLIDATE →
 //! REVISE → REPEAT.
 //!
-//! This first engine is wired to the native ANF induction learner
+//! The original engine is wired to the native ANF induction learner
 //! ([`crate::anf_lesson`]) because it has an exact, independent oracle. The
 //! lesson domain tags (French, English, Mathematics, Rust) are used **only** to
 //! exercise per-discipline lanes, fairness and telemetry with an identical
@@ -39,6 +39,10 @@ use crate::teacher::{
     Verdict,
 };
 use crate::telemetry::Telemetry;
+
+#[path = "linguistic_backend.rs"]
+mod linguistic;
+pub use linguistic::{linguistic_l1_key, L1Input};
 
 /// Parameters of one ANF lesson. Everything is derived deterministically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -352,7 +356,7 @@ struct Job {
     id: LessonId,
     attempt: u32,
     lease: Lease,
-    prereqs: Vec<(Digest, Vec<u8>, AnfLessonParams)>,
+    prereqs: Vec<(LessonId, Digest, Vec<u8>)>,
 }
 
 struct AttemptOutput {
@@ -366,15 +370,49 @@ struct AttemptOutput {
     detail: String,
 }
 
+// Only built-in, reviewed backends may produce an engine attempt. Teachers
+// cannot install their own examiner or submit an ExamReport to the engine.
+trait EngineBackend: Send + Sync {
+    fn key(&self, id: &LessonId) -> Digest;
+    fn teacher_name(&self) -> &str;
+    fn model_version(&self) -> &str;
+    fn external_retention(&self, _id: &LessonId) -> Vec<Digest> {
+        Vec::new()
+    }
+    fn attempt(&self, job: &Job) -> AttemptOutput;
+}
+
+struct AnfBackend {
+    params: Arc<BTreeMap<LessonId, AnfLessonParams>>,
+    teacher: AnfTeacher,
+    oracle: AnfOracle,
+}
+
+impl EngineBackend for AnfBackend {
+    fn key(&self, id: &LessonId) -> Digest {
+        knowledge_key(id)
+    }
+
+    fn teacher_name(&self) -> &str {
+        self.teacher.name()
+    }
+
+    fn model_version(&self) -> &str {
+        "sml-tutor-anf-gf2-v1"
+    }
+
+    fn attempt(&self, job: &Job) -> AttemptOutput {
+        attempt_lesson(&self.params, &self.teacher, &self.oracle, job)
+    }
+}
+
 pub struct Engine {
     registry: LessonRegistry,
     scheduler: Scheduler,
     store: KnowledgeStore,
     journal: Journal,
     resources: ResourceManager,
-    params: Arc<BTreeMap<LessonId, AnfLessonParams>>,
-    teacher: AnfTeacher,
-    oracle: AnfOracle,
+    backend: Box<dyn EngineBackend>,
     pub ledger: TeacherLedger,
     pub telemetry: Telemetry,
     cfg: EngineConfig,
@@ -399,11 +437,52 @@ impl Engine {
         curriculum: AnfCurriculum,
         cfg: EngineConfig,
     ) -> Result<(Self, ResumeReport), EngineError> {
+        let params = Arc::new(curriculum.params);
+        let backend = AnfBackend {
+            teacher: AnfTeacher {
+                params: Arc::clone(&params),
+                lie_every: cfg.teacher_lie_every,
+            },
+            oracle: AnfOracle {
+                params: Arc::clone(&params),
+            },
+            params,
+        };
+        Self::open_with(root, curriculum.specs, Box::new(backend), cfg)
+    }
+
+    /// Controlled re-admission of the two L1 linguistic banks through the
+    /// same scheduler, examiner, journal and store as ANF. The executable must
+    /// be the trusted native L1 learner built by the caller's control plane.
+    /// This does not start a GPU teacher or claim new language capabilities.
+    pub fn open_bilingual_l1(
+        root: &Path,
+        native_learner: &Path,
+        inputs: [L1Input; 2],
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        if !(1..=2).contains(&cfg.workers)
+            || !(1..=2).contains(&cfg.wave)
+            || cfg.teacher_lie_every != 0
+        {
+            return Err(EngineError::Curriculum("invalid L1 resource bounds".into()));
+        }
+        let (specs, backend) =
+            linguistic::L1Backend::new(native_learner, inputs).map_err(EngineError::Curriculum)?;
+        Self::open_with(root, specs, Box::new(backend), cfg)
+    }
+
+    fn open_with(
+        root: &Path,
+        specs: Vec<LessonSpec>,
+        backend: Box<dyn EngineBackend>,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
         std::fs::create_dir_all(root).map_err(|e| EngineError::Store(StoreError::Io(e)))?;
         let store = KnowledgeStore::open(root.join("store"))?;
         let (mut journal, replay) = Journal::open(&root.join("journal.log"))?;
         let mut registry = LessonRegistry::new();
-        for spec in curriculum.specs {
+        for spec in specs {
             registry.register(spec)?;
         }
         for id in replay.states.keys() {
@@ -445,7 +524,7 @@ impl Engine {
                 journal_transition(&mut registry, &mut journal, &id, *to)?;
             }
             if state == KnowledgeState::Consolidated
-                && !snapshot.entries.contains_key(&knowledge_key(&id))
+                && !snapshot.entries.contains_key(&backend.key(&id))
             {
                 report.consolidated_missing_from_store += 1;
                 journal_transition(
@@ -457,7 +536,6 @@ impl Engine {
             }
         }
         journal.sync()?;
-        let params = Arc::new(curriculum.params);
         let wave = cfg.wave.max(1);
         let resources = ResourceManager::new(vec![Machine {
             name: "local".into(),
@@ -480,14 +558,7 @@ impl Engine {
                 store,
                 journal,
                 resources,
-                teacher: AnfTeacher {
-                    params: Arc::clone(&params),
-                    lie_every: cfg.teacher_lie_every,
-                },
-                oracle: AnfOracle {
-                    params: Arc::clone(&params),
-                },
-                params,
+                backend,
                 ledger: TeacherLedger::default(),
                 telemetry: Telemetry::new(),
                 cfg,
@@ -532,18 +603,14 @@ impl Engine {
     fn prereq_checkpoints(
         &self,
         id: &LessonId,
-    ) -> Result<Vec<(Digest, Vec<u8>, AnfLessonParams)>, EngineError> {
+    ) -> Result<Vec<(LessonId, Digest, Vec<u8>)>, EngineError> {
         let mut out = Vec::new();
         for p in self.registry.graph().prerequisites(id) {
-            let key = knowledge_key(p);
+            let key = self.backend.key(p);
             let bytes = self.store.get(&key)?.ok_or_else(|| {
                 EngineError::Curriculum(format!("prerequisite {} not in store", p.short()))
             })?;
-            let params = *self
-                .params
-                .get(p)
-                .ok_or_else(|| EngineError::Curriculum(format!("no params for {}", p.short())))?;
-            out.push((key, bytes, params));
+            out.push((*p, key, bytes));
         }
         Ok(out)
     }
@@ -603,13 +670,10 @@ impl Engine {
                 .iter()
                 .map(|j| (j.lane, j.id, j.lease.clone(), j.attempt))
                 .collect();
-            let params = Arc::clone(&self.params);
-            let teacher = &self.teacher;
-            let oracle = &self.oracle;
+            let backend = &self.backend;
             let learn_start = Instant::now();
-            let (outcomes, stats) = run_parallel(jobs, self.cfg.workers, cancel, |job| {
-                attempt_lesson(&params, teacher, oracle, &job)
-            });
+            let (outcomes, stats) =
+                run_parallel(jobs, self.cfg.workers, cancel, |job| backend.attempt(&job));
             summary.learn_phase_nanos += learn_start.elapsed().as_nanos();
             summary.stolen += stats.stolen;
             summary.waves += 1;
@@ -690,7 +754,7 @@ impl Engine {
     ) -> Result<Option<(LessonId, StagedEntry)>, EngineError> {
         for v in &out.verdicts {
             self.ledger.record(
-                self.teacher.name(),
+                self.backend.teacher_name(),
                 v,
                 out.teach_nanos / out.verdicts.len().max(1) as u128,
             );
@@ -723,10 +787,10 @@ impl Engine {
         }
         if let Some(l) = self.registry.get_mut(id) {
             l.measured_cost_nanos = out.learn_nanos + out.validate_nanos;
-            l.teacher = Some(self.teacher.name().to_string());
+            l.teacher = Some(self.backend.teacher_name().to_string());
             l.test_corpus = Some(out.report.corpus.digest());
             l.train_digest = Some(out.report.corpus.train);
-            l.model_version = Some("sml-tutor-anf-gf2-v1".into());
+            l.model_version = Some(self.backend.model_version().to_string());
             l.exams.push(out.report.clone());
         }
         let Some(checkpoint) = out.checkpoint else {
@@ -756,12 +820,15 @@ impl Engine {
             id,
             KnowledgeState::Validating,
         )?;
-        let retained: Vec<Digest> = self
+        let mut retained: Vec<Digest> = self
             .registry
             .graph()
             .prerequisites(id)
-            .map(knowledge_key)
+            .map(|p| self.backend.key(p))
             .collect();
+        retained.extend(self.backend.external_retention(id));
+        retained.sort();
+        retained.dedup();
         match certify(*id, &out.report, &retained) {
             Ok(cert) => {
                 journal_transition(
@@ -777,7 +844,7 @@ impl Engine {
                 }
                 Ok(Some((
                     *id,
-                    StagedEntry::new(&cert, knowledge_key(id), checkpoint),
+                    StagedEntry::new(&cert, self.backend.key(id), checkpoint),
                 )))
             }
             Err(e) => {
@@ -966,7 +1033,11 @@ fn attempt_lesson(
                 Err(_) => cohort(Cohort::Reload, 0, 1),
             };
             cohorts.push(reload);
-            for (key, bytes, pp) in &job.prereqs {
+            for (prereq, key, bytes) in &job.prereqs {
+                let Some(pp) = params.get(prereq) else {
+                    cohorts.push(cohort(Cohort::Retention(*key), 0, 1));
+                    continue;
+                };
                 let r = match (decode_checkpoint(bytes), pp.partitions()) {
                     (Ok((i, d, coeffs)), Ok(pparts)) => {
                         let all: Vec<u32> = pparts
