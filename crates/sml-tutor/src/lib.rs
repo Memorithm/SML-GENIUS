@@ -20,6 +20,7 @@
 //! native GF(2) ANF induction workload used to qualify the engine.
 
 pub mod anf_lesson;
+pub mod archive;
 pub mod domain;
 pub mod engine;
 pub mod executor;
