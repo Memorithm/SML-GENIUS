@@ -155,9 +155,14 @@ impl EngineBackend for R1Backend {
         let start = Instant::now();
         match examine(&bank) {
             Ok(exam) => {
-                for (i, cohort) in [Cohort::TrainRecall, Cohort::Dev, Cohort::Test, Cohort::TestTest]
-                    .into_iter()
-                    .enumerate()
+                for (i, cohort) in [
+                    Cohort::TrainRecall,
+                    Cohort::Dev,
+                    Cohort::Test,
+                    Cohort::TestTest,
+                ]
+                .into_iter()
+                .enumerate()
                 {
                     out.report.cohorts.push(CohortResult {
                         cohort,

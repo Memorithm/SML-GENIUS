@@ -11,7 +11,10 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 fn qualify(teacher_train: Option<&str>, bank_path: Option<&Path>) -> Result<()> {
     let raw = induce(teacher_train)?;
     let exam = examine(&raw)?;
-    for (i, name) in ["train_recall", "dev", "test", "testtest"].iter().enumerate() {
+    for (i, name) in ["train_recall", "dev", "test", "testtest"]
+        .iter()
+        .enumerate()
+    {
         println!(
             "SML_TUTOR_R1_COHORT cohort={} correct={} total={}",
             name, exam.correct[i], exam.total[i]
