@@ -260,7 +260,7 @@ fn admit_teacher_train(raw: &str) -> Result<Vec<Vec<Example>>> {
     Ok(batch)
 }
 
-fn qualify(teacher_train: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
+fn qualify(teacher_train: Option<&str>, bank_path: Option<&std::path::Path>) -> Result<()> {
     let train: BTreeSet<_> = TRAIN.into_iter().collect();
     let dev: BTreeSet<_> = DEV.into_iter().collect();
     if train.len() != TRAIN.len() || dev.len() != DEV.len() || !train.is_disjoint(&dev) {
@@ -367,7 +367,7 @@ fn qualify(teacher_train: Option<&str>, output: Option<&std::path::Path>) -> Res
     } else {
         "none"
     };
-    if let Some(path) = output {
+    if let Some(path) = bank_path {
         use std::io::Write;
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -390,9 +390,7 @@ fn main() -> Result<()> {
         [flag, input, output] if flag == "--teacher-train" => {
             use std::io::Read;
             let mut raw = String::new();
-            fs::File::open(input)?
-                .take(4097)
-                .read_to_string(&mut raw)?;
+            fs::File::open(input)?.take(4097).read_to_string(&mut raw)?;
             qualify(Some(&raw), Some(std::path::Path::new(output)))
         }
         _ => Err("usage: sml_tutor_rust_r1 [--teacher-train corpus checkpoint]".into()),
