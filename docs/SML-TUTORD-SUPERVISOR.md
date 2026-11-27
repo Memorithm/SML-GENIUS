@@ -18,6 +18,7 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 | Reprise | `Supervisor::open` | verrou exclusif `supervisor.lock` (une seule instance par racine) ; un job `Running` au démarrage est remis en file immédiatement (tentative comptée) ; un job épuisé resté en backoff après un crash est mis en quarantaine ; le moteur reprend son propre journal dans le même répertoire de cycle |
 | Disjoncteur | `SupervisorConfig::breaker_quarantines` (3 par défaut) | après N quarantaines consécutives sans succès : `Running` → `Maintenance`, plus aucun cycle ni planification ; compteur rejoué depuis le journal (un redémarrage ne le réarme pas) ; seul un `resume` opérateur le remet à zéro |
 | Gate ressources | `host_probe.rs` `ResourceBudget::admit` | RAM disponible, charge/CPU, disque libre ; lecture inconnue = refus |
+| Verrou hôte partagé | `resource_lock=PATH` | `flock` exclusif non bloquant pris pour la durée d'un seul cycle puis relâché ; occupé ⇒ tick refusé par le gate (`resource lock … busy`) puis réessayé après `idle_ms` : les autres jobs du Dell attendent au plus un cycle |
 | Modes | `Mode::{Simulation, Production}` | enregistré dans chaque événement de démarrage ; `production` refusé sans `<root>/PRODUCTION_ADMITTED` |
 | Pilotage | `<root>/control` : `pause`, `resume`, `maintenance`, `drain`, `stop`, `emergency` | lu puis supprimé à chaque tick |
 | Santé | `<root>/health.json` (`SML_TUTORD_HEALTH_V1`), écrit atomiquement | état, mode, uptime, files, acquisitions, dernière réussite, dernière erreur, refus du gate |
@@ -25,7 +26,12 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 
 ## Charge actuelle
 
-Le seul type de job branché est `anf-m2` : un curriculum ANF GF(2) (Mathématiques M2, induction native) avec une graine nouvelle à chaque cycle, dans son propre store `<root>/cycles/<job>`. Les étiquettes FR/EN/Rust internes à ce curriculum servent uniquement à tester l'équité des voies : **ce ne sont pas des leçons de langue ni de Rust**. Les backends L1 (#1058) et R1 (#1059) sont les prochains types de job.
+Deux types de job sont branchés :
+
+- `anf-m2` : un curriculum ANF GF(2) (Mathématiques M2, induction native) avec une graine nouvelle à chaque cycle, dans son propre store `<root>/cycles/<job>`. Les étiquettes FR/EN/Rust internes à ce curriculum servent uniquement à tester l'équité des voies : **ce ne sont pas des leçons de langue ni de Rust**. Compté en `new_certified`.
+- `l1-retention` (optionnel, arguments `l1_native`, `l1_fr`, `l1_en`, `l1_fr_sha`, `l1_en_sha`, `l1_every`) : les deux banques L1 natives déjà certifiées (français, anglais) sont réadmises par le moteur P1 dans un store neuf. Chaque cohorte doit repasser à 100 % (1 792 cas tenus à l'écart au total) et le checkpoint publié doit être identique octet pour octet à la banque parente. Compté en `reexamined`, **jamais** en `new_certified`. Un job sur `l1_every` est de ce type. La provenance (SHA des manifests parents) fait partie de l'identité du job ; une configuration différente fait échouer le job au lieu de le réinterpréter. Les fichiers de corpus sont relus à chaque cycle (fichier régulier, pas de lien symbolique, 64 KiB au plus).
+
+Le backend R1 (#1059) n'est pas encore un type de job : son code généré doit d'abord être qualifié dans un bac à sable isolé.
 
 ## Limites connues
 
