@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! sml-tutord root=DIR [mode=simulation|production] [workers=N] [per_domain=16]
-//!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [plan_ahead=2]
+//!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [cycle_gap_ms=0] [plan_ahead=2]
 //!            [min_mem_gib=4] [max_load_per_cpu=0.85] [min_disk_gib=2]
 //!            [l1_native=EXE l1_fr=DIR l1_en=DIR l1_fr_sha=HEX l1_en_sha=HEX
 //!             l1_every=4] [resource_lock=PATH]
@@ -28,6 +28,10 @@
 //! `resource_lock=PATH` makes every cycle take an exclusive `flock` on PATH
 //! (for example the shared Dell lock) just for that cycle; if another job
 //! holds it, the tick is gated and retried after `idle_ms`.
+//!
+//! `cycle_gap_ms=N` paces a continuous run: after each successful job the
+//! daemon waits N ms (cut short as soon as `DIR/control` holds a command), so
+//! the store growth and the host share stay bounded.
 //!
 //! `mode=production` is refused unless `DIR/PRODUCTION_ADMITTED` exists: the
 //! switch to production is an explicit operator decision, never automatic.
@@ -80,6 +84,8 @@ struct Args {
     degree: u8,
     max_cycles: u64,
     idle_ms: u64,
+    /// Pause after each successful job (pacing for continuous runs).
+    cycle_gap_ms: u64,
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
@@ -96,6 +102,7 @@ fn parse() -> Result<Args, String> {
         degree: 3,
         max_cycles: 0,
         idle_ms: 5_000,
+        cycle_gap_ms: 0,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
@@ -119,6 +126,7 @@ fn parse() -> Result<Args, String> {
             "degree" => a.degree = v.parse().map_err(|_| bad())?,
             "max_cycles" => a.max_cycles = v.parse().map_err(|_| bad())?,
             "idle_ms" => a.idle_ms = v.parse().map_err(|_| bad())?,
+            "cycle_gap_ms" => a.cycle_gap_ms = v.parse().map_err(|_| bad())?,
             "plan_ahead" => a.plan_ahead = v.parse().map_err(|_| bad())?,
             "min_mem_gib" => {
                 a.budget.min_mem_available_kib =
@@ -473,6 +481,15 @@ fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
     Ok(())
 }
 
+/// Sleeps up to `ms`, returning early once an operator command is waiting
+/// in `root/control`, so pacing never delays a drain or an emergency stop.
+fn pause(root: &Path, ms: u64) {
+    let end = std::time::Instant::now() + Duration::from_millis(ms);
+    while std::time::Instant::now() < end && !root.join("control").exists() {
+        std::thread::sleep(Duration::from_millis(100).min(end - std::time::Instant::now()));
+    }
+}
+
 fn main() {
     let a = match parse() {
         Ok(a) => a,
@@ -580,6 +597,8 @@ fn main() {
                 Tick::Gated(_) | Tick::Idle(_) | Tick::NothingReady | Tick::Failed(_)
             ) {
                 std::thread::sleep(Duration::from_millis(a.idle_ms));
+            } else if matches!(tick, Tick::Succeeded(_)) && a.cycle_gap_ms > 0 {
+                pause(&a.root, a.cycle_gap_ms);
             }
             Ok(None)
         })();
