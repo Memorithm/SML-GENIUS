@@ -187,6 +187,7 @@ pub mod toy_tasks;
 pub mod trace;
 pub mod train;
 pub mod train_lag_discovery;
+pub mod tutor_rust_r1;
 pub mod v888_csr;
 pub mod v888_handoff;
 pub mod wide_anf_delta_kv;

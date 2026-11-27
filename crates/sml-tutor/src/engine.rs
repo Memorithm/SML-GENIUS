@@ -44,6 +44,10 @@ use crate::telemetry::Telemetry;
 mod linguistic;
 pub use linguistic::{linguistic_l1_key, L1Input};
 
+#[path = "rust_r1_backend.rs"]
+mod rust_r1;
+pub use rust_r1::{reexamine_r1, rust_r1_key, R1Input};
+
 /// Parameters of one ANF lesson. Everything is derived deterministically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AnfLessonParams {
@@ -557,6 +561,20 @@ impl Engine {
             params,
         };
         Self::open_with(root, curriculum.specs, Box::new(backend), cfg)
+    }
+
+    /// One real Rust R1 bank, learned from independently admitted TRAIN labels.
+    /// No arbitrary source is accepted; the compiler only receives closed grammar.
+    pub fn open_rust_r1(
+        root: &Path,
+        input: R1Input,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        if cfg.workers != 1 || cfg.wave != 1 || cfg.teacher_lie_every != 0 {
+            return Err(EngineError::Curriculum("invalid R1 resource bounds".into()));
+        }
+        let (spec, backend) = rust_r1::R1Backend::new(input).map_err(EngineError::Curriculum)?;
+        Self::open_with(root, vec![spec], Box::new(backend), cfg)
     }
 
     /// Controlled re-admission of the two L1 linguistic banks through the
