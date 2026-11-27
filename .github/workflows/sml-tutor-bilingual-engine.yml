@@ -74,6 +74,42 @@ jobs:
             grep -Fx "SML_TUTOR_MIXED=PASS fr=1 en=1 math=6 rust=0 workers=$workers store_entries=8 reopen_unchanged=true" "$stage/mixed-$workers.txt"
           done
           cmp "$stage/mixed-1/store/HEAD" "$stage/mixed-2/store/HEAD"
+          # Actual supervisor: first cycle admits FR/EN and four mathematical
+          # functions. The second process reads both language banks directly
+          # and consolidates four more functions in the same store.
+          cargo build --locked --release -p sml-tutor --bin sml-tutord
+          daemon="$PWD/target/release/sml-tutord"
+          for workers in 1 2; do
+            timeout 180s "$daemon" root="$stage/cumulative-mixed" cumulative_math=1 plan_ahead=1 max_cycles=1 per_domain=4 inputs=7 degree=2 workers="$workers" min_mem_gib=0 min_disk_gib=0 max_load_per_cpu=100 archive_cycles=1 l1_native="$native" l1_fr="$stage/fr" l1_en="$stage/en" l1_fr_sha="$fr_sha" l1_en_sha="$en_sha" | tee "$stage/cumulative-$workers.txt"
+          done
+          python3 - "$stage/cumulative-mixed" <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          h = json.loads((root / "health.json").read_text())
+          assert h["new_certified_total"] == 8, h
+          assert h["reexamined_total"] == 8, h
+          assert h["jobs"]["succeeded"] == 2, h
+          store = root / "cumulative-math-v1"
+          version, digest = (store / "HEAD").read_text().splitlines()[1].split()
+          assert version == "2"
+          def manifest(d):
+              raw = (store / "manifests" / d).read_bytes()
+              assert hashlib.sha256(raw).hexdigest() == d
+              lines = raw.decode().splitlines()
+              return lines[2].split()[1], {r.split()[1]: r for r in lines[3:]}
+          parent, latest = manifest(digest)
+          _, old = manifest(parent)
+          assert len(old) == 6 and len(latest) == 10
+          assert all(latest[k] == v for k, v in old.items())
+          hashes = {r.split()[-1] for r in latest.values()}
+          for lang in ("fr", "en"):
+              expected = hashlib.sha256((root.parent / lang / "linguistic.bank").read_bytes()).hexdigest()
+              assert expected in hashes
+              assert hashlib.sha256((store / "objects" / expected).read_bytes()).hexdigest() == expected
+          assert len(list((root / "archive").glob("*.smlpack"))) == 2
+          print("SML_TUTORD_CUMULATIVE_MIXED=PASS math_new=8 l1_banks=2 reexamined=8 store_entries=10 version=2")
+          PY
+          grep -q 'l1_retained=2 l1_cases=1792 exact_replay=false' "$stage/cumulative-2.txt"
           # The annotation teacher is not authoritative. A validly formatted
           # incorrect role label must not enter the store as a certified bank.
           sed -i '1s/|0$/|1/' "$stage/fr/train.txt"

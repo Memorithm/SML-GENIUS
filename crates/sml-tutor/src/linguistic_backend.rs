@@ -310,6 +310,67 @@ pub fn linguistic_l1_key(id: &LessonId) -> Digest {
     c.finish()
 }
 
+/// Identity of the two frozen curricula, including the native binary, all
+/// source rows, provenance and parent bank bytes. Stable across input order.
+pub fn linguistic_l1_identity(binary: &Path, inputs: [L1Input; 2]) -> Result<Digest> {
+    let (specs, _) = L1Backend::new(binary, inputs)?;
+    let mut ids: Vec<_> = specs.iter().map(LessonSpec::id).collect();
+    ids.sort();
+    let mut identity = Canonical::new("SML_TUTOR_CUMULATIVE_L1_IDENTITY_V1");
+    for id in ids {
+        identity.digest(&id);
+    }
+    Ok(identity.finish())
+}
+
+/// Assess the already consolidated banks directly, using the native predictor
+/// and independent frozen labels. No teacher, training or store write.
+pub fn reexamine_l1(
+    store: &crate::store::KnowledgeStore,
+    binary: &Path,
+    inputs: [L1Input; 2],
+) -> Result<(usize, u64)> {
+    let (_, backend) = L1Backend::new(binary, inputs)?;
+    let snapshot = store.snapshot().map_err(|e| e.to_string())?;
+    let stage = Temp::new()?;
+    let mut cases = 0;
+    for (id, p) in &backend.lessons {
+        let key = linguistic_l1_key(id);
+        let record = snapshot
+            .entries
+            .get(&key)
+            .ok_or("missing retained L1 record")?;
+        if record.lesson != *id {
+            return Err("retained L1 lesson mismatch".into());
+        }
+        let bytes = store
+            .get(&key)
+            .map_err(|e| e.to_string())?
+            .ok_or("missing retained L1 bank")?;
+        if bytes != p.input.parent_bank || binary_digest(&backend.binary)? != backend.binary_digest
+        {
+            return Err("retained L1 bank or binary mismatch".into());
+        }
+        let bank = stage.0.join(format!("{}.bank", id.to_hex()));
+        fs::write(&bank, bytes).map_err(|e| e.to_string())?;
+        for (rows, cohort) in [
+            (&p.dev, Cohort::Dev),
+            (&p.test, Cohort::Test),
+            (&p.testtest, Cohort::TestTest),
+        ] {
+            let result = backend.assess(&stage.0, &bank, rows, cohort)?;
+            if result.total == 0 || result.correct != result.total || result.abstained != 0 {
+                return Err("retained L1 prediction failed".into());
+            }
+            cases += result.total;
+        }
+    }
+    if store.snapshot().map_err(|e| e.to_string())? != snapshot {
+        return Err("store changed during L1 retention".into());
+    }
+    Ok((backend.lessons.len(), cases))
+}
+
 pub(super) struct L1Backend {
     binary: PathBuf,
     binary_digest: Digest,
