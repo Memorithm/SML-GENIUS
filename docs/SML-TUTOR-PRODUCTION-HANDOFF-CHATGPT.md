@@ -1,6 +1,6 @@
 # SML-TUTOR — passation production vers ChatGPT
 
-Date : 2026-11-27, vers 11 h 40 UTC. Rédigé par Claude à partir des dépôts `Memorithm/SML-GENIUS` (`main` = `fdbf1e3`) et `Memorithm/RemoteOps` (`main` après #2089), et des journaux GitHub Actions relus le jour même.
+Date : 2026-11-27, mise à jour vers 16 h 30 UTC (première version vers 11 h 40 UTC). Rédigé par Claude à partir des dépôts `Memorithm/SML-GENIUS` (`main` = `1b636c6`) et `Memorithm/RemoteOps` (`main` = `5c38f14`, après #2093), et des journaux GitHub Actions relus le jour même.
 
 Règles de lecture :
 - **PHYSIQUE** signifie qu'un job a tourné sur `dell-t430-remoteops-x64-01` via RemoteOps et que sa sortie a été relue.
@@ -28,15 +28,19 @@ Colonnes : conçu / codé / testé en CI / fusionné / qualifié physiquement / 
 | Gate ressources hôte (RAM, charge par CPU, disque ; échec fermé) | oui | oui | oui | oui | oui (inclus dans la simulation) | non | non | `host_probe.rs` ; run 45982603559 |
 | Disjoncteur de quarantaines consécutives | oui | oui | oui | oui | non (testé en unitaire uniquement) | non | non | #1063 |
 | Commit groupé du store (fsync parallèles, un fsync de répertoire par commit) | oui | oui | oui | oui | oui (mesure A/B) | sans objet | non | #1064 ; run 45985324296 |
-| Jobs L1, R1 et mixtes dans le superviseur | oui | **non** | non | non | non | non | non | seul le type de job `anf-m2` est branché |
+| Job `l1-retention` dans le superviseur (réexamen des banques L1 fr et en) | oui | oui | oui | oui | oui (mode simulation) | non | non | #1066 ; runs 45999833595 (phase E) et 46004010532 (33 réexamens) |
+| Jobs R1 et mixtes dans le superviseur | oui | **non** | non | non | non | non | non | seuls `anf-m2` et `l1-retention` sont branchés |
+| Archivage vérifié des cycles (`archive_cycles=1`, `unpack`) | oui | oui | oui | oui | oui (endurance 1 h) | non | non | #1068 ; RemoteOps #2093 |
 | Professeur LFM3-1.7B CUDA (RTX 4060) à la demande, non résident | oui | oui (hors moteur) | oui | oui | oui (acquisition L1) | non | non | run 45864449915 ; **pas encore appelé par `sml-tutord`** |
 | Cohortes TRAIN_RECALL, DEV, TEST, TESTTEST, RELOAD, RETENTION | oui | oui | oui | oui | oui (via le moteur) | non | non | `mastery.rs::Cohort` |
 | Cohortes TRANSFER et ROBUSTNESS | voie `Transfer` seulement | **non** | non | non | non | non | non | aucune variante `Cohort` correspondante |
-| Unité systemd et endurance 1 h, 6 h, 24 h, 72 h, 7 j | non | non | non | non | non | non | non | — |
+| Unité systemd (modèle durci, redémarrage sur échec, drain à l'arrêt) | oui | oui | oui | oui | oui (unité transitoire) | **non installée** | non | RemoteOps #2092 ; run 46014329451 |
+| Endurance 1 h | oui | oui | oui | oui | oui (simulation) | sans objet | non | RemoteOps #2091 ; run 46004010532 (`wall_s=3605`) |
+| Endurance 6 h, 24 h, 72 h, 7 j | oui | non | non | non | **non exécutée** | non | non | — |
 | Tableau de bord versionné JSON et Markdown | `health.json` seulement | partiel | oui (`health.json`) | oui | oui (`health.json`) | non | non | `SML_TUTORD_HEALTH_V1` |
 | Mémoire V9 de référence (9 compétences) | — | — | — | — | vérifiée inchangée avant et après chaque run cité | — | — | `SML_TUTOR_DURABLE_VERIFY=PASS head=1142ff9d94d363f27471bdcbe986df790a66c9bb344794694d03a315971eb3f2 depth=9` |
 
-Conclusion : **rien n'est déployé ni actif en production.** Le superviseur est qualifié en simulation sur un seul type de job (ANF M2). La bascule en production exige une admission explicite, matérialisée par le fichier `<root>/PRODUCTION_ADMITTED`, qui n'a jamais été créé.
+Conclusion : **rien n'est déployé ni actif en production.** Le superviseur est qualifié en simulation sur deux types de job (`anf-m2` et `l1-retention`), sous systemd (unité transitoire) et sur 1 h d'endurance. La bascule en production exige une admission explicite, matérialisée par le fichier `<root>/PRODUCTION_ADMITTED`, qui n'a jamais été créé.
 
 ### Jugement scientifique
 
@@ -105,7 +109,16 @@ Conclusion : **rien n'est déployé ni actif en production.** Le superviseur est
   - un job `Running` trouvé à l'ouverture est remis en file immédiatement (sa tentative compte) ;
   - un job épuisé est mis en quarantaine à l'ouverture.
 - **API publique :** `open`, `start`, `submit`, `command`, `tick`, `poll_control`, `health_json`, `write_health`, `pending`, `jobs`, `job`, `log_seq`, `log_head`, `consecutive_quarantines`, `breaker_tripped`.
-- **Binaire :** arguments `root= mode= workers= per_domain=16 inputs=10 (4..=12) degree=3 max_cycles=0 idle_ms=5000 plan_ahead=2 min_mem_gib min_disk_gib max_load_per_cpu`. Codes de sortie : 0 arrêt, 1 erreur, 2 arguments invalides ou production refusée, 3 arrêt d'urgence.
+- **Binaire :** arguments `root= mode= workers= per_domain=16 inputs=10 (4..=12) degree=3 max_cycles=0 idle_ms=5000 cycle_gap_ms=0 archive_cycles=0 plan_ahead=2 min_mem_gib min_disk_gib max_load_per_cpu resource_lock=`, plus `l1_native= l1_fr= l1_en= l1_fr_sha= l1_en_sha= l1_every=` pour les jobs L1. Codes de sortie : 0 arrêt, 1 erreur, 2 arguments invalides ou production refusée, 3 arrêt d'urgence.
+- **Types de jobs :** `anf-m2` (apprentissage de nouvelles leçons ANF) et `l1-retention` (réexamen des deux banques L1 natives fr et en, sans apprentissage). Un job L1 est planifié tous les `l1_every` jobs ANF. Il est compté en `reexamined`, jamais en `new_certified`. Il vérifie que le checkpoint republié est identique octet pour octet à la banque parente. Une tentative interrompue est déplacée dans `rolled-back/`, puis l'examen repart de zéro (#1066).
+- **Cadence :** `cycle_gap_ms=N` fait une pause de N ms après chaque succès. La pause est interrompue dès qu'une commande attend dans `control` et n'a pas lieu pendant un drain (#1067).
+- **Verrou partagé :** `resource_lock=` prend le verrou Dell pour un cycle seulement. Les autres jobs appariés attendent donc au plus un cycle.
+- **Archivage :** avec `archive_cycles=1`, chaque cycle réussi est empaqueté dans `archive/<job>.smlpack`, au format `SML_TUTOR_PACK_V1`, sans dépendance. Le répertoire n'est retiré qu'après les étapes suivantes :
+  - fsync de l'archive, puis renommage ;
+  - fsync des répertoires ;
+  - relecture de l'archive octet par octet contre le répertoire.
+  
+  Tout échec conserve le répertoire. Au démarrage, les archivages restés inachevés sont repris. `sml-tutord unpack ARCHIVE DEST` restaure un cycle à l'identique (#1068).
 
 ### B.4 Formats de checkpoints et schémas de données
 
@@ -120,6 +133,7 @@ Conclusion : **rien n'est déployé ni actif en production.** Le superviseur est
 | `<root>/supervisor.log` | `SML_TUTORD_LOG_V1` | `E\t<seq>\t<prev>\t<champs>\t<hash>`, chaîne SHA-256 (`sml-tutord-log-v1`) ; événements `submit`, `start`, `succeed`, `fail`, `quarantine`, `state` ; échappement `%` |
 | `<root>/health.json` | `"schema":"SML_TUTORD_HEALTH_V1"` | état, mode, uptime, `log_seq`, `log_head`, jobs par statut, `new_certified_total`, `reexamined_total`, dernière réussite, dernière erreur, refus du gate, `interrupted_at_open`, `torn_tail_at_open`, `consecutive_quarantines`, `breaker_tripped` |
 | `<root>/cycles/<job_hex>/` | — | racine du moteur pour un cycle (`store/` et `journal.log`) |
+| `<root>/archive/<job_hex>.smlpack` | `SMLPACK1` | `u64` nombre de membres, puis par membre : `u64` longueur du chemin, chemin UTF-8 relatif, `u64` taille, SHA-256, octets. Membres triés par chemin. Se termine par un SHA-256 de tout ce qui précède. Liens symboliques, fichiers spéciaux et chemins non sûrs sont refusés. |
 
 ### B.5 Workflows physiques et déclenchement
 
@@ -170,7 +184,55 @@ Le gain de bout en bout entre 1 et 16 workers passe de 1,31× à 1,84×. Le pass
 
 **Échec honnête à signaler :** le premier run de simulation (45981962996) a échoué à cause d'un défaut du script de test (il visait le journal d'un cycle déjà terminé). Le défaut est corrigé par #2087.
 
-**Endurance :** aucune durée de 1 h ou plus n'a été exécutée. Aucun chiffre n'existe.
+**Rétention L1 dans le superviseur** (phase E de `run-supervisor-sim.sh`, run 45999833595, SML-GENIUS `1eedf8a`) :
+- 2 réexamens L1, chacun `banks=2 held_out=1792` ;
+- banques parentes et V9 inchangés.
+
+**Endurance 1 h** (run 46004010532, SML-GENIUS `e2f0d8e`, `workers=8 per_domain=16 l1_every=10 cycle_gap_ms=10000`, verrou par cycle) :
+- `wall_s=3605` mesuré ;
+- 299 cycles ANF et 33 réexamens L1 ;
+- `new_certified_total=19136` et `reexamined_total=66` ;
+- 0 échec, 0 quarantaine, 0 refus du gate ;
+- chaîne du journal contiguë (`log_seq=1001`) ;
+- V9 inchangé.
+
+Ce run a aussi mesuré deux croissances :
+- **Mémoire :** la RSS passe de 6116 à 11792 Kio. L'analyse locale montre un plateau d'environ 11,6 Mio dès le premier job L1, puis environ 1,7 Kio par job, ce qui correspond à la table des jobs en mémoire. Ce n'est pas une fuite, mais la croissance est linéaire.
+- **Disque :** la racine atteint 135204 Kio. Un cycle occupe environ 440 Kio sur disque pour 133 Kio de données réelles, répartis en environ 74 fichiers. C'est ce qui a motivé l'archivage de #1068.
+
+**Qualification systemd** (run 46014329451, unité transitoire, gestionnaire système) :
+- les propriétés de `ops/sml-tutor/systemd/sml-tutord-sim.service` sont appliquées : `CPUQuota=800%`, `MemoryMax=4G`, `TasksMax=256`, `ProtectSystem=strict`, `PrivateNetwork=yes`, capacités vides ;
+- un `kill -9` du processus principal, envoyé pendant un cycle quand son journal comptait 489 lignes, donne `NRestarts=1`, puis une reprise du cycle depuis son journal ;
+- le drain se termine proprement avec `Result=success` et le code 0, sans nouveau redémarrage ;
+- 4 cycles, `new_certified_total=1024`, V9 inchangé.
+
+L'unité n'est **pas installée** de façon permanente : seul le modèle est versionné.
+
+**Endurance 1 h avec archivage** (run 46023151716, SML-GENIUS `1b636c6`, mêmes réglages plus `archive_cycles=1`) :
+- `wall_s=3602` mesuré ;
+- 298 cycles ANF et 33 réexamens L1 ;
+- `new_certified_total=19072` et `reexamined_total=66` ;
+- 0 échec et 0 refus du gate ;
+- `log_seq=998` ;
+- V9 inchangé.
+
+Archivage :
+- 331 archives, une par cycle réussi, sans aucun `ARCHIVE=FAIL` ;
+- aucun répertoire de cycle restant ;
+- `unpack` de la dernière archive : `PASS files=75`.
+
+Racine : **45352 Kio après 1 h, contre 135204 Kio sans archivage**, soit 3,0 fois moins. La croissance est linéaire, environ 3,7 Mio toutes les 5 minutes, soit environ 44 Mio/h à cette cadence de test.
+
+Trajectoire RSS (Kio) :
+
+| t (s) | 300 | 600 | 900 | 1200 | 1800 | 2400 | 3000 | 3601 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RSS | 9148 | 10192 | 10864 | 11048 | 11112 | 11708 | 11820 | 11968 |
+| racine | 3848 | 7704 | 11524 | 15316 | 23036 | 30576 | 38076 | 45352 |
+
+La RSS monte vite pendant les 20 premières minutes (montée en charge des banques L1). Elle augmente ensuite d'environ 0,9 Mio en 40 minutes, ce qui correspond à la table des jobs en mémoire et confirme l'analyse locale. Ce n'est pas un plateau strict.
+
+**Durées non exécutées :** 6 h, 24 h, 72 h et 7 j. Aucun chiffre n'existe pour ces durées.
 
 ---
 
@@ -190,25 +252,24 @@ Le gain de bout en bout entre 1 et 16 workers passe de 1,31× à 1,84×. Le pass
 ## E. Limites et blocages connus
 
 - Un cycle est synchrone : `stop` et `emergency` ne sont pris en compte qu'entre deux cycles.
-- Chaque cycle a son propre store (`cycles/<job>/store`). Il n'existe pas encore de store unifié entre cycles, pas de réexamen de rétention des cycles précédents, et aucun lien vers le store V9.
-- Le superviseur ne sait lancer que `anf-m2`. Les jobs L1, R1 et mixtes ne sont pas branchés, et le professeur LFM3 n'est pas appelé par le superviseur.
+- Chaque cycle a son propre store (`cycles/<job>/store`, ou son archive). Il n'existe pas encore de store unifié entre cycles et aucun lien vers le store V9. La rétention est réexaminée pour les banques L1, mais pas encore pour les leçons ANF des cycles précédents.
+- La table des jobs du superviseur reste entièrement en mémoire. La mesure physique donne environ +0,9 Mio en 40 minutes, soit environ 1,3 Mio/h ou environ 32 Mio/jour à la cadence de test (environ 330 jobs/h). À la cadence de l'unité (`cycle_gap_ms=60000`, environ 60 jobs/h), cela ferait environ 6 Mio/jour. C'est une extrapolation, pas une mesure. Le compactage des jobs terminés n'est pas fait et doit l'être avant une exécution de 72 h ou de 7 j.
+- Le superviseur lance `anf-m2` et `l1-retention`. R1 et les jobs mixtes ne sont pas branchés, et le professeur LFM3 n'est pas appelé par le superviseur.
 - Les cohortes TRANSFER et ROBUSTNESS n'existent pas.
 - R1 et le curriculum mixte (#1059, #1060) n'ont pas de qualification physique connue.
-- Il n'y a pas d'unité systemd, de métriques exportées, d'alertes, ni de tableau de bord versionné au-delà de `health.json`.
+- L'unité systemd est qualifiée mais n'est pas installée. Il n'y a ni métriques exportées, ni alertes, ni tableau de bord versionné au-delà de `health.json`.
+- L'hôte des artefacts GitHub (`productionresultssa8.blob.core.windows.net`) n'est pas joignable depuis la session de l'agent. Les chiffres utiles sont donc imprimés dans le log du job (`SML_TUTORD_ENDURANCE_SAMPLE`).
 - La partie série résiduelle est d'environ 1 s par cycle de 256 leçons sur le Dell.
 
 ---
 
 ## F. Prochaines étapes recommandées (par ordre)
 
-1. **Jobs L1 et mixtes dans `sml-tutord`.** Ajouter un `CycleRunner` par type, réutilisant `Engine::open_bilingual_l1` et `open_mixed_l1_anf`, avec les mêmes `verify` (audit du store) et `rollback`. Qualifier en simulation via `run-supervisor-sim.sh`, étendu avec une phase par type.
-2. **Store unifié et rétention.** Faire publier les cycles dans un store cumulatif, ou consolider les stores de cycle vers lui par `commit_rebasing`. Ajouter un job de réexamen périodique des connaissances déjà certifiées, compté en `reexamined` et jamais en `new_certified`.
-3. **R1 Rust.** Lancer d'abord une qualification physique isolée (bac à sable sans réseau, avec `ulimit` et `timeout`), avant tout branchement dans le superviseur.
-4. **systemd.** Unité `sml-tutord.service` en mode simulation sur le Dell, déployée par RemoteOps :
-   - `Restart=on-failure`, `MemoryMax`, `CPUQuota`, `TasksMax`, `ProtectSystem=strict` ;
-   - `ReadWritePaths` limité à la racine du superviseur ;
-   - `ExecStop` qui écrit `drain` dans le fichier de contrôle.
-5. **Endurance.** Faire tourner 1 h, puis 6 h, 24 h, 72 h et 7 j en simulation. Relever le nombre de cycles réussis, les quarantaines, la RSS maximale, l'espace disque consommé et la cohérence de la chaîne du journal. Ne rapporter que les durées réellement écoulées.
+1. **Endurance longue.** Lancer 6 h, puis 24 h, 72 h et 7 j en simulation avec `archive_cycles=1`, en élargissant le `timeout` du workflow. Relever les mêmes grandeurs que pour le run de 1 h et ne rapporter que les durées réellement écoulées.
+2. **Compactage de la table des jobs.** Ne garder en mémoire que les compteurs des jobs réussis, la chaîne du journal restant la source de vérité.
+3. **Store unifié et rétention ANF.** Consolider les cycles dans un store cumulatif par `commit_rebasing`. Ajouter des réexamens périodiques des leçons ANF déjà certifiées, comptés en `reexamined`.
+4. **R1 Rust.** Lancer d'abord une qualification physique isolée (bac à sable sans réseau, avec `ulimit` et `timeout`), avant tout branchement dans le superviseur.
+5. **Installation de l'unité systemd** en simulation sur le Dell, par une PR RemoteOps explicite, sur décision de l'opérateur.
 6. **Optimisation.** Pipeliner la consolidation avec la vague suivante et grouper les fsync du journal. Mesurer avec `sml-tutor-engine-bench-ab.yml` en changeant les épingles A et B.
 7. **Production.** Seulement après les étapes 1 à 5, et sur admission explicite de l'opérateur (`PRODUCTION_ADMITTED`).
 
@@ -218,16 +279,19 @@ Le gain de bout en bout entre 1 et 16 workers passe de 1,31× à 1,84×. Le pass
 
 ```bash
 # SML-GENIUS
-cargo test --locked -p sml-tutor                 # 126 tests unitaires + 1 d'exemple + doctests
+cargo test --locked -p sml-tutor                 # 130 tests unitaires + 1 d'exemple + doctests
 cargo clippy --locked -p sml-tutor --all-targets -- -D warnings
 cargo run --release -p sml-tutor --example sml_tutor_engine_bench -- per_domain=64 inputs=10 degree=3 workers=1,2,4,8,16 lie_every=0
 cargo build --locked --release -p sml-tutor --bin sml-tutord
-target/release/sml-tutord root=/tmp/tutord max_cycles=2 per_domain=16 inputs=10 degree=3
+target/release/sml-tutord root=/tmp/tutord max_cycles=2 per_domain=16 inputs=10 degree=3 archive_cycles=1
 echo pause > /tmp/tutord/control; cat /tmp/tutord/health.json
+target/release/sml-tutord unpack /tmp/tutord/archive/<job>.smlpack /tmp/cycle-restored
 
 # RemoteOps (CHECKUPAUTO, depuis main)
 #   Actions → "SML TUTOR sml-tutord physical simulation qualification" → Run workflow
 #   Actions → "SML TUTOR engine A/B physical bench (store group commit)" → Run workflow
+#   Actions → "SML TUTOR sml-tutord 60 min endurance (simulation)" → Run workflow
+#   Actions → "SML TUTOR sml-tutord systemd service qualification (simulation)" → Run workflow
 ```
 
 ## H. PR de cette phase
@@ -240,4 +304,11 @@ echo pause > /tmp/tutord/control; cat /tmp/tutord/health.json
 | RemoteOps | #2086, #2087 | qualification physique du superviseur | Claude |
 | SML-GENIUS | #1064 | commit groupé du store | Claude |
 | RemoteOps | #2089 | bench A/B physique | Claude |
+| SML-GENIUS | #1066 | jobs `l1-retention` dans le superviseur | Claude |
+| SML-GENIUS | #1067 | cadence `cycle_gap_ms` | Claude |
+| SML-GENIUS | #1068 | archivage vérifié des cycles | Claude |
+| RemoteOps | #2090 | phase E (rétention L1 physique) | Claude |
+| RemoteOps | #2091 | endurance 1 h | Claude |
+| RemoteOps | #2092 | qualification systemd, modèle d'unité | Claude |
+| RemoteOps | #2093 | endurance avec archivage | Claude |
 | SML-GENIUS | #1058, #1059, #1060 | L1 sur moteur, R1 Rust, curriculum mixte | automatisation ChatGPT |
