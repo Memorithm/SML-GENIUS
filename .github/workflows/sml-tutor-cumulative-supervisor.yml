@@ -1,0 +1,61 @@
+name: SML TUTOR cumulative supervisor admission
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/sml-tutor/**'
+      - '.github/workflows/sml-tutor-cumulative-supervisor.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/sml-tutor/**'
+      - '.github/workflows/sml-tutor-cumulative-supervisor.yml'
+permissions:
+  contents: read
+jobs:
+  cumulative:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTFLAGS: "-D warnings"
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Native cumulative supervisor and ledger recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --release -p sml-tutor --bin sml-tutord
+          cargo build --locked --release -p sml-tutor --bin sml-tutord
+          stage="$(mktemp -d)"
+          trap 'rm -rf -- "$stage"' EXIT
+          bin="$PWD/target/release/sml-tutord"
+          for workers in 1 2; do
+            timeout 180s "$bin" root="$stage/learner" cumulative_math=1 plan_ahead=1 max_cycles=2 per_domain=4 inputs=7 degree=2 workers="$workers" min_mem_gib=0 min_disk_gib=0 max_load_per_cpu=100 archive_cycles=1
+          done
+          python3 - "$stage/learner" <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          health = json.loads((root / "health.json").read_text())
+          assert health["state"] == "stopped", health
+          assert health["new_certified_total"] == 16, health
+          assert health["reexamined_total"] == 12, health
+          assert health["jobs"]["succeeded"] == 4, health
+          store = root / "cumulative-math-v1"
+          version, digest = (store / "HEAD").read_text().splitlines()[1].split()
+          assert version == "4"
+          import hashlib
+          raw = (store / "manifests" / digest).read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == digest
+          records = [line.split() for line in raw.decode().splitlines() if line.startswith("entry ")]
+          assert len(records) == len({row[1] for row in records}) == 16
+          for row in records:
+              assert hashlib.sha256((store / "objects" / row[-1]).read_bytes()).hexdigest() == row[-1]
+          assert len(list((root / "archive").glob("*.smlpack"))) == 4
+          print("SML_TUTORD_CUMULATIVE=PASS cycles=4 entries=16 reexamined=12 version=4 archives=4")
+          PY
