@@ -346,7 +346,7 @@ pub fn examine(raw: &str) -> Result<Examination> {
     }
 
     let mut correct = [0u64; 4];
-    let mut total = [0usize; 4];
+    let mut total = [0u64; 4];
     let mut reload = 0u64;
     for a in 0u8..=255 {
         for b in 0u8..=255 {

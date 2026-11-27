@@ -200,8 +200,8 @@ mod tests {
             ..EngineConfig::default()
         };
         let cancel = CancellationToken::new();
-        let (mut math, _) = Engine::open(&root.join("math"), math_curriculum(4, 7, 2, 11), cfg)
-            .unwrap();
+        let (mut math, _) =
+            Engine::open(&root.join("math"), math_curriculum(4, 7, 2, 11), cfg).unwrap();
         math.run(&cancel).unwrap();
         assert_eq!(math.publish_certified_cycle(&target).unwrap().added, 4);
         let input = R1Input {
@@ -219,8 +219,14 @@ mod tests {
         for (key, record) in before.entries {
             assert_eq!(after.entries.get(&key), Some(&record));
         }
-        assert_eq!(reexamine_r1(&target, input.clone()).unwrap(), (589_824, 589_824));
-        assert_eq!(reexamine_math(&target, &math_curriculum(4, 7, 2, 11)).unwrap(), (4, 512));
+        assert_eq!(
+            reexamine_r1(&target, input.clone()).unwrap(),
+            (589_824, 589_824)
+        );
+        assert_eq!(
+            reexamine_math(&target, &math_curriculum(4, 7, 2, 11)).unwrap(),
+            (4, 512)
+        );
         let bad = R1Input {
             teacher_train: input.teacher_train.replacen("0|0|0|0", "0|0|0|1", 1),
             ..input
