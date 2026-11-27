@@ -429,15 +429,58 @@ impl KnowledgeStore {
         Ok(true)
     }
 
-    fn write_object(&self, payload: &[u8], d: &Digest) -> Result<(), StoreError> {
+    /// Group commit of several objects. Same durability as one
+    /// atomic write per object: every object file is fsynced before
+    /// its rename, and the directory is fsynced once after all renames, before
+    /// the caller writes the manifest. File syncs run on a few threads, so a
+    /// slow disk pays roughly `n / threads` sync latencies instead of `2n`.
+    fn write_objects(&self, objects: &[(&[u8], Digest)]) -> Result<(), StoreError> {
         let dir = self.root.join("objects");
-        let name = d.to_hex();
-        if dir.join(&name).exists() {
-            // Content-addressed: an existing object must already be identical.
-            self.read_object(d)?;
+        let mut todo: Vec<(&[u8], Digest)> = Vec::new();
+        for &(payload, d) in objects {
+            if dir.join(d.to_hex()).exists() {
+                // Content-addressed: an existing object must already be identical.
+                self.read_object(&d)?;
+            } else if !todo.iter().any(|(_, t)| *t == d) {
+                todo.push((payload, d));
+            }
+        }
+        if todo.is_empty() {
             return Ok(());
         }
-        write_atomic(&dir, &name, payload)?;
+        let tmp_of = |d: &Digest| dir.join(format!(".{}.tmp.{}", d.to_hex(), std::process::id()));
+        let threads = todo.len().clamp(1, 8);
+        let chunk = todo.len().div_ceil(threads);
+        let written: io::Result<()> = std::thread::scope(|sc| {
+            let handles: Vec<_> = todo
+                .chunks(chunk)
+                .map(|part| {
+                    sc.spawn(move || -> io::Result<()> {
+                        for (payload, d) in part {
+                            let mut f = File::create(tmp_of(d))?;
+                            f.write_all(payload)?;
+                            f.sync_all()?;
+                        }
+                        Ok(())
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join()
+                    .map_err(|_| io::Error::other("object writer panicked"))??;
+            }
+            Ok(())
+        });
+        if let Err(e) = written {
+            for (_, d) in &todo {
+                let _ = fs::remove_file(tmp_of(d));
+            }
+            return Err(e.into());
+        }
+        for (_, d) in &todo {
+            fs::rename(tmp_of(d), dir.join(d.to_hex()))?;
+        }
+        File::open(&dir)?.sync_all()?;
         Ok(())
     }
 
@@ -517,8 +560,12 @@ impl KnowledgeStore {
                 idempotent,
             });
         }
+        let objects: Vec<(&[u8], Digest)> = fresh
+            .iter()
+            .map(|s| (s.payload.as_slice(), s.record.object))
+            .collect();
+        self.write_objects(&objects)?;
         for s in &fresh {
-            self.write_object(&s.payload, &s.record.object)?;
             entries.insert(s.record.key, s.record);
         }
         if self.fail_point == Some(FailPoint::AfterObjects) {
@@ -711,6 +758,37 @@ mod tests {
                 current: 1
             })
         ));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn group_commit_publishes_every_object_once_and_leaves_no_temp_files() {
+        let dir = tmp("group");
+        let s = KnowledgeStore::open(&dir).unwrap();
+        let mut entries: Vec<StagedEntry> =
+            (0..100u64).map(|i| entry(i, &i.to_le_bytes())).collect();
+        // Two keys sharing one content-addressed object.
+        entries.push(entry(500, &7u64.to_le_bytes()));
+        let o = s
+            .commit(&Transaction {
+                base_version: 0,
+                entries,
+            })
+            .unwrap();
+        assert_eq!((o.version, o.added), (1, 101));
+        assert_eq!(s.audit().unwrap(), 101);
+        let objects: Vec<String> = fs::read_dir(dir.join("objects"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(objects.len(), 100);
+        assert!(objects.iter().all(|n| !n.starts_with('.')));
+        for i in 0..100u64 {
+            assert_eq!(
+                s.get(&entry(i, b"").record.key).unwrap().unwrap(),
+                i.to_le_bytes()
+            );
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 
