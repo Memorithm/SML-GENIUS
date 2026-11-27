@@ -475,9 +475,8 @@ impl AnfRunner {
             None => None,
         };
         let banks = if linguistic.is_some() { 2 } else { 0 };
-        let cardinality = |version: u64| {
-            version as usize * lessons + if version > 0 { banks } else { 0 }
-        };
+        let cardinality =
+            |version: u64| version as usize * lessons + if version > 0 { banks } else { 0 };
         let target = self.cumulative_store()?;
         let before = target.snapshot().map_err(|e| e.to_string())?;
         if !(before.version == seed || before.version == seed + 1)
