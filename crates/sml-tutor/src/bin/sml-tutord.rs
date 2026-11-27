@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! sml-tutord root=DIR [mode=simulation|production] [workers=N] [per_domain=16]
-//!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [cycle_gap_ms=0] [plan_ahead=2]
+//!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [cycle_gap_ms=0] [archive_cycles=0] [plan_ahead=2]
 //!            [min_mem_gib=4] [max_load_per_cpu=0.85] [min_disk_gib=2]
 //!            [l1_native=EXE l1_fr=DIR l1_en=DIR l1_fr_sha=HEX l1_en_sha=HEX
 //!             l1_every=4] [resource_lock=PATH]
@@ -28,6 +28,12 @@
 //! `resource_lock=PATH` makes every cycle take an exclusive `flock` on PATH
 //! (for example the shared Dell lock) just for that cycle; if another job
 //! holds it, the tick is gated and retried after `idle_ms`.
+//!
+//! `archive_cycles=1` packs each successful cycle directory into one
+//! verified archive `DIR/archive/<job>.smlpack` (every byte of every file,
+//! see `sml_tutor::archive`) and removes the directory only after the archive
+//! has been fsynced and re-read byte for byte against it. If anything fails
+//! the directory is kept. `sml-tutord unpack ARCHIVE DEST` restores it.
 //!
 //! `cycle_gap_ms=N` paces a continuous run: after each successful job the
 //! daemon waits N ms (cut short as soon as `DIR/control` holds a command), so
@@ -86,6 +92,8 @@ struct Args {
     idle_ms: u64,
     /// Pause after each successful job (pacing for continuous runs).
     cycle_gap_ms: u64,
+    /// Pack successful cycle directories into verified archives.
+    archive_cycles: bool,
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
@@ -103,6 +111,7 @@ fn parse() -> Result<Args, String> {
         max_cycles: 0,
         idle_ms: 5_000,
         cycle_gap_ms: 0,
+        archive_cycles: false,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
@@ -127,6 +136,13 @@ fn parse() -> Result<Args, String> {
             "max_cycles" => a.max_cycles = v.parse().map_err(|_| bad())?,
             "idle_ms" => a.idle_ms = v.parse().map_err(|_| bad())?,
             "cycle_gap_ms" => a.cycle_gap_ms = v.parse().map_err(|_| bad())?,
+            "archive_cycles" => {
+                a.archive_cycles = match v {
+                    "0" => false,
+                    "1" => true,
+                    _ => return Err(bad()),
+                }
+            }
             "plan_ahead" => a.plan_ahead = v.parse().map_err(|_| bad())?,
             "min_mem_gib" => {
                 a.budget.min_mem_available_kib =
@@ -481,6 +497,39 @@ fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
     Ok(())
 }
 
+/// Packs `root/cycles/<id>` into `root/archive/<id>.smlpack`, verifies the
+/// archive byte for byte against the directory, then removes the directory.
+/// Returns (files, archive bytes, digest). On any error the directory stays.
+fn archive_cycle(root: &Path, id: JobId) -> Result<Option<(usize, u64, String)>, String> {
+    use sml_tutor::archive;
+    let hex = id.0.to_hex();
+    let dir = root.join("cycles").join(&hex);
+    if !dir.is_dir() {
+        return Ok(None);
+    }
+    let adir = root.join("archive");
+    std::fs::create_dir_all(&adir).map_err(|e| e.to_string())?;
+    let fin = adir.join(format!("{hex}.smlpack"));
+    let digest = if fin.exists() {
+        // A crash after the rename: the archive is complete, re-check it.
+        archive::read(&fin).map_err(|e| e.to_string())?.0
+    } else {
+        let tmp = adir.join(format!("{hex}.smlpack.partial"));
+        // Only ever an unfinished archive written by this daemon.
+        let _ = std::fs::remove_file(&tmp);
+        let d = archive::pack(&dir, &tmp).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, &fin).map_err(|e| e.to_string())?;
+        std::fs::File::open(&adir)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+        d
+    };
+    let files = archive::verify_against(&fin, digest, &dir).map_err(|e| e.to_string())?;
+    let bytes = std::fs::metadata(&fin).map_err(|e| e.to_string())?.len();
+    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(Some((files, bytes, digest.to_hex())))
+}
+
 /// Sleeps up to `ms`, returning early once an operator command is waiting
 /// in `root/control`, so pacing never delays a drain or an emergency stop.
 fn pause(root: &Path, ms: u64) {
@@ -491,6 +540,28 @@ fn pause(root: &Path, ms: u64) {
 }
 
 fn main() {
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.get(1).map(String::as_str) == Some("unpack") {
+        let code = match (argv.get(2), argv.get(3), argv.len()) {
+            (Some(src), Some(dest), 4) => {
+                match sml_tutor::archive::unpack(Path::new(src), Path::new(dest)) {
+                    Ok(n) => {
+                        println!("SML_TUTORD_UNPACK=PASS files={n} dest={dest}");
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("SML_TUTORD_UNPACK=FAIL reason={e}");
+                        1
+                    }
+                }
+            }
+            _ => {
+                eprintln!("usage: sml-tutord unpack ARCHIVE DEST");
+                2
+            }
+        };
+        std::process::exit(code);
+    }
     let a = match parse() {
         Ok(a) => a,
         Err(e) => {
@@ -569,6 +640,19 @@ fn main() {
                         r.store_version,
                         r.detail
                     );
+                    if a.archive_cycles {
+                        match archive_cycle(&a.root, *id) {
+                            Ok(Some((files, bytes, digest))) => println!(
+                                "SML_TUTORD_ARCHIVE=PASS job={} files={files} bytes={bytes} digest={digest}",
+                                id.short()
+                            ),
+                            Ok(None) => {}
+                            Err(e) => println!(
+                                "SML_TUTORD_ARCHIVE=FAIL job={} kept_dir=true reason={e}",
+                                id.short()
+                            ),
+                        }
+                    }
                     if a.max_cycles != 0 && cycles >= a.max_cycles {
                         sup.command(sml_tutor::supervisor::Command::Drain)
                             .map_err(|e| e.to_string())?;
