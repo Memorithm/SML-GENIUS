@@ -9,6 +9,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+type Example = (u8, u8, u8);
 const TRAIN: [(u8, u8); 8] = [
     (0, 0),
     (1, 1),
@@ -221,18 +222,66 @@ impl Drop for Temp {
     }
 }
 
-fn qualify() -> Result<()> {
+// External teacher labels are accepted only in the canonical TRAIN partition.
+fn admit_teacher_train(raw: &str) -> Result<Vec<Vec<Example>>> {
+    if raw.len() > 4096 {
+        return Err("R1 teacher corpus exceeds size limit".into());
+    }
+    let mut lines = raw.lines();
+    if lines.next() != Some("SML_TUTOR_R1_TRAIN_V1") {
+        return Err("invalid R1 teacher corpus marker".into());
+    }
+    let mut batch = Vec::new();
+    for task in 0..Op::ALL.len() {
+        let mut examples = Vec::new();
+        for (a, b) in TRAIN {
+            let row = lines.next().ok_or("missing TRAIN row")?;
+            let mut fields = row.split('|');
+            let id: usize = fields.next().ok_or("missing task")?.parse()?;
+            let left: u8 = fields.next().ok_or("missing a")?.parse()?;
+            let right: u8 = fields.next().ok_or("missing b")?.parse()?;
+            let answer: u8 = fields.next().ok_or("missing answer")?.parse()?;
+            if fields.next().is_some()
+                || (id, left, right) != (task, a, b)
+                || row != format!("{task}|{a}|{b}|{answer}")
+            {
+                return Err("noncanonical or foreign TRAIN row".into());
+            }
+            if answer != oracle(task, a, b) {
+                return Err(format!("teacher label rejected: task={task}, a={a}, b={b}").into());
+            }
+            examples.push((a, b, answer));
+        }
+        batch.push(examples);
+    }
+    if lines.next().is_some() || !raw.ends_with('\n') {
+        return Err("extra or incomplete TRAIN data".into());
+    }
+    Ok(batch)
+}
+
+fn qualify(teacher_train: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
     let train: BTreeSet<_> = TRAIN.into_iter().collect();
     let dev: BTreeSet<_> = DEV.into_iter().collect();
     if train.len() != TRAIN.len() || dev.len() != DEV.len() || !train.is_disjoint(&dev) {
         return Err("partition overlap".into());
     }
+    let batch = match teacher_train {
+        Some(raw) => admit_teacher_train(raw)?,
+        None => (0..Op::ALL.len())
+            .map(|task| {
+                TRAIN
+                    .iter()
+                    .map(|&(a, b)| (a, b, oracle(task, a, b)))
+                    .collect()
+            })
+            .collect(),
+    };
     let mut learned = Vec::new();
-    for task in 0..Op::ALL.len() {
-        let examples: Vec<_> = TRAIN
-            .iter()
-            .map(|&(a, b)| (a, b, oracle(task, a, b)))
-            .collect();
+    for examples in batch {
+        if learn(&[]) != Learning::Ambiguous {
+            return Err("untrained baseline must abstain".into());
+        }
         match learn(&examples) {
             Learning::Unique(op) => learned.push(op),
             _ => return Err("R1 synthesis did not uniquely identify a program".into()),
@@ -313,12 +362,41 @@ fn qualify() -> Result<()> {
             names[i], correct[i], total[i]
         );
     }
-    println!("SML_TUTOR_R1=PASS programs={} compiler=rustc exact_cases={} reload={} teacher_inference=none", learned.len(), total.iter().sum::<usize>(), reload);
+    let teacher = if teacher_train.is_some() {
+        "external_verified_labels"
+    } else {
+        "none"
+    };
+    if let Some(path) = output {
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(raw.as_bytes())?;
+        file.sync_all()?;
+    }
+    println!("SML_TUTOR_R1=PASS programs={} compiler=rustc exact_cases={} reload={} teacher_inference={teacher}", learned.len(), total.iter().sum::<usize>(), reload);
+    if teacher_train.is_some() {
+        println!("SML_TUTOR_R1_TEACHER_ADMISSION=PASS rows=72 untrained_baseline_abstains=9");
+    }
     Ok(())
 }
 
 fn main() -> Result<()> {
-    qualify()
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    match args.as_slice() {
+        [] => qualify(None, None),
+        [flag, input, output] if flag == "--teacher-train" => {
+            use std::io::Read;
+            let mut raw = String::new();
+            fs::File::open(input)?
+                .take(4097)
+                .read_to_string(&mut raw)?;
+            qualify(Some(&raw), Some(std::path::Path::new(output)))
+        }
+        _ => Err("usage: sml_tutor_rust_r1 [--teacher-train corpus checkpoint]".into()),
+    }
 }
 
 #[cfg(test)]
@@ -341,8 +419,41 @@ mod tests {
         assert!(restore(&format!("{bank}9|a ^ b\n")).is_err());
     }
 
+    fn fixture() -> String {
+        let mut text = String::from("SML_TUTOR_R1_TRAIN_V1\n");
+        for task in 0..Op::ALL.len() {
+            for (a, b) in TRAIN {
+                text.push_str(&format!("{task}|{a}|{b}|{}\n", oracle(task, a, b)));
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn rejects_wrong_incomplete_and_foreign_teacher_rows() {
+        let raw = fixture();
+        assert_eq!(admit_teacher_train(&raw).unwrap().len(), 9);
+        assert!(admit_teacher_train(&raw.replacen("0|0|0|0", "0|0|0|1", 1)).is_err());
+        assert!(admit_teacher_train(&raw.replacen("0|0|0|0", "0|2|7|9", 1)).is_err());
+        assert!(admit_teacher_train(&raw[..raw.len() - 3]).is_err());
+        assert!(admit_teacher_train(&format!("{raw}0|0|0|0\n")).is_err());
+        assert!(admit_teacher_train(&raw.replacen("0|0|0|0", "00|0|0|0", 1)).is_err());
+    }
+
+    #[test]
+    fn external_label_route_compiles_and_persists_checkpoint() {
+        let temp = Temp::new().unwrap();
+        let out = temp.0.join("bank");
+        qualify(Some(&fixture()), Some(&out)).unwrap();
+        assert_eq!(
+            restore(&fs::read_to_string(&out).unwrap()).unwrap(),
+            Op::ALL
+        );
+        assert!(qualify(Some(&fixture()), Some(&out)).is_err());
+    }
+
     #[test]
     fn synthesize_compile_and_exhaustively_qualify_nine_programs() {
-        qualify().unwrap();
+        qualify(None, None).unwrap();
     }
 }
