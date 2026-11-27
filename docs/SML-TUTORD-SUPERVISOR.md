@@ -18,6 +18,7 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 | Reprise | `Supervisor::open` | verrou exclusif `supervisor.lock` (une seule instance par racine) ; un job `Running` au démarrage est remis en file immédiatement (tentative comptée) ; un job épuisé resté en backoff après un crash est mis en quarantaine ; le moteur reprend son propre journal dans le même répertoire de cycle |
 | Disjoncteur | `SupervisorConfig::breaker_quarantines` (3 par défaut) | après N quarantaines consécutives sans succès : `Running` → `Maintenance`, plus aucun cycle ni planification ; compteur rejoué depuis le journal (un redémarrage ne le réarme pas) ; seul un `resume` opérateur le remet à zéro |
 | Gate ressources | `host_probe.rs` `ResourceBudget::admit` | RAM disponible, charge/CPU, disque libre ; lecture inconnue = refus |
+| Verrou hôte partagé | `resource_lock=PATH` | `flock` exclusif non bloquant pris pour la durée d'un seul cycle puis relâché ; occupé ⇒ tick refusé par le gate (`resource lock … busy`) puis réessayé après `idle_ms` : les autres jobs du Dell attendent au plus un cycle |
 | Modes | `Mode::{Simulation, Production}` | enregistré dans chaque événement de démarrage ; `production` refusé sans `<root>/PRODUCTION_ADMITTED` |
 | Pilotage | `<root>/control` : `pause`, `resume`, `maintenance`, `drain`, `stop`, `emergency` | lu puis supprimé à chaque tick |
 | Santé | `<root>/health.json` (`SML_TUTORD_HEALTH_V1`), écrit atomiquement | état, mode, uptime, files, acquisitions, dernière réussite, dernière erreur, refus du gate |

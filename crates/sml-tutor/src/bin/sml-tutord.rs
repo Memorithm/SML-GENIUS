@@ -7,7 +7,7 @@
 //!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [plan_ahead=2]
 //!            [min_mem_gib=4] [max_load_per_cpu=0.85] [min_disk_gib=2]
 //!            [l1_native=EXE l1_fr=DIR l1_en=DIR l1_fr_sha=HEX l1_en_sha=HEX
-//!             l1_every=4]
+//!             l1_every=4] [resource_lock=PATH]
 //! ```
 //!
 //! With the `l1_*` arguments, every `l1_every`-th planned job is an
@@ -24,6 +24,10 @@
 //! curriculum only exercise lane fairness: they are **not** French, English or
 //! Rust lessons. Real linguistic and Rust backends plug in as further job
 //! kinds.
+//!
+//! `resource_lock=PATH` makes every cycle take an exclusive `flock` on PATH
+//! (for example the shared Dell lock) just for that cycle; if another job
+//! holds it, the tick is gated and retried after `idle_ms`.
 //!
 //! `mode=production` is refused unless `DIR/PRODUCTION_ADMITTED` exists: the
 //! switch to production is an explicit operator decision, never automatic.
@@ -79,6 +83,7 @@ struct Args {
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
+    resource_lock: Option<PathBuf>,
 }
 
 fn parse() -> Result<Args, String> {
@@ -94,6 +99,7 @@ fn parse() -> Result<Args, String> {
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
+        resource_lock: None,
     };
     let (mut l1_native, mut l1_fr, mut l1_en, mut l1_fr_sha, mut l1_en_sha) =
         (None, None, None, None, None);
@@ -122,6 +128,7 @@ fn parse() -> Result<Args, String> {
                 a.budget.min_disk_free_kib = (v.parse::<f64>().map_err(|_| bad())? * GIB_KIB) as u64
             }
             "max_load_per_cpu" => a.budget.max_load_per_cpu = v.parse().map_err(|_| bad())?,
+            "resource_lock" => a.resource_lock = Some(PathBuf::from(v)),
             "l1_native" => l1_native = Some(PathBuf::from(v)),
             "l1_fr" => l1_fr = Some(PathBuf::from(v)),
             "l1_en" => l1_en = Some(PathBuf::from(v)),
@@ -169,11 +176,40 @@ fn parse() -> Result<Args, String> {
 struct HostGate {
     budget: ResourceBudget,
     disk: PathBuf,
+    /// Shared host lock (`flock`) taken for the duration of one cycle only,
+    /// so other jobs on the same host wait at most one cycle.
+    lock_path: Option<PathBuf>,
+    held: Option<std::fs::File>,
+}
+
+impl HostGate {
+    /// Releases the per-cycle host lock (closing the descriptor drops it).
+    fn release(&mut self) {
+        self.held = None;
+    }
 }
 
 impl Gate for HostGate {
     fn admit(&mut self) -> Result<(), Vec<String>> {
-        self.budget.admit(&sample(&self.disk))
+        self.budget.admit(&sample(&self.disk))?;
+        if let Some(path) = &self.lock_path {
+            let f = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(path)
+                .map_err(|e| vec![format!("resource lock {}: {e}", path.display())])?;
+            match f.try_lock() {
+                Ok(()) => self.held = Some(f),
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    return Err(vec![format!("resource lock {} busy", path.display())])
+                }
+                Err(std::fs::TryLockError::Error(e)) => {
+                    return Err(vec![format!("resource lock {}: {e}", path.display())])
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -467,6 +503,8 @@ fn main() {
     let mut gate = HostGate {
         budget: a.budget,
         disk: a.root.clone(),
+        lock_path: a.resource_lock.clone(),
+        held: None,
     };
     let cancel = CancellationToken::new();
     let mut cycles = 0u64;
@@ -490,7 +528,9 @@ fn main() {
             let t = now_ms();
             let tick = sup
                 .tick(&mut runner, &mut gate, &cancel, t)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| e.to_string());
+            gate.release();
+            let tick = tick?;
             sup.write_health(now_ms()).map_err(|e| e.to_string())?;
             match &tick {
                 Tick::Succeeded(id) => {
