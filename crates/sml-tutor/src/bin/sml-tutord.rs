@@ -43,14 +43,19 @@
 //! switch to production is an explicit operator decision, never automatic.
 //! Operator commands are written to `DIR/control` (pause, resume, maintenance,
 //! drain, stop, emergency). `DIR/health.json` is rewritten after every tick.
-//! `max_cycles=0` runs until stopped.
+//! `max_cycles=0` runs until stopped in legacy mode.
+//! `cumulative_math=1` is a bounded simulation on a separate root, with one
+//! math-only cycle per store version and exact replay after an interruption.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use sml_tutor::domain::Domain;
 use sml_tutor::domain::KnowledgeState;
-use sml_tutor::engine::{anf_curriculum, linguistic_l1_key, Engine, EngineConfig, L1Input};
+use sml_tutor::engine::{
+    anf_curriculum, linguistic_l1_key, math_curriculum, reexamine_math, Engine, EngineConfig,
+    L1Input,
+};
 use sml_tutor::executor::{available_workers, CancellationToken};
 use sml_tutor::hash::Digest;
 use sml_tutor::host_probe::{sample, ResourceBudget};
@@ -62,6 +67,8 @@ use sml_tutor::supervisor::{
 
 const ANF_KIND: &str = "anf-m2";
 const L1_KIND: &str = "l1-retention";
+const CUMULATIVE_KIND: &str = "anf-cumulative-v1";
+const CUMULATIVE_MAX_CYCLES: u64 = 64;
 
 /// Frozen inputs of the L1 retention job (paths validated at every run).
 #[derive(Clone, Debug)]
@@ -94,6 +101,7 @@ struct Args {
     cycle_gap_ms: u64,
     /// Pack successful cycle directories into verified archives.
     archive_cycles: bool,
+    cumulative_math: bool,
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
@@ -112,6 +120,7 @@ fn parse() -> Result<Args, String> {
         idle_ms: 5_000,
         cycle_gap_ms: 0,
         archive_cycles: false,
+        cumulative_math: false,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
@@ -138,6 +147,13 @@ fn parse() -> Result<Args, String> {
             "cycle_gap_ms" => a.cycle_gap_ms = v.parse().map_err(|_| bad())?,
             "archive_cycles" => {
                 a.archive_cycles = match v {
+                    "0" => false,
+                    "1" => true,
+                    _ => return Err(bad()),
+                }
+            }
+            "cumulative_math" => {
+                a.cumulative_math = match v {
                     "0" => false,
                     "1" => true,
                     _ => return Err(bad()),
@@ -193,6 +209,17 @@ fn parse() -> Result<Args, String> {
             "workers, per_domain, inputs (4..={}) or degree out of range",
             sml_tutor::anf_lesson::MAX_INPUTS
         ));
+    }
+    if a.cumulative_math
+        && (a.mode != Mode::Simulation
+            || a.l1.is_some()
+            || a.plan_ahead != 1
+            || !(1..=CUMULATIVE_MAX_CYCLES).contains(&a.max_cycles)
+            || a.per_domain > 64
+            || a.inputs > 10
+            || a.degree > 3)
+    {
+        return Err("cumulative math requires bounded simulation, plan_ahead=1, no L1".into());
     }
     Ok(a)
 }
@@ -394,16 +421,117 @@ impl AnfRunner {
     }
 }
 
+impl AnfRunner {
+    fn cumulative_store(&self) -> Result<sml_tutor::store::KnowledgeStore, String> {
+        sml_tutor::store::KnowledgeStore::open(self.root.join("cumulative-math-v1"))
+            .map_err(|e| e.to_string())
+    }
+
+    /// The job seed is also the expected previous manifest version. The
+    /// supervisor runs one job at a time, and the next job is only planned
+    /// after a success. The only allowed ahead-of-journal state is the
+    /// exact current cycle committed before its Succeed event was synced.
+    fn run_cumulative(
+        &mut self,
+        id: JobId,
+        spec: &JobSpec,
+        cancel: &CancellationToken,
+    ) -> Result<CycleReport, String> {
+        let (lessons, inputs, degree, seed) = Self::params(spec)?;
+        if seed >= CUMULATIVE_MAX_CYCLES || !(1..=64).contains(&lessons) || inputs > 10 || degree > 3
+        {
+            return Err("cumulative curriculum outside qualified bounds".into());
+        }
+        let target = self.cumulative_store()?;
+        let before = target.snapshot().map_err(|e| e.to_string())?;
+        if !(before.version == seed || before.version == seed + 1)
+            || before.entries.len() != before.version as usize * lessons
+        {
+            return Err("cumulative version/cardinality mismatch".into());
+        }
+        let (retained, retention_cases) = if seed == 0 {
+            (0, 0)
+        } else {
+            reexamine_math(&target, &math_curriculum(lessons, inputs, degree, seed - 1))
+                .map_err(|e| e.to_string())?
+        };
+        // Live exam reports are required to reconstruct certificates. An
+        // interrupted local cycle is kept as evidence and independently
+        // re-examined from scratch, even if its cumulative commit survived.
+        self.move_cycle_aside(id)?;
+        let cfg = EngineConfig {
+            workers: self.workers,
+            ..EngineConfig::default()
+        };
+        let (mut engine, _) = Engine::open(
+            &self.dir(id),
+            math_curriculum(lessons, inputs, degree, seed),
+            cfg,
+        )
+        .map_err(|e| e.to_string())?;
+        let summary = engine.run(cancel).map_err(|e| e.to_string())?;
+        if cancel.is_cancelled()
+            || summary.states.get(&KnowledgeState::Consolidated) != Some(&lessons)
+        {
+            return Err("cumulative cycle incomplete".into());
+        }
+        reexamine_math(engine.store(), &math_curriculum(lessons, inputs, degree, seed))
+            .map_err(|e| e.to_string())?;
+        if target.snapshot().map_err(|e| e.to_string())? != before {
+            return Err("cumulative target changed during cycle".into());
+        }
+        let outcome = engine
+            .publish_certified_cycle(&target)
+            .map_err(|e| e.to_string())?;
+        let replay = before.version == seed + 1;
+        if outcome.version != seed + 1
+            || (replay && (outcome.added != 0 || outcome.idempotent != lessons))
+            || (!replay && (outcome.added != lessons || outcome.idempotent != 0))
+        {
+            return Err("unexpected cumulative publication receipt".into());
+        }
+        let total = engine.telemetry.total();
+        // This is the unique job's acquisition count, not the number of
+        // writes attempted in this process. The journal counts Succeed once.
+        Ok(CycleReport {
+            new_certified: lessons as u64,
+            reexamined: retained as u64,
+            rejected: total.teacher_rejections + total.exam_failures,
+            store_version: outcome.version,
+            detail: format!(
+                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} exact_replay={replay}"
+            ),
+        })
+    }
+
+    fn move_cycle_aside(&self, id: JobId) -> Result<(), String> {
+        let from = self.dir(id);
+        if !from.exists() {
+            return Ok(());
+        }
+        let to = self
+            .root
+            .join("rolled-back")
+            .join(format!("{}-{}", id.0.to_hex(), now_ms()));
+        std::fs::create_dir_all(to.parent().unwrap_or(Path::new(".")))
+            .and_then(|_| std::fs::rename(&from, &to))
+            .map_err(|e| e.to_string())
+    }
+}
+
 impl CycleRunner for AnfRunner {
     fn run(
         &mut self,
         id: JobId,
         spec: &JobSpec,
-        _mode: Mode,
+        mode: Mode,
         cancel: &CancellationToken,
     ) -> Result<CycleReport, String> {
         match spec.kind.as_str() {
             ANF_KIND => {}
+            CUMULATIVE_KIND if mode == Mode::Simulation => {
+                return self.run_cumulative(id, spec, cancel);
+            }
             L1_KIND => return self.run_l1(id, spec, cancel),
             k => return Err(format!("unsupported job kind {k}")),
         }
@@ -445,32 +573,112 @@ impl CycleRunner for AnfRunner {
         })
     }
 
-    fn verify(&mut self, id: JobId, _spec: &JobSpec) -> Result<(), String> {
+    fn verify(&mut self, id: JobId, spec: &JobSpec) -> Result<(), String> {
+        if spec.kind == CUMULATIVE_KIND {
+            let (lessons, inputs, degree, seed) = Self::params(spec)?;
+            let target = self.cumulative_store()?;
+            let snapshot = target.snapshot().map_err(|e| e.to_string())?;
+            if snapshot.version != seed + 1
+                || snapshot.entries.len() != (seed + 1) as usize * lessons
+            {
+                return Err("cumulative post-commit version/cardinality mismatch".into());
+            }
+            reexamine_math(&target, &math_curriculum(lessons, inputs, degree, seed))
+                .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
         let store = sml_tutor::store::KnowledgeStore::open(self.dir(id).join("store"))
             .map_err(|e| e.to_string())?;
         store.audit().map(|_| ()).map_err(|e| e.to_string())
     }
 
     /// Non-destructive rollback: the cycle's store is moved aside, never deleted.
-    fn rollback(&mut self, id: JobId, _spec: &JobSpec) -> Result<(), String> {
-        let from = self.dir(id);
-        if !from.exists() {
-            return Ok(());
+    fn rollback(&mut self, id: JobId, spec: &JobSpec) -> Result<(), String> {
+        if spec.kind == CUMULATIVE_KIND {
+            // A published shared manifest must not be silently undone or
+            // removed. An uncertain post-commit audit forces emergency stop.
+            return Err("cumulative publication requires operator recovery".into());
         }
-        let to = self
-            .root
-            .join("rolled-back")
-            .join(format!("{}-{}", id.0.to_hex(), now_ms()));
-        std::fs::create_dir_all(to.parent().unwrap_or(Path::new(".")))
-            .and_then(|_| std::fs::rename(&from, &to))
-            .map_err(|e| e.to_string())
+        self.move_cycle_aside(id)
     }
 }
 
 /// Keeps `plan_ahead` jobs pending. With L1 configured, the job planned at
 /// position `k` (counting every planned job) is an L1 retention job when
 /// `k % l1_every == l1_every - 1`, an ANF cycle otherwise.
+fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
+    JobSpec::new(CUMULATIVE_KIND)
+        .param("per_domain", a.per_domain)
+        .param("inputs", a.inputs)
+        .param("degree", a.degree)
+        .param("seed", seed)
+}
+
+/// Reconcile the durable job ledger with the cumulative store before
+/// dispatch. An interrupted publication may be exactly one version ahead.
+fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
+    let dir = a.root.join("cumulative-math-v1");
+    if !a.cumulative_math {
+        if dir.exists() || sup.jobs().any(|(_, j)| j.spec.kind == CUMULATIVE_KIND) {
+            return Err("cumulative root requires cumulative_math=1".into());
+        }
+        return Ok(());
+    }
+    let mut succeeded = 0u64;
+    let mut pending = false;
+    for (i, (_, job)) in sup.jobs().enumerate() {
+        let seed = i as u64;
+        if job.spec != cumulative_spec(a, seed) || seed >= CUMULATIVE_MAX_CYCLES || pending {
+            return Err("incompatible cumulative job ledger".into());
+        }
+        match &job.status {
+            JobStatus::Succeeded => {
+                let report = job.report.as_ref().ok_or("missing cumulative receipt")?;
+                if report.store_version != seed + 1 || report.new_certified != a.per_domain as u64 {
+                    return Err("cumulative receipt mismatch".into());
+                }
+                succeeded += 1;
+            }
+            JobStatus::Quarantined { .. } => return Err("cumulative job quarantined".into()),
+            _ => pending = true,
+        }
+    }
+    if succeeded + a.max_cycles > CUMULATIVE_MAX_CYCLES {
+        return Err("cumulative root reached simulation cycle budget".into());
+    }
+    // A first queued job can precede creation of the target directory.
+    if !dir.exists() && succeeded != 0 {
+        return Err("cumulative store missing".into());
+    }
+    let target = sml_tutor::store::KnowledgeStore::open(dir).map_err(|e| e.to_string())?;
+    let snapshot = target.snapshot().map_err(|e| e.to_string())?;
+    if snapshot.version < succeeded
+        || snapshot.version > succeeded + u64::from(pending)
+        || target.audit().map_err(|e| e.to_string())? != snapshot.version as usize * a.per_domain
+    {
+        return Err("cumulative store and job ledger disagree".into());
+    }
+    Ok(())
+}
+
 fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
+    if a.cumulative_math {
+        if sup
+            .jobs()
+            .any(|(_, j)| matches!(j.status, JobStatus::Quarantined { .. }))
+        {
+            return Err("cumulative job quarantined; refusing next seed".into());
+        }
+        if sup.pending() == 0 {
+            let seed = sup.jobs().count() as u64;
+            if seed >= CUMULATIVE_MAX_CYCLES {
+                return Err("cumulative cycle budget exhausted".into());
+            }
+            sup.submit(cumulative_spec(a, seed))
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
     let count = |kind: &str| sup.jobs().filter(|(_, j)| j.spec.kind == kind).count() as u64;
     let mut anf = count(ANF_KIND);
     let mut l1 = count(L1_KIND);
@@ -601,6 +809,10 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if let Err(e) = check_cumulative_start(&sup, &a) {
+        eprintln!("SML_TUTORD=FAIL reason={e}");
+        std::process::exit(1);
+    }
     println!(
         "SML_TUTORD_START mode={} root={} workers={} log_seq={} interrupted={} torn_tail={}",
         a.mode.name(),
@@ -729,4 +941,67 @@ fn main() {
         sup.log_head().to_hex()
     );
     std::process::exit(code);
+}
+
+#[cfg(test)]
+mod cumulative_tests {
+    use super::*;
+
+    #[test]
+    fn exact_replay_after_commit_before_success_preserves_head_and_retains_math() {
+        let root = std::env::temp_dir().join(format!(
+            "sml-tutord-cumulative-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut runner = AnfRunner {
+            root: root.clone(),
+            workers: 2,
+            l1: None,
+        };
+        let spec = |seed| {
+            JobSpec::new(CUMULATIVE_KIND)
+                .param("per_domain", 4)
+                .param("inputs", 7)
+                .param("degree", 2)
+                .param("seed", seed)
+        };
+        let cancel = CancellationToken::new();
+        let first = spec(0);
+        let report = runner
+            .run(first.id(), &first, Mode::Simulation, &cancel)
+            .unwrap();
+        assert_eq!((report.new_certified, report.store_version), (4, 1));
+        let target = runner.cumulative_store().unwrap();
+        let before = target.snapshot().unwrap();
+        drop(runner);
+        let mut resumed = AnfRunner {
+            root: root.clone(),
+            workers: 1,
+            l1: None,
+        };
+        let replay = resumed
+            .run(first.id(), &first, Mode::Simulation, &cancel)
+            .unwrap();
+        assert_eq!((replay.new_certified, replay.store_version), (4, 1));
+        assert!(replay.detail.contains("exact_replay=true"));
+        assert_eq!(target.snapshot().unwrap(), before);
+        resumed.verify(first.id(), &first).unwrap();
+        let second = spec(1);
+        let next = resumed
+            .run(second.id(), &second, Mode::Simulation, &cancel)
+            .unwrap();
+        assert_eq!(
+            (next.new_certified, next.reexamined, next.store_version),
+            (4, 4, 2)
+        );
+        resumed.verify(second.id(), &second).unwrap();
+        assert_eq!(target.audit().unwrap(), 8);
+        for (key, record) in before.entries {
+            assert_eq!(target.snapshot().unwrap().entries.get(&key), Some(&record));
+        }
+        assert!(resumed.rollback(second.id(), &second).is_err());
+        assert_eq!(target.version().unwrap(), 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
