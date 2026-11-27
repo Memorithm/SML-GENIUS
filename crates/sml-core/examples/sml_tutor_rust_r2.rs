@@ -170,7 +170,7 @@ fn oracle(task: usize, a: u8, b: u8) -> u8 {
         2 => intersection(a, b) * a,
         3 => a - intersection(a, b),
         4 => xor(if a < b { a } else { b }, b),
-        5 => if b > a { b - a } else { 0 },
+        5 => b.saturating_sub(a),
         6 => a * (b + 1),
         _ => unreachable!(),
     };
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(admit(&raw).unwrap().len(), TASKS);
         assert!(admit(&raw.replacen("0|0|0|0", "0|0|0|1", 1)).is_err());
         assert!(admit(&format!("{raw}0|0|0|0\n")).is_err());
-        assert!(admit(&raw[..raw.len()-1]).is_err());
+        assert!(admit(&raw[..raw.len() - 1]).is_err());
         let g = grammar();
         assert_eq!(learn(&g, &[(0, 0, 0)]), Learning::Ambiguous);
         assert_eq!(learn(&g, &[(0, 0, 0), (0, 0, 1)]), Learning::Inconsistent);
