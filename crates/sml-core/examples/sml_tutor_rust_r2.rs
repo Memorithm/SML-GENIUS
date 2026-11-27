@@ -40,7 +40,7 @@ const DEV: [(u8, u8); 8] = [
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Op {
+pub(crate) enum Op {
     Add,
     Sub,
     Mul,
@@ -51,7 +51,7 @@ enum Op {
     Max,
 }
 impl Op {
-    const ALL: [Self; 8] = [
+    pub(crate) const ALL: [Self; 8] = [
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -88,30 +88,30 @@ impl Op {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum Expr {
+pub(crate) enum Expr {
     A,
     B,
     Apply(Op, Box<Expr>, Box<Expr>),
 }
 impl Expr {
-    fn apply(op: Op, a: &Self, b: &Self) -> Self {
+    pub(crate) fn apply(op: Op, a: &Self, b: &Self) -> Self {
         Self::Apply(op, Box::new(a.clone()), Box::new(b.clone()))
     }
-    fn eval(&self, a: u8, b: u8) -> u8 {
+    pub(crate) fn eval(&self, a: u8, b: u8) -> u8 {
         match self {
             Self::A => a,
             Self::B => b,
             Self::Apply(op, l, r) => op.eval(l.eval(a, b), r.eval(a, b)),
         }
     }
-    fn source(&self) -> String {
+    pub(crate) fn source(&self) -> String {
         match self {
             Self::A => "a".into(),
             Self::B => "b".into(),
             Self::Apply(op, l, r) => op.source(&l.source(), &r.source()),
         }
     }
-    fn cost(&self) -> usize {
+    pub(crate) fn cost(&self) -> usize {
         match self {
             Self::A | Self::B => 0,
             Self::Apply(_, l, r) => 1 + l.cost() + r.cost(),
@@ -119,7 +119,7 @@ impl Expr {
     }
 }
 
-fn grammar() -> Vec<Expr> {
+pub(crate) fn grammar() -> Vec<Expr> {
     let leaves = [Expr::A, Expr::B];
     let mut one = Vec::new();
     for op in Op::ALL {
@@ -143,7 +143,7 @@ fn grammar() -> Vec<Expr> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Learning {
+pub(crate) enum Learning {
     Unique(Expr),
     Ambiguous,
     Inconsistent,
@@ -154,7 +154,7 @@ enum Learning {
 fn equivalent(a: &Expr, b: &Expr) -> bool {
     (0..=255u8).all(|x| (0..=255u8).all(|y| a.eval(x, y) == b.eval(x, y)))
 }
-fn learn(grammar: &[Expr], examples: &[Example]) -> Learning {
+pub(crate) fn learn(grammar: &[Expr], examples: &[Example]) -> Learning {
     let mut found: Option<Expr> = None;
     for expr in grammar {
         if !examples.iter().all(|&(a, b, y)| expr.eval(a, b) == y) {
@@ -187,7 +187,7 @@ fn intersection(a: u32, b: u32) -> u32 {
         })
         .sum()
 }
-fn oracle(task: usize, a: u8, b: u8) -> u8 {
+pub(crate) fn oracle(task: usize, a: u8, b: u8) -> u8 {
     let (a, b) = (u32::from(a), u32::from(b));
     let xor = |x, y| x + y - 2 * intersection(x, y);
     let value = match task {
@@ -203,7 +203,7 @@ fn oracle(task: usize, a: u8, b: u8) -> u8 {
     (value % 256) as u8
 }
 
-fn fixture() -> String {
+pub(crate) fn fixture() -> String {
     let mut raw = String::from("SML_TUTOR_R2_TRAIN_V1\n");
     for task in 0..TASKS {
         for (a, b) in TRAIN {
@@ -249,7 +249,7 @@ fn checkpoint(ops: &[Expr]) -> String {
     }
     raw
 }
-fn restore(raw: &str, grammar: &[Expr]) -> Result<Vec<Expr>> {
+pub(crate) fn restore(raw: &str, grammar: &[Expr]) -> Result<Vec<Expr>> {
     let mut lines = raw.lines();
     if lines.next() != Some("SML_TUTOR_R2_BANK_V1") || !raw.ends_with('\n') {
         return Err("invalid R2 bank".into());
@@ -269,9 +269,9 @@ fn restore(raw: &str, grammar: &[Expr]) -> Result<Vec<Expr>> {
     Ok(ops)
 }
 
-struct Temp(PathBuf);
+pub(crate) struct Temp(pub(crate) PathBuf);
 impl Temp {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
             "sml-r2-{}-{}",
@@ -288,7 +288,7 @@ impl Drop for Temp {
     }
 }
 
-fn compile_and_run(ops: &[Expr], temp: &Path) -> Result<Vec<u8>> {
+pub(crate) fn compile_and_run(ops: &[Expr], temp: &Path) -> Result<Vec<u8>> {
     // All expression source originates from the grammar, never the corpus.
     let mut source = String::from("#![allow(unused_parens)]\nuse std::io::{self,Write};\n");
     for (i, op) in ops.iter().enumerate() {
@@ -333,7 +333,7 @@ fn compile_and_run(ops: &[Expr], temp: &Path) -> Result<Vec<u8>> {
     Ok(out.stdout)
 }
 
-fn qualify(raw: &str, external: bool, output: Option<&Path>) -> Result<()> {
+pub(crate) fn qualify(raw: &str, external: bool, output: Option<&Path>) -> Result<()> {
     let grammar = grammar();
     if grammar.len() != 1058 || TRAIN.iter().any(|p| DEV.contains(p)) {
         return Err("R2 grammar or partition contract".into());
