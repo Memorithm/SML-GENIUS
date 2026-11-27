@@ -6,7 +6,17 @@
 //! sml-tutord root=DIR [mode=simulation|production] [workers=N] [per_domain=16]
 //!            [inputs=10] [degree=3] [max_cycles=0] [idle_ms=5000] [plan_ahead=2]
 //!            [min_mem_gib=4] [max_load_per_cpu=0.85] [min_disk_gib=2]
+//!            [l1_native=EXE l1_fr=DIR l1_en=DIR l1_fr_sha=HEX l1_en_sha=HEX
+//!             l1_every=4]
 //! ```
+//!
+//! With the `l1_*` arguments, every `l1_every`-th planned job is an
+//! `l1-retention` job: the two already-certified native L1 banks (French,
+//! English) are re-admitted through the P1 engine into a fresh cycle store and
+//! must pass every cohort at 100 % again, byte-identical to the parent bank.
+//! These count as **re-examinations**, never as new knowledge. The native
+//! learner executable and the frozen corpus directories must come from a
+//! trusted, pinned build (RemoteOps), exactly as for `sml_tutor_bilingual_l1`.
 //!
 //! Each cycle is one ANF GF(2) curriculum (Mathematics/M2, native induction)
 //! with a fresh seed, run through the P1 engine into its own transactional
@@ -24,16 +34,31 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use sml_tutor::domain::Domain;
 use sml_tutor::domain::KnowledgeState;
-use sml_tutor::engine::{anf_curriculum, Engine, EngineConfig};
+use sml_tutor::engine::{anf_curriculum, linguistic_l1_key, Engine, EngineConfig, L1Input};
 use sml_tutor::executor::{available_workers, CancellationToken};
+use sml_tutor::hash::Digest;
 use sml_tutor::host_probe::{sample, ResourceBudget};
+use sml_tutor::mastery::Cohort;
 use sml_tutor::supervisor::{
     CycleReport, CycleRunner, Gate, JobId, JobSpec, Mode, Supervisor, SupervisorConfig,
     SupervisorState, Tick,
 };
 
 const ANF_KIND: &str = "anf-m2";
+const L1_KIND: &str = "l1-retention";
+
+/// Frozen inputs of the L1 retention job (paths validated at every run).
+#[derive(Clone, Debug)]
+struct L1Config {
+    native: PathBuf,
+    fr: PathBuf,
+    en: PathBuf,
+    fr_sha: Digest,
+    en_sha: Digest,
+    every: u64,
+}
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -53,6 +78,7 @@ struct Args {
     idle_ms: u64,
     plan_ahead: usize,
     budget: ResourceBudget,
+    l1: Option<L1Config>,
 }
 
 fn parse() -> Result<Args, String> {
@@ -67,7 +93,11 @@ fn parse() -> Result<Args, String> {
         idle_ms: 5_000,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
+        l1: None,
     };
+    let (mut l1_native, mut l1_fr, mut l1_en, mut l1_fr_sha, mut l1_en_sha) =
+        (None, None, None, None, None);
+    let mut l1_every = 4u64;
     const GIB_KIB: f64 = 1024.0 * 1024.0;
     for arg in std::env::args().skip(1) {
         let (k, v) = arg
@@ -92,9 +122,34 @@ fn parse() -> Result<Args, String> {
                 a.budget.min_disk_free_kib = (v.parse::<f64>().map_err(|_| bad())? * GIB_KIB) as u64
             }
             "max_load_per_cpu" => a.budget.max_load_per_cpu = v.parse().map_err(|_| bad())?,
+            "l1_native" => l1_native = Some(PathBuf::from(v)),
+            "l1_fr" => l1_fr = Some(PathBuf::from(v)),
+            "l1_en" => l1_en = Some(PathBuf::from(v)),
+            "l1_fr_sha" => l1_fr_sha = Some(Digest::from_hex(v).ok_or_else(bad)?),
+            "l1_en_sha" => l1_en_sha = Some(Digest::from_hex(v).ok_or_else(bad)?),
+            "l1_every" => l1_every = v.parse().map_err(|_| bad())?,
             _ => return Err(format!("unknown argument {k}")),
         }
     }
+    a.l1 = match (l1_native, l1_fr, l1_en, l1_fr_sha, l1_en_sha) {
+        (None, None, None, None, None) => None,
+        (Some(native), Some(fr), Some(en), Some(fr_sha), Some(en_sha)) if l1_every >= 1 => {
+            Some(L1Config {
+                native,
+                fr,
+                en,
+                fr_sha,
+                en_sha,
+                every: l1_every,
+            })
+        }
+        _ => {
+            return Err(
+                "l1 retention needs all of l1_native, l1_fr, l1_en, l1_fr_sha, l1_en_sha and l1_every>=1"
+                    .into(),
+            )
+        }
+    };
     if a.root.as_os_str().is_empty() {
         return Err("root=DIR is required".into());
     }
@@ -125,6 +180,35 @@ impl Gate for HostGate {
 struct AnfRunner {
     root: PathBuf,
     workers: usize,
+    l1: Option<L1Config>,
+}
+
+/// Reads one frozen corpus file: regular file, not a symlink, at most 64 KiB.
+fn read_frozen(dir: &Path, name: &str) -> Result<Vec<u8>, String> {
+    let path = dir.join(name);
+    let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !meta.is_file() || meta.len() > 65_536 {
+        return Err(format!(
+            "{}: not a regular file of at most 64 KiB",
+            path.display()
+        ));
+    }
+    std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn l1_input(domain: Domain, dir: &Path, provenance: Digest) -> Result<L1Input, String> {
+    let text = |name: &str| {
+        String::from_utf8(read_frozen(dir, name)?).map_err(|_| format!("{name}: not UTF-8"))
+    };
+    Ok(L1Input {
+        domain,
+        lexicon: text("lexicon.txt")?,
+        proposed_train: text("train.txt")?,
+        oracle_train: text("oracle-train.txt")?,
+        held_out: text("test.txt")?,
+        parent_bank: read_frozen(dir, "linguistic.bank")?,
+        provenance,
+    })
 }
 
 impl AnfRunner {
@@ -158,6 +242,92 @@ impl AnfRunner {
     }
 }
 
+impl AnfRunner {
+    /// Re-admits the two certified native L1 banks into a fresh cycle store.
+    /// Success means every cohort passed at 100 % again and the published
+    /// checkpoint is byte-identical to the parent bank: a re-examination.
+    fn run_l1(
+        &mut self,
+        id: JobId,
+        spec: &JobSpec,
+        cancel: &CancellationToken,
+    ) -> Result<CycleReport, String> {
+        let l1 = self
+            .l1
+            .clone()
+            .ok_or("l1-retention job but no l1_* configuration")?;
+        // The job's identity pins the provenance it was planned with.
+        for (k, want) in [("fr", l1.fr_sha), ("en", l1.en_sha)] {
+            if spec.params.get(k).map(String::as_str) != Some(want.to_hex().as_str()) {
+                return Err(format!("job provenance {k} differs from configuration"));
+            }
+        }
+        let inputs = [
+            l1_input(Domain::French, &l1.fr, l1.fr_sha)?,
+            l1_input(Domain::English, &l1.en, l1.en_sha)?,
+        ];
+        let cfg = EngineConfig {
+            workers: self.workers.min(2),
+            wave: 2,
+            max_attempts: 1,
+            ..EngineConfig::default()
+        };
+        let (mut engine, resume) =
+            Engine::open_bilingual_l1(&self.dir(id), &l1.native, inputs.clone(), cfg)
+                .map_err(|e| e.to_string())?;
+        let summary = engine.run(cancel).map_err(|e| e.to_string())?;
+        if cancel.is_cancelled() {
+            return Err("cancelled".into());
+        }
+        let consolidated = summary
+            .states
+            .get(&KnowledgeState::Consolidated)
+            .copied()
+            .unwrap_or(0);
+        if consolidated != 2 || engine.store().audit().map_err(|e| e.to_string())? != 2 {
+            return Err(format!("only {consolidated}/2 L1 banks re-admitted"));
+        }
+        let mut held_out = 0u64;
+        for lesson in engine.registry().iter() {
+            let report = lesson.exams.last().ok_or("missing exam report")?;
+            let parent = inputs
+                .iter()
+                .find(|i| i.domain == lesson.spec.domain)
+                .ok_or("unexpected language")?;
+            let bytes = engine
+                .store()
+                .get(&linguistic_l1_key(&lesson.id))
+                .map_err(|e| e.to_string())?
+                .ok_or("missing re-admitted checkpoint")?;
+            if bytes != parent.parent_bank || !report.passed() || report.cohorts.len() != 6 {
+                return Err(format!(
+                    "{}: checkpoint differs from parent or a cohort failed",
+                    lesson.spec.domain
+                ));
+            }
+            held_out += report
+                .cohorts
+                .iter()
+                .filter(|c| matches!(c.cohort, Cohort::Dev | Cohort::Test | Cohort::TestTest))
+                .map(|c| c.total)
+                .sum::<u64>();
+        }
+        Ok(CycleReport {
+            new_certified: 0,
+            reexamined: 2,
+            rejected: 0,
+            store_version: summary.store_version,
+            detail: format!(
+                "l1-retention seq={} banks=2 held_out={held_out} waves={} wall_ms={} resumed_records={}",
+                spec.params.get("seq").map(String::as_str).unwrap_or("?"),
+                summary.waves,
+                summary.wall_nanos / 1_000_000,
+                resume.replayed_records
+            ),
+        })
+    }
+}
+
 impl CycleRunner for AnfRunner {
     fn run(
         &mut self,
@@ -166,8 +336,10 @@ impl CycleRunner for AnfRunner {
         _mode: Mode,
         cancel: &CancellationToken,
     ) -> Result<CycleReport, String> {
-        if spec.kind != ANF_KIND {
-            return Err(format!("unsupported job kind {}", spec.kind));
+        match spec.kind.as_str() {
+            ANF_KIND => {}
+            L1_KIND => return self.run_l1(id, spec, cancel),
+            k => return Err(format!("unsupported job kind {k}")),
         }
         let (per_domain, inputs, degree, seed) = Self::params(spec)?;
         let cfg = EngineConfig {
@@ -229,17 +401,31 @@ impl CycleRunner for AnfRunner {
     }
 }
 
+/// Keeps `plan_ahead` jobs pending. With L1 configured, the job planned at
+/// position `k` (counting every planned job) is an L1 retention job when
+/// `k % l1_every == l1_every - 1`, an ANF cycle otherwise.
 fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
-    let mut submitted = sup.jobs().filter(|(_, j)| j.spec.kind == ANF_KIND).count() as u64;
+    let count = |kind: &str| sup.jobs().filter(|(_, j)| j.spec.kind == kind).count() as u64;
+    let mut anf = count(ANF_KIND);
+    let mut l1 = count(L1_KIND);
     while sup.pending() < a.plan_ahead {
-        let spec = JobSpec::new(ANF_KIND)
-            .param("per_domain", a.per_domain)
-            .param("inputs", a.inputs)
-            .param("degree", a.degree)
-            .param("seed", submitted);
-        match sup.submit(spec) {
-            Ok(_) => submitted += 1,
-            Err(e) => return Err(e.to_string()),
+        let spec = match &a.l1 {
+            Some(c) if (anf + l1) % c.every == c.every - 1 => JobSpec::new(L1_KIND)
+                .param("seq", l1)
+                .param("fr", c.fr_sha.to_hex())
+                .param("en", c.en_sha.to_hex()),
+            _ => JobSpec::new(ANF_KIND)
+                .param("per_domain", a.per_domain)
+                .param("inputs", a.inputs)
+                .param("degree", a.degree)
+                .param("seed", anf),
+        };
+        let is_l1 = spec.kind == L1_KIND;
+        sup.submit(spec).map_err(|e| e.to_string())?;
+        if is_l1 {
+            l1 += 1;
+        } else {
+            anf += 1;
         }
     }
     Ok(())
@@ -276,6 +462,7 @@ fn main() {
     let mut runner = AnfRunner {
         root: a.root.clone(),
         workers: a.workers,
+        l1: a.l1.clone(),
     };
     let mut gate = HostGate {
         budget: a.budget,

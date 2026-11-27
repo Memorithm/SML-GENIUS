@@ -25,7 +25,12 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 
 ## Charge actuelle
 
-Le seul type de job branché est `anf-m2` : un curriculum ANF GF(2) (Mathématiques M2, induction native) avec une graine nouvelle à chaque cycle, dans son propre store `<root>/cycles/<job>`. Les étiquettes FR/EN/Rust internes à ce curriculum servent uniquement à tester l'équité des voies : **ce ne sont pas des leçons de langue ni de Rust**. Les backends L1 (#1058) et R1 (#1059) sont les prochains types de job.
+Deux types de job sont branchés :
+
+- `anf-m2` : un curriculum ANF GF(2) (Mathématiques M2, induction native) avec une graine nouvelle à chaque cycle, dans son propre store `<root>/cycles/<job>`. Les étiquettes FR/EN/Rust internes à ce curriculum servent uniquement à tester l'équité des voies : **ce ne sont pas des leçons de langue ni de Rust**. Compté en `new_certified`.
+- `l1-retention` (optionnel, arguments `l1_native`, `l1_fr`, `l1_en`, `l1_fr_sha`, `l1_en_sha`, `l1_every`) : les deux banques L1 natives déjà certifiées (français, anglais) sont réadmises par le moteur P1 dans un store neuf. Chaque cohorte doit repasser à 100 % (1 792 cas tenus à l'écart au total) et le checkpoint publié doit être identique octet pour octet à la banque parente. Compté en `reexamined`, **jamais** en `new_certified`. Un job sur `l1_every` est de ce type. La provenance (SHA des manifests parents) fait partie de l'identité du job ; une configuration différente fait échouer le job au lieu de le réinterpréter. Les fichiers de corpus sont relus à chaque cycle (fichier régulier, pas de lien symbolique, 64 KiB au plus).
+
+Le backend R1 (#1059) n'est pas encore un type de job : son code généré doit d'abord être qualifié dans un bac à sable isolé.
 
 ## Limites connues
 
