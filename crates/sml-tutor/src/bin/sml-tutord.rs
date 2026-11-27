@@ -56,7 +56,7 @@ use sml_tutor::hash::Digest;
 use sml_tutor::host_probe::{sample, ResourceBudget};
 use sml_tutor::mastery::Cohort;
 use sml_tutor::supervisor::{
-    CycleReport, CycleRunner, Gate, JobId, JobSpec, Mode, Supervisor, SupervisorConfig,
+    CycleReport, CycleRunner, Gate, JobId, JobSpec, JobStatus, Mode, Supervisor, SupervisorConfig,
     SupervisorState, Tick,
 };
 
@@ -508,7 +508,13 @@ fn archive_cycle(root: &Path, id: JobId) -> Result<Option<(usize, u64, String)>,
         return Ok(None);
     }
     let adir = root.join("archive");
-    std::fs::create_dir_all(&adir).map_err(|e| e.to_string())?;
+    if !adir.is_dir() {
+        std::fs::create_dir_all(&adir).map_err(|e| e.to_string())?;
+        // Persist the new directory entry before any cycle data can be removed.
+        std::fs::File::open(root)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+    }
     let fin = adir.join(format!("{hex}.smlpack"));
     let digest = if fin.exists() {
         // A crash after the rename: the archive is complete, re-check it.
@@ -528,6 +534,21 @@ fn archive_cycle(root: &Path, id: JobId) -> Result<Option<(usize, u64, String)>,
     let bytes = std::fs::metadata(&fin).map_err(|e| e.to_string())?.len();
     std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(Some((files, bytes, digest.to_hex())))
+}
+
+/// Archives one cycle and prints the outcome line.
+fn archive_and_report(root: &Path, id: JobId) {
+    match archive_cycle(root, id) {
+        Ok(Some((files, bytes, digest))) => println!(
+            "SML_TUTORD_ARCHIVE=PASS job={} files={files} bytes={bytes} digest={digest}",
+            id.short()
+        ),
+        Ok(None) => {}
+        Err(e) => println!(
+            "SML_TUTORD_ARCHIVE=FAIL job={} kept_dir=true reason={e}",
+            id.short()
+        ),
+    }
 }
 
 /// Sleeps up to `ms`, returning early once an operator command is waiting
@@ -589,6 +610,18 @@ fn main() {
         sup.interrupted_at_open,
         sup.torn_tail_at_open
     );
+    if a.archive_cycles {
+        // Finish archiving left unfinished by a crash or an earlier failure:
+        // succeeded jobs are never run again, so this is their only retry.
+        let done: Vec<JobId> = sup
+            .jobs()
+            .filter(|(_, r)| r.status == JobStatus::Succeeded)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in done {
+            archive_and_report(&a.root, id);
+        }
+    }
     let mut runner = AnfRunner {
         root: a.root.clone(),
         workers: a.workers,
@@ -641,17 +674,7 @@ fn main() {
                         r.detail
                     );
                     if a.archive_cycles {
-                        match archive_cycle(&a.root, *id) {
-                            Ok(Some((files, bytes, digest))) => println!(
-                                "SML_TUTORD_ARCHIVE=PASS job={} files={files} bytes={bytes} digest={digest}",
-                                id.short()
-                            ),
-                            Ok(None) => {}
-                            Err(e) => println!(
-                                "SML_TUTORD_ARCHIVE=FAIL job={} kept_dir=true reason={e}",
-                                id.short()
-                            ),
-                        }
+                        archive_and_report(&a.root, *id);
                     }
                     if a.max_cycles != 0 && cycles >= a.max_cycles {
                         sup.command(sml_tutor::supervisor::Command::Drain)
