@@ -11,12 +11,32 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 type Example = (u8, u8, u8);
 const TASKS: usize = 7;
 const TRAIN: [(u8, u8); 16] = [
-    (0, 0), (1, 1), (255, 1), (1, 255), (3, 5), (128, 128), (17, 0), (0, 17),
-    (12, 37), (143, 62), (78, 219), (199, 130), (85, 170), (7, 15), (31, 93),
+    (0, 0),
+    (1, 1),
+    (255, 1),
+    (1, 255),
+    (3, 5),
+    (128, 128),
+    (17, 0),
+    (0, 17),
+    (12, 37),
+    (143, 62),
+    (78, 219),
+    (199, 130),
+    (85, 170),
+    (7, 15),
+    (31, 93),
     (251, 249),
 ];
 const DEV: [(u8, u8); 8] = [
-    (2, 7), (7, 2), (15, 16), (16, 15), (127, 129), (129, 127), (254, 2), (2, 254),
+    (2, 7),
+    (7, 2),
+    (15, 16),
+    (16, 15),
+    (127, 129),
+    (129, 127),
+    (254, 2),
+    (2, 254),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -32,8 +52,14 @@ enum Op {
 }
 impl Op {
     const ALL: [Self; 8] = [
-        Self::Add, Self::Sub, Self::Mul, Self::Xor, Self::And, Self::Or,
-        Self::Min, Self::Max,
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Xor,
+        Self::And,
+        Self::Or,
+        Self::Min,
+        Self::Max,
     ];
     fn eval(self, a: u8, b: u8) -> u8 {
         match self {
@@ -230,7 +256,11 @@ fn restore(raw: &str, grammar: &[Expr]) -> Result<Vec<Expr>> {
     }
     let ops: Vec<_> = lines
         .map(|s| {
-            grammar.iter().find(|e| e.source() == s).cloned().ok_or("unknown expression")
+            grammar
+                .iter()
+                .find(|e| e.source() == s)
+                .cloned()
+                .ok_or("unknown expression")
         })
         .collect::<std::result::Result<_, _>>()?;
     if ops.len() != TASKS || ops.iter().any(|e| e.cost() != 2) {
@@ -244,7 +274,9 @@ impl Temp {
     fn new() -> Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "sml-r2-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)
+            "sml-r2-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&path)?;
         Ok(Self(path))
@@ -261,7 +293,8 @@ fn compile_and_run(ops: &[Expr], temp: &Path) -> Result<Vec<u8>> {
     let mut source = String::from("#![allow(unused_parens)]\nuse std::io::{self,Write};\n");
     for (i, op) in ops.iter().enumerate() {
         source.push_str(&format!(
-            "fn learned_{i}(a:u8,b:u8)->u8{{ {} }}\n", op.source()
+            "fn learned_{i}(a:u8,b:u8)->u8{{ {} }}\n",
+            op.source()
         ));
     }
     source.push_str("fn main()->io::Result<()> {let mut out=io::BufWriter::new(io::stdout().lock());for a in 0u8..=255{for b in 0u8..=255{out.write_all(&[");
@@ -274,12 +307,26 @@ fn compile_and_run(ops: &[Expr], temp: &Path) -> Result<Vec<u8>> {
     fs::write(&file, source)?;
     let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let status = Command::new(rustc)
-        .args(["--edition=2021", "-Dwarnings", "-O", "--crate-name", "sml_tutor_r2_learned"])
-        .arg(&file).arg("-o").arg(&executable).stdin(Stdio::null()).output()?;
+        .args([
+            "--edition=2021",
+            "-Dwarnings",
+            "-O",
+            "--crate-name",
+            "sml_tutor_r2_learned",
+        ])
+        .arg(&file)
+        .arg("-o")
+        .arg(&executable)
+        .stdin(Stdio::null())
+        .output()?;
     if !status.status.success() {
         return Err(String::from_utf8_lossy(&status.stderr).into_owned().into());
     }
-    let out = Command::new(&executable).current_dir(temp).env_clear().stdin(Stdio::null()).output()?;
+    let out = Command::new(&executable)
+        .current_dir(temp)
+        .env_clear()
+        .stdin(Stdio::null())
+        .output()?;
     if !out.status.success() || !out.stderr.is_empty() || out.stdout.len() != 65_536 * TASKS {
         return Err("compiled execution failed".into());
     }
@@ -334,14 +381,21 @@ fn qualify(raw: &str, external: bool, output: Option<&Path>) -> Result<()> {
         }
     }
     if let Some(path) = output {
-        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
         file.write_all(bank.as_bytes())?;
         file.sync_all()?;
     }
     for (name, total) in ["train", "dev", "test", "testtest"].into_iter().zip(totals) {
         println!("SML_TUTOR_R2_COHORT cohort={name} correct={total} total={total}");
     }
-    let teacher = if external { "external_verified_labels" } else { "synthetic_oracle" };
+    let teacher = if external {
+        "external_verified_labels"
+    } else {
+        "synthetic_oracle"
+    };
     println!("SML_TUTOR_R2=PASS programs={TASKS} grammar=1058 primitive_baseline_abstains={TASKS} exact_cases={} reload={} teacher={teacher}", totals.iter().sum::<usize>(), totals.iter().sum::<usize>());
     Ok(())
 }
@@ -380,6 +434,11 @@ mod tests {
         let bank = temp.0.join("result.bank");
         // Fixture is synthetic; it is deliberately not called a real teacher run.
         qualify(&fixture(), false, Some(&bank)).unwrap();
-        assert_eq!(restore(&fs::read_to_string(bank).unwrap(), &grammar()).unwrap().len(), TASKS);
+        assert_eq!(
+            restore(&fs::read_to_string(bank).unwrap(), &grammar())
+                .unwrap()
+                .len(),
+            TASKS
+        );
     }
 }
