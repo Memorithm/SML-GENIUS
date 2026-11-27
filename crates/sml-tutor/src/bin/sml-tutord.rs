@@ -619,10 +619,16 @@ fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
 fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
     let dir = a.root.join("cumulative-math-v1");
     if !a.cumulative_math {
-        if dir.exists() || sup.jobs().any(|(_, j)| j.spec.kind == CUMULATIVE_KIND) {
+        if dir.exists() || sup.count_kind(CUMULATIVE_KIND) != 0 {
             return Err("cumulative root requires cumulative_math=1".into());
         }
         return Ok(());
+    }
+    if sup.count_kind(ANF_KIND) != 0
+        || sup.count_kind(L1_KIND) != 0
+        || sup.count_kind(CUMULATIVE_KIND) != sup.jobs().count() as u64
+    {
+        return Err("legacy or compacted ledger cannot enter bounded cumulative mode".into());
     }
     let mut succeeded = 0u64;
     let mut pending = false;
@@ -670,7 +676,7 @@ fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
             return Err("cumulative job quarantined; refusing next seed".into());
         }
         if sup.pending() == 0 {
-            let seed = sup.jobs().count() as u64;
+            let seed = sup.count_kind(CUMULATIVE_KIND);
             if seed >= CUMULATIVE_MAX_CYCLES {
                 return Err("cumulative cycle budget exhausted".into());
             }
@@ -679,9 +685,9 @@ fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
         }
         return Ok(());
     }
-    let count = |kind: &str| sup.jobs().filter(|(_, j)| j.spec.kind == kind).count() as u64;
-    let mut anf = count(ANF_KIND);
-    let mut l1 = count(L1_KIND);
+    // Counts include succeeded jobs compacted out of the record table.
+    let mut anf = sup.count_kind(ANF_KIND);
+    let mut l1 = sup.count_kind(L1_KIND);
     while sup.pending() < a.plan_ahead {
         let spec = match &a.l1 {
             Some(c) if (anf + l1) % c.every == c.every - 1 => JobSpec::new(L1_KIND)
@@ -825,11 +831,17 @@ fn main() {
     if a.archive_cycles {
         // Finish archiving left unfinished by a crash or an earlier failure:
         // succeeded jobs are never run again, so this is their only retry.
-        let done: Vec<JobId> = sup
-            .jobs()
-            .filter(|(_, r)| r.status == JobStatus::Succeeded)
-            .map(|(id, _)| *id)
+        // The cycle directories are scanned (not the record table) so that
+        // succeeded jobs compacted out of memory are covered too.
+        let mut done: Vec<JobId> = std::fs::read_dir(a.root.join("cycles"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().and_then(Digest::from_hex))
+            .map(JobId)
+            .filter(|id| sup.succeeded(id))
             .collect();
+        done.sort();
         for id in done {
             archive_and_report(&a.root, id);
         }
