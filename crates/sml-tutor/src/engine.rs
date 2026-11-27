@@ -42,7 +42,7 @@ use crate::telemetry::Telemetry;
 
 #[path = "linguistic_backend.rs"]
 mod linguistic;
-pub use linguistic::{linguistic_l1_key, L1Input};
+pub use linguistic::{linguistic_l1_identity, linguistic_l1_key, reexamine_l1, L1Input};
 
 #[path = "rust_r1_backend.rs"]
 mod rust_r1;
@@ -608,6 +608,23 @@ impl Engine {
         inputs: [L1Input; 2],
         cfg: EngineConfig,
     ) -> Result<(Self, ResumeReport), EngineError> {
+        Self::open_mixed_math(
+            root,
+            native_learner,
+            inputs,
+            math_curriculum(6, 7, 2, 11),
+            cfg,
+        )
+    }
+
+    /// Bootstrap the two frozen L1 banks and a bounded real math curriculum.
+    pub fn open_mixed_math(
+        root: &Path,
+        native_learner: &Path,
+        inputs: [L1Input; 2],
+        curriculum: AnfCurriculum,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
         if !(1..=2).contains(&cfg.workers)
             || !(1..=2).contains(&cfg.wave)
             || cfg.teacher_lie_every != 0
@@ -620,14 +637,20 @@ impl Engine {
         let (mut specs, l1) =
             linguistic::L1Backend::new(native_learner, inputs).map_err(EngineError::Curriculum)?;
         let language_ids: BTreeSet<_> = specs.iter().map(LessonSpec::id).collect();
-        let curriculum = anf_curriculum(6, 7, 2, 11);
-        let math: Vec<_> = curriculum
-            .specs
-            .into_iter()
-            .filter(|s| s.domain == Domain::Mathematics)
-            .collect();
+        let math = curriculum.specs;
         let math_ids: BTreeSet<_> = math.iter().map(LessonSpec::id).collect();
-        if math.len() != 6
+        if math.is_empty()
+            || math.len() > 64
+            || math.len() != math_ids.len()
+            || math.len() != curriculum.params.len()
+            || math.iter().any(|s| {
+                s.domain != Domain::Mathematics
+                    || !curriculum.params.get(&s.id()).is_some_and(|p| {
+                        s.payload == Digest::of(&p.encode())
+                            && (4..=10).contains(&p.inputs)
+                            && (1..=3).contains(&p.degree)
+                    })
+            })
             || math
                 .iter()
                 .any(|s| s.prerequisites.iter().any(|p| !math_ids.contains(p)))
