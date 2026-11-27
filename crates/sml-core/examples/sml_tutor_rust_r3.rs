@@ -183,10 +183,7 @@ fn qualify(memory: &str, raw: &str, source: &str, output: Option<&Path>) -> Resu
     let baseline = r2::grammar();
     let bank = verified_memory(memory, &baseline)?;
     let candidates = extend(&bank);
-    if baseline.len() != 1058
-        || candidates.len() != 224
-        || TRAIN.iter().any(|p| DEV.contains(p))
-    {
+    if baseline.len() != 1058 || candidates.len() != 224 || TRAIN.iter().any(|p| DEV.contains(p)) {
         return Err("R3 grammar or partition contract".into());
     }
     let mut learned = Vec::new();
