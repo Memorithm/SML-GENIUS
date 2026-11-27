@@ -56,7 +56,7 @@ use sml_tutor::hash::Digest;
 use sml_tutor::host_probe::{sample, ResourceBudget};
 use sml_tutor::mastery::Cohort;
 use sml_tutor::supervisor::{
-    CycleReport, CycleRunner, Gate, JobId, JobSpec, JobStatus, Mode, Supervisor, SupervisorConfig,
+    CycleReport, CycleRunner, Gate, JobId, JobSpec, Mode, Supervisor, SupervisorConfig,
     SupervisorState, Tick,
 };
 
@@ -471,9 +471,9 @@ impl CycleRunner for AnfRunner {
 /// position `k` (counting every planned job) is an L1 retention job when
 /// `k % l1_every == l1_every - 1`, an ANF cycle otherwise.
 fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
-    let count = |kind: &str| sup.jobs().filter(|(_, j)| j.spec.kind == kind).count() as u64;
-    let mut anf = count(ANF_KIND);
-    let mut l1 = count(L1_KIND);
+    // Counts include succeeded jobs compacted out of the record table.
+    let mut anf = sup.count_kind(ANF_KIND);
+    let mut l1 = sup.count_kind(L1_KIND);
     while sup.pending() < a.plan_ahead {
         let spec = match &a.l1 {
             Some(c) if (anf + l1) % c.every == c.every - 1 => JobSpec::new(L1_KIND)
@@ -613,11 +613,17 @@ fn main() {
     if a.archive_cycles {
         // Finish archiving left unfinished by a crash or an earlier failure:
         // succeeded jobs are never run again, so this is their only retry.
-        let done: Vec<JobId> = sup
-            .jobs()
-            .filter(|(_, r)| r.status == JobStatus::Succeeded)
-            .map(|(id, _)| *id)
+        // The cycle directories are scanned (not the record table) so that
+        // succeeded jobs compacted out of memory are covered too.
+        let mut done: Vec<JobId> = std::fs::read_dir(a.root.join("cycles"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().and_then(Digest::from_hex))
+            .map(JobId)
+            .filter(|id| sup.succeeded(id))
             .collect();
+        done.sort();
         for id in done {
             archive_and_report(&a.root, id);
         }
