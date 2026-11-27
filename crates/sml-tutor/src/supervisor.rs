@@ -310,6 +310,10 @@ pub struct SupervisorConfig {
     pub max_queued: usize,
     pub backoff_base_ms: u64,
     pub backoff_max_ms: u64,
+    /// Circuit breaker: after this many quarantines in a row (no success in
+    /// between) the supervisor leaves `Running` for `Maintenance` and an
+    /// operator must `resume`. `0` disables the breaker.
+    pub breaker_quarantines: u32,
 }
 
 impl Default for SupervisorConfig {
@@ -318,6 +322,7 @@ impl Default for SupervisorConfig {
             max_queued: 256,
             backoff_base_ms: 30_000,
             backoff_max_ms: 3_600_000,
+            breaker_quarantines: 3,
         }
     }
 }
@@ -565,6 +570,8 @@ pub struct Supervisor {
     pub interrupted_at_open: usize,
     pub torn_tail_at_open: bool,
     last_gate: Vec<String>,
+    /// Quarantines since the last success or operator resume (replayed).
+    consecutive_quarantines: u32,
 }
 
 fn corrupt(line: usize, reason: impl Into<String>) -> SupervisorError {
@@ -620,6 +627,7 @@ impl Supervisor {
             interrupted_at_open: 0,
             torn_tail_at_open: false,
             last_gate: Vec::new(),
+            consecutive_quarantines: 0,
         };
         if bytes.is_empty() {
             writeln!(sup.log, "{LOG_HEADER}")?;
@@ -767,6 +775,7 @@ impl Supervisor {
                 j.status = JobStatus::Succeeded;
                 j.report = Some(r.clone());
                 j.last_error = None;
+                self.consecutive_quarantines = 0;
             }
             Event::Fail(id, a, e, until) => {
                 let j = self.jobs.get_mut(id).ok_or("failure of unknown job")?;
@@ -785,10 +794,15 @@ impl Supervisor {
                     return Err("illegal quarantine".into());
                 }
                 j.status = JobStatus::Quarantined { reason: r.clone() };
+                self.consecutive_quarantines = self.consecutive_quarantines.saturating_add(1);
             }
             Event::State(a, b) => {
                 if *a != self.state || !self.state.can_go(*b) {
                     return Err(format!("illegal state {} -> {}", a.name(), b.name()));
+                }
+                // An operator leaving maintenance re-arms the breaker.
+                if *a == SupervisorState::Maintenance && *b == SupervisorState::Running {
+                    self.consecutive_quarantines = 0;
                 }
                 self.state = *b;
             }
@@ -938,6 +952,26 @@ impl Supervisor {
     pub fn start(&mut self) -> Result<(), SupervisorError> {
         if self.state == SupervisorState::Starting {
             self.set_state(SupervisorState::Running)?;
+            // Quarantines replayed or made at open still count.
+            self.trip_breaker()?;
+        }
+        Ok(())
+    }
+
+    /// Quarantines since the last success or operator resume.
+    pub fn consecutive_quarantines(&self) -> u32 {
+        self.consecutive_quarantines
+    }
+
+    /// Whether the circuit breaker currently holds the supervisor.
+    pub fn breaker_tripped(&self) -> bool {
+        self.cfg.breaker_quarantines != 0
+            && self.consecutive_quarantines >= self.cfg.breaker_quarantines
+    }
+
+    fn trip_breaker(&mut self) -> Result<(), SupervisorError> {
+        if self.state == SupervisorState::Running && self.breaker_tripped() {
+            self.set_state(SupervisorState::Maintenance)?;
         }
         Ok(())
     }
@@ -1019,6 +1053,7 @@ impl Supervisor {
         // Backoff counts from the end of the failed cycle, not its start.
         let failed_at = now_ms.saturating_add(cycle_started.elapsed().as_millis() as u64);
         if self.record_failure(id, attempt, failure, failed_at, true)? {
+            self.trip_breaker()?;
             Ok(Tick::Quarantined(id))
         } else {
             Ok(Tick::Failed(id))
@@ -1077,7 +1112,8 @@ impl Supervisor {
                 "\"new_certified_total\":{},\"reexamined_total\":{},",
                 "\"last_success_job\":{},\"last_success_store_version\":{},",
                 "\"last_error\":{},\"gate_refusals\":[{}],",
-                "\"interrupted_at_open\":{},\"torn_tail_at_open\":{}}}"
+                "\"interrupted_at_open\":{},\"torn_tail_at_open\":{},",
+                "\"consecutive_quarantines\":{},\"breaker_tripped\":{}}}"
             ),
             jstr(self.state.name()),
             jstr(self.mode.name()),
@@ -1097,6 +1133,8 @@ impl Supervisor {
             gate.join(","),
             self.interrupted_at_open,
             self.torn_tail_at_open,
+            self.consecutive_quarantines,
+            self.breaker_tripped(),
         )
     }
 
@@ -1199,7 +1237,54 @@ mod tests {
             max_queued: 4,
             backoff_base_ms: 100,
             backoff_max_ms: 1_000,
+            breaker_quarantines: 2,
         }
+    }
+
+    #[test]
+    fn breaker_enters_maintenance_after_consecutive_quarantines_and_survives_restart() {
+        let root = tmp("breaker");
+        let c = CancellationToken::new();
+        let mut r = Scripted {
+            fail_first: u32::MAX,
+            ..Scripted::default()
+        };
+        {
+            let mut s = open(&root);
+            for seed in 0..3 {
+                let mut spec = JobSpec::new("x").param("seed", seed);
+                spec.max_attempts = 1;
+                s.submit(spec).unwrap();
+            }
+            assert!(matches!(
+                s.tick(&mut r, &mut OpenGate, &c, 0).unwrap(),
+                Tick::Quarantined(_)
+            ));
+            assert_eq!(s.state(), SupervisorState::Running);
+            assert!(matches!(
+                s.tick(&mut r, &mut OpenGate, &c, 0).unwrap(),
+                Tick::Quarantined(_)
+            ));
+            assert_eq!(s.state(), SupervisorState::Maintenance);
+            assert!(s.breaker_tripped());
+            assert!(s.health_json(0).contains("\"breaker_tripped\":true"));
+            // Held: the third job is not dispatched.
+            assert_eq!(
+                s.tick(&mut r, &mut OpenGate, &c, 0).unwrap(),
+                Tick::Idle(SupervisorState::Maintenance)
+            );
+            assert_eq!(r.calls.len(), 2);
+            s.command(Command::Stop).unwrap();
+        }
+        // The count is replayed: a restart does not silently re-arm it.
+        let mut s = open(&root);
+        assert_eq!(s.consecutive_quarantines(), 2);
+        assert_eq!(s.state(), SupervisorState::Maintenance);
+        // An explicit operator resume re-arms it.
+        s.command(Command::Resume).unwrap();
+        assert_eq!(s.consecutive_quarantines(), 0);
+        assert_eq!(s.state(), SupervisorState::Running);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn open(root: &Path) -> Supervisor {
