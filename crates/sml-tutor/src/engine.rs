@@ -181,6 +181,75 @@ pub fn anf_curriculum(per_domain: usize, inputs: u8, degree: u8, seed: u64) -> A
     AnfCurriculum { specs, params }
 }
 
+/// Real mathematical curriculum, retaining the exact mathematical identities
+/// and prerequisites from the existing ANF generator, without fake domain tags.
+pub fn math_curriculum(lessons: usize, inputs: u8, degree: u8, seed: u64) -> AnfCurriculum {
+    let mut curriculum = anf_curriculum(lessons, inputs, degree, seed);
+    curriculum
+        .specs
+        .retain(|spec| spec.domain == Domain::Mathematics);
+    let ids: BTreeSet<_> = curriculum.specs.iter().map(LessonSpec::id).collect();
+    curriculum.params.retain(|id, _| ids.contains(id));
+    curriculum
+}
+
+/// Re-examine previously certified mathematical checkpoints from a cumulative
+/// store against their original deterministic oracle over the complete input
+/// space. No learner or teacher runs and no publication occurs.
+pub fn reexamine_math(
+    store: &KnowledgeStore,
+    curriculum: &AnfCurriculum,
+) -> Result<(usize, u64), EngineError> {
+    let invalid = |message: &str| EngineError::Curriculum(message.into());
+    if curriculum.specs.is_empty() || curriculum.specs.len() != curriculum.params.len() {
+        return Err(invalid("invalid retention curriculum"));
+    }
+    let snapshot = store.snapshot()?;
+    let mut seen = BTreeSet::new();
+    let mut cases = 0u64;
+    for spec in &curriculum.specs {
+        let id = spec.id();
+        if spec.domain != Domain::Mathematics || !seen.insert(id) {
+            return Err(invalid("invalid retention lesson identity"));
+        }
+        let p = curriculum
+            .params
+            .get(&id)
+            .ok_or_else(|| invalid("missing ANF parameters"))?;
+        if spec.payload != Digest::of(&p.encode())
+            || !(1..=crate::anf_lesson::MAX_INPUTS).contains(&p.inputs)
+        {
+            return Err(invalid("retention parameters differ from lesson"));
+        }
+        let key = knowledge_key(&id);
+        let record = snapshot
+            .entries
+            .get(&key)
+            .ok_or_else(|| invalid("missing retained lesson"))?;
+        if record.lesson != id {
+            return Err(invalid("retained lesson mismatch"));
+        }
+        let bytes = store
+            .get(&key)?
+            .ok_or_else(|| invalid("missing retained checkpoint"))?;
+        let (inputs, degree, coeffs) =
+            decode_checkpoint(&bytes).map_err(|err| invalid(&err.to_string()))?;
+        if inputs != p.inputs || degree != p.degree {
+            return Err(invalid("retained checkpoint shape mismatch"));
+        }
+        let rows: Vec<u32> = (0..1u32 << inputs).collect();
+        let (correct, total) = exam(inputs, degree, &coeffs, &p.task(), &rows);
+        if correct != total || total == 0 {
+            return Err(invalid("mathematical retention failed"));
+        }
+        cases += total;
+    }
+    if store.snapshot()? != snapshot {
+        return Err(invalid("store changed during retention exam"));
+    }
+    Ok((seen.len(), cases))
+}
+
 /// Deterministic teacher: labels TRAIN rows from the true function, but lies on
 /// one row out of `lie_every` (0 = never). It is never trusted.
 pub struct AnfTeacher {
@@ -684,6 +753,62 @@ impl Engine {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Publish one fully examined cycle into a separate cumulative store.
+    /// No trust is placed in a certificate digest read from disk: the live
+    /// engine reports must reconstruct exactly the records already certified
+    /// and stored by this engine. A reopened engine without reports cannot
+    /// use this path; the cycle must be independently re-examined first.
+    pub fn publish_certified_cycle(
+        &self,
+        target: &KnowledgeStore,
+    ) -> Result<crate::store::CommitOutcome, EngineError> {
+        let source = self.store.snapshot()?;
+        let invalid = |message: &str| EngineError::Curriculum(message.into());
+        if source.entries.is_empty() || self.store.audit()? != source.entries.len() {
+            return Err(invalid("empty or incomplete cycle store"));
+        }
+        let mut entries = Vec::new();
+        for lesson in self.registry.iter() {
+            if lesson.state != KnowledgeState::Consolidated {
+                return Err(invalid("cycle has unconsolidated lessons"));
+            }
+            let report = lesson
+                .exams
+                .last()
+                .ok_or_else(|| invalid("missing live exam"))?;
+            for cohort in [Cohort::Dev, Cohort::TestTest] {
+                if !report.cohorts.iter().any(|r| r.cohort == cohort) {
+                    return Err(invalid("missing independent exam cohort"));
+                }
+            }
+            let mut retained: Vec<_> = self
+                .registry
+                .graph()
+                .prerequisites(&lesson.id)
+                .map(|p| self.backend.key(p))
+                .collect();
+            retained.extend(self.backend.external_retention(&lesson.id));
+            retained.sort();
+            retained.dedup();
+            let certificate = certify(lesson.id, report, &retained)
+                .map_err(|err| invalid(&err.to_string()))?;
+            let key = self.backend.key(&lesson.id);
+            let payload = self
+                .store
+                .get(&key)?
+                .ok_or_else(|| invalid("missing cycle checkpoint"))?;
+            let entry = StagedEntry::new(&certificate, key, payload);
+            if source.entries.get(&key) != Some(entry.record()) {
+                return Err(invalid("cycle certificate or object mismatch"));
+            }
+            entries.push(entry);
+        }
+        if entries.len() != source.entries.len() || self.store.snapshot()? != source {
+            return Err(invalid("unexpected cycle entries or concurrent mutation"));
+        }
+        Ok(target.commit_exact_cycle(entries)?)
     }
 
     fn enqueue_ready(&mut self) {
@@ -1224,6 +1349,49 @@ mod tests {
         let (mut e, _) = Engine::open(&dir, anf_curriculum(6, 7, 2, 11), cfg).unwrap();
         let s = e.run(&CancellationToken::new()).unwrap();
         (e, s)
+    }
+
+    #[test]
+    fn cumulative_math_cycles_retain_prior_functions_and_reject_unexamined_replay() {
+        let root = tmp("cumulative-math");
+        let target = KnowledgeStore::open(root.join("cumulative")).unwrap();
+        let cfg = EngineConfig {
+            workers: 2,
+            wave: 4,
+            ..EngineConfig::default()
+        };
+        let mut previous = BTreeMap::new();
+        for seed in [11, 12] {
+            let path = root.join(seed.to_string());
+            let (mut engine, _) =
+                Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
+            engine.run(&CancellationToken::new()).unwrap();
+            let outcome = engine.publish_certified_cycle(&target).unwrap();
+            assert_eq!(outcome.added, 6);
+            let snapshot = target.snapshot().unwrap();
+            for (key, record) in &previous {
+                assert_eq!(snapshot.entries.get(key), Some(record));
+            }
+            assert_eq!(
+                engine.publish_certified_cycle(&target).unwrap().idempotent,
+                6
+            );
+            assert_eq!(target.snapshot().unwrap(), snapshot);
+            for prior in 11..=seed {
+                assert_eq!(
+                    reexamine_math(&target, &math_curriculum(6, 7, 2, prior)).unwrap(),
+                    (6, 768)
+                );
+            }
+            previous = snapshot.entries;
+            drop(engine);
+            let (reopened, _) =
+                Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
+            assert!(reopened.publish_certified_cycle(&target).is_err());
+        }
+        assert_eq!(target.audit().unwrap(), 12);
+        assert_eq!(target.version().unwrap(), 2);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
