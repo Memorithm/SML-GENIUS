@@ -45,7 +45,9 @@
 //! drain, stop, emergency). `DIR/health.json` is rewritten after every tick.
 //! `max_cycles=0` runs until stopped in legacy mode.
 //! `cumulative_math=1` is a bounded simulation on a separate root, with one
-//! math-only cycle per store version and exact replay after an interruption.
+//! math cycle per store version and exact replay after an interruption. With
+//! frozen L1 arguments, the first cycle also re-admits both language banks.
+//! Later cycles re-examine them directly without teacher or relearning.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -53,8 +55,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sml_tutor::domain::Domain;
 use sml_tutor::domain::KnowledgeState;
 use sml_tutor::engine::{
-    anf_curriculum, linguistic_l1_key, math_curriculum, reexamine_math, Engine, EngineConfig,
-    L1Input,
+    anf_curriculum, linguistic_l1_identity, linguistic_l1_key, math_curriculum, reexamine_l1,
+    reexamine_math, Engine, EngineConfig, L1Input,
 };
 use sml_tutor::executor::{available_workers, CancellationToken};
 use sml_tutor::hash::Digest;
@@ -81,6 +83,15 @@ struct L1Config {
     every: u64,
 }
 
+impl L1Config {
+    fn inputs(&self) -> Result<[L1Input; 2], String> {
+        Ok([
+            l1_input(Domain::French, &self.fr, self.fr_sha)?,
+            l1_input(Domain::English, &self.en, self.en_sha)?,
+        ])
+    }
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -102,6 +113,7 @@ struct Args {
     /// Pack successful cycle directories into verified archives.
     archive_cycles: bool,
     cumulative_math: bool,
+    cumulative_l1_identity: Option<Digest>,
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
@@ -121,6 +133,7 @@ fn parse() -> Result<Args, String> {
         cycle_gap_ms: 0,
         archive_cycles: false,
         cumulative_math: false,
+        cumulative_l1_identity: None,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
@@ -212,14 +225,18 @@ fn parse() -> Result<Args, String> {
     }
     if a.cumulative_math
         && (a.mode != Mode::Simulation
-            || a.l1.is_some()
             || a.plan_ahead != 1
             || !(1..=CUMULATIVE_MAX_CYCLES).contains(&a.max_cycles)
             || a.per_domain > 64
             || a.inputs > 10
             || a.degree > 3)
     {
-        return Err("cumulative math requires bounded simulation, plan_ahead=1, no L1".into());
+        return Err("cumulative math requires bounded simulation and plan_ahead=1".into());
+    }
+    if a.cumulative_math {
+        if let Some(l1) = &a.l1 {
+            a.cumulative_l1_identity = Some(linguistic_l1_identity(&l1.native, l1.inputs()?)?);
+        }
     }
     Ok(a)
 }
@@ -445,10 +462,26 @@ impl AnfRunner {
         {
             return Err("cumulative curriculum outside qualified bounds".into());
         }
+        let linguistic = match &self.l1 {
+            Some(l1) => {
+                let inputs = l1.inputs()?;
+                let identity = linguistic_l1_identity(&l1.native, inputs.clone())?;
+                if spec.params.get("l1").map(String::as_str) != Some(identity.to_hex().as_str()) {
+                    return Err("cumulative L1 identity mismatch".into());
+                }
+                Some((l1.native.clone(), inputs))
+            }
+            None if spec.params.contains_key("l1") => return Err("missing cumulative L1".into()),
+            None => None,
+        };
+        let banks = if linguistic.is_some() { 2 } else { 0 };
+        let cardinality = |version: u64| {
+            version as usize * lessons + if version > 0 { banks } else { 0 }
+        };
         let target = self.cumulative_store()?;
         let before = target.snapshot().map_err(|e| e.to_string())?;
         if !(before.version == seed || before.version == seed + 1)
-            || before.entries.len() != before.version as usize * lessons
+            || before.entries.len() != cardinality(before.version)
         {
             return Err("cumulative version/cardinality mismatch".into());
         }
@@ -458,6 +491,10 @@ impl AnfRunner {
             reexamine_math(&target, &math_curriculum(lessons, inputs, degree, seed - 1))
                 .map_err(|e| e.to_string())?
         };
+        let (l1_retained, l1_cases) = match &linguistic {
+            Some((binary, inputs)) if seed != 0 => reexamine_l1(&target, binary, inputs.clone())?,
+            _ => (0, 0),
+        };
         // Live exam reports are required to reconstruct certificates. An
         // interrupted local cycle is kept as evidence and independently
         // re-examined from scratch, even if its cumulative commit survived.
@@ -466,15 +503,26 @@ impl AnfRunner {
             workers: self.workers,
             ..EngineConfig::default()
         };
-        let (mut engine, _) = Engine::open(
-            &self.dir(id),
-            math_curriculum(lessons, inputs, degree, seed),
-            cfg,
-        )
+        let curriculum = math_curriculum(lessons, inputs, degree, seed);
+        let (mut engine, _) = match &linguistic {
+            Some((binary, input)) if seed == 0 => Engine::open_mixed_math(
+                &self.dir(id),
+                binary,
+                input.clone(),
+                curriculum,
+                EngineConfig {
+                    workers: self.workers.min(2),
+                    wave: 2,
+                    ..cfg
+                },
+            ),
+            _ => Engine::open(&self.dir(id), curriculum, cfg),
+        }
         .map_err(|e| e.to_string())?;
+        let published = lessons + if seed == 0 { banks } else { 0 };
         let summary = engine.run(cancel).map_err(|e| e.to_string())?;
         if cancel.is_cancelled()
-            || summary.states.get(&KnowledgeState::Consolidated) != Some(&lessons)
+            || summary.states.get(&KnowledgeState::Consolidated) != Some(&published)
         {
             return Err("cumulative cycle incomplete".into());
         }
@@ -491,8 +539,8 @@ impl AnfRunner {
             .map_err(|e| e.to_string())?;
         let replay = before.version == seed + 1;
         if outcome.version != seed + 1
-            || (replay && (outcome.added != 0 || outcome.idempotent != lessons))
-            || (!replay && (outcome.added != lessons || outcome.idempotent != 0))
+            || (replay && (outcome.added != 0 || outcome.idempotent != published))
+            || (!replay && (outcome.added != published || outcome.idempotent != 0))
         {
             return Err("unexpected cumulative publication receipt".into());
         }
@@ -501,11 +549,11 @@ impl AnfRunner {
         // writes attempted in this process. The journal counts Succeed once.
         Ok(CycleReport {
             new_certified: lessons as u64,
-            reexamined: retained as u64,
+            reexamined: (retained + l1_retained + if seed == 0 { banks } else { 0 }) as u64,
             rejected: total.teacher_rejections + total.exam_failures,
             store_version: outcome.version,
             detail: format!(
-                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} exact_replay={replay}"
+                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} l1_banks={banks} l1_retained={l1_retained} l1_cases={l1_cases} exact_replay={replay}"
             ),
         })
     }
@@ -584,13 +632,22 @@ impl CycleRunner for AnfRunner {
             let (lessons, inputs, degree, seed) = Self::params(spec)?;
             let target = self.cumulative_store()?;
             let snapshot = target.snapshot().map_err(|e| e.to_string())?;
+            let banks = if spec.params.contains_key("l1") { 2 } else { 0 };
             if snapshot.version != seed + 1
-                || snapshot.entries.len() != (seed + 1) as usize * lessons
+                || snapshot.entries.len() != (seed + 1) as usize * lessons + banks
             {
                 return Err("cumulative post-commit version/cardinality mismatch".into());
             }
             reexamine_math(&target, &math_curriculum(lessons, inputs, degree, seed))
                 .map_err(|e| e.to_string())?;
+            if let Some(l1) = &self.l1 {
+                let inputs = l1.inputs()?;
+                let identity = linguistic_l1_identity(&l1.native, inputs.clone())?;
+                if spec.params.get("l1").map(String::as_str) != Some(identity.to_hex().as_str()) {
+                    return Err("post-commit L1 identity mismatch".into());
+                }
+                reexamine_l1(&target, &l1.native, inputs)?;
+            }
             return Ok(());
         }
         let store = sml_tutor::store::KnowledgeStore::open(self.dir(id).join("store"))
@@ -613,11 +670,15 @@ impl CycleRunner for AnfRunner {
 /// position `k` (counting every planned job) is an L1 retention job when
 /// `k % l1_every == l1_every - 1`, an ANF cycle otherwise.
 fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
-    JobSpec::new(CUMULATIVE_KIND)
+    let spec = JobSpec::new(CUMULATIVE_KIND)
         .param("per_domain", a.per_domain)
         .param("inputs", a.inputs)
         .param("degree", a.degree)
-        .param("seed", seed)
+        .param("seed", seed);
+    match a.cumulative_l1_identity {
+        Some(id) => spec.param("l1", id.to_hex()),
+        None => spec,
+    }
 }
 
 /// Reconcile the durable job ledger with the cumulative store before
@@ -666,7 +727,13 @@ fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
     let snapshot = target.snapshot().map_err(|e| e.to_string())?;
     if snapshot.version < succeeded
         || snapshot.version > succeeded + u64::from(pending)
-        || target.audit().map_err(|e| e.to_string())? != snapshot.version as usize * a.per_domain
+        || target.audit().map_err(|e| e.to_string())?
+            != snapshot.version as usize * a.per_domain
+                + if snapshot.version != 0 && a.cumulative_l1_identity.is_some() {
+                    2
+                } else {
+                    0
+                }
     {
         return Err("cumulative store and job ledger disagree".into());
     }
