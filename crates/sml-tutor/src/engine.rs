@@ -792,8 +792,8 @@ impl Engine {
             retained.extend(self.backend.external_retention(&lesson.id));
             retained.sort();
             retained.dedup();
-            let certificate = certify(lesson.id, report, &retained)
-                .map_err(|err| invalid(&err.to_string()))?;
+            let certificate =
+                certify(lesson.id, report, &retained).map_err(|err| invalid(&err.to_string()))?;
             let key = self.backend.key(&lesson.id);
             let payload = self
                 .store
@@ -1363,8 +1363,7 @@ mod tests {
         let mut previous = BTreeMap::new();
         for seed in [11, 12] {
             let path = root.join(seed.to_string());
-            let (mut engine, _) =
-                Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
+            let (mut engine, _) = Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
             engine.run(&CancellationToken::new()).unwrap();
             let outcome = engine.publish_certified_cycle(&target).unwrap();
             assert_eq!(outcome.added, 6);
@@ -1385,8 +1384,7 @@ mod tests {
             }
             previous = snapshot.entries;
             drop(engine);
-            let (reopened, _) =
-                Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
+            let (reopened, _) = Engine::open(&path, math_curriculum(6, 7, 2, seed), cfg).unwrap();
             assert!(reopened.publish_certified_cycle(&target).is_err());
         }
         assert_eq!(target.audit().unwrap(), 12);

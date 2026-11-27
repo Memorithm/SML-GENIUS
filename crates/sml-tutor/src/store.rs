@@ -535,8 +535,7 @@ impl KnowledgeStore {
         if entries.is_empty() {
             return Err(StoreError::Corrupt("empty certified cycle".into()));
         }
-        let unique: std::collections::BTreeSet<_> =
-            entries.iter().map(|e| e.record.key).collect();
+        let unique: std::collections::BTreeSet<_> = entries.iter().map(|e| e.record.key).collect();
         if unique.len() != entries.len() {
             return Err(StoreError::Corrupt("duplicate cycle key".into()));
         }
@@ -593,7 +592,9 @@ impl KnowledgeStore {
             }
         }
         if exact_cycle && idempotent != 0 && !fresh.is_empty() {
-            return Err(StoreError::Corrupt("partial certified cycle overlap".into()));
+            return Err(StoreError::Corrupt(
+                "partial certified cycle overlap".into(),
+            ));
         }
         if fresh.is_empty() {
             return Ok(CommitOutcome {
