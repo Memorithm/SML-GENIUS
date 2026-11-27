@@ -308,6 +308,12 @@ impl AnfRunner {
             max_attempts: 1,
             ..EngineConfig::default()
         };
+        // A retention job is a pure re-examination and its exam reports live
+        // only in memory: a resumed engine would skip lessons consolidated by
+        // an interrupted attempt and leave no report to verify. Any previous
+        // attempt's store is therefore moved aside (never deleted) and the
+        // job re-examines both banks from scratch.
+        self.rollback(id, spec)?;
         let (mut engine, resume) =
             Engine::open_bilingual_l1(&self.dir(id), &l1.native, inputs.clone(), cfg)
                 .map_err(|e| e.to_string())?;
