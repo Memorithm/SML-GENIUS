@@ -39,7 +39,7 @@
 //! What this module does not claim: it is an orchestration substrate. It
 //! makes no statement about what is learned; the runner and the examiner do.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -314,6 +314,11 @@ pub struct SupervisorConfig {
     /// between) the supervisor leaves `Running` for `Maintenance` and an
     /// operator must `resume`. `0` disables the breaker.
     pub breaker_quarantines: u32,
+    /// Succeeded jobs kept as full records (most recent first). Older ones
+    /// are compacted to their id plus aggregate counters, so a permanent
+    /// supervisor's memory no longer grows by a full record per cycle. The
+    /// event log stays complete; compaction is replayed identically.
+    pub keep_succeeded: usize,
 }
 
 impl Default for SupervisorConfig {
@@ -323,8 +328,18 @@ impl Default for SupervisorConfig {
             backoff_base_ms: 30_000,
             backoff_max_ms: 3_600_000,
             breaker_quarantines: 3,
+            keep_succeeded: 256,
         }
     }
+}
+
+/// Succeeded jobs compacted out of the record table.
+#[derive(Clone, Debug, Default)]
+struct Compacted {
+    ids: BTreeSet<JobId>,
+    by_kind: BTreeMap<String, u64>,
+    new_certified: u64,
+    reexamined: u64,
 }
 
 #[derive(Debug)]
@@ -562,6 +577,9 @@ pub struct Supervisor {
     state: SupervisorState,
     jobs: BTreeMap<JobId, JobRecord>,
     order: Vec<JobId>,
+    /// Succeeded job ids in success order, still held as full records.
+    recent_succeeded: VecDeque<JobId>,
+    compacted: Compacted,
     cfg: SupervisorConfig,
     mode: Mode,
     started_ms: u64,
@@ -621,6 +639,8 @@ impl Supervisor {
             state: SupervisorState::Stopped,
             jobs: BTreeMap::new(),
             order: Vec::new(),
+            recent_succeeded: VecDeque::new(),
+            compacted: Compacted::default(),
             cfg,
             mode,
             started_ms: now_ms,
@@ -737,11 +757,11 @@ impl Supervisor {
     fn apply(&mut self, ev: &Event) -> Result<(), String> {
         match ev {
             Event::Submit(id, spec) => {
-                if self.jobs.contains_key(id) {
+                if self.known(id) {
                     return Err("duplicate submit".into());
                 }
                 for d in &spec.deps {
-                    if !self.jobs.contains_key(d) {
+                    if !self.known(d) {
                         return Err("unknown dependency".into());
                     }
                 }
@@ -776,6 +796,8 @@ impl Supervisor {
                 j.report = Some(r.clone());
                 j.last_error = None;
                 self.consecutive_quarantines = 0;
+                self.recent_succeeded.push_back(*id);
+                self.compact();
             }
             Event::Fail(id, a, e, until) => {
                 let j = self.jobs.get_mut(id).ok_or("failure of unknown job")?;
@@ -897,13 +919,63 @@ impl Supervisor {
         self.head
     }
 
+    /// Full record of a job. `None` for unknown jobs and for succeeded jobs
+    /// compacted away (see [`SupervisorConfig::keep_succeeded`]).
     pub fn job(&self, id: &JobId) -> Option<&JobRecord> {
         self.jobs.get(id)
     }
 
-    /// Jobs in submission order.
+    /// Jobs held as full records, in submission order. Compacted succeeded
+    /// jobs are not listed: use [`Supervisor::succeeded`],
+    /// [`Supervisor::count_kind`] and the health totals for those.
     pub fn jobs(&self) -> impl Iterator<Item = (&JobId, &JobRecord)> {
         self.order.iter().map(move |id| (id, &self.jobs[id]))
+    }
+
+    /// Whether the job is known, as a full record or compacted.
+    pub fn known(&self, id: &JobId) -> bool {
+        self.jobs.contains_key(id) || self.compacted.ids.contains(id)
+    }
+
+    /// Whether the job succeeded (compacted or not).
+    pub fn succeeded(&self, id: &JobId) -> bool {
+        self.compacted.ids.contains(id)
+            || self.jobs.get(id).map(|j| j.status == JobStatus::Succeeded) == Some(true)
+    }
+
+    /// Jobs of this kind ever submitted, compacted ones included.
+    pub fn count_kind(&self, kind: &str) -> u64 {
+        let live = self.jobs.values().filter(|j| j.spec.kind == kind).count() as u64;
+        live + self.compacted.by_kind.get(kind).copied().unwrap_or(0)
+    }
+
+    /// Number of succeeded jobs compacted to their id.
+    pub fn compacted_succeeded(&self) -> usize {
+        self.compacted.ids.len()
+    }
+
+    /// Moves the oldest succeeded records beyond `keep_succeeded` into the
+    /// compact summary. Deterministic, so replay rebuilds the same state.
+    fn compact(&mut self) {
+        let mut gone = BTreeSet::new();
+        while self.recent_succeeded.len() > self.cfg.keep_succeeded {
+            let Some(id) = self.recent_succeeded.pop_front() else {
+                break;
+            };
+            let Some(j) = self.jobs.remove(&id) else {
+                continue;
+            };
+            if let Some(r) = &j.report {
+                self.compacted.new_certified += r.new_certified;
+                self.compacted.reexamined += r.reexamined;
+            }
+            *self.compacted.by_kind.entry(j.spec.kind).or_default() += 1;
+            self.compacted.ids.insert(id);
+            gone.insert(id);
+        }
+        if !gone.is_empty() {
+            self.order.retain(|id| !gone.contains(id));
+        }
     }
 
     /// Jobs not yet finished (queued, running or in backoff).
@@ -922,14 +994,14 @@ impl Supervisor {
     /// Idempotent submission. Returns `Ok(false)` if the job already exists.
     pub fn submit(&mut self, spec: JobSpec) -> Result<(JobId, bool), SupervisorError> {
         let id = spec.id();
-        if self.jobs.contains_key(&id) {
+        if self.known(&id) {
             return Ok((id, false));
         }
         if self.state == SupervisorState::EmergencyStopped {
             return Err(SupervisorError::EmergencyStopped);
         }
         for d in &spec.deps {
-            if !self.jobs.contains_key(d) {
+            if !self.known(d) {
                 return Err(SupervisorError::UnknownDependency(*d));
             }
         }
@@ -977,9 +1049,7 @@ impl Supervisor {
     }
 
     fn deps_done(&self, spec: &JobSpec) -> bool {
-        spec.deps
-            .iter()
-            .all(|d| self.jobs.get(d).map(|j| j.status == JobStatus::Succeeded) == Some(true))
+        spec.deps.iter().all(|d| self.succeeded(d))
     }
 
     /// Highest-priority job that may start now; ties broken by submission order.
@@ -1063,8 +1133,8 @@ impl Supervisor {
     /// Machine-readable health snapshot (`SML_TUTORD_HEALTH_V1`).
     pub fn health_json(&self, now_ms: u64) -> String {
         let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
-        let mut new_certified = 0u64;
-        let mut reexamined = 0u64;
+        let mut new_certified = self.compacted.new_certified;
+        let mut reexamined = self.compacted.reexamined;
         let mut last_success: Option<(&JobId, &CycleReport)> = None;
         let mut last_error: Option<&str> = None;
         for (id, j) in self.jobs() {
@@ -1099,6 +1169,7 @@ impl Supervisor {
             o
         };
         let count = |k: &str| counts.get(k).copied().unwrap_or(0);
+        let succeeded = count("succeeded") + self.compacted.ids.len();
         let (ls_id, ls_ver) = match last_success {
             Some((id, r)) => (jstr(&id.0.to_hex()), r.store_version.to_string()),
             None => ("null".into(), "null".into()),
@@ -1113,7 +1184,8 @@ impl Supervisor {
                 "\"last_success_job\":{},\"last_success_store_version\":{},",
                 "\"last_error\":{},\"gate_refusals\":[{}],",
                 "\"interrupted_at_open\":{},\"torn_tail_at_open\":{},",
-                "\"consecutive_quarantines\":{},\"breaker_tripped\":{}}}"
+                "\"consecutive_quarantines\":{},\"breaker_tripped\":{},",
+                "\"compacted_succeeded\":{}}}"
             ),
             jstr(self.state.name()),
             jstr(self.mode.name()),
@@ -1123,7 +1195,7 @@ impl Supervisor {
             count("queued"),
             count("running"),
             count("backoff"),
-            count("succeeded"),
+            succeeded,
             count("quarantined"),
             new_certified,
             reexamined,
@@ -1135,6 +1207,7 @@ impl Supervisor {
             self.torn_tail_at_open,
             self.consecutive_quarantines,
             self.breaker_tripped(),
+            self.compacted.ids.len(),
         )
     }
 
@@ -1238,6 +1311,7 @@ mod tests {
             backoff_base_ms: 100,
             backoff_max_ms: 1_000,
             breaker_quarantines: 2,
+            keep_succeeded: 256,
         }
     }
 
@@ -1291,6 +1365,75 @@ mod tests {
         let mut s = Supervisor::open(root, Mode::Simulation, cfg(), 0).unwrap();
         s.start().unwrap();
         s
+    }
+
+    #[test]
+    fn succeeded_jobs_are_compacted_and_replay_identically() {
+        let root = tmp("compact");
+        let c = CancellationToken::new();
+        let small = SupervisorConfig {
+            keep_succeeded: 2,
+            ..cfg()
+        };
+        let open_small = |root: &Path| {
+            let mut s = Supervisor::open(root, Mode::Simulation, small, 0).unwrap();
+            s.start().unwrap();
+            s
+        };
+        // Everything after the log position (seq and head differ by the
+        // stop/start events of the reopen).
+        let strip = |h: String| h.split(",\"jobs\"").nth(1).unwrap().to_string();
+        let mut ids = Vec::new();
+        let before;
+        {
+            let mut s = open_small(&root);
+            let mut r = Scripted::default();
+            for seed in 0..6 {
+                let (id, _) = s.submit(JobSpec::new("x").param("seed", seed)).unwrap();
+                ids.push(id);
+                assert_eq!(
+                    s.tick(&mut r, &mut OpenGate, &c, 0).unwrap(),
+                    Tick::Succeeded(id)
+                );
+                // The report of the job that just succeeded is still readable.
+                assert_eq!(
+                    s.job(&id).unwrap().report.as_ref().unwrap().new_certified,
+                    4
+                );
+            }
+            assert_eq!(s.jobs().count(), 2);
+            assert_eq!(s.compacted_succeeded(), 4);
+            assert!(s.job(&ids[0]).is_none());
+            assert!(ids.iter().all(|id| s.succeeded(id) && s.known(id)));
+            assert_eq!(s.count_kind("x"), 6);
+            // Idempotent submit still recognises a compacted job.
+            assert_eq!(
+                s.submit(JobSpec::new("x").param("seed", 0)).unwrap(),
+                (ids[0], false)
+            );
+            // A dependency on a compacted job is known and satisfied.
+            let mut dep = JobSpec::new("y");
+            dep.deps = vec![ids[0]];
+            let (y, fresh) = s.submit(dep).unwrap();
+            assert!(fresh);
+            assert_eq!(
+                s.tick(&mut r, &mut OpenGate, &c, 0).unwrap(),
+                Tick::Succeeded(y)
+            );
+            let h = s.health_json(0);
+            assert!(h.contains("\"succeeded\":7"), "{h}");
+            assert!(h.contains("\"new_certified_total\":28"), "{h}");
+            assert!(h.contains("\"compacted_succeeded\":5"), "{h}");
+            before = strip(h);
+            s.command(Command::Stop).unwrap();
+        }
+        // Replay rebuilds the same compacted state.
+        let s = open_small(&root);
+        assert_eq!(s.compacted_succeeded(), 5);
+        assert_eq!(s.jobs().count(), 2);
+        let after = strip(s.health_json(0));
+        assert_eq!(after, before);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
