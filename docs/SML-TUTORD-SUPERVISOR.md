@@ -15,7 +15,7 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 | Dépendances acycliques | une dépendance doit être un job déjà connu | acyclique par construction |
 | Priorités, backpressure | `next_ready`, `SupervisorConfig::max_queued` | priorité puis FIFO ; soumission refusée au-delà de la borne |
 | Tentatives bornées, temporisation, quarantaine | `record_failure` | backoff `base·2^(n-1)` plafonné ; quarantaine à `max_attempts` ; jamais relancé automatiquement |
-| Reprise | `Supervisor::open` | un job `Running` au démarrage est remis en file immédiatement (tentative comptée) ; le moteur reprend son propre journal dans le même répertoire de cycle |
+| Reprise | `Supervisor::open` | verrou exclusif `supervisor.lock` (une seule instance par racine) ; un job `Running` au démarrage est remis en file immédiatement (tentative comptée) ; un job épuisé resté en backoff après un crash est mis en quarantaine ; le moteur reprend son propre journal dans le même répertoire de cycle |
 | Gate ressources | `host_probe.rs` `ResourceBudget::admit` | RAM disponible, charge/CPU, disque libre ; lecture inconnue = refus |
 | Modes | `Mode::{Simulation, Production}` | enregistré dans chaque événement de démarrage ; `production` refusé sans `<root>/PRODUCTION_ADMITTED` |
 | Pilotage | `<root>/control` : `pause`, `resume`, `maintenance`, `drain`, `stop`, `emergency` | lu puis supprimé à chaque tick |

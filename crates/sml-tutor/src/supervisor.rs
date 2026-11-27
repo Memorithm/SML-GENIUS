@@ -325,11 +325,16 @@ impl Default for SupervisorConfig {
 #[derive(Debug)]
 pub enum SupervisorError {
     Io(io::Error),
-    Corrupt { line: usize, reason: String },
+    Corrupt {
+        line: usize,
+        reason: String,
+    },
     IllegalTransition(SupervisorState, SupervisorState),
     Backpressure(usize),
     UnknownDependency(JobId),
     EmergencyStopped,
+    /// Another supervisor process holds `<root>/supervisor.lock`.
+    Locked,
 }
 
 impl fmt::Display for SupervisorError {
@@ -352,6 +357,7 @@ impl fmt::Display for SupervisorError {
                 write!(f, "dependency {} is not a known job", d.short())
             }
             SupervisorError::EmergencyStopped => write!(f, "supervisor is emergency-stopped"),
+            SupervisorError::Locked => write!(f, "another supervisor holds this root"),
         }
     }
 }
@@ -544,6 +550,8 @@ fn chain(seq: u64, prev: &Digest, fields: &[String]) -> Digest {
 pub struct Supervisor {
     root: PathBuf,
     log: File,
+    /// Held for the supervisor's lifetime: one writer per root.
+    _lock: File,
     seq: u64,
     head: Digest,
     state: SupervisorState,
@@ -576,6 +584,18 @@ impl Supervisor {
         now_ms: u64,
     ) -> Result<Self, SupervisorError> {
         std::fs::create_dir_all(root)?;
+        // Exclusive advisory lock before reading anything: a second instance
+        // on the same root would fork the hash chain and re-run live jobs.
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(root.join("supervisor.lock"))?;
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => return Err(SupervisorError::Locked),
+            Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
+        }
         let path = root.join("supervisor.log");
         let mut log = OpenOptions::new()
             .read(true)
@@ -588,6 +608,7 @@ impl Supervisor {
         let mut sup = Supervisor {
             root: root.to_path_buf(),
             log,
+            _lock: lock,
             seq: 0,
             head: Digest::ZERO,
             state: SupervisorState::Stopped,
@@ -637,6 +658,23 @@ impl Supervisor {
         for id in running {
             let attempts = sup.jobs[&id].attempts;
             sup.record_failure(id, attempts, "interrupted by restart".into(), now_ms, false)?;
+        }
+        // A crash between a final `Fail` and its `Quarantine` leaves an
+        // exhausted job in backoff: complete the quarantine before dispatch.
+        let exhausted: Vec<(JobId, u32)> = sup
+            .jobs
+            .iter()
+            .filter(|(_, j)| {
+                matches!(j.status, JobStatus::Queued | JobStatus::Backoff { .. })
+                    && j.attempts >= j.spec.max_attempts
+            })
+            .map(|(id, j)| (*id, j.attempts))
+            .collect();
+        for (id, attempts) in exhausted {
+            sup.append(Event::Quarantine(
+                id,
+                format!("{attempts} failed attempts (recovered at open)"),
+            ))?;
         }
         match sup.state {
             SupervisorState::EmergencyStopped => return Err(SupervisorError::EmergencyStopped),
@@ -958,6 +996,7 @@ impl Supervisor {
         let attempt = self.jobs[&id].attempts + 1;
         let spec = self.jobs[&id].spec.clone();
         self.append(Event::Start(id, attempt, self.mode))?;
+        let cycle_started = std::time::Instant::now();
         let outcome = runner.run(id, &spec, self.mode, cancel);
         let failure = match outcome {
             Ok(report) => match runner.verify(id, &spec) {
@@ -977,7 +1016,9 @@ impl Supervisor {
             },
             Err(e) => e,
         };
-        if self.record_failure(id, attempt, failure, now_ms, true)? {
+        // Backoff counts from the end of the failed cycle, not its start.
+        let failed_at = now_ms.saturating_add(cycle_started.elapsed().as_millis() as u64);
+        if self.record_failure(id, attempt, failure, failed_at, true)? {
             Ok(Tick::Quarantined(id))
         } else {
             Ok(Tick::Failed(id))
@@ -1364,6 +1405,45 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("rolled back"));
+    }
+
+    #[test]
+    fn second_instance_on_same_root_is_refused() {
+        let root = tmp("lock");
+        let s = open(&root);
+        assert!(matches!(
+            Supervisor::open(&root, Mode::Simulation, cfg(), 0),
+            Err(SupervisorError::Locked)
+        ));
+        drop(s);
+        let _again = open(&root);
+    }
+
+    #[test]
+    fn exhausted_job_left_in_backoff_by_a_crash_is_quarantined_at_open() {
+        let root = tmp("exhausted");
+        let mut spec = JobSpec::new("x");
+        spec.max_attempts = 1;
+        let id = spec.id();
+        {
+            let mut s = open(&root);
+            s.submit(spec).unwrap();
+            // Crash after the final Fail, before its Quarantine.
+            s.append(Event::Start(id, 1, Mode::Simulation)).unwrap();
+            s.append(Event::Fail(id, 1, "boom".into(), 0)).unwrap();
+        }
+        let mut s = open(&root);
+        assert!(matches!(
+            s.job(&id).unwrap().status,
+            JobStatus::Quarantined { .. }
+        ));
+        let mut r = Scripted::default();
+        let c = CancellationToken::new();
+        assert_eq!(
+            s.tick(&mut r, &mut OpenGate, &c, 10_000).unwrap(),
+            Tick::NothingReady
+        );
+        assert!(r.calls.is_empty());
     }
 
     #[test]
