@@ -438,7 +438,10 @@ impl AnfRunner {
         cancel: &CancellationToken,
     ) -> Result<CycleReport, String> {
         let (lessons, inputs, degree, seed) = Self::params(spec)?;
-        if seed >= CUMULATIVE_MAX_CYCLES || !(1..=64).contains(&lessons) || inputs > 10 || degree > 3
+        if seed >= CUMULATIVE_MAX_CYCLES
+            || !(1..=64).contains(&lessons)
+            || inputs > 10
+            || degree > 3
         {
             return Err("cumulative curriculum outside qualified bounds".into());
         }
@@ -475,8 +478,11 @@ impl AnfRunner {
         {
             return Err("cumulative cycle incomplete".into());
         }
-        reexamine_math(engine.store(), &math_curriculum(lessons, inputs, degree, seed))
-            .map_err(|e| e.to_string())?;
+        reexamine_math(
+            engine.store(),
+            &math_curriculum(lessons, inputs, degree, seed),
+        )
+        .map_err(|e| e.to_string())?;
         if target.snapshot().map_err(|e| e.to_string())? != before {
             return Err("cumulative target changed during cycle".into());
         }
@@ -1034,7 +1040,13 @@ mod cumulative_tests {
             .health_json(1)
             .contains("\"new_certified_total\":4,"));
         assert_eq!(
-            supervisor.job(&id).unwrap().report.as_ref().unwrap().new_certified,
+            supervisor
+                .job(&id)
+                .unwrap()
+                .report
+                .as_ref()
+                .unwrap()
+                .new_certified,
             4
         );
         drop(supervisor);
@@ -1049,10 +1061,8 @@ mod cumulative_tests {
 
     #[test]
     fn exact_replay_after_commit_before_success_preserves_head_and_retains_math() {
-        let root = std::env::temp_dir().join(format!(
-            "sml-tutord-cumulative-test-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("sml-tutord-cumulative-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let mut runner = AnfRunner {
             root: root.clone(),
