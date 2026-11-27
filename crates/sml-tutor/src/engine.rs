@@ -374,8 +374,8 @@ struct AttemptOutput {
 // cannot install their own examiner or submit an ExamReport to the engine.
 trait EngineBackend: Send + Sync {
     fn key(&self, id: &LessonId) -> Digest;
-    fn teacher_name(&self) -> &str;
-    fn model_version(&self) -> &str;
+    fn teacher_name(&self, id: &LessonId) -> &str;
+    fn model_version(&self, id: &LessonId) -> &str;
     fn external_retention(&self, _id: &LessonId) -> Vec<Digest> {
         Vec::new()
     }
@@ -393,16 +393,55 @@ impl EngineBackend for AnfBackend {
         knowledge_key(id)
     }
 
-    fn teacher_name(&self) -> &str {
+    fn teacher_name(&self, _id: &LessonId) -> &str {
         self.teacher.name()
     }
 
-    fn model_version(&self) -> &str {
+    fn model_version(&self, _id: &LessonId) -> &str {
         "sml-tutor-anf-gf2-v1"
     }
 
     fn attempt(&self, job: &Job) -> AttemptOutput {
         attempt_lesson(&self.params, &self.teacher, &self.oracle, job)
+    }
+}
+
+/// Dispatch the two reviewed backend types without relabeling ANF as language.
+struct MixedBackend {
+    anf: AnfBackend,
+    l1: linguistic::L1Backend,
+    language_ids: BTreeSet<LessonId>,
+}
+
+impl MixedBackend {
+    fn select(&self, id: &LessonId) -> &dyn EngineBackend {
+        if self.language_ids.contains(id) {
+            &self.l1
+        } else {
+            &self.anf
+        }
+    }
+}
+
+impl EngineBackend for MixedBackend {
+    fn key(&self, id: &LessonId) -> Digest {
+        self.select(id).key(id)
+    }
+
+    fn teacher_name(&self, id: &LessonId) -> &str {
+        self.select(id).teacher_name(id)
+    }
+
+    fn model_version(&self, id: &LessonId) -> &str {
+        self.select(id).model_version(id)
+    }
+
+    fn external_retention(&self, id: &LessonId) -> Vec<Digest> {
+        self.select(id).external_retention(id)
+    }
+
+    fn attempt(&self, job: &Job) -> AttemptOutput {
+        self.select(&job.id).attempt(job)
     }
 }
 
@@ -470,6 +509,73 @@ impl Engine {
         let (specs, backend) =
             linguistic::L1Backend::new(native_learner, inputs).map_err(EngineError::Curriculum)?;
         Self::open_with(root, specs, Box::new(backend), cfg)
+    }
+
+    /// A finite, genuinely mixed curriculum: two native language L1 lessons
+    /// and six mathematical ANF lessons. The mathematical specs and keys
+    /// are unchanged; fake language/Rust ANF lane tags are excluded.
+    /// No cross-backend dependency is admitted in this first bridge.
+    pub fn open_mixed_l1_anf(
+        root: &Path,
+        native_learner: &Path,
+        inputs: [L1Input; 2],
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        if !(1..=2).contains(&cfg.workers)
+            || !(1..=2).contains(&cfg.wave)
+            || cfg.teacher_lie_every != 0
+            || cfg.max_attempts < 6
+        {
+            return Err(EngineError::Curriculum(
+                "invalid mixed resource bounds".into(),
+            ));
+        }
+        let (mut specs, l1) =
+            linguistic::L1Backend::new(native_learner, inputs).map_err(EngineError::Curriculum)?;
+        let language_ids: BTreeSet<_> = specs.iter().map(LessonSpec::id).collect();
+        let curriculum = anf_curriculum(6, 7, 2, 11);
+        let math: Vec<_> = curriculum
+            .specs
+            .into_iter()
+            .filter(|s| s.domain == Domain::Mathematics)
+            .collect();
+        let math_ids: BTreeSet<_> = math.iter().map(LessonSpec::id).collect();
+        if math.len() != 6
+            || math
+                .iter()
+                .any(|s| s.prerequisites.iter().any(|p| !math_ids.contains(p)))
+            || !language_ids.is_disjoint(&math_ids)
+        {
+            return Err(EngineError::Curriculum("invalid mixed dependencies".into()));
+        }
+        let params = Arc::new(
+            curriculum
+                .params
+                .into_iter()
+                .filter(|(id, _)| math_ids.contains(id))
+                .collect(),
+        );
+        let anf = AnfBackend {
+            teacher: AnfTeacher {
+                params: Arc::clone(&params),
+                lie_every: 0,
+            },
+            oracle: AnfOracle {
+                params: Arc::clone(&params),
+            },
+            params,
+        };
+        specs.extend(math);
+        Self::open_with(
+            root,
+            specs,
+            Box::new(MixedBackend {
+                anf,
+                l1,
+                language_ids,
+            }),
+            cfg,
+        )
     }
 
     fn open_with(
@@ -754,7 +860,7 @@ impl Engine {
     ) -> Result<Option<(LessonId, StagedEntry)>, EngineError> {
         for v in &out.verdicts {
             self.ledger.record(
-                self.backend.teacher_name(),
+                self.backend.teacher_name(id),
                 v,
                 out.teach_nanos / out.verdicts.len().max(1) as u128,
             );
@@ -787,10 +893,10 @@ impl Engine {
         }
         if let Some(l) = self.registry.get_mut(id) {
             l.measured_cost_nanos = out.learn_nanos + out.validate_nanos;
-            l.teacher = Some(self.backend.teacher_name().to_string());
+            l.teacher = Some(self.backend.teacher_name(id).to_string());
             l.test_corpus = Some(out.report.corpus.digest());
             l.train_digest = Some(out.report.corpus.train);
-            l.model_version = Some(self.backend.model_version().to_string());
+            l.model_version = Some(self.backend.model_version(id).to_string());
             l.exams.push(out.report.clone());
         }
         let Some(checkpoint) = out.checkpoint else {

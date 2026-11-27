@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           cargo test --locked --release -p sml-tutor
           cargo build --locked --release -p sml-core --example sml_tutor_linguistic_roles
-          cargo build --locked --release -p sml-tutor --example sml_tutor_bilingual_l1
+          cargo build --locked --release -p sml-tutor --example sml_tutor_bilingual_l1 --example sml_tutor_mixed_l1_anf
           stage="$(mktemp -d)"
           trap 'rm -rf -- "$stage"' EXIT
           native="$PWD/target/release/examples/sml_tutor_linguistic_roles"
@@ -68,6 +68,12 @@ jobs:
             grep -Fx "SML_TUTOR_L1_ENGINE=PASS languages=2 workers=$workers learned_annotations=96 held_out=1792 store_entries=2 reopen_unchanged=true" "$stage/result-$workers.txt"
           done
           cmp "$stage/store-1/store/HEAD" "$stage/store-2/store/HEAD"
+          mixed="$PWD/target/release/examples/sml_tutor_mixed_l1_anf"
+          for workers in 1 2; do
+            "$mixed" "$native" "$stage/mixed-$workers" "$stage/fr" "$stage/en" "$fr_sha" "$en_sha" "$workers" | tee "$stage/mixed-$workers.txt"
+            grep -Fx "SML_TUTOR_MIXED=PASS fr=1 en=1 math=6 rust=0 workers=$workers store_entries=8 reopen_unchanged=true" "$stage/mixed-$workers.txt"
+          done
+          cmp "$stage/mixed-1/store/HEAD" "$stage/mixed-2/store/HEAD"
           # The annotation teacher is not authoritative. A validly formatted
           # incorrect role label must not enter the store as a certified bank.
           sed -i '1s/|0$/|1/' "$stage/fr/train.txt"
