@@ -16,6 +16,7 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 | Priorités, backpressure | `next_ready`, `SupervisorConfig::max_queued` | priorité puis FIFO ; soumission refusée au-delà de la borne |
 | Tentatives bornées, temporisation, quarantaine | `record_failure` | backoff `base·2^(n-1)` plafonné ; quarantaine à `max_attempts` ; jamais relancé automatiquement |
 | Reprise | `Supervisor::open` | verrou exclusif `supervisor.lock` (une seule instance par racine) ; un job `Running` au démarrage est remis en file immédiatement (tentative comptée) ; un job épuisé resté en backoff après un crash est mis en quarantaine ; le moteur reprend son propre journal dans le même répertoire de cycle |
+| Disjoncteur | `SupervisorConfig::breaker_quarantines` (3 par défaut) | après N quarantaines consécutives sans succès : `Running` → `Maintenance`, plus aucun cycle ni planification ; compteur rejoué depuis le journal (un redémarrage ne le réarme pas) ; seul un `resume` opérateur le remet à zéro |
 | Gate ressources | `host_probe.rs` `ResourceBudget::admit` | RAM disponible, charge/CPU, disque libre ; lecture inconnue = refus |
 | Modes | `Mode::{Simulation, Production}` | enregistré dans chaque événement de démarrage ; `production` refusé sans `<root>/PRODUCTION_ADMITTED` |
 | Pilotage | `<root>/control` : `pause`, `resume`, `maintenance`, `drain`, `stop`, `emergency` | lu puis supprimé à chaque tick |
@@ -27,6 +28,8 @@ Le moteur P1 (`crates/sml-tutor/src/engine.rs`) exécute un curriculum jusqu'au 
 Le seul type de job branché est `anf-m2` : un curriculum ANF GF(2) (Mathématiques M2, induction native) avec une graine nouvelle à chaque cycle, dans son propre store `<root>/cycles/<job>`. Les étiquettes FR/EN/Rust internes à ce curriculum servent uniquement à tester l'équité des voies : **ce ne sont pas des leçons de langue ni de Rust**. Les backends L1 (#1058) et R1 (#1059) sont les prochains types de job.
 
 ## Limites connues
+
+- `inputs` est borné à `anf_lesson::MAX_INPUTS` (12) à l'analyse des arguments et à nouveau par job.
 
 - Un cycle est synchrone : `stop`/`emergency` sont pris en compte entre deux cycles, pas pendant.
 - Un store par cycle ; pas encore de store unifié inter-cycles ni de réexamen de rétention des cycles précédents.
@@ -41,4 +44,4 @@ target/release/sml-tutord root=/tmp/tutord max_cycles=2 per_domain=16 inputs=10 
 echo pause > /tmp/tutord/control
 ```
 
-Sorties lisibles par machine : `SML_TUTORD_START`, `SML_TUTORD_CYCLE=PASS|FAIL`, `SML_TUTORD_GATED`, `SML_TUTORD_CONTROL`, `SML_TUTORD_EXIT`.
+Sorties lisibles par machine : `SML_TUTORD_START`, `SML_TUTORD_CYCLE=PASS|FAIL`, `SML_TUTORD_BREAKER`, `SML_TUTORD_GATED`, `SML_TUTORD_CONTROL`, `SML_TUTORD_EXIT`.

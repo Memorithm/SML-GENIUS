@@ -98,8 +98,15 @@ fn parse() -> Result<Args, String> {
     if a.root.as_os_str().is_empty() {
         return Err("root=DIR is required".into());
     }
-    if a.workers == 0 || a.per_domain == 0 || !(4..=14).contains(&a.inputs) || a.degree == 0 {
-        return Err("workers, per_domain, inputs (4..=14) or degree out of range".into());
+    if a.workers == 0
+        || a.per_domain == 0
+        || !(4..=sml_tutor::anf_lesson::MAX_INPUTS).contains(&a.inputs)
+        || a.degree == 0
+    {
+        return Err(format!(
+            "workers, per_domain, inputs (4..={}) or degree out of range",
+            sml_tutor::anf_lesson::MAX_INPUTS
+        ));
     }
     Ok(a)
 }
@@ -137,6 +144,17 @@ impl AnfRunner {
             get("degree")?.parse().map_err(|_| "bad degree")?,
             get("seed")?.parse().map_err(|_| "bad seed")?,
         ))
+        .and_then(|p: (usize, u8, u8, u64)| {
+            if (4..=sml_tutor::anf_lesson::MAX_INPUTS).contains(&p.1) {
+                Ok(p)
+            } else {
+                Err(format!(
+                    "inputs {} outside 4..={}",
+                    p.1,
+                    sml_tutor::anf_lesson::MAX_INPUTS
+                ))
+            }
+        })
     }
 }
 
@@ -312,6 +330,13 @@ fn main() {
                         "SML_TUTORD_CYCLE=FAIL job={} outcome={tick:?} error={err:?}",
                         id.short()
                     );
+                    if sup.breaker_tripped() {
+                        println!(
+                            "SML_TUTORD_BREAKER consecutive_quarantines={} state={}",
+                            sup.consecutive_quarantines(),
+                            sup.state().name()
+                        );
+                    }
                 }
                 Tick::Gated(r) => println!("SML_TUTORD_GATED reasons={r:?}"),
                 Tick::Drained => println!("SML_TUTORD_DRAINED"),
