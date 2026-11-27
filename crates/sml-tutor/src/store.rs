@@ -522,6 +522,35 @@ impl KnowledgeStore {
 
     /// Atomically publishes a transaction (all entries or none).
     pub fn commit(&self, txn: &Transaction) -> Result<CommitOutcome, StoreError> {
+        self.commit_impl(txn, false)
+    }
+
+    /// The caller has reconstructed every certificate from a completed
+    /// engine cycle. Publication is all-new or an exact replay of that
+    /// whole cycle; partial overlap and changed provenance fail closed.
+    pub(crate) fn commit_exact_cycle(
+        &self,
+        entries: Vec<StagedEntry>,
+    ) -> Result<CommitOutcome, StoreError> {
+        if entries.is_empty() {
+            return Err(StoreError::Corrupt("empty certified cycle".into()));
+        }
+        let unique: std::collections::BTreeSet<_> = entries.iter().map(|e| e.record.key).collect();
+        if unique.len() != entries.len() {
+            return Err(StoreError::Corrupt("duplicate cycle key".into()));
+        }
+        let txn = Transaction {
+            base_version: self.version()?,
+            entries,
+        };
+        self.commit_impl(&txn, true)
+    }
+
+    fn commit_impl(
+        &self,
+        txn: &Transaction,
+        exact_cycle: bool,
+    ) -> Result<CommitOutcome, StoreError> {
         let _guard = self.lock()?;
         let snap = self.snapshot()?;
         if snap.version != txn.base_version {
@@ -542,6 +571,15 @@ impl KnowledgeStore {
                     .map(|s| s.record)
             });
             match existing {
+                Some(e) if exact_cycle && e == rec => {
+                    self.read_object(&e.object)?;
+                    idempotent += 1;
+                }
+                Some(e) if exact_cycle && e.object == rec.object => {
+                    return Err(StoreError::Corrupt(
+                        "cycle certificate or lesson changed".into(),
+                    ));
+                }
                 Some(e) if e.object == rec.object => idempotent += 1,
                 Some(e) => {
                     return Err(StoreError::Contradiction {
@@ -552,6 +590,11 @@ impl KnowledgeStore {
                 }
                 None => fresh.push(staged),
             }
+        }
+        if exact_cycle && idempotent != 0 && !fresh.is_empty() {
+            return Err(StoreError::Corrupt(
+                "partial certified cycle overlap".into(),
+            ));
         }
         if fresh.is_empty() {
             return Ok(CommitOutcome {
@@ -758,6 +801,54 @@ mod tests {
                 current: 1
             })
         ));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn exact_cycle_replay_requires_complete_matching_certificates() {
+        let dir = tmp("exact-cycle");
+        let s = KnowledgeStore::open(&dir).unwrap();
+        let a = entry(1, b"one");
+        let b = entry(2, b"two");
+        assert_eq!(
+            s.commit_exact_cycle(vec![a.clone(), b.clone()])
+                .unwrap()
+                .added,
+            2
+        );
+        let before = s.snapshot().unwrap();
+        assert_eq!(
+            s.commit_exact_cycle(vec![a.clone(), b.clone()])
+                .unwrap()
+                .idempotent,
+            2
+        );
+        assert!(s
+            .commit_exact_cycle(vec![a.clone(), entry(3, b"three")])
+            .is_err());
+        let changed = StagedEntry::new(&test_certificate(9), a.record.key, b"one".to_vec());
+        assert!(s.commit_exact_cycle(vec![changed]).is_err());
+        assert!(s.commit_exact_cycle(vec![a.clone(), a]).is_err());
+        assert!(s.commit_exact_cycle(Vec::new()).is_err());
+        assert_eq!(s.snapshot().unwrap(), before);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn exact_cycle_failure_keeps_previous_head() {
+        let dir = tmp("exact-failure");
+        let mut s = KnowledgeStore::open(&dir).unwrap();
+        s.commit_exact_cycle(vec![entry(1, b"one")]).unwrap();
+        let before = s.snapshot().unwrap();
+        s.inject_failure(Some(FailPoint::AfterManifest));
+        assert!(s.commit_exact_cycle(vec![entry(2, b"two")]).is_err());
+        assert_eq!(s.snapshot().unwrap(), before);
+        s.inject_failure(None);
+        assert_eq!(
+            s.commit_exact_cycle(vec![entry(2, b"two")]).unwrap().added,
+            1
+        );
+        assert_eq!(s.audit().unwrap(), 2);
         let _ = fs::remove_dir_all(&dir);
     }
 
