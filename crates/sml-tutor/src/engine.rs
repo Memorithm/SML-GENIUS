@@ -484,10 +484,16 @@ struct MixedBackend {
     anf: AnfBackend,
     l1: linguistic::L1Backend,
     language_ids: BTreeSet<LessonId>,
+    rust: Option<(LessonId, rust_r1::R1Backend)>,
 }
 
 impl MixedBackend {
     fn select(&self, id: &LessonId) -> &dyn EngineBackend {
+        if let Some((rust_id, backend)) = &self.rust {
+            if id == rust_id {
+                return backend;
+            }
+        }
         if self.language_ids.contains(id) {
             &self.l1
         } else {
@@ -625,6 +631,19 @@ impl Engine {
         curriculum: AnfCurriculum,
         cfg: EngineConfig,
     ) -> Result<(Self, ResumeReport), EngineError> {
+        Self::open_four_domains(root, native_learner, inputs, curriculum, None, cfg)
+    }
+
+    /// The initial cycle may admit a bounded R1 bank alongside both L1 banks
+    /// and new mathematical functions in one engine and atomic publication.
+    pub fn open_four_domains(
+        root: &Path,
+        native_learner: &Path,
+        inputs: [L1Input; 2],
+        curriculum: AnfCurriculum,
+        r1: Option<R1Input>,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
         if !(1..=2).contains(&cfg.workers)
             || !(1..=2).contains(&cfg.wave)
             || cfg.teacher_lie_every != 0
@@ -676,6 +695,19 @@ impl Engine {
             params,
         };
         specs.extend(math);
+        let rust = match r1 {
+            Some(input) => {
+                let (spec, backend) =
+                    rust_r1::R1Backend::new(input).map_err(EngineError::Curriculum)?;
+                let id = spec.id();
+                if specs.iter().any(|s| s.id() == id) {
+                    return Err(EngineError::Curriculum("duplicate R1 lesson".into()));
+                }
+                specs.push(spec);
+                Some((id, backend))
+            }
+            None => None,
+        };
         Self::open_with(
             root,
             specs,
@@ -683,6 +715,7 @@ impl Engine {
                 anf,
                 l1,
                 language_ids,
+                rust,
             }),
             cfg,
         )
