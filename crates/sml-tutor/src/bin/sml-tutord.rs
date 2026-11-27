@@ -597,7 +597,10 @@ fn main() {
                 Tick::Gated(_) | Tick::Idle(_) | Tick::NothingReady | Tick::Failed(_)
             ) {
                 std::thread::sleep(Duration::from_millis(a.idle_ms));
-            } else if matches!(tick, Tick::Succeeded(_)) && a.cycle_gap_ms > 0 {
+            } else if matches!(tick, Tick::Succeeded(_))
+                && a.cycle_gap_ms > 0
+                && sup.state().dispatches()
+            {
                 pause(&a.root, a.cycle_gap_ms);
             }
             Ok(None)
