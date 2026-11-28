@@ -63,7 +63,7 @@ use sml_tutor::hash::Digest;
 use sml_tutor::host_probe::{sample, ResourceBudget};
 use sml_tutor::mastery::Cohort;
 use sml_tutor::supervisor::{
-    CycleReport, CycleRunner, Gate, JobId, JobSpec, JobStatus, Mode, Supervisor, SupervisorConfig,
+    CycleReport, CycleRunner, Gate, JobId, JobSpec, Mode, Supervisor, SupervisorConfig,
     SupervisorState, Tick,
 };
 
