@@ -332,6 +332,260 @@ pub fn examine(parent: &str, child: &str, bank: &str) -> Result<[u64; 4]> {
     Ok(totals)
 }
 
+
+/// A local edit changes a single typed field, never the program family.
+fn one_edit(a: Program, b: Program) -> bool {
+    match (a, b) {
+        (Program::Branch(p, y, n), Program::Branch(q, u, v)) => {
+            usize::from(p != q) + usize::from(y != u) + usize::from(n != v) == 1
+        }
+        (Program::Repeat(n, f), Program::Repeat(m, g)) => {
+            usize::from(n != m) + usize::from(f != g) == 1
+        }
+        (Program::Sequence(f, g), Program::Sequence(h, i)) => {
+            usize::from(f != h) + usize::from(g != i) == 1
+        }
+        _ => false,
+    }
+}
+
+fn neighborhood(initial: Program) -> Vec<Program> {
+    grammar()
+        .into_iter()
+        .filter(|&p| p == initial || one_edit(initial, p))
+        .collect()
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RepairProposal {
+    pub traces: Vec<Vec<crate::tutor_rust_r5::Action>>,
+    pub candidate: Option<String>,
+}
+
+const REPAIR_BUDGET: usize = 8;
+
+fn plan_local(
+    saved: &[Expr],
+    initial: Program,
+    evidence: &[Example],
+    budget: usize,
+    adaptive: bool,
+) -> Vec<crate::tutor_rust_r5::Action> {
+    use crate::tutor_rust_r5::Action;
+    let universe = neighborhood(initial);
+    let mut remaining: Vec<usize> = (0..universe.len()).collect();
+    let mut used = vec![false; evidence.len()];
+    let mut trace = Vec::new();
+    for step in 0..=budget {
+        if remaining.len() == 1 {
+            trace.push(Action::Patch {
+                candidate: remaining[0],
+            });
+            return trace;
+        }
+        if remaining.is_empty() || step == budget {
+            break;
+        }
+        let available = (0..evidence.len()).filter(|&i| !used[i]);
+        let next = if adaptive {
+            available
+                .map(|i| {
+                    let (a, b, _) = evidence[i];
+                    let mut counts = [0usize; 256];
+                    for &candidate in &remaining {
+                        counts[usize::from(universe[candidate].eval(saved, a, b))] += 1;
+                    }
+                    (counts.iter().map(|n| n * n).sum::<usize>(), i)
+                })
+                .filter(|&(score, _)| score < remaining.len() * remaining.len())
+                .min()
+                .map(|(_, i)| i)
+        } else {
+            available.into_iter().next()
+        };
+        let Some(index) = next else { break };
+        let (a, b, observed) = evidence[index];
+        used[index] = true;
+        trace.push(Action::Probe { index, observed });
+        remaining.retain(|&i| universe[i].eval(saved, a, b) == observed);
+    }
+    trace.push(Action::Abstain);
+    trace
+}
+
+fn replay_local(
+    saved: &[Expr],
+    initial: Program,
+    evidence: &[Example],
+    budget: usize,
+    trace: &[crate::tutor_rust_r5::Action],
+) -> Result<Option<Program>> {
+    use crate::tutor_rust_r5::Action;
+    let universe = neighborhood(initial);
+    let mut remaining: Vec<usize> = (0..universe.len()).collect();
+    let mut used = vec![false; evidence.len()];
+    let mut probes = 0;
+    for (step, action) in trace.iter().enumerate() {
+        match *action {
+            Action::Probe { index, observed } => {
+                let &(a, b, y) = evidence.get(index).ok_or("foreign R6b probe")?;
+                if used[index] || probes >= budget || observed != y {
+                    return Err("invalid R6b probe".into());
+                }
+                used[index] = true;
+                probes += 1;
+                remaining.retain(|&i| universe[i].eval(saved, a, b) == observed);
+            }
+            Action::Patch { candidate } => {
+                if step + 1 != trace.len() || remaining.as_slice() != [candidate] {
+                    return Err("unsupported R6b patch".into());
+                }
+                return Ok(Some(universe[candidate]));
+            }
+            Action::Abstain => {
+                if step + 1 != trace.len() {
+                    return Err("R6b abstention must terminate".into());
+                }
+                return Ok(None);
+            }
+        }
+    }
+    Err("R6b missing terminal action".into())
+}
+
+/// Proposal only: no clean bank, no held-out labels, no publication.
+pub fn propose_repair(
+    parent: &str,
+    child: &str,
+    damaged: &str,
+    train: &str,
+    budget: usize,
+) -> Result<RepairProposal> {
+    if budget > REPAIR_BUDGET {
+        return Err("R6b budget exceeds policy".into());
+    }
+    let saved = memory(parent, child)?;
+    let initial = restore(damaged)?;
+    let admitted = admit(train)?;
+    let traces: Vec<_> = initial
+        .iter()
+        .zip(&admitted)
+        .map(|(&p, evidence)| plan_local(&saved, p, evidence, budget, true))
+        .collect();
+    let candidate = replay_bank(&saved, &initial, &admitted, budget, &traces)?;
+    Ok(RepairProposal { traces, candidate })
+}
+
+fn replay_bank(
+    saved: &[Expr],
+    initial: &[Program],
+    admitted: &[Vec<Example>],
+    budget: usize,
+    traces: &[Vec<crate::tutor_rust_r5::Action>],
+) -> Result<Option<String>> {
+    if traces.len() != TASKS || budget > REPAIR_BUDGET {
+        return Err("R6b trace or budget contract".into());
+    }
+    let mut repaired = Vec::new();
+    for ((&p, evidence), trace) in initial.iter().zip(admitted).zip(traces) {
+        if let Some(selected) = replay_local(saved, p, evidence, budget, trace)? {
+            repaired.push(selected);
+        }
+    }
+    Ok((repaired.len() == TASKS).then(|| checkpoint(&repaired)))
+}
+
+pub fn verify_repair(
+    parent: &str,
+    child: &str,
+    damaged: &str,
+    train: &str,
+    budget: usize,
+    proposal: &RepairProposal,
+) -> Result<()> {
+    let saved = memory(parent, child)?;
+    let initial = restore(damaged)?;
+    let admitted = admit(train)?;
+    let candidate = replay_bank(&saved, &initial, &admitted, budget, &proposal.traces)?;
+    if candidate != proposal.candidate {
+        return Err("R6b substituted candidate".into());
+    }
+    Ok(())
+}
+
+pub fn qualify_repair(parent: &str, child: &str, clean: &str, train: &str) -> Result<()> {
+    use crate::tutor_rust_r5::Action;
+    examine(parent, child, clean)?;
+    let saved = memory(parent, child)?;
+    let original = restore(clean)?;
+    let admitted = admit(train)?;
+    let mut mutations = 0;
+    let mut harmful = 0;
+    let mut adaptive_probes = 0;
+    let mut sequential_probes = 0;
+    let mut sequential_solved = 0;
+    let mut combined = original.clone();
+    for (task, (&p, evidence)) in original.iter().zip(&admitted).enumerate() {
+        let mut selected = false;
+        for damaged in neighborhood(p).into_iter().filter(|&q| q != p) {
+            mutations += 1;
+            if (0..=255u8).all(|a| {
+                (0..=255u8).all(|b| damaged.eval(&saved, a, b) == p.eval(&saved, a, b))
+            }) {
+                continue;
+            }
+            harmful += 1;
+            if !selected {
+                combined[task] = damaged;
+                selected = true;
+            }
+            let adaptive = plan_local(&saved, damaged, evidence, REPAIR_BUDGET, true);
+            let sequential = plan_local(&saved, damaged, evidence, REPAIR_BUDGET, false);
+            let count = |trace: &[Action]| {
+                trace.iter().filter(|a| matches!(a, Action::Probe { .. })).count()
+            };
+            adaptive_probes += count(&adaptive);
+            sequential_probes += count(&sequential);
+            if replay_local(&saved, damaged, evidence, REPAIR_BUDGET, &adaptive)? != Some(p) {
+                return Err("R6b local repair failed".into());
+            }
+            if replay_local(&saved, damaged, evidence, REPAIR_BUDGET, &sequential)? == Some(p) {
+                sequential_solved += 1;
+            }
+        }
+        if !selected {
+            return Err("R6b task has no harmful mutation".into());
+        }
+    }
+    if mutations != 44 {
+        return Err("R6b mutation coverage changed".into());
+    }
+    let damaged = checkpoint(&combined);
+    if examine(parent, child, &damaged).is_ok() {
+        return Err("R6b damaged bank passed exam".into());
+    }
+    let abstained = propose_repair(parent, child, &damaged, train, 0)?;
+    if abstained.candidate.is_some() {
+        return Err("R6b zero-budget proposal succeeded".into());
+    }
+    let proposal = propose_repair(parent, child, &damaged, train, REPAIR_BUDGET)?;
+    verify_repair(parent, child, &damaged, train, REPAIR_BUDGET, &proposal)?;
+    let mut forged = proposal.clone();
+    forged.candidate = Some(damaged.clone());
+    if verify_repair(parent, child, &damaged, train, REPAIR_BUDGET, &forged).is_ok() {
+        return Err("R6b forged proposal passed".into());
+    }
+    let repaired = proposal.candidate.ok_or("R6b abstained")?;
+    if repaired != clean {
+        return Err("R6b exact recovery failed".into());
+    }
+    let cases: u64 = examine(parent, child, &repaired)?.iter().sum();
+    let retained_r2: u64 = r2::examine(parent)?.iter().sum();
+    let retained_r3: u64 = r3::examine(parent, child)?.iter().sum();
+    println!("SML_TUTOR_R6B=PASS mutations={mutations} harmful={harmful} repaired={harmful} adaptive_probes={adaptive_probes} sequential_probes={sequential_probes} sequential_solved={sequential_solved} exact_recovery=true forged_rejected=true zero_budget_abstained=true cases={cases} retained_r2={retained_r2} retained_r3={retained_r3}");
+    Ok(())
+}
+
 fn read(path: &Path) -> Result<String> {
     let mut raw = String::new();
     fs::File::open(path)?.take(8193).read_to_string(&mut raw)?;
@@ -375,6 +629,12 @@ pub fn run_cli() -> Result<()> {
             let child = r3::induce(&parent, &r3::fixture())?;
             qualify(&parent, &child, &fixture(), "synthetic_fixture", None)
         }
+        [flag, parent, child, bank, train] if flag == "--repair-qualify" => qualify_repair(
+            &read(Path::new(parent))?,
+            &read(Path::new(child))?,
+            &read(Path::new(bank))?,
+            &read(Path::new(train))?,
+        ),
         [flag, parent, child, train, output] if flag == "--teacher-train" => qualify(
             &read(Path::new(parent))?,
             &read(Path::new(child))?,
@@ -383,7 +643,7 @@ pub fn run_cli() -> Result<()> {
             Some(Path::new(output)),
         ),
         _ => Err(
-            "usage: sml_tutor_rust_r6 [--teacher-train r2.bank r3.bank r6.train r6.bank]".into(),
+            "usage: sml_tutor_rust_r6 [--teacher-train r2.bank r3.bank r6.train r6.bank | --repair-qualify r2.bank r3.bank r6.bank r6.train]".into(),
         ),
     }
 }
@@ -410,4 +670,13 @@ mod tests {
         assert!(restore("SML_TUTOR_R6A_BANK_V1\nunsafe{}\n").is_err());
         assert!(induce(&parent, "invalid", &train).is_err());
     }
+    #[test]
+    fn local_control_flow_mutations_are_repaired() {
+        let parent = r2::induce(&r2::fixture()).unwrap();
+        let child = r3::induce(&parent, &r3::fixture()).unwrap();
+        let train = fixture();
+        let clean = induce(&parent, &child, &train).unwrap();
+        qualify_repair(&parent, &child, &clean, &train).unwrap();
+    }
+
 }
