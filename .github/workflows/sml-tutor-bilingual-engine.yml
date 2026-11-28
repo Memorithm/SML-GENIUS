@@ -109,7 +109,50 @@ jobs:
           assert len(list((root / "archive").glob("*.smlpack"))) == 2
           print("SML_TUTORD_CUMULATIVE_MIXED=PASS math_new=8 l1_banks=2 reexamined=8 store_entries=10 version=2")
           PY
-          grep -q 'l1_retained=2 l1_cases=1792 exact_replay=false' "$stage/cumulative-2.txt"
+          grep -q 'l1_retained=2 l1_cases=1792 r1_compiled=0 r1_reload=0 exact_replay=false' "$stage/cumulative-2.txt"
+          # Oracle-generated canonical fixture; not external teacher inference.
+          python3 - "$stage/r1.train" <<'PY'
+          import pathlib, sys
+          pairs = [(0,0),(1,1),(255,1),(1,255),(3,5),(128,128),(17,0),(0,17)]
+          ops = [lambda a,b:(a+b)%256,lambda a,b:(a-b)%256,lambda a,b:(b-a)%256,
+                 lambda a,b:(a*b)%256,lambda a,b:a^b,lambda a,b:a&b,lambda a,b:a|b,min,max]
+          pathlib.Path(sys.argv[1]).write_text("SML_TUTOR_R1_TRAIN_V1\n" + "".join(
+              f"{i}|{a}|{b}|{op(a,b)}\n" for i,op in enumerate(ops) for a,b in pairs))
+          PY
+          r1_sha="$(sha256sum "$stage/r1.train" | cut -d' ' -f1)"
+          for workers in 1 2; do
+            timeout 180s "$daemon" root="$stage/cumulative-four" cumulative_math=1 plan_ahead=1 max_cycles=1 per_domain=4 inputs=7 degree=2 workers="$workers" min_mem_gib=0 min_disk_gib=0 max_load_per_cpu=100 archive_cycles=1 l1_native="$native" l1_fr="$stage/fr" l1_en="$stage/en" l1_fr_sha="$fr_sha" l1_en_sha="$en_sha" r1_train="$stage/r1.train" r1_sha="$r1_sha" | tee "$stage/four-$workers.txt"
+          done
+          python3 - "$stage/cumulative-four" <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          h = json.loads((root / "health.json").read_text())
+          assert h["new_certified_total"] == 8, h
+          assert h["reexamined_total"] == 10, h
+          assert h["jobs"]["succeeded"] == 2, h
+          store = root / "cumulative-math-v1"
+          version, digest = (store / "HEAD").read_text().splitlines()[1].split()
+          assert version == "2"
+          def manifest(d):
+              raw = (store / "manifests" / d).read_bytes()
+              assert hashlib.sha256(raw).hexdigest() == d
+              lines = raw.decode().splitlines()
+              return lines[2].split()[1], {r.split()[1]: r for r in lines[3:]}
+          parent, latest = manifest(digest)
+          _, old = manifest(parent)
+          assert len(old) == 7 and len(latest) == 11
+          assert all(latest[k] == v for k, v in old.items())
+          r1 = []
+          for row in latest.values():
+              obj = row.split()[-1]
+              data = (store / "objects" / obj).read_bytes()
+              assert hashlib.sha256(data).hexdigest() == obj
+              if data.startswith(b"SML_TUTOR_R1_U8_V1\n"):
+                  r1.append(data)
+          assert len(r1) == 1 and len(r1[0].splitlines()) == 10
+          print("SML_TUTORD_FOUR_DOMAINS=PASS math_new=8 l1_banks=2 r1_banks=1 store_entries=11 reexamined=10")
+          PY
+          grep -q 'r1_compiled=589824 r1_reload=589824 exact_replay=false' "$stage/four-2.txt"
           # The annotation teacher is not authoritative. A validly formatted
           # incorrect role label must not enter the store as a certified bank.
           sed -i '1s/|0$/|1/' "$stage/fr/train.txt"

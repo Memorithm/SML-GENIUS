@@ -48,6 +48,8 @@
 //! math cycle per store version and exact replay after an interruption. With
 //! frozen L1 arguments, the first cycle also re-admits both language banks.
 //! Later cycles re-examine them directly without teacher or relearning.
+//! Optional r1_train=FILE r1_sha=HEX adds one already qualified R1 bank
+//! to the initial bilingual cycle; later cycles compile it from shared memory.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -56,7 +58,7 @@ use sml_tutor::domain::Domain;
 use sml_tutor::domain::KnowledgeState;
 use sml_tutor::engine::{
     anf_curriculum, linguistic_l1_identity, linguistic_l1_key, math_curriculum, reexamine_l1,
-    reexamine_math, Engine, EngineConfig, L1Input,
+    reexamine_math, reexamine_r1, Engine, EngineConfig, L1Input, R1Input,
 };
 use sml_tutor::executor::{available_workers, CancellationToken};
 use sml_tutor::hash::Digest;
@@ -114,6 +116,7 @@ struct Args {
     archive_cycles: bool,
     cumulative_math: bool,
     cumulative_l1_identity: Option<Digest>,
+    r1: Option<R1Input>,
     plan_ahead: usize,
     budget: ResourceBudget,
     l1: Option<L1Config>,
@@ -134,6 +137,7 @@ fn parse() -> Result<Args, String> {
         archive_cycles: false,
         cumulative_math: false,
         cumulative_l1_identity: None,
+        r1: None,
         plan_ahead: 2,
         budget: ResourceBudget::default(),
         l1: None,
@@ -142,6 +146,7 @@ fn parse() -> Result<Args, String> {
     let (mut l1_native, mut l1_fr, mut l1_en, mut l1_fr_sha, mut l1_en_sha) =
         (None, None, None, None, None);
     let mut l1_every = 4u64;
+    let (mut r1_train, mut r1_sha) = (None, None);
     const GIB_KIB: f64 = 1024.0 * 1024.0;
     for arg in std::env::args().skip(1) {
         let (k, v) = arg
@@ -188,6 +193,8 @@ fn parse() -> Result<Args, String> {
             "l1_fr_sha" => l1_fr_sha = Some(Digest::from_hex(v).ok_or_else(bad)?),
             "l1_en_sha" => l1_en_sha = Some(Digest::from_hex(v).ok_or_else(bad)?),
             "l1_every" => l1_every = v.parse().map_err(|_| bad())?,
+            "r1_train" => r1_train = Some(PathBuf::from(v)),
+            "r1_sha" => r1_sha = Some(Digest::from_hex(v).ok_or_else(bad)?),
             _ => return Err(format!("unknown argument {k}")),
         }
     }
@@ -238,6 +245,25 @@ fn parse() -> Result<Args, String> {
             a.cumulative_l1_identity = Some(linguistic_l1_identity(&l1.native, l1.inputs()?)?);
         }
     }
+    a.r1 = match (r1_train, r1_sha) {
+        (None, None) => None,
+        (Some(path), Some(sha)) if a.cumulative_math && a.l1.is_some() => {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or("invalid R1 path")?;
+            let parent = path.parent().ok_or("invalid R1 parent")?;
+            let bytes = read_frozen(parent, name)?;
+            if bytes.len() > 4096 || sha == Digest::ZERO || Digest::of(&bytes) != sha {
+                return Err("R1 corpus digest or size mismatch".into());
+            }
+            Some(R1Input {
+                teacher_train: String::from_utf8(bytes).map_err(|_| "R1 corpus not UTF-8")?,
+                provenance: sha,
+            })
+        }
+        _ => return Err("R1 requires both r1_train/r1_sha and cumulative bilingual mode".into()),
+    };
     Ok(a)
 }
 
@@ -285,6 +311,7 @@ struct AnfRunner {
     root: PathBuf,
     workers: usize,
     l1: Option<L1Config>,
+    r1: Option<R1Input>,
 }
 
 /// Reads one frozen corpus file: regular file, not a symlink, at most 64 KiB.
@@ -474,9 +501,11 @@ impl AnfRunner {
             None if spec.params.contains_key("l1") => return Err("missing cumulative L1".into()),
             None => None,
         };
+        let r1 = self.bound_r1(spec)?;
         let banks = if linguistic.is_some() { 2 } else { 0 };
+        let bootstrap = banks + usize::from(r1.is_some());
         let cardinality =
-            |version: u64| version as usize * lessons + if version > 0 { banks } else { 0 };
+            |version: u64| version as usize * lessons + if version > 0 { bootstrap } else { 0 };
         let target = self.cumulative_store()?;
         let before = target.snapshot().map_err(|e| e.to_string())?;
         if !(before.version == seed || before.version == seed + 1)
@@ -494,6 +523,10 @@ impl AnfRunner {
             Some((binary, inputs)) if seed != 0 => reexamine_l1(&target, binary, inputs.clone())?,
             _ => (0, 0),
         };
+        let (r1_compiled, r1_reload) = match &r1 {
+            Some(input) if seed != 0 => reexamine_r1(&target, input.clone())?,
+            _ => (0, 0),
+        };
         // Live exam reports are required to reconstruct certificates. An
         // interrupted local cycle is kept as evidence and independently
         // re-examined from scratch, even if its cumulative commit survived.
@@ -504,11 +537,12 @@ impl AnfRunner {
         };
         let curriculum = math_curriculum(lessons, inputs, degree, seed);
         let (mut engine, _) = match &linguistic {
-            Some((binary, input)) if seed == 0 => Engine::open_mixed_math(
+            Some((binary, input)) if seed == 0 => Engine::open_four_domains(
                 &self.dir(id),
                 binary,
                 input.clone(),
                 curriculum,
+                r1.clone(),
                 EngineConfig {
                     workers: self.workers.min(2),
                     wave: 2,
@@ -518,7 +552,7 @@ impl AnfRunner {
             _ => Engine::open(&self.dir(id), curriculum, cfg),
         }
         .map_err(|e| e.to_string())?;
-        let published = lessons + if seed == 0 { banks } else { 0 };
+        let published = lessons + if seed == 0 { bootstrap } else { 0 };
         let summary = engine.run(cancel).map_err(|e| e.to_string())?;
         if cancel.is_cancelled()
             || summary.states.get(&KnowledgeState::Consolidated) != Some(&published)
@@ -548,13 +582,29 @@ impl AnfRunner {
         // writes attempted in this process. The journal counts Succeed once.
         Ok(CycleReport {
             new_certified: lessons as u64,
-            reexamined: (retained + l1_retained + if seed == 0 { banks } else { 0 }) as u64,
+            reexamined: (retained
+                + l1_retained
+                + if seed == 0 { banks } else { 0 }
+                + usize::from(r1.is_some())) as u64,
             rejected: total.teacher_rejections + total.exam_failures,
             store_version: outcome.version,
             detail: format!(
-                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} l1_banks={banks} l1_retained={l1_retained} l1_cases={l1_cases} exact_replay={replay}"
+                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} l1_banks={banks} l1_retained={l1_retained} l1_cases={l1_cases} r1_compiled={r1_compiled} r1_reload={r1_reload} exact_replay={replay}"
             ),
         })
+    }
+
+    fn bound_r1(&self, spec: &JobSpec) -> Result<Option<R1Input>, String> {
+        match (&self.r1, spec.params.get("r1")) {
+            (None, None) => Ok(None),
+            (Some(input), Some(sha))
+                if sha == &input.provenance.to_hex()
+                    && Digest::of(input.teacher_train.as_bytes()) == input.provenance =>
+            {
+                Ok(Some(input.clone()))
+            }
+            _ => Err("cumulative R1 provenance mismatch".into()),
+        }
     }
 
     fn move_cycle_aside(&self, id: JobId) -> Result<(), String> {
@@ -631,9 +681,11 @@ impl CycleRunner for AnfRunner {
             let (lessons, inputs, degree, seed) = Self::params(spec)?;
             let target = self.cumulative_store()?;
             let snapshot = target.snapshot().map_err(|e| e.to_string())?;
+            let r1 = self.bound_r1(spec)?;
             let banks = if spec.params.contains_key("l1") { 2 } else { 0 };
             if snapshot.version != seed + 1
-                || snapshot.entries.len() != (seed + 1) as usize * lessons + banks
+                || snapshot.entries.len()
+                    != (seed + 1) as usize * lessons + banks + usize::from(r1.is_some())
             {
                 return Err("cumulative post-commit version/cardinality mismatch".into());
             }
@@ -646,6 +698,9 @@ impl CycleRunner for AnfRunner {
                     return Err("post-commit L1 identity mismatch".into());
                 }
                 reexamine_l1(&target, &l1.native, inputs)?;
+            }
+            if let Some(input) = r1 {
+                reexamine_r1(&target, input)?;
             }
             return Ok(());
         }
@@ -674,8 +729,12 @@ fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
         .param("inputs", a.inputs)
         .param("degree", a.degree)
         .param("seed", seed);
-    match a.cumulative_l1_identity {
+    let spec = match a.cumulative_l1_identity {
         Some(id) => spec.param("l1", id.to_hex()),
+        None => spec,
+    };
+    match &a.r1 {
+        Some(input) => spec.param("r1", input.provenance.to_hex()),
         None => spec,
     }
 }
@@ -728,8 +787,9 @@ fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
         || snapshot.version > succeeded + u64::from(pending)
         || target.audit().map_err(|e| e.to_string())?
             != snapshot.version as usize * a.per_domain
-                + if snapshot.version != 0 && a.cumulative_l1_identity.is_some() {
-                    2
+                + if snapshot.version != 0 {
+                    2 * usize::from(a.cumulative_l1_identity.is_some())
+                        + usize::from(a.r1.is_some())
                 } else {
                     0
                 }
@@ -922,6 +982,7 @@ fn main() {
         root: a.root.clone(),
         workers: a.workers,
         l1: a.l1.clone(),
+        r1: a.r1.clone(),
     };
     let mut gate = HostGate {
         budget: a.budget,
@@ -1064,6 +1125,7 @@ mod cumulative_tests {
             root: root.clone(),
             workers: 2,
             l1: None,
+            r1: None,
         };
         let spec = JobSpec::new(CUMULATIVE_KIND)
             .param("per_domain", 4)
@@ -1134,6 +1196,7 @@ mod cumulative_tests {
             root: root.clone(),
             workers: 2,
             l1: None,
+            r1: None,
         };
         let spec = |seed| {
             JobSpec::new(CUMULATIVE_KIND)
@@ -1155,6 +1218,7 @@ mod cumulative_tests {
             root: root.clone(),
             workers: 1,
             l1: None,
+            r1: None,
         };
         let replay = resumed
             .run(first.id(), &first, Mode::Simulation, &cancel)
