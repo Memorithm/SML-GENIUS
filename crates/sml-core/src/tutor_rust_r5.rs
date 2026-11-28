@@ -4,6 +4,9 @@
 use crate::tutor_rust_r2::{self as r2, Expr, Learning, Op};
 use crate::tutor_rust_r3 as r3;
 use std::error::Error;
+use std::fs;
+use std::io::Read;
+use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 type Example = (u8, u8, u8);
@@ -54,9 +57,9 @@ fn select(
     queried: &[bool],
     strategy: Strategy,
 ) -> Option<usize> {
-    let available = (0..inputs.len()).filter(|&i| !queried[i]);
+    let mut available = (0..inputs.len()).filter(|&i| !queried[i]);
     match strategy {
-        Strategy::Sequential => available.into_iter().next(),
+        Strategy::Sequential => available.next(),
         Strategy::Adaptive => available
             .map(|i| (score(candidates, inputs[i].0, inputs[i].1), i))
             .filter(|&(s, _)| s < candidates.len() * candidates.len())
@@ -159,6 +162,7 @@ pub struct ActiveReport {
     pub tasks: usize,
     pub adaptive_probes: usize,
     pub sequential_probes: usize,
+    pub sequential_solved: usize,
     pub new_cases: u64,
     pub retained_cases: u64,
 }
@@ -174,6 +178,7 @@ pub fn qualify(memory: &str, clean: &str, train: &str) -> Result<ActiveReport> {
         tasks: 0,
         adaptive_probes: 0,
         sequential_probes: 0,
+        sequential_solved: 0,
         new_cases: 0,
         retained_cases: 0,
     };
@@ -195,6 +200,7 @@ pub fn qualify(memory: &str, clean: &str, train: &str) -> Result<ActiveReport> {
             return Err("sequential replay mismatch".into());
         }
         if let Some(ref expr) = passive_result {
+            report.sequential_solved += 1;
             if expr.source() != original.source() {
                 return Err("sequential patch differs from original bank".into());
             }
@@ -213,6 +219,46 @@ pub fn qualify(memory: &str, clean: &str, train: &str) -> Result<ActiveReport> {
     Ok(report)
 }
 
+fn read(path: &Path) -> Result<String> {
+    let mut raw = String::new();
+    fs::File::open(path)?.take(8193).read_to_string(&mut raw)?;
+    if raw.is_empty() || raw.len() > 8192 {
+        return Err("R5 input size".into());
+    }
+    Ok(raw)
+}
+
+pub fn run_cli() -> Result<()> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let (parent, child, train, source) = match args.as_slice() {
+        [] => {
+            let parent = r2::induce(&r2::fixture())?;
+            let train = r3::fixture();
+            let child = r3::induce(&parent, &train)?;
+            (parent, child, train, "synthetic_fixture")
+        }
+        [flag, parent, child, train] if flag == "--qualify" => (
+            read(Path::new(parent))?,
+            read(Path::new(child))?,
+            read(Path::new(train))?,
+            "external_inputs",
+        ),
+        _ => return Err("usage: sml_tutor_rust_r5 [--qualify r2.bank r3.bank r3.train]".into()),
+    };
+    let report = qualify(&parent, &child, &train)?;
+    println!(
+        "SML_TUTOR_R5A=PASS tasks={} budget_per_task={BUDGET} adaptive_probes={} adaptive_solved={} sequential_probes={} sequential_solved={} r3_cases={} retained_r2={} replay=true source={source}",
+        report.tasks,
+        report.adaptive_probes,
+        report.tasks,
+        report.sequential_probes,
+        report.sequential_solved,
+        report.new_cases,
+        report.retained_cases
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +271,8 @@ mod tests {
         let report = qualify(&parent, &child, &train).unwrap();
         assert_eq!(report.tasks, 7);
         assert!(report.adaptive_probes <= 7 * BUDGET);
+        assert!(report.sequential_probes <= 7 * BUDGET);
+        assert!(report.sequential_solved <= 7);
         assert_eq!(report.new_cases, 458_752);
         assert_eq!(report.retained_cases, 458_752);
     }
