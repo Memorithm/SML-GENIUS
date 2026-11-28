@@ -36,7 +36,8 @@ Colonnes : conçu / codé / testé en CI / fusionné / qualifié physiquement / 
 | Cohortes TRANSFER et ROBUSTNESS | voie `Transfer` seulement | **non** | non | non | non | non | non | aucune variante `Cohort` correspondante |
 | Unité systemd (modèle durci, redémarrage sur échec, drain à l'arrêt) | oui | oui | oui | oui | oui (unité transitoire) | **non installée** | non | RemoteOps #2092 ; run 46014329451 |
 | Endurance 1 h | oui | oui | oui | oui | oui (simulation) | sans objet | non | RemoteOps #2091 ; run 46004010532 (`wall_s=3605`) |
-| Endurance 6 h, 24 h, 72 h, 7 j | oui | non | non | non | **non exécutée** | non | non | — |
+| Endurance 6 h | oui | oui | oui | oui | oui (simulation) | sans objet | non | RemoteOps #2104 ; run 46049084161 (`wall_s=21611`, RSS en plateau) |
+| Endurance 24 h, 72 h, 7 j | oui | oui (`minutes=1440` pour 24 h) | oui | oui | **non exécutée** | non | non | — |
 | Tableau de bord versionné JSON et Markdown | `health.json` seulement | partiel | oui (`health.json`) | oui | oui (`health.json`) | non | non | `SML_TUTORD_HEALTH_V1` |
 | Mémoire V9 de référence (9 compétences) | — | — | — | — | vérifiée inchangée avant et après chaque run cité | — | — | `SML_TUTOR_DURABLE_VERIFY=PASS head=1142ff9d94d363f27471bdcbe986df790a66c9bb344794694d03a315971eb3f2 depth=9` |
 
@@ -232,7 +233,24 @@ Trajectoire RSS (Kio) :
 
 La RSS monte vite pendant les 20 premières minutes (montée en charge des banques L1). Elle augmente ensuite d'environ 0,9 Mio en 40 minutes, ce qui correspond à la table des jobs en mémoire et confirme l'analyse locale. Ce n'est pas un plateau strict.
 
-**Durées non exécutées :** 6 h, 24 h, 72 h et 7 j. Aucun chiffre n'existe pour ces durées.
+**Endurance 6 h avec compaction de la table des jobs** (run 46049084161, SML-GENIUS `8ad4959` (#1071), `minutes=360`, mêmes réglages, du 2026-11-27 à 18 h 24 UTC au 2026-11-28 à 00 h 24 UTC) :
+- `wall_s=21611` mesuré ;
+- 1762 cycles ANF et 195 réexamens L1 ;
+- `new_certified_total=112768` et `reexamined_total=390` ;
+- 0 échec et 0 refus du gate ;
+- `log_seq=5876` ;
+- V9 inchangé.
+
+Archivage et compaction :
+- 1957 archives, toutes vérifiées ;
+- `unpack` de la dernière archive : `PASS files=75` ;
+- 1701 jobs compactés.
+
+**RSS : plateau.** La RSS atteint 11996 Kio à 1 h, puis 12184 Kio à 3 h et 12272 Kio à 6 h, soit environ +55 Kio/h après la première heure, contre environ +1,3 Mio/h avant #1071.
+
+**Disque : linéaire.** La racine atteint 268648 Kio en 6 h, soit environ 44 Mio/h à cette cadence de test. Ce n'est pas une fuite : c'est le volume des archives de cycles, qui sont la mémoire conservée.
+
+**Durées non exécutées :** 24 h, 72 h et 7 j. Aucun chiffre n'existe pour ces durées.
 
 ---
 
@@ -253,7 +271,7 @@ La RSS monte vite pendant les 20 premières minutes (montée en charge des banqu
 
 - Un cycle est synchrone : `stop` et `emergency` ne sont pris en compte qu'entre deux cycles.
 - Chaque cycle a son propre store (`cycles/<job>/store`, ou son archive). Il n'existe pas encore de store unifié entre cycles et aucun lien vers le store V9. La rétention est réexaminée pour les banques L1, mais pas encore pour les leçons ANF des cycles précédents.
-- La table des jobs du superviseur reste entièrement en mémoire. La mesure physique donne environ +0,9 Mio en 40 minutes, soit environ 1,3 Mio/h ou environ 32 Mio/jour à la cadence de test (environ 330 jobs/h). À la cadence de l'unité (`cycle_gap_ms=60000`, environ 60 jobs/h), cela ferait environ 6 Mio/jour. C'est une extrapolation, pas une mesure. Le compactage des jobs terminés n'est pas fait et doit l'être avant une exécution de 72 h ou de 7 j.
+- La table des jobs est compactée au-delà des 256 derniers jobs réussis (#1071). Sur 6 h physiques, la RSS est en plateau à environ 12 Mio. Le disque reste linéaire, environ 44 Mio/h à la cadence de test et environ 6 fois moins à celle de l'unité. Avant 72 h ou 7 j, il faudra une politique de rétention, ou une consolidation des archives dans un store unifié.
 - Le superviseur lance `anf-m2` et `l1-retention`. R1 et les jobs mixtes ne sont pas branchés, et le professeur LFM3 n'est pas appelé par le superviseur.
 - Les cohortes TRANSFER et ROBUSTNESS n'existent pas.
 - R1 et le curriculum mixte (#1059, #1060) n'ont pas de qualification physique connue.
@@ -265,8 +283,8 @@ La RSS monte vite pendant les 20 premières minutes (montée en charge des banqu
 
 ## F. Prochaines étapes recommandées (par ordre)
 
-1. **Endurance longue.** Lancer 6 h, puis 24 h, 72 h et 7 j en simulation avec `archive_cycles=1`, en élargissant le `timeout` du workflow. Relever les mêmes grandeurs que pour le run de 1 h et ne rapporter que les durées réellement écoulées.
-2. **Compactage de la table des jobs.** Ne garder en mémoire que les compteurs des jobs réussis, la chaîne du journal restant la source de vérité.
+1. **Endurance longue.** Lancer 24 h (`minutes=1440`), puis 72 h et 7 j une fois le disque traité. Ne rapporter que les durées réellement écoulées.
+2. **Croissance disque.** Consolider les archives de cycles dans un store cumulatif, ou définir une rétention explicite décidée par l'opérateur, sans jamais détruire de mémoire certifiée.
 3. **Store unifié et rétention ANF.** Consolider les cycles dans un store cumulatif par `commit_rebasing`. Ajouter des réexamens périodiques des leçons ANF déjà certifiées, comptés en `reexamined`.
 4. **R1 Rust.** Lancer d'abord une qualification physique isolée (bac à sable sans réseau, avec `ulimit` et `timeout`), avant tout branchement dans le superviseur.
 5. **Installation de l'unité systemd** en simulation sur le Dell, par une PR RemoteOps explicite, sur décision de l'opérateur.
@@ -279,7 +297,7 @@ La RSS monte vite pendant les 20 premières minutes (montée en charge des banqu
 
 ```bash
 # SML-GENIUS
-cargo test --locked -p sml-tutor                 # 130 tests unitaires + 1 d'exemple + doctests
+cargo test --locked -p sml-tutor                 # 131 tests unitaires + 1 d'exemple + doctests
 cargo clippy --locked -p sml-tutor --all-targets -- -D warnings
 cargo run --release -p sml-tutor --example sml_tutor_engine_bench -- per_domain=64 inputs=10 degree=3 workers=1,2,4,8,16 lie_every=0
 cargo build --locked --release -p sml-tutor --bin sml-tutord
@@ -290,7 +308,7 @@ target/release/sml-tutord unpack /tmp/tutord/archive/<job>.smlpack /tmp/cycle-re
 # RemoteOps (CHECKUPAUTO, depuis main)
 #   Actions → "SML TUTOR sml-tutord physical simulation qualification" → Run workflow
 #   Actions → "SML TUTOR engine A/B physical bench (store group commit)" → Run workflow
-#   Actions → "SML TUTOR sml-tutord 60 min endurance (simulation)" → Run workflow
+#   Actions → "SML TUTOR sml-tutord endurance (simulation)" (entrée `minutes`) → Run workflow
 #   Actions → "SML TUTOR sml-tutord systemd service qualification (simulation)" → Run workflow
 ```
 
@@ -311,4 +329,6 @@ target/release/sml-tutord unpack /tmp/tutord/archive/<job>.smlpack /tmp/cycle-re
 | RemoteOps | #2091 | endurance 1 h | Claude |
 | RemoteOps | #2092 | qualification systemd, modèle d'unité | Claude |
 | RemoteOps | #2093 | endurance avec archivage | Claude |
+| SML-GENIUS | #1071 | compaction de la table des jobs | Claude |
+| RemoteOps | #2104 | durée d'endurance au choix (60, 360 ou 1440 min) | Claude |
 | SML-GENIUS | #1058, #1059, #1060 | L1 sur moteur, R1 Rust, curriculum mixte | automatisation ChatGPT |
