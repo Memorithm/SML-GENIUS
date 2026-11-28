@@ -48,6 +48,10 @@ pub use linguistic::{linguistic_l1_identity, linguistic_l1_key, reexamine_l1, L1
 mod rust_r1;
 pub use rust_r1::{reexamine_r1, rust_r1_key, R1Input};
 
+#[path = "rust_composition_backend.rs"]
+mod rust_composition;
+pub use rust_composition::{reexamine_rust_composition, rust_composition_key, RustCompositionInput};
+
 /// Parameters of one ANF lesson. Everything is derived deterministically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AnfLessonParams {
@@ -581,6 +585,21 @@ impl Engine {
         }
         let (spec, backend) = rust_r1::R1Backend::new(input).map_err(EngineError::Curriculum)?;
         Self::open_with(root, vec![spec], Box::new(backend), cfg)
+    }
+
+    /// R2 then R3, through the real prerequisite graph. R3 receives R2
+    /// checkpoint bytes from the engine store, never a fabricated parent.
+    pub fn open_rust_composition(
+        root: &Path,
+        input: RustCompositionInput,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        if cfg.workers != 1 || cfg.wave != 1 || cfg.teacher_lie_every != 0 {
+            return Err(EngineError::Curriculum("invalid Rust composition resource bounds".into()));
+        }
+        let (specs, backend) =
+            rust_composition::CompositionBackend::new(input).map_err(EngineError::Curriculum)?;
+        Self::open_with(root, specs, Box::new(backend), cfg)
     }
 
     /// Controlled re-admission of the two L1 linguistic banks through the
