@@ -11,7 +11,10 @@ fn r3_shared_learner_compiles_and_retains_r2() {
     let parent = tutor_rust_r2::induce(&tutor_rust_r2::fixture()).unwrap();
     let bank = tutor_rust_r3::induce(&parent, &tutor_rust_r3::fixture()).unwrap();
     assert_eq!(
-        tutor_rust_r3::examine(&parent, &bank).unwrap().iter().sum::<u64>(),
+        tutor_rust_r3::examine(&parent, &bank)
+            .unwrap()
+            .iter()
+            .sum::<u64>(),
         458_752
     );
     assert!(tutor_rust_r3::examine("invalid parent", &bank).is_err());

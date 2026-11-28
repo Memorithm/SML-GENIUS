@@ -121,9 +121,14 @@ impl CompositionBackend {
 }
 
 fn add_exam(out: &mut AttemptOutput, totals: [u64; 4]) {
-    for (cohort, total) in [Cohort::TrainRecall, Cohort::Dev, Cohort::Test, Cohort::TestTest]
-        .into_iter()
-        .zip(totals)
+    for (cohort, total) in [
+        Cohort::TrainRecall,
+        Cohort::Dev,
+        Cohort::Test,
+        Cohort::TestTest,
+    ]
+    .into_iter()
+    .zip(totals)
     {
         out.report.cohorts.push(CohortResult {
             cohort,
@@ -167,7 +172,11 @@ impl EngineBackend for CompositionBackend {
         let mut out = AttemptOutput {
             report: ExamReport {
                 lesson: job.id,
-                corpus: if parent { self.r2_corpus } else { self.r3_corpus },
+                corpus: if parent {
+                    self.r2_corpus
+                } else {
+                    self.r3_corpus
+                },
                 cohorts: Vec::new(),
             },
             checkpoint: None,
@@ -253,7 +262,10 @@ pub fn reexamine_rust_composition(
     for spec in specs {
         let id = spec.id();
         let key = rust_composition_key(&id);
-        let rec = snapshot.entries.get(&key).ok_or("missing composition record")?;
+        let rec = snapshot
+            .entries
+            .get(&key)
+            .ok_or("missing composition record")?;
         if rec.lesson != id {
             return Err("composition record identity mismatch".into());
         }
@@ -309,7 +321,10 @@ mod tests {
         let summary = engine.run(&cancel).unwrap();
         assert_eq!(summary.states.get(&KnowledgeState::Consolidated), Some(&2));
         assert_eq!(engine.publish_certified_cycle(&target).unwrap().added, 2);
-        assert_eq!(engine.publish_certified_cycle(&target).unwrap().idempotent, 2);
+        assert_eq!(
+            engine.publish_certified_cycle(&target).unwrap().idempotent,
+            2
+        );
         let after = target.snapshot().unwrap();
         assert_eq!(after.entries.len(), 6);
         for (key, record) in before.entries {
@@ -323,8 +338,7 @@ mod tests {
             r2_train: input.r2_train.replacen("0|0|0|0", "0|0|0|1", 1),
             ..input
         };
-        let (mut engine, _) =
-            Engine::open_rust_composition(&root.join("bad"), bad, cfg).unwrap();
+        let (mut engine, _) = Engine::open_rust_composition(&root.join("bad"), bad, cfg).unwrap();
         let summary = engine.run(&cancel).unwrap();
         assert_eq!(summary.states.get(&KnowledgeState::Consolidated), None);
         assert!(engine.publish_certified_cycle(&target).is_err());

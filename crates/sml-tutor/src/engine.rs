@@ -50,7 +50,9 @@ pub use rust_r1::{reexamine_r1, rust_r1_key, R1Input};
 
 #[path = "rust_composition_backend.rs"]
 mod rust_composition;
-pub use rust_composition::{reexamine_rust_composition, rust_composition_key, RustCompositionInput};
+pub use rust_composition::{
+    reexamine_rust_composition, rust_composition_key, RustCompositionInput,
+};
 
 /// Parameters of one ANF lesson. Everything is derived deterministically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -595,7 +597,9 @@ impl Engine {
         cfg: EngineConfig,
     ) -> Result<(Self, ResumeReport), EngineError> {
         if cfg.workers != 1 || cfg.wave != 1 || cfg.teacher_lie_every != 0 {
-            return Err(EngineError::Curriculum("invalid Rust composition resource bounds".into()));
+            return Err(EngineError::Curriculum(
+                "invalid Rust composition resource bounds".into(),
+            ));
         }
         let (specs, backend) =
             rust_composition::CompositionBackend::new(input).map_err(EngineError::Curriculum)?;
