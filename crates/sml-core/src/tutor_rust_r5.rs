@@ -70,12 +70,7 @@ fn select(
 
 // One evidence source exposes coordinates to planning and a single label
 // to the probe action. The trace is replayed independently before use.
-fn plan(
-    initial: &Expr,
-    evidence: &[Example],
-    budget: usize,
-    strategy: Strategy,
-) -> Result<Plan> {
+fn plan(initial: &Expr, evidence: &[Example], budget: usize, strategy: Strategy) -> Result<Plan> {
     let universe = candidates(initial)?;
     let inputs: Vec<_> = evidence.iter().map(|&(a, b, _)| (a, b)).collect();
     let mut queried = vec![false; inputs.len()];
@@ -288,18 +283,33 @@ mod tests {
         assert!(replay(
             &initial,
             &evidence,
-            &[Action::Probe { index: 0, observed: 4 }, Action::Abstain],
+            &[
+                Action::Probe {
+                    index: 0,
+                    observed: 4
+                },
+                Action::Abstain
+            ],
             1
         )
         .is_err());
         assert!(replay(
             &initial,
             &evidence,
-            &[Action::Probe { index: 1, observed: 3 }, Action::Abstain],
+            &[
+                Action::Probe {
+                    index: 1,
+                    observed: 3
+                },
+                Action::Abstain
+            ],
             1
         )
         .is_err());
-        let probe = Action::Probe { index: 0, observed: 3 };
+        let probe = Action::Probe {
+            index: 0,
+            observed: 3,
+        };
         assert!(replay(
             &initial,
             &evidence,
