@@ -23,12 +23,7 @@ fn read(path: &Path) -> Result<Vec<u8>> {
     Ok(data)
 }
 
-fn qualify(
-    root: &Path,
-    input: RustCompositionInput,
-    r2_bank: &[u8],
-    r3_bank: &[u8],
-) -> Result<()> {
+fn qualify(root: &Path, input: RustCompositionInput, r2_bank: &[u8], r3_bank: &[u8]) -> Result<()> {
     // Refuse existing roots: never point this experimental gate at production.
     fs::create_dir(root)?;
     let cfg = EngineConfig {
@@ -44,8 +39,7 @@ fn qualify(
         return Err("math seed publication mismatch".into());
     }
     let before = target.snapshot()?;
-    let (mut engine, _) =
-        Engine::open_rust_composition(&root.join("rust"), input.clone(), cfg)?;
+    let (mut engine, _) = Engine::open_rust_composition(&root.join("rust"), input.clone(), cfg)?;
     let summary = engine.run(&cancel)?;
     if summary.states.get(&KnowledgeState::Consolidated) != Some(&2) {
         return Err("composition engine did not consolidate both banks".into());
@@ -73,9 +67,7 @@ fn qualify(
             return Err("previous math record changed".into());
         }
     }
-    if engine.publish_certified_cycle(&target)?.idempotent != 2
-        || target.snapshot()? != after
-    {
+    if engine.publish_certified_cycle(&target)?.idempotent != 2 || target.snapshot()? != after {
         return Err("non-idempotent replay".into());
     }
     drop(target);
@@ -93,7 +85,9 @@ fn qualify(
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 7 {
-        return Err("usage: root r2.train r3.train r2.bank r3.bank r2_archive_sha r3_archive_sha".into());
+        return Err(
+            "usage: root r2.train r3.train r2.bank r3.bank r2_archive_sha r3_archive_sha".into(),
+        );
     }
     let provenance = |i: usize| -> Result<Digest> {
         Digest::from_hex(args[i].to_str().ok_or("invalid digest")?)
