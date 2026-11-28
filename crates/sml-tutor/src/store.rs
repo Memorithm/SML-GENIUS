@@ -148,6 +148,15 @@ pub struct Snapshot {
     pub entries: BTreeMap<Digest, EntryRecord>,
 }
 
+/// Work performed by one complete integrity audit of a pinned HEAD.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AuditStats {
+    pub entries: usize,
+    pub manifests: u64,
+    pub object_references: u64,
+    pub unique_objects: usize,
+}
+
 pub struct KnowledgeStore {
     root: PathBuf,
     fail_point: Option<FailPoint>,
@@ -688,23 +697,49 @@ impl KnowledgeStore {
         })
     }
 
-    /// Exhaustive integrity audit of the whole history: every manifest and
-    /// every referenced object is re-hashed. Returns the number of objects
-    /// verified in the current version.
+    /// Exhaustive integrity audit of all historical manifests and distinct
+    /// referenced objects. Returns the current number of certified entries.
     pub fn audit(&self) -> Result<usize, StoreError> {
-        let history = self.history()?;
-        let mut expected = history.len() as u64;
-        for (v, m) in &history {
-            if *v != expected {
-                return Err(StoreError::Corrupt(format!("non-contiguous version {v}")));
+        Ok(self.audit_stats()?.entries)
+    }
+
+    /// Hash every manifest once and every distinct content-addressed object
+    /// once per audit, including objects reachable only through old versions.
+    /// No verification cache survives the call. A concurrent HEAD advance
+    /// invalidates the result instead of returning a count from another view.
+    pub fn audit_stats(&self) -> Result<AuditStats, StoreError> {
+        let head = self.read_head()?;
+        let (mut expected, mut current) = head;
+        let mut stats = AuditStats::default();
+        let mut verified = std::collections::BTreeSet::new();
+        while let Some(manifest) = current {
+            let (version, parent, entries) = self.read_manifest(&manifest)?;
+            if expected == 0 || version != expected {
+                return Err(StoreError::Corrupt(format!(
+                    "non-contiguous version {version}, expected {expected}"
+                )));
+            }
+            if version == head.0 {
+                stats.entries = entries.len();
+            }
+            stats.manifests += 1;
+            for record in entries.values() {
+                stats.object_references += 1;
+                if verified.insert(record.object) {
+                    self.read_object(&record.object)?;
+                }
             }
             expected -= 1;
-            let (_, _, entries) = self.read_manifest(m)?;
-            for r in entries.values() {
-                self.read_object(&r.object)?;
-            }
+            current = parent;
         }
-        Ok(self.snapshot()?.entries.len())
+        if expected != 0 {
+            return Err(StoreError::Corrupt("truncated manifest history".into()));
+        }
+        if self.read_head()? != head {
+            return Err(StoreError::Corrupt("HEAD changed during audit".into()));
+        }
+        stats.unique_objects = verified.len();
+        Ok(stats)
     }
 
     pub fn root(&self) -> &Path {
@@ -985,6 +1020,56 @@ mod tests {
             assert_eq!(s.snapshot().unwrap().entries.len(), 4, "round {round}");
             let _ = fs::remove_dir_all(&dir);
         }
+    }
+
+    #[test]
+    fn cumulative_audit_hashes_each_distinct_object_once_per_pass() {
+        let dir = tmp("audit-dedup");
+        let s = KnowledgeStore::open(&dir).unwrap();
+        assert_eq!(s.audit_stats().unwrap(), AuditStats::default());
+        for cycle in 0..32u64 {
+            let entries = (0..4)
+                .map(|i| {
+                    let id = cycle * 4 + i + 1;
+                    entry(id, &id.to_le_bytes())
+                })
+                .collect();
+            s.commit_exact_cycle(entries).unwrap();
+        }
+        let stats = s.audit_stats().unwrap();
+        assert_eq!(
+            stats,
+            AuditStats {
+                entries: 128,
+                manifests: 32,
+                object_references: 2_112,
+                unique_objects: 128,
+            }
+        );
+        // A restored HEAD omits newer keys, but their objects must still
+        // be verified through historical manifests.
+        s.restore(1).unwrap();
+        let restored = s.audit_stats().unwrap();
+        assert_eq!(restored.entries, 4);
+        assert_eq!(restored.manifests, 33);
+        assert_eq!(restored.object_references, 2_116);
+        assert_eq!(restored.unique_objects, 128);
+        let historical = Digest::of(&128u64.to_le_bytes());
+        fs::write(dir.join("objects").join(historical.to_hex()), b"bad").unwrap();
+        assert!(matches!(s.audit_stats(), Err(StoreError::Corrupt(_))));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn audit_rejects_truncated_or_misnumbered_history() {
+        let dir = tmp("audit-chain");
+        let s = KnowledgeStore::open(&dir).unwrap();
+        let manifest = s.write_manifest(2, None, &BTreeMap::new()).unwrap();
+        s.publish_head(2, manifest).unwrap();
+        assert!(matches!(s.audit_stats(), Err(StoreError::Corrupt(_))));
+        s.publish_head(1, manifest).unwrap();
+        assert!(matches!(s.audit_stats(), Err(StoreError::Corrupt(_))));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
