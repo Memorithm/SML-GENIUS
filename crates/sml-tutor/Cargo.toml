@@ -18,3 +18,7 @@ workspace = true
 [[example]]
 name = "sml_tutor_engine_bench"
 test = true
+
+[[example]]
+name = "sml_tutor_rust_store"
+test = true
