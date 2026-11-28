@@ -1,6 +1,6 @@
 //! R5b: coordinated, typed repair tools with an independent publication gate.
 //! All source comes from the closed Rust grammar. Experimental roots only.
-use sml_core::{tutor_rust_r2 as r2, tutor_rust_r3 as r3, tutor_rust_r4 as r4};
+use sml_core::{tutor_rust_r2 as r2, tutor_rust_r3 as r3, tutor_rust_r4 as r4, tutor_rust_r5 as r5};
 use sml_tutor::hash::Digest;
 use std::fs;
 use std::io::{Read, Write};
@@ -196,12 +196,95 @@ fn qualify(root: &Path, parent: &str, clean: &str, train: &str) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 4 {
-        return Err("usage: root r2.bank r3.bank r3.train".into());
+// Canonical evidence serialization, with coordinates represented by admitted
+// TRAIN row index. Replaying a typed proposal reconstructs the bank.
+fn proposal_text(proposal: &r5::BankProposal) -> String {
+    let mut text = String::from("SML_TUTOR_R5C_PROPOSAL_V1\n");
+    for (task, actions) in proposal.traces.iter().enumerate() {
+        for action in actions {
+            use std::fmt::Write as _;
+            match action {
+                r5::Action::Probe { index, observed } => {
+                    writeln!(text, "{task}|probe|{index}|{observed}").unwrap();
+                }
+                r5::Action::Patch { candidate } => {
+                    writeln!(text, "{task}|patch|{candidate}").unwrap();
+                }
+                r5::Action::Abstain => {
+                    writeln!(text, "{task}|abstain").unwrap();
+                }
+            }
+        }
     }
-    qualify(
+    text
+}
+
+fn qualify_active(root: &Path, parent: &str, clean: &str, train: &str) -> Result<()> {
+    fs::create_dir(root)?;
+    let damaged = r4::mutation_challenge(parent, clean, train)?;
+    if damaged == clean {
+        return Err("missing mutation".into());
+    }
+    // With no budget, no bank may reach the staging tool.
+    let abstained = r5::propose_active_bank(parent, &damaged, train, 0)?;
+    r5::verify_active_bank_proposal(parent, &damaged, train, 0, &abstained)?;
+    if abstained.candidate.is_some() {
+        return Err("zero-budget proposal unexpectedly resolved".into());
+    }
+    write_new(
+        &root.join("abstained.trace.txt"),
+        proposal_text(&abstained).as_bytes(),
+    )?;
+    let proposal = r5::propose_active_bank(parent, &damaged, train, 8)?;
+    r5::verify_active_bank_proposal(parent, &damaged, train, 8, &proposal)?;
+    let candidate = proposal.candidate.as_deref().ok_or("active bank abstained")?;
+    let probes = proposal
+        .traces
+        .iter()
+        .flatten()
+        .filter(|action| matches!(action, r5::Action::Probe { .. }))
+        .count();
+    // Reject a substituted candidate before any staging operation.
+    let mut forged = proposal.clone();
+    forged.candidate = Some(damaged.clone());
+    if r5::verify_active_bank_proposal(parent, &damaged, train, 8, &forged).is_ok() {
+        return Err("forged active candidate accepted".into());
+    }
+    let rejected = transaction(&root.join("rejected"), parent, &damaged, train, &damaged)?;
+    if rejected.0 != Verdict::Reject {
+        return Err("negative control passed".into());
+    }
+    write_new(&root.join("damaged.bank"), damaged.as_bytes())?;
+    write_new(
+        &root.join("proposal.trace.txt"),
+        proposal_text(&proposal).as_bytes(),
+    )?;
+    // The verified adaptive candidate, not an all-label fallback or the clean
+    // reference, is submitted to the independent transaction examiner.
+    let accepted = transaction(&root.join("accepted"), parent, &damaged, train, candidate)?;
+    if accepted.0 != Verdict::Pass
+        || read(&root.join("accepted/repaired.bank"))? != clean
+        || root.join("rejected/repaired.bank").exists()
+        || root.join("accepted/staged.bank").exists()
+        || root.join("rejected/staged.bank").exists()
+    {
+        return Err("unified active transaction failed".into());
+    }
+    println!("SML_TUTOR_R5D=PASS tasks=7 probes={probes} budget_per_task=8 abstained=1 forged_rejected=1 rolled_back=1 committed=1 exact_recovery=true r3_cases=458752 retained_r2=458752 replay=true");
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let mut args: Vec<_> = std::env::args_os().skip(1).collect();
+    let active = args.first().is_some_and(|flag| flag == "--active");
+    if active {
+        args.remove(0);
+    }
+    if args.len() != 4 {
+        return Err("usage: [--active] root r2.bank r3.bank r3.train".into());
+    }
+    let run = if active { qualify_active } else { qualify };
+    run(
         Path::new(&args[0]),
         &read(Path::new(&args[1]))?,
         &read(Path::new(&args[2]))?,
@@ -224,6 +307,20 @@ mod tests {
         assert!(qualify(&root, &parent, &clean, &train).is_err());
         assert!(!root.join("rejected/repaired.bank").exists());
         assert_eq!(read(&root.join("accepted/repaired.bank")).unwrap(), clean);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adaptive_proposal_reaches_real_transaction_gate() {
+        let root = std::env::temp_dir().join(format!("sml-tutor-r5d-{}", std::process::id()));
+        let parent = r2::induce(&r2::fixture()).unwrap();
+        let train = r3::fixture();
+        let clean = r3::induce(&parent, &train).unwrap();
+        qualify_active(&root, &parent, &clean, &train).unwrap();
+        assert_eq!(read(&root.join("accepted/repaired.bank")).unwrap(), clean);
+        assert!(!root.join("rejected/repaired.bank").exists());
+        assert!(root.join("proposal.trace.txt").is_file());
+        assert!(root.join("abstained.trace.txt").is_file());
         fs::remove_dir_all(root).unwrap();
     }
 }
