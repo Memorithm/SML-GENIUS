@@ -191,6 +191,7 @@ pub mod tutor_rust_r1;
 pub mod tutor_rust_r2;
 pub mod tutor_rust_r3;
 pub mod tutor_rust_r4;
+pub mod tutor_rust_r5;
 pub mod v888_csr;
 pub mod v888_handoff;
 pub mod wide_anf_delta_kv;
