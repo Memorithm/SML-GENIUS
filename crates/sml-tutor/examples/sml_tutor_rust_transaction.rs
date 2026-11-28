@@ -1,6 +1,8 @@
 //! R5b: coordinated, typed repair tools with an independent publication gate.
 //! All source comes from the closed Rust grammar. Experimental roots only.
-use sml_core::{tutor_rust_r2 as r2, tutor_rust_r3 as r3, tutor_rust_r4 as r4, tutor_rust_r5 as r5};
+use sml_core::{
+    tutor_rust_r2 as r2, tutor_rust_r3 as r3, tutor_rust_r4 as r4, tutor_rust_r5 as r5,
+};
 use sml_tutor::hash::Digest;
 use std::fs;
 use std::io::{Read, Write};
@@ -237,7 +239,10 @@ fn qualify_active(root: &Path, parent: &str, clean: &str, train: &str) -> Result
     )?;
     let proposal = r5::propose_active_bank(parent, &damaged, train, 8)?;
     r5::verify_active_bank_proposal(parent, &damaged, train, 8, &proposal)?;
-    let candidate = proposal.candidate.as_deref().ok_or("active bank abstained")?;
+    let candidate = proposal
+        .candidate
+        .as_deref()
+        .ok_or("active bank abstained")?;
     let probes = proposal
         .traces
         .iter()
