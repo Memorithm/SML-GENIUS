@@ -256,8 +256,7 @@ fn parse() -> Result<Args, String> {
     {
         return Err("cumulative math requires bounded simulation and plan_ahead=1".into());
     }
-    if !a.cumulative_math
-        && (a.retention_history || a.cumulative_limit != CUMULATIVE_DEFAULT_LIMIT)
+    if !a.cumulative_math && (a.retention_history || a.cumulative_limit != CUMULATIVE_DEFAULT_LIMIT)
     {
         return Err("retention_history/cumulative_limit require cumulative_math=1".into());
     }
