@@ -26,7 +26,7 @@ impl Predicate {
         match self {
             Self::Less => a < b,
             Self::Equal => a == b,
-            Self::Even => a % 2 == 0,
+            Self::Even => a & 1 == 0,
         }
     }
 
@@ -34,7 +34,7 @@ impl Predicate {
         match self {
             Self::Less => "a < b",
             Self::Equal => "a == b",
-            Self::Even => "a % 2 == 0",
+            Self::Even => "a & 1 == 0",
         }
     }
 }
@@ -119,7 +119,7 @@ fn oracle(task: usize, a: u8, b: u8) -> u8 {
             }
         }
         1 => {
-            if a % 2 == 0 {
+            if a & 1 == 0 {
                 (((a ^ b) + b) % 256) ^ a
             } else {
                 (a.min(b) ^ b) + a
@@ -165,7 +165,11 @@ fn admit(raw: &str) -> Result<Vec<Vec<Example>>> {
             if row != format!("{task}|{a}|{b}|{}", oracle(task, a, b)) {
                 return Err(format!("invalid R6a teacher row task={task}, a={a}, b={b}").into());
             }
-            examples.push((a, b, row.rsplit('|').next().ok_or("missing label")?.parse()?));
+            examples.push((
+                a,
+                b,
+                row.rsplit('|').next().ok_or("missing label")?.parse()?,
+            ));
         }
         batch.push(examples);
     }
@@ -230,11 +234,9 @@ pub fn induce(parent: &str, child: &str, raw: &str) -> Result<String> {
         {
             return Err("old macro baseline did not abstain".into());
         }
-        let mut matching = candidates.iter().filter(|p| {
-            examples
-                .iter()
-                .all(|&(a, b, y)| p.eval(&saved, a, b) == y)
-        });
+        let mut matching = candidates
+            .iter()
+            .filter(|p| examples.iter().all(|&(a, b, y)| p.eval(&saved, a, b) == y));
         let chosen = *matching.next().ok_or("R6a synthesis inconsistent")?;
         if matching.next().is_some() {
             return Err("R6a synthesis ambiguous".into());
@@ -245,7 +247,8 @@ pub fn induce(parent: &str, child: &str, raw: &str) -> Result<String> {
 }
 
 fn compile(saved: &[Expr], programs: &[Program], root: &Path) -> Result<Vec<u8>> {
-    let mut source = String::from("#![allow(unused_parens,dead_code)]\nuse std::io::{self,Write};\n");
+    let mut source =
+        String::from("#![allow(unused_parens,dead_code)]\nuse std::io::{self,Write};\n");
     for (i, expr) in saved.iter().enumerate() {
         source.push_str(&format!(
             "fn saved_{i}(a:u8,b:u8)->u8{{ {} }}\n",
@@ -268,7 +271,13 @@ fn compile(saved: &[Expr], programs: &[Program], root: &Path) -> Result<Vec<u8>>
     fs::write(&file, source)?;
     let compiler = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let result = Command::new(compiler)
-        .args(["--edition=2021", "-Dwarnings", "-O", "--crate-name", "sml_r6a"])
+        .args([
+            "--edition=2021",
+            "-Dwarnings",
+            "-O",
+            "--crate-name",
+            "sml_r6a",
+        ])
         .arg(&file)
         .arg("-o")
         .arg(&binary)
@@ -282,7 +291,10 @@ fn compile(saved: &[Expr], programs: &[Program], root: &Path) -> Result<Vec<u8>>
         .current_dir(root)
         .stdin(Stdio::null())
         .output()?;
-    if !result.status.success() || !result.stderr.is_empty() || result.stdout.len() != 65_536 * TASKS {
+    if !result.status.success()
+        || !result.stderr.is_empty()
+        || result.stdout.len() != 65_536 * TASKS
+    {
         return Err("R6a compiled execution failed".into());
     }
     Ok(result.stdout)
@@ -308,7 +320,9 @@ pub fn examine(parent: &str, child: &str, bank: &str) -> Result<[u64; 4]> {
             };
             for (task, program) in programs.iter().enumerate() {
                 let expected = oracle(task, a, b);
-                if program.eval(&saved, a, b) != expected || output[index * TASKS + task] != expected {
+                if program.eval(&saved, a, b) != expected
+                    || output[index * TASKS + task] != expected
+                {
                     return Err(format!("R6a exhaustive mismatch task={task}, a={a}, b={b}").into());
                 }
                 totals[cohort] += 1;
@@ -327,13 +341,22 @@ fn read(path: &Path) -> Result<String> {
     Ok(raw)
 }
 
-fn qualify(parent: &str, child: &str, train: &str, source: &str, output: Option<&Path>) -> Result<()> {
+fn qualify(
+    parent: &str,
+    child: &str,
+    train: &str,
+    source: &str,
+    output: Option<&Path>,
+) -> Result<()> {
     let bank = induce(parent, child, train)?;
     let totals = examine(parent, child, &bank)?;
     let retained_r2: u64 = r2::examine(parent)?.iter().sum();
     let retained_r3: u64 = r3::examine(parent, child)?.iter().sum();
     if let Some(path) = output {
-        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
         file.write_all(bank.as_bytes())?;
         file.sync_all()?;
     }
@@ -359,7 +382,9 @@ pub fn run_cli() -> Result<()> {
             "external_inputs",
             Some(Path::new(output)),
         ),
-        _ => Err("usage: sml_tutor_rust_r6 [--teacher-train r2.bank r3.bank r6.train r6.bank]".into()),
+        _ => Err(
+            "usage: sml_tutor_rust_r6 [--teacher-train r2.bank r3.bank r6.train r6.bank]".into(),
+        ),
     }
 }
 
@@ -377,7 +402,10 @@ mod tests {
         assert!(bank.contains("if "));
         assert!(bank.contains("for _ in"));
         assert!(bank.contains("let x="));
-        assert_eq!(examine(&parent, &child, &bank).unwrap().iter().sum::<u64>(), 262_144);
+        assert_eq!(
+            examine(&parent, &child, &bank).unwrap().iter().sum::<u64>(),
+            262_144
+        );
         assert!(admit(&train.replacen("0|0|0|0", "0|0|0|1", 1)).is_err());
         assert!(restore("SML_TUTOR_R6A_BANK_V1\nunsafe{}\n").is_err());
         assert!(induce(&parent, "invalid", &train).is_err());
