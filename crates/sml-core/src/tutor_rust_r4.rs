@@ -36,9 +36,9 @@ fn repair_expr(expr: &Expr, examples: &[Example]) -> Result<Expr> {
     }
 }
 
-/// Repair an existing closed-grammar bank. Refuse an unqualified parent,
-/// unknown expressions or a result that fails independent examination.
-pub fn repair(memory: &str, damaged: &str, train: &str) -> Result<String> {
+/// Propose a closed-grammar repair using admitted TRAIN evidence only.
+/// The result is not certified: callers must independently examine it before publication.
+pub fn propose_repair(memory: &str, damaged: &str, train: &str) -> Result<String> {
     let parent = r3::verified_memory(memory, &r2::grammar())?;
     let candidates = r3::extend(&parent);
     let initial = r3::restore(damaged, &candidates)?;
@@ -47,9 +47,34 @@ pub fn repair(memory: &str, damaged: &str, train: &str) -> Result<String> {
     for (expr, examples) in initial.iter().zip(&admitted) {
         repaired.push(repair_expr(expr, examples)?);
     }
-    let bank = r3::checkpoint(&repaired);
+    Ok(r3::checkpoint(&repaired))
+}
+
+/// Repair and independently examine the proposed bank.
+pub fn repair(memory: &str, damaged: &str, train: &str) -> Result<String> {
+    let bank = propose_repair(memory, damaged, train)?;
     r3::examine(memory, &bank)?;
     Ok(bank)
+}
+
+/// Manufacture a controlled mutation challenge for the qualification harness.
+/// The clean bank is used only here and by scoring, never by proposal selection.
+pub fn mutation_challenge(memory: &str, clean: &str, train: &str) -> Result<String> {
+    r3::examine(memory, clean)?;
+    let parent = r3::verified_memory(memory, &r2::grammar())?;
+    let original = r3::restore(clean, &r3::extend(&parent))?;
+    let admitted = r3::admit(train)?;
+    let damaged: Vec<_> = original
+        .iter()
+        .zip(&admitted)
+        .map(|(expr, examples)| {
+            root_edits(expr)?
+                .into_iter()
+                .find(|candidate| disagrees(candidate, examples))
+                .ok_or_else(|| "no observable mutation".into())
+        })
+        .collect::<Result<_>>()?;
+    Ok(r3::checkpoint(&damaged))
 }
 
 fn equivalent(a: &Expr, b: &Expr) -> bool {
