@@ -13,7 +13,7 @@ type Example = (u8, u8, u8);
 const BUDGET: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Action {
+pub enum Action {
     Probe { index: usize, observed: u8 },
     Patch { candidate: usize },
     Abstain,
@@ -152,6 +152,79 @@ fn replay(
     Err("missing terminal action".into())
 }
 
+/// A bank-level proposal is not a certificate. Publication requires an
+/// independent semantic examination of the resulting candidate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BankProposal {
+    pub traces: Vec<Vec<Action>>,
+    pub candidate: Option<String>,
+}
+
+/// Produce a repair proposal from the damaged bank and admitted TRAIN only.
+/// If any task cannot be resolved within its budget, no bank is returned.
+pub fn propose_active_bank(
+    memory: &str,
+    damaged: &str,
+    train: &str,
+    budget: usize,
+) -> Result<BankProposal> {
+    if budget > BUDGET {
+        return Err("active repair budget exceeds policy".into());
+    }
+    let parent = r3::verified_memory(memory, &r2::grammar())?;
+    let initial = r3::restore(damaged, &r3::extend(&parent))?;
+    let admitted = r3::admit(train)?;
+    let mut traces = Vec::new();
+    let mut repaired = Vec::new();
+    for (expr, evidence) in initial.iter().zip(&admitted) {
+        let planned = plan(expr, evidence, budget, Strategy::Adaptive)?;
+        if let Some(selected) = planned.selected {
+            repaired.push(selected);
+        }
+        traces.push(planned.actions);
+    }
+    let proposal = BankProposal {
+        candidate: (repaired.len() == initial.len()).then(|| r3::checkpoint(&repaired)),
+        traces,
+    };
+    verify_active_bank_proposal(memory, damaged, train, budget, &proposal)?;
+    Ok(proposal)
+}
+
+/// Replay an untrusted proposal and reconstruct its candidate from permitted
+/// observations. No clean target bank or held-out labels enter this tool.
+pub fn verify_active_bank_proposal(
+    memory: &str,
+    damaged: &str,
+    train: &str,
+    budget: usize,
+    proposal: &BankProposal,
+) -> Result<()> {
+    if budget > BUDGET {
+        return Err("active repair budget exceeds policy".into());
+    }
+    let parent = r3::verified_memory(memory, &r2::grammar())?;
+    let initial = r3::restore(damaged, &r3::extend(&parent))?;
+    let admitted = r3::admit(train)?;
+    if proposal.traces.len() != initial.len() {
+        return Err("unexpected number of task traces".into());
+    }
+    let mut repaired = Vec::new();
+    for ((expr, evidence), trace) in initial.iter().zip(&admitted).zip(&proposal.traces) {
+        if trace.len() > budget + 1 {
+            return Err("trace exceeds action budget".into());
+        }
+        if let Some(selected) = replay(expr, evidence, trace, budget)? {
+            repaired.push(selected);
+        }
+    }
+    let candidate = (repaired.len() == initial.len()).then(|| r3::checkpoint(&repaired));
+    if candidate != proposal.candidate {
+        return Err("proposal does not match replayed evidence".into());
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct ActiveReport {
     pub tasks: usize,
@@ -270,6 +343,47 @@ mod tests {
         assert!(report.sequential_solved <= 7);
         assert_eq!(report.new_cases, 458_752);
         assert_eq!(report.retained_cases, 458_752);
+    }
+
+    #[test]
+    fn bank_proposal_replays_or_abstains_without_clean_reference() {
+        let parent = r2::induce(&r2::fixture()).unwrap();
+        let train = r3::fixture();
+        let clean = r3::induce(&parent, &train).unwrap();
+        let saved = r3::verified_memory(&parent, &r2::grammar()).unwrap();
+        let initial = r3::restore(&clean, &r3::extend(&saved)).unwrap();
+        let admitted = r3::admit(&train).unwrap();
+        let mutants: Vec<_> = initial
+            .iter()
+            .zip(&admitted)
+            .map(|(expr, evidence)| {
+                candidates(expr)
+                    .unwrap()
+                    .into_iter()
+                    .find(|c| evidence.iter().any(|&(a, b, y)| c.eval(a, b) != y))
+                    .unwrap()
+            })
+            .collect();
+        let damaged = r3::checkpoint(&mutants);
+        let proposal = propose_active_bank(&parent, &damaged, &train, BUDGET).unwrap();
+        assert_eq!(proposal.candidate.as_deref(), Some(clean.as_str()));
+        assert_eq!(proposal.traces.len(), 7);
+        verify_active_bank_proposal(&parent, &damaged, &train, BUDGET, &proposal).unwrap();
+        let candidate = proposal.candidate.as_deref().unwrap();
+        assert_eq!(
+            r3::examine(&parent, candidate).unwrap().iter().sum::<u64>(),
+            458_752
+        );
+        let mut forged = proposal.clone();
+        forged.candidate = Some(damaged.clone());
+        assert!(verify_active_bank_proposal(&parent, &damaged, &train, BUDGET, &forged).is_err());
+        let mut forged = proposal;
+        forged.traces.pop();
+        assert!(verify_active_bank_proposal(&parent, &damaged, &train, BUDGET, &forged).is_err());
+        let abstain = propose_active_bank(&parent, &damaged, &train, 0).unwrap();
+        assert!(abstain.candidate.is_none());
+        assert!(abstain.traces.iter().all(|t| t == &[Action::Abstain]));
+        assert!(propose_active_bank(&parent, &damaged, &train, BUDGET + 1).is_err());
     }
 
     #[test]
