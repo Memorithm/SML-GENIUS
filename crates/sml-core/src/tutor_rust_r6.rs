@@ -332,7 +332,6 @@ pub fn examine(parent: &str, child: &str, bank: &str) -> Result<[u64; 4]> {
     Ok(totals)
 }
 
-
 /// A local edit changes a single typed field, never the program family.
 fn one_edit(a: Program, b: Program) -> bool {
     match (a, b) {
@@ -386,7 +385,7 @@ fn plan_local(
         if remaining.is_empty() || step == budget {
             break;
         }
-        let available = (0..evidence.len()).filter(|&i| !used[i]);
+        let mut available = (0..evidence.len()).filter(|&i| !used[i]);
         let next = if adaptive {
             available
                 .map(|i| {
@@ -401,7 +400,7 @@ fn plan_local(
                 .min()
                 .map(|(_, i)| i)
         } else {
-            available.into_iter().next()
+            available.next()
         };
         let Some(index) = next else { break };
         let (a, b, observed) = evidence[index];
@@ -529,9 +528,9 @@ pub fn qualify_repair(parent: &str, child: &str, clean: &str, train: &str) -> Re
         let mut selected = false;
         for damaged in neighborhood(p).into_iter().filter(|&q| q != p) {
             mutations += 1;
-            if (0..=255u8).all(|a| {
-                (0..=255u8).all(|b| damaged.eval(&saved, a, b) == p.eval(&saved, a, b))
-            }) {
+            if (0..=255u8)
+                .all(|a| (0..=255u8).all(|b| damaged.eval(&saved, a, b) == p.eval(&saved, a, b)))
+            {
                 continue;
             }
             harmful += 1;
@@ -542,7 +541,10 @@ pub fn qualify_repair(parent: &str, child: &str, clean: &str, train: &str) -> Re
             let adaptive = plan_local(&saved, damaged, evidence, REPAIR_BUDGET, true);
             let sequential = plan_local(&saved, damaged, evidence, REPAIR_BUDGET, false);
             let count = |trace: &[Action]| {
-                trace.iter().filter(|a| matches!(a, Action::Probe { .. })).count()
+                trace
+                    .iter()
+                    .filter(|a| matches!(a, Action::Probe { .. }))
+                    .count()
             };
             adaptive_probes += count(&adaptive);
             sequential_probes += count(&sequential);
@@ -678,5 +680,4 @@ mod tests {
         let clean = induce(&parent, &child, &train).unwrap();
         qualify_repair(&parent, &child, &clean, &train).unwrap();
     }
-
 }
