@@ -72,7 +72,9 @@ use sml_tutor::supervisor::{
 const ANF_KIND: &str = "anf-m2";
 const L1_KIND: &str = "l1-retention";
 const CUMULATIVE_KIND: &str = "anf-cumulative-v1";
-const CUMULATIVE_MAX_CYCLES: u64 = 64;
+const CUMULATIVE_DEFAULT_LIMIT: u64 = 64;
+const CUMULATIVE_MAX_CYCLES: u64 = 512;
+const CUMULATIVE_MAX_MATH_ENTRIES: u64 = 8192;
 
 /// Frozen inputs of the L1 retention job (paths validated at every run).
 #[derive(Clone, Debug)]
@@ -115,6 +117,8 @@ struct Args {
     /// Pack successful cycle directories into verified archives.
     archive_cycles: bool,
     cumulative_math: bool,
+    cumulative_limit: u64,
+    retention_history: bool,
     cumulative_l1_identity: Option<Digest>,
     r1: Option<R1Input>,
     plan_ahead: usize,
@@ -136,6 +140,8 @@ fn parse() -> Result<Args, String> {
         cycle_gap_ms: 0,
         archive_cycles: false,
         cumulative_math: false,
+        cumulative_limit: CUMULATIVE_DEFAULT_LIMIT,
+        retention_history: false,
         cumulative_l1_identity: None,
         r1: None,
         plan_ahead: 2,
@@ -172,6 +178,14 @@ fn parse() -> Result<Args, String> {
             }
             "cumulative_math" => {
                 a.cumulative_math = match v {
+                    "0" => false,
+                    "1" => true,
+                    _ => return Err(bad()),
+                }
+            }
+            "cumulative_limit" => a.cumulative_limit = v.parse().map_err(|_| bad())?,
+            "retention_history" => {
+                a.retention_history = match v {
                     "0" => false,
                     "1" => true,
                     _ => return Err(bad()),
@@ -233,12 +247,18 @@ fn parse() -> Result<Args, String> {
     if a.cumulative_math
         && (a.mode != Mode::Simulation
             || a.plan_ahead != 1
-            || !(1..=CUMULATIVE_MAX_CYCLES).contains(&a.max_cycles)
+            || !(1..=CUMULATIVE_MAX_CYCLES).contains(&a.cumulative_limit)
+            || !(1..=a.cumulative_limit).contains(&a.max_cycles)
             || a.per_domain > 64
+            || a.cumulative_limit * a.per_domain as u64 > CUMULATIVE_MAX_MATH_ENTRIES
             || a.inputs > 10
             || a.degree > 3)
     {
         return Err("cumulative math requires bounded simulation and plan_ahead=1".into());
+    }
+    if !a.cumulative_math && (a.retention_history || a.cumulative_limit != CUMULATIVE_DEFAULT_LIMIT)
+    {
+        return Err("retention_history/cumulative_limit require cumulative_math=1".into());
     }
     if a.cumulative_math {
         if let Some(l1) = &a.l1 {
@@ -513,12 +533,21 @@ impl AnfRunner {
         {
             return Err("cumulative version/cardinality mismatch".into());
         }
-        let (retained, retention_cases) = if seed == 0 {
-            (0, 0)
-        } else {
-            reexamine_math(&target, &math_curriculum(lessons, inputs, degree, seed - 1))
-                .map_err(|e| e.to_string())?
+        let historical = match spec.params.get("retention").map(String::as_str) {
+            None => false,
+            Some("dyadic-v1") => true,
+            _ => return Err("unknown cumulative retention policy".into()),
         };
+        let mut retained = 0;
+        let mut retention_cases = 0;
+        let retained_seeds = retention_seeds(seed, historical);
+        for prior in &retained_seeds {
+            let (count, cases) =
+                reexamine_math(&target, &math_curriculum(lessons, inputs, degree, *prior))
+                    .map_err(|e| e.to_string())?;
+            retained += count;
+            retention_cases += cases;
+        }
         let (l1_retained, l1_cases) = match &linguistic {
             Some((binary, inputs)) if seed != 0 => reexamine_l1(&target, binary, inputs.clone())?,
             _ => (0, 0),
@@ -578,6 +607,11 @@ impl AnfRunner {
             return Err("unexpected cumulative publication receipt".into());
         }
         let total = engine.telemetry.total();
+        let historical_detail = if historical {
+            format!(" retention_seeds={retained_seeds:?}")
+        } else {
+            String::new()
+        };
         // This is the unique job's acquisition count, not the number of
         // writes attempted in this process. The journal counts Succeed once.
         Ok(CycleReport {
@@ -589,7 +623,7 @@ impl AnfRunner {
             rejected: total.teacher_rejections + total.exam_failures,
             store_version: outcome.version,
             detail: format!(
-                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} l1_banks={banks} l1_retained={l1_retained} l1_cases={l1_cases} r1_compiled={r1_compiled} r1_reload={r1_reload} exact_replay={replay}"
+                "cumulative-math seed={seed} lessons={lessons} retained={retained} retention_cases={retention_cases} l1_banks={banks} l1_retained={l1_retained} l1_cases={l1_cases} r1_compiled={r1_compiled} r1_reload={r1_reload} exact_replay={replay}{historical_detail}"
             ),
         })
     }
@@ -723,6 +757,26 @@ impl CycleRunner for AnfRunner {
 /// Keeps `plan_ahead` jobs pending. With L1 configured, the job planned at
 /// position `k` (counting every planned job) is an L1 retention job when
 /// `k % l1_every == l1_every - 1`, an ANF cycle otherwise.
+/// Always examine the immediate predecessor. In each dyadic epoch
+/// [2^k, 2^(k+1)), also revisit seeds in [0, 2^k) in order.
+/// This gives every earlier cycle a deterministic future review, with
+/// at most two prior curricula per job and no mutable scheduler state.
+fn retention_seeds(seed: u64, historical: bool) -> Vec<u64> {
+    if seed == 0 {
+        return Vec::new();
+    }
+    let previous = seed - 1;
+    let mut seeds = vec![previous];
+    if historical && seed > 1 {
+        let epoch = 1u64 << seed.ilog2();
+        let older = seed - epoch;
+        if older != previous {
+            seeds.push(older);
+        }
+    }
+    seeds
+}
+
 fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
     let spec = JobSpec::new(CUMULATIVE_KIND)
         .param("per_domain", a.per_domain)
@@ -733,9 +787,14 @@ fn cumulative_spec(a: &Args, seed: u64) -> JobSpec {
         Some(id) => spec.param("l1", id.to_hex()),
         None => spec,
     };
-    match &a.r1 {
+    let spec = match &a.r1 {
         Some(input) => spec.param("r1", input.provenance.to_hex()),
         None => spec,
+    };
+    if a.retention_history {
+        spec.param("retention", "dyadic-v1")
+    } else {
+        spec
     }
 }
 
@@ -749,18 +808,32 @@ fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
         }
         return Ok(());
     }
-    if sup.count_kind(ANF_KIND) != 0
-        || sup.count_kind(L1_KIND) != 0
-        || sup.count_kind(CUMULATIVE_KIND) != sup.jobs().count() as u64
+    let total = sup.count_kind(CUMULATIVE_KIND);
+    if total != (sup.jobs().count() + sup.compacted_succeeded()) as u64
+        || total > a.cumulative_limit
     {
-        return Err("legacy or compacted ledger cannot enter bounded cumulative mode".into());
+        return Err("incompatible cumulative ledger kind or budget".into());
     }
     let mut succeeded = 0u64;
     let mut pending = false;
-    for (i, (_, job)) in sup.jobs().enumerate() {
-        let seed = i as u64;
-        if job.spec != cumulative_spec(a, seed) || seed >= CUMULATIVE_MAX_CYCLES || pending {
+    for seed in 0..total {
+        let spec = cumulative_spec(a, seed);
+        let id = spec.id();
+        if pending || !sup.known(&id) {
             return Err("incompatible cumulative job ledger".into());
+        }
+        let Some(job) = sup.job(&id) else {
+            // Compaction keeps the exact content-addressed job ID. Recompute
+            // it from the pinned curriculum and retention policy rather than
+            // trusting an aggregate count or treating the old cycle as new.
+            if !sup.succeeded(&id) {
+                return Err("unknown compacted cumulative receipt".into());
+            }
+            succeeded += 1;
+            continue;
+        };
+        if job.spec != spec {
+            return Err("incompatible cumulative job spec".into());
         }
         match &job.status {
             JobStatus::Succeeded => {
@@ -774,7 +847,7 @@ fn check_cumulative_start(sup: &Supervisor, a: &Args) -> Result<(), String> {
             _ => pending = true,
         }
     }
-    if succeeded + a.max_cycles > CUMULATIVE_MAX_CYCLES {
+    if succeeded + a.max_cycles > a.cumulative_limit {
         return Err("cumulative root reached simulation cycle budget".into());
     }
     // A first queued job can precede creation of the target directory.
@@ -809,7 +882,7 @@ fn plan(sup: &mut Supervisor, a: &Args) -> Result<(), String> {
         }
         if sup.pending() == 0 {
             let seed = sup.count_kind(CUMULATIVE_KIND);
-            if seed >= CUMULATIVE_MAX_CYCLES {
+            if seed >= a.cumulative_limit {
                 return Err("cumulative cycle budget exhausted".into());
             }
             sup.submit(cumulative_spec(a, seed))
@@ -1183,6 +1256,93 @@ mod cumulative_tests {
             .health_json(2)
             .contains("\"new_certified_total\":4,"));
         assert_eq!(supervisor.pending(), 0);
+        drop(supervisor);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dyadic_retention_revisits_every_older_seed_with_bounded_work() {
+        assert!(retention_seeds(0, true).is_empty());
+        assert_eq!(retention_seeds(1, true), vec![0]);
+        for epoch in [2u64, 4, 8, 16, 32, 64, 128, 256] {
+            for offset in 0..epoch {
+                let seed = epoch + offset;
+                assert_eq!(retention_seeds(seed, true), vec![seed - 1, offset]);
+                assert_eq!(retention_seeds(seed, false), vec![seed - 1]);
+            }
+        }
+    }
+
+    #[test]
+    fn compacted_cumulative_ledger_recovers_and_reexamines_older_math() {
+        use sml_tutor::supervisor::OpenGate;
+
+        let root = std::env::temp_dir().join(format!(
+            "sml-tutord-cumulative-compacted-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut a = Args {
+            root: root.clone(),
+            mode: Mode::Simulation,
+            workers: 1,
+            per_domain: 4,
+            inputs: 7,
+            degree: 2,
+            max_cycles: 1,
+            idle_ms: 0,
+            cycle_gap_ms: 0,
+            archive_cycles: false,
+            cumulative_math: true,
+            cumulative_limit: 128,
+            retention_history: true,
+            cumulative_l1_identity: None,
+            r1: None,
+            plan_ahead: 1,
+            budget: ResourceBudget::default(),
+            l1: None,
+            resource_lock: None,
+        };
+        let cfg = SupervisorConfig {
+            keep_succeeded: 1,
+            ..SupervisorConfig::default()
+        };
+        let mut runner = AnfRunner {
+            root: root.clone(),
+            workers: 1,
+            l1: None,
+            r1: None,
+        };
+        let cancel = CancellationToken::new();
+        for seed in 0..4 {
+            let mut supervisor = Supervisor::open(&root, Mode::Simulation, cfg, seed).unwrap();
+            check_cumulative_start(&supervisor, &a).unwrap();
+            supervisor.start().unwrap();
+            plan(&mut supervisor, &a).unwrap();
+            let id = cumulative_spec(&a, seed).id();
+            assert!(matches!(
+                supervisor
+                    .tick(&mut runner, &mut OpenGate, &cancel, seed)
+                    .unwrap(),
+                Tick::Succeeded(job) if job == id
+            ));
+            let report = supervisor.job(&id).unwrap().report.as_ref().unwrap();
+            assert_eq!(
+                report.reexamined,
+                4 * retention_seeds(seed, true).len() as u64
+            );
+            assert_eq!(report.store_version, seed + 1);
+            assert_eq!(supervisor.compacted_succeeded(), seed as usize);
+        }
+        let supervisor = Supervisor::open(&root, Mode::Simulation, cfg, 5).unwrap();
+        assert_eq!(supervisor.compacted_succeeded(), 3);
+        check_cumulative_start(&supervisor, &a).unwrap();
+        assert_eq!(runner.cumulative_store().unwrap().audit().unwrap(), 16);
+        a.retention_history = false;
+        assert!(check_cumulative_start(&supervisor, &a).is_err());
+        a.retention_history = true;
+        a.per_domain = 5;
+        assert!(check_cumulative_start(&supervisor, &a).is_err());
         drop(supervisor);
         let _ = std::fs::remove_dir_all(root);
     }

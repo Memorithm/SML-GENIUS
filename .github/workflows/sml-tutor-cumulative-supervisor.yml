@@ -59,3 +59,28 @@ jobs:
           assert len(list((root / "archive").glob("*.smlpack"))) == 4
           print("SML_TUTORD_CUMULATIVE=PASS cycles=4 entries=16 reexamined=12 version=4 archives=4")
           PY
+          # Cross the former 64-cycle limit with a real process restart.
+          # The unit test separately forces job compaction with keep_succeeded=1.
+          for cycles in 32 33; do
+            timeout 240s "$bin" root="$stage/horizon" cumulative_math=1 cumulative_limit=65 retention_history=1 plan_ahead=1 max_cycles="$cycles" per_domain=1 inputs=7 degree=2 workers=2 min_mem_gib=0 min_disk_gib=0 max_load_per_cpu=100 archive_cycles=1
+          done
+          python3 - "$stage/horizon" <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          health = json.loads((root / "health.json").read_text())
+          assert health["state"] == "stopped", health
+          assert health["new_certified_total"] == 65, health
+          assert health["reexamined_total"] == 127, health
+          assert health["jobs"]["succeeded"] == 65, health
+          store = root / "cumulative-math-v1"
+          version, digest = (store / "HEAD").read_text().splitlines()[1].split()
+          assert version == "65"
+          raw = (store / "manifests" / digest).read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == digest
+          records = [line.split() for line in raw.decode().splitlines() if line.startswith("entry ")]
+          assert len(records) == len({row[1] for row in records}) == 65
+          for row in records:
+              assert hashlib.sha256((store / "objects" / row[-1]).read_bytes()).hexdigest() == row[-1]
+          assert len(list((root / "archive").glob("*.smlpack"))) == 65
+          print("SML_TUTORD_HORIZON=PASS cycles=65 entries=65 historical_reexaminations=127 archives=65")
+          PY
