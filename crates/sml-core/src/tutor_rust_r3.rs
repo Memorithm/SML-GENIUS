@@ -48,7 +48,7 @@ pub const DEV: [(u8, u8); 8] = [
     (2, 254),
 ];
 
-fn verified_memory(raw: &str, baseline: &[Expr]) -> Result<Vec<Expr>> {
+pub(crate) fn verified_memory(raw: &str, baseline: &[Expr]) -> Result<Vec<Expr>> {
     if raw.len() > 8192 {
         return Err("R2 bank exceeds bound".into());
     }
@@ -65,7 +65,7 @@ fn verified_memory(raw: &str, baseline: &[Expr]) -> Result<Vec<Expr>> {
     Ok(bank)
 }
 
-fn extend(bank: &[Expr]) -> Vec<Expr> {
+pub(crate) fn extend(bank: &[Expr]) -> Vec<Expr> {
     let mut candidates = Vec::new();
     for op in Op::ALL {
         for saved in bank {
@@ -118,7 +118,7 @@ pub fn fixture() -> String {
     raw
 }
 
-fn admit(raw: &str) -> Result<Vec<Vec<Example>>> {
+pub(crate) fn admit(raw: &str) -> Result<Vec<Vec<Example>>> {
     if raw.len() > 8192 || !raw.ends_with('\n') {
         return Err("invalid R3 corpus size or termination".into());
     }
@@ -145,7 +145,7 @@ fn admit(raw: &str) -> Result<Vec<Vec<Example>>> {
     Ok(batch)
 }
 
-fn checkpoint(ops: &[Expr]) -> String {
+pub(crate) fn checkpoint(ops: &[Expr]) -> String {
     let mut raw = String::from("SML_TUTOR_R3_BANK_V1\n");
     for op in ops {
         raw.push_str(&op.source());
@@ -154,7 +154,7 @@ fn checkpoint(ops: &[Expr]) -> String {
     raw
 }
 
-fn restore(raw: &str, candidates: &[Expr]) -> Result<Vec<Expr>> {
+pub(crate) fn restore(raw: &str, candidates: &[Expr]) -> Result<Vec<Expr>> {
     if raw.len() > 8192 || !raw.ends_with('\n') {
         return Err("invalid R3 bank size or termination".into());
     }
