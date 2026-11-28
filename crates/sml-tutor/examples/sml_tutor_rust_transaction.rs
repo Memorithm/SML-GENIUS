@@ -142,9 +142,7 @@ fn transaction(
         Verdict::Pass => Event::Commit(digest),
         Verdict::Reject => Event::Rollback(digest),
     });
-    if replay(parent, damaged, train, &actual, &events)? != verdict
-        || read(&staged)? != actual
-    {
+    if replay(parent, damaged, train, &actual, &events)? != verdict || read(&staged)? != actual {
         return Err("independent trajectory replay mismatch".into());
     }
     // A hard link publishes an already-synced candidate atomically without
@@ -217,10 +215,8 @@ mod tests {
 
     #[test]
     fn actual_compile_exam_commit_and_rollback() {
-        let root = std::env::temp_dir().join(format!(
-            "sml-tutor-r5b-transaction-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("sml-tutor-r5b-transaction-{}", std::process::id()));
         let parent = r2::induce(&r2::fixture()).unwrap();
         let train = r3::fixture();
         let clean = r3::induce(&parent, &train).unwrap();
