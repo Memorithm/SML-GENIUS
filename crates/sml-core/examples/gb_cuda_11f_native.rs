@@ -169,7 +169,11 @@ fn recurrent<const S: usize>(gates: usize, lanes: usize, depth: u32, overlap: bo
         bit,
     };
     let inputs = (0..lanes)
-        .map(|i| (0..6).map(|j| coordinate((i * gates + j * 7 + 3) % S)).collect())
+        .map(|i| {
+            (0..6)
+                .map(|j| coordinate((i * gates + j * 7 + 3) % S))
+                .collect()
+        })
         .collect();
     let outputs = (0..S).map(coordinate).collect();
     let plan = SbgAnfPlan::<S, 64>::new(inputs, outputs).unwrap();
