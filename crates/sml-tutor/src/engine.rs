@@ -44,6 +44,10 @@ use crate::telemetry::Telemetry;
 mod linguistic;
 pub use linguistic::{linguistic_l1_identity, linguistic_l1_key, reexamine_l1, L1Input};
 
+#[path = "rust_r1_backend.rs"]
+mod rust_r1;
+pub use rust_r1::{reexamine_r1, rust_r1_key, R1Input};
+
 /// Parameters of one ANF lesson. Everything is derived deterministically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AnfLessonParams {
@@ -480,10 +484,16 @@ struct MixedBackend {
     anf: AnfBackend,
     l1: linguistic::L1Backend,
     language_ids: BTreeSet<LessonId>,
+    rust: Option<(LessonId, rust_r1::R1Backend)>,
 }
 
 impl MixedBackend {
     fn select(&self, id: &LessonId) -> &dyn EngineBackend {
+        if let Some((rust_id, backend)) = &self.rust {
+            if id == rust_id {
+                return backend;
+            }
+        }
         if self.language_ids.contains(id) {
             &self.l1
         } else {
@@ -559,6 +569,20 @@ impl Engine {
         Self::open_with(root, curriculum.specs, Box::new(backend), cfg)
     }
 
+    /// One real Rust R1 bank, learned from independently admitted TRAIN labels.
+    /// No arbitrary source is accepted; the compiler only receives closed grammar.
+    pub fn open_rust_r1(
+        root: &Path,
+        input: R1Input,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        if cfg.workers != 1 || cfg.wave != 1 || cfg.teacher_lie_every != 0 {
+            return Err(EngineError::Curriculum("invalid R1 resource bounds".into()));
+        }
+        let (spec, backend) = rust_r1::R1Backend::new(input).map_err(EngineError::Curriculum)?;
+        Self::open_with(root, vec![spec], Box::new(backend), cfg)
+    }
+
     /// Controlled re-admission of the two L1 linguistic banks through the
     /// same scheduler, examiner, journal and store as ANF. The executable must
     /// be the trusted native L1 learner built by the caller's control plane.
@@ -605,6 +629,19 @@ impl Engine {
         native_learner: &Path,
         inputs: [L1Input; 2],
         curriculum: AnfCurriculum,
+        cfg: EngineConfig,
+    ) -> Result<(Self, ResumeReport), EngineError> {
+        Self::open_four_domains(root, native_learner, inputs, curriculum, None, cfg)
+    }
+
+    /// The initial cycle may admit a bounded R1 bank alongside both L1 banks
+    /// and new mathematical functions in one engine and atomic publication.
+    pub fn open_four_domains(
+        root: &Path,
+        native_learner: &Path,
+        inputs: [L1Input; 2],
+        curriculum: AnfCurriculum,
+        r1: Option<R1Input>,
         cfg: EngineConfig,
     ) -> Result<(Self, ResumeReport), EngineError> {
         if !(1..=2).contains(&cfg.workers)
@@ -658,6 +695,19 @@ impl Engine {
             params,
         };
         specs.extend(math);
+        let rust = match r1 {
+            Some(input) => {
+                let (spec, backend) =
+                    rust_r1::R1Backend::new(input).map_err(EngineError::Curriculum)?;
+                let id = spec.id();
+                if specs.iter().any(|s| s.id() == id) {
+                    return Err(EngineError::Curriculum("duplicate R1 lesson".into()));
+                }
+                specs.push(spec);
+                Some((id, backend))
+            }
+            None => None,
+        };
         Self::open_with(
             root,
             specs,
@@ -665,6 +715,7 @@ impl Engine {
                 anf,
                 l1,
                 language_ids,
+                rust,
             }),
             cfg,
         )
